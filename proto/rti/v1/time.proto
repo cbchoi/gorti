@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// TimeService — time management.
+// Cut 1 supports NER only; TAR added in cut 2 (see docs/srs.md FR-TM-2).
+//
+// Grant callbacks are delivered via StreamService.Events (see stream.proto).
+service TimeService {
+  rpc EnableTimeRegulation(EnableRegulationRequest) returns (Empty);
+  rpc DisableTimeRegulation(DisableRegulationRequest) returns (Empty);
+  rpc EnableTimeConstrained(EnableConstrainedRequest) returns (Empty);
+  rpc DisableTimeConstrained(DisableConstrainedRequest) returns (Empty);
+  rpc NextMessageRequest(NERRequest) returns (Empty);
+}
+
+message EnableRegulationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  // Lookahead. Must be >= 0 and finite.
+  double lookahead = 4;
+}
+
+message DisableRegulationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message EnableConstrainedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message DisableConstrainedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message NERRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  // Time at which the federate wishes to advance to (or earlier if a message arrives).
+  double logical_time = 4;
+}

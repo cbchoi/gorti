@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package rti.v1;
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// ErrorCode is a CLOSED set. Agents may NOT add codes locally; new codes
+// require an orchestrator-approved contract change.
+//
+// Codes are namespaced by domain (FED_*, FOM_*, OBJ_*, TIME_*, ENC_*, WIRE_*).
+// See docs/idd.md §1.1.3.
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+
+  // Federation Management (1-99)
+  ERR_FED_NOT_FOUND = 1;
+  ERR_FED_ALREADY_EXISTS = 2;
+  ERR_FED_NOT_JOINED = 3;
+  ERR_FED_ALREADY_JOINED = 4;
+  ERR_FED_HAS_FEDERATES_JOINED = 5;
+  ERR_FED_HALTED = 6;
+  ERR_FED_INVALID_NAME = 7;
+
+  // FOM (100-199)
+  ERR_FOM_VALIDATION_FAILED = 100;
+  ERR_FOM_MIM_REDEFINITION = 101;
+
+  // Object Management (200-299)
+  ERR_OBJ_NOT_FOUND = 200;
+  ERR_OBJ_CLASS_NOT_PUBLISHED = 201;
+  ERR_OBJ_ATTR_NOT_OWNED = 202;
+  ERR_OBJ_HANDLE_INVALID = 203;
+  ERR_OBJ_INTERACTION_NOT_PUBLISHED = 204;
+  ERR_OBJ_CLASS_NOT_FOUND = 205;
+  ERR_OBJ_ATTR_NOT_FOUND = 206;
+
+  // Time Management (300-399)
+  ERR_TIME_NOT_REGULATING = 300;
+  ERR_TIME_NOT_CONSTRAINED = 301;
+  ERR_TIME_INVALID_LOOKAHEAD = 302;
+  ERR_TIME_REQUEST_IN_PAST = 303;
+  ERR_TIME_ALREADY_REGULATING = 304;
+  ERR_TIME_ALREADY_CONSTRAINED = 305;
+
+  // Encoding (400-499)
+  ERR_ENC_INSUFFICIENT_BYTES = 400;
+  ERR_ENC_TYPE_MISMATCH = 401;
+  ERR_ENC_PADDING_VIOLATION = 402;
+
+  // Wire / Transport (500-599)
+  ERR_WIRE_VERSION_MISMATCH = 500;
+  ERR_WIRE_MALFORMED_MESSAGE = 501;
+}
+
+// ErrorInfo is attached to gRPC status details so federate SDKs can match
+// deterministically across languages.
+message ErrorInfo {
+  ErrorCode code = 1;
+  // Human-readable message. Intended for logs, not user display.
+  string message = 2;
+  // FOM diagnostic code (e.g. "FOM-001"). Empty if not a FOM error.
+  // Full list in docs/idd.md §1.2.1.
+  string fom_code = 3;
+  // 1-based line number when applicable; 0 if unknown.
+  int32 line = 4;
+}

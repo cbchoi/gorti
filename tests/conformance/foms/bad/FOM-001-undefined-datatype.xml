@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-001 fixture: an attribute references a dataType that is not defined.
+  Expected diagnostic: FOM-001 (DataType referenced but not defined).
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-001-undefined-datatype</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-28</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: undefined dataType.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Broken</name>
+        <sharing>PublishSubscribe</sharing>
+        <semantics>Has an attribute of an undefined type.</semantics>
+        <attribute>
+          <name>x</name>
+          <dataType>HLAnonexistentType</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>NA</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

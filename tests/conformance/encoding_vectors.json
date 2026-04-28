@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "_meta": {
+    "purpose": "Golden cross-language byte vectors for HLA Evolved encoding rules per IEEE 1516.2-2010 §4.",
+    "owner": "orchestrator at M0; Agent B may add vectors during M1; Agent C must produce byte-identical output.",
+    "format": "Each vector has id, type (string for primitive, object for composite), value (JSON), bytes (lowercase hex, no separators), optional notes.",
+    "stability": "Vectors are additive only; do not delete or modify after agents have implemented against them. New diagnostics: file a contract-change-request."
+  },
+  "vectors": [
+    {
+      "id": "int32be-zero",
+      "type": "HLAinteger32BE",
+      "value": 0,
+      "bytes": "00000000",
+      "notes": "octet boundary 4"
+    },
+    {
+      "id": "int32be-one",
+      "type": "HLAinteger32BE",
+      "value": 1,
+      "bytes": "00000001"
+    },
+    {
+      "id": "int32be-max",
+      "type": "HLAinteger32BE",
+      "value": 2147483647,
+      "bytes": "7fffffff"
+    },
+    {
+      "id": "int32be-min",
+      "type": "HLAinteger32BE",
+      "value": -2147483648,
+      "bytes": "80000000",
+      "notes": "two's complement"
+    },
+    {
+      "id": "int32be-neg-one",
+      "type": "HLAinteger32BE",
+      "value": -1,
+      "bytes": "ffffffff"
+    },
+    {
+      "id": "int64be-one",
+      "type": "HLAinteger64BE",
+      "value": 1,
+      "bytes": "0000000000000001",
+      "notes": "octet boundary 8"
+    },
+    {
+      "id": "int64be-neg-one",
+      "type": "HLAinteger64BE",
+      "value": -1,
+      "bytes": "ffffffffffffffff"
+    },
+    {
+      "id": "float32be-one",
+      "type": "HLAfloat32BE",
+      "value": 1.0,
+      "bytes": "3f800000",
+      "notes": "IEEE 754 single, BE; octet boundary 4"
+    },
+    {
+      "id": "float64be-one",
+      "type": "HLAfloat64BE",
+      "value": 1.0,
+      "bytes": "3ff0000000000000",
+      "notes": "IEEE 754 double, BE; octet boundary 8"
+    },
+    {
+      "id": "float64be-neg-two",
+      "type": "HLAfloat64BE",
+      "value": -2.0,
+      "bytes": "c000000000000000"
+    },
+    {
+      "id": "float64be-half",
+      "type": "HLAfloat64BE",
+      "value": 0.5,
+      "bytes": "3fe0000000000000",
+      "notes": "exactly representable; safe for cross-language equality"
+    },
+    {
+      "id": "boolean-true",
+      "type": "HLAboolean",
+      "value": true,
+      "bytes": "00000001",
+      "notes": "encoded as HLAinteger32BE; octet boundary 4"
+    },
+    {
+      "id": "boolean-false",
+      "type": "HLAboolean",
+      "value": false,
+      "bytes": "00000000"
+    },
+    {
+      "id": "octet-ab",
+      "type": "HLAoctet",
+      "value": 171,
+      "bytes": "ab",
+      "notes": "single byte, value 0xAB; octet boundary 1"
+    },
+    {
+      "id": "ascii-char-A",
+      "type": "HLAASCIIchar",
+      "value": "A",
+      "bytes": "41",
+      "notes": "octet boundary 1"
+    },
+    {
+      "id": "unicode-char-A",
+      "type": "HLAunicodeChar",
+      "value": "A",
+      "bytes": "0041",
+      "notes": "UTF-16 BE; octet boundary 2"
+    },
+    {
+      "_disabled": true,
+      "id": "fixed-record-octet-float64",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {"name": "a", "type": "HLAoctet"},
+          {"name": "b", "type": "HLAfloat64BE"}
+        ]
+      },
+      "value": {"a": 5, "b": 1.0},
+      "bytes": "0500000000000000 3ff0000000000000",
+      "notes": "EXAMPLE composite vector; commented (_disabled) until Agent B implements composite codec via CodecFor; padding to 8-byte boundary then float64"
+    }
+  ]
+}

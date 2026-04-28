@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// Event is one record in the federation's event log file.
+// Format: file header followed by length-prefixed Event records.
+// See docs/idd.md §1.6 for the binary layout.
+message Event {
+  // Monotonic, gapless within a federation.
+  uint64 seq = 1;
+  // Wall time in ns since epoch. INFORMATIONAL ONLY — never used for ordering.
+  uint64 wall_ns = 2;
+
+  oneof body {
+    FederateJoined fed_joined = 10;
+    FederateResigned fed_resigned = 11;
+    ObjectRegistered obj_registered = 12;
+    ObjectDeleted obj_deleted = 13;
+    AttributeUpdated attr_updated = 14;
+    InteractionSent inter_sent = 15;
+    TimeAdvanceRequested time_requested = 16;
+    TimeAdvanceGranted time_granted = 17;
+    EventFederationHalted halted = 99;
+  }
+}
+
+message FederateJoined {
+  uint64 federate_handle = 1;
+  string federate_name = 2;
+}
+
+message FederateResigned {
+  uint64 federate_handle = 1;
+  ResignAction action = 2;
+}
+
+message ObjectRegistered {
+  uint64 object_handle = 1;
+  uint64 object_class_handle = 2;
+  uint64 owner_federate_handle = 3;
+  string object_name = 4;
+}
+
+message ObjectDeleted {
+  uint64 object_handle = 1;
+  optional double logical_time = 2;
+}
+
+message AttributeUpdated {
+  uint64 object_handle = 1;
+  uint64 producer_federate_handle = 2;
+  map<uint64, bytes> attributes = 3;
+  optional double logical_time = 4;
+}
+
+message InteractionSent {
+  uint64 interaction_class_handle = 1;
+  uint64 producer_federate_handle = 2;
+  map<uint64, bytes> parameters = 3;
+  optional double logical_time = 4;
+}
+
+message TimeAdvanceRequested {
+  uint64 federate_handle = 1;
+  double logical_time = 2;
+}
+
+message TimeAdvanceGranted {
+  uint64 federate_handle = 1;
+  double logical_time = 2;
+}
+
+message EventFederationHalted {
+  string cause = 1;
+}

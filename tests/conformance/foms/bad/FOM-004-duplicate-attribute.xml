@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-004 fixture: attribute name duplicated within a class.
+  Expected diagnostic: FOM-004.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-004-duplicate-attribute</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-28</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: same attribute name declared twice in one class.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Dup</name>
+        <sharing>PublishSubscribe</sharing>
+        <semantics>Duplicate attribute name.</semantics>
+        <attribute>
+          <name>position</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>NA</semantics>
+        </attribute>
+        <attribute>
+          <name>position</name>
+          <dataType>HLAfloat32BE</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>NA</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

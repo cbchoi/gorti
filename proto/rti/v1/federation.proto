@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// FederationService — federation lifecycle.
+// See docs/srs.md §5.1, docs/idd.md §1.1.1.
+service FederationService {
+  rpc CreateFederation(CreateFederationRequest) returns (CreateFederationResponse);
+  rpc DestroyFederation(DestroyFederationRequest) returns (Empty);
+  rpc JoinFederation(JoinFederationRequest) returns (JoinFederationResponse);
+  rpc ResignFederation(ResignFederationRequest) returns (Empty);
+  rpc ListFederations(ListFederationsRequest) returns (ListFederationsResponse);
+}
+
+message CreateFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  repeated FOMModule fom_modules = 3;
+  Mode mode = 4;
+  // Stall-detection timeout in seconds. 0 = use server default (60s).
+  double stall_timeout_seconds = 5;
+  // Optional deterministic seed override. 0 = derive from name + creation time.
+  uint64 seed = 6;
+}
+
+message CreateFederationResponse {
+  // Echo of the seed actually applied (useful when client supplied 0).
+  uint64 effective_seed = 1;
+}
+
+message DestroyFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+message JoinFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string federate_name = 3;
+}
+
+message JoinFederationResponse {
+  // Federate handle assigned deterministically by join order.
+  uint64 federate_handle = 1;
+}
+
+message ResignFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  ResignAction action = 4;
+}
+
+message ListFederationsRequest {
+  WireVersion wire_version = 1;
+}
+
+message ListFederationsResponse {
+  repeated FederationSummary federations = 1;
+}
+
+message FederationSummary {
+  string name = 1;
+  Mode mode = 2;
+  uint32 federates_joined = 3;
+}

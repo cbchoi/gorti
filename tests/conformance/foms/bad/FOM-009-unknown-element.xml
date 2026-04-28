@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-009 fixture: contains an XML element that is not in the IEEE 1516-2010 DIF.
+  In strict mode (per docs/srs.md FR-FOM-1) this must be rejected.
+  Expected diagnostic: FOM-009.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-009-unknown-element</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-28</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: unknown XML element.</description>
+    <useHistory>None</useHistory>
+    <unknownExtensionElement>this should be rejected in strict mode</unknownExtensionElement>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

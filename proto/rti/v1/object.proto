@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// ObjectService — object/interaction operations.
+// See docs/srs.md §5.3.
+service ObjectService {
+  rpc RegisterObjectInstance(RegisterObjectRequest) returns (RegisterObjectResponse);
+  rpc UpdateAttributeValues(UpdateAttributeValuesRequest) returns (Empty);
+  rpc SendInteraction(SendInteractionRequest) returns (Empty);
+}
+
+message RegisterObjectRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  // Optional name; if empty, RTI generates one.
+  string object_name = 5;
+}
+
+message RegisterObjectResponse {
+  uint64 object_handle = 1;
+  // Name actually assigned (echoed if client supplied).
+  string object_name = 2;
+}
+
+message UpdateAttributeValuesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  // attribute_handle -> HLA-encoded bytes (per IEEE 1516.2-2010 §4 encoding rules).
+  map<uint64, bytes> attributes = 5;
+  // Optional. If absent, message is RO; if present, TSO with this timestamp.
+  optional double logical_time = 6;
+}
+
+message SendInteractionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+  // parameter_handle -> HLA-encoded bytes.
+  map<uint64, bytes> parameters = 5;
+  // Optional. If absent, RO; if present, TSO with this timestamp.
+  optional double logical_time = 6;
+}

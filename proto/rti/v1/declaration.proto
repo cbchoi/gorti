@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// DeclarationService — pub/sub declarations.
+// See docs/srs.md §5.2.
+service DeclarationService {
+  rpc PublishObjectClassAttributes(PubObjAttrsRequest) returns (Empty);
+  rpc UnpublishObjectClassAttributes(UnpubObjAttrsRequest) returns (Empty);
+  rpc SubscribeObjectClassAttributes(SubObjAttrsRequest) returns (Empty);
+  rpc UnsubscribeObjectClassAttributes(UnsubObjAttrsRequest) returns (Empty);
+  rpc PublishInteractionClass(PubInterRequest) returns (Empty);
+  rpc UnpublishInteractionClass(UnpubInterRequest) returns (Empty);
+  rpc SubscribeInteractionClass(SubInterRequest) returns (Empty);
+  rpc UnsubscribeInteractionClass(UnsubInterRequest) returns (Empty);
+}
+
+message PubObjAttrsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message UnpubObjAttrsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message SubObjAttrsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message UnsubObjAttrsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message PubInterRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+}
+
+message UnpubInterRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+}
+
+message SubInterRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+}
+
+message UnsubInterRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+}

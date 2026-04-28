@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// StreamService — server-streamed callbacks to a joined federate.
+// One stream per federate carries Discover, Reflect, Receive, Grant, etc.
+service StreamService {
+  rpc Events(EventsRequest) returns (stream FederateEvent);
+}
+
+message EventsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+// FederateEvent is one server-initiated callback. Per-federation monotonic seq.
+message FederateEvent {
+  uint64 seq = 1;
+  oneof event {
+    DiscoverObjectInstance discover = 10;
+    ReflectAttributeValues reflect = 11;
+    RemoveObjectInstance remove = 12;
+    ReceiveInteraction receive = 13;
+    TimeAdvanceGrant grant = 14;
+    FederationHalted halted = 99;
+  }
+}
+
+message DiscoverObjectInstance {
+  uint64 object_handle = 1;
+  uint64 object_class_handle = 2;
+  string object_name = 3;
+}
+
+message ReflectAttributeValues {
+  uint64 object_handle = 1;
+  uint64 object_class_handle = 2;
+  map<uint64, bytes> attributes = 3;
+  optional double logical_time = 4;
+}
+
+message RemoveObjectInstance {
+  uint64 object_handle = 1;
+  optional double logical_time = 2;
+}
+
+message ReceiveInteraction {
+  uint64 interaction_class_handle = 1;
+  map<uint64, bytes> parameters = 2;
+  optional double logical_time = 3;
+}
+
+message TimeAdvanceGrant {
+  double logical_time = 1;
+}
+
+message FederationHalted {
+  // Why the federation halted. e.g. "stall: federate=3", "fed=destroyed".
+  string cause = 1;
+}
