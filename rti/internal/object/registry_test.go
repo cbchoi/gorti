@@ -403,6 +403,119 @@ func TestRegister_DiscoverSkipsProducer(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// TASK-032 — UpdateAttributes / Reflect path
+// ---------------------------------------------------------------------------
+
+func TestUpdateAttributes_FansReflectInSortedOrder(t *testing.T) {
+	t.Parallel()
+	log := &recordingEventLog{}
+	reg, declMgr, outbox := newTestRegistry(t, log)
+	ctx := context.Background()
+	for _, h := range []core.FederateHandle{9, 2, 5} {
+		_ = declMgr.SubscribeObjectClassAttributes(ctx, "fed", h, 7, []core.AttributeHandle{2})
+	}
+	_ = declMgr.PublishObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{2})
+	obj, _, err := reg.Register(ctx, "fed", 1, 7, "")
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	preDiscover := len(outbox.Records())
+	preLog := len(log.Records())
+
+	if err := reg.UpdateAttributes(ctx, "fed", 1, obj, map[core.AttributeHandle][]byte{2: {0xAB}}, nil); err != nil {
+		t.Fatalf("UpdateAttributes: %v", err)
+	}
+
+	// Eventlog: AttributeUpdated must appear (write-ahead invariant).
+	logs := log.Records()[preLog:]
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 new eventlog append, got %d", len(logs))
+	}
+	carrier, ok := logs[0].Event.(eventCarrier)
+	if !ok {
+		t.Fatalf("appended event %T does not satisfy eventCarrier", logs[0].Event)
+	}
+	body := carrier.Inner().GetAttrUpdated()
+	if body == nil {
+		t.Fatalf("appended event has no AttributeUpdated body: %+v", carrier.Inner())
+	}
+	if body.GetObjectHandle() != uint64(obj) || body.GetProducerFederateHandle() != 1 {
+		t.Errorf("AttributeUpdated = %+v, want object=%d producer=1", body, obj)
+	}
+	if got, ok := body.GetAttributes()[2]; !ok || len(got) != 1 || got[0] != 0xAB {
+		t.Errorf("AttributeUpdated.Attributes[2] = %v, want [0xAB]", got)
+	}
+
+	updates := outbox.Records()[preDiscover:]
+	want := []core.FederateHandle{2, 5, 9}
+	if len(updates) != len(want) {
+		t.Fatalf("Reflect fanout = %+v, want %v", updates, want)
+	}
+	for i, w := range want {
+		if updates[i].Federate != w {
+			t.Errorf("[%d]: Reflect to %d, want %d", i, updates[i].Federate, w)
+		}
+		ev := updates[i].Event.(*outboundEvent).Inner().GetReflect()
+		if ev == nil {
+			t.Errorf("[%d]: outbound event has no Reflect body", i)
+			continue
+		}
+		if ev.GetObjectHandle() != uint64(obj) {
+			t.Errorf("[%d]: Reflect.ObjectHandle = %d, want %d", i, ev.GetObjectHandle(), obj)
+		}
+		if got, ok := ev.GetAttributes()[2]; !ok || len(got) != 1 || got[0] != 0xAB {
+			t.Errorf("[%d]: Reflect.Attributes[2] = %v, want [0xAB]", i, got)
+		}
+	}
+}
+
+func TestUpdateAttributes_RejectsUnowned(t *testing.T) {
+	t.Parallel()
+	reg, declMgr, _ := newTestRegistry(t, &recordingEventLog{})
+	ctx := context.Background()
+	_ = declMgr.PublishObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{2})
+	obj, _, _ := reg.Register(ctx, "fed", 1, 7, "")
+
+	err := reg.UpdateAttributes(ctx, "fed", 99, obj, map[core.AttributeHandle][]byte{2: {0xAB}}, nil)
+	if !errors.Is(err, core.ErrAttributeNotOwned) {
+		t.Errorf("UpdateAttributes by non-publisher: err = %v, want ErrAttributeNotOwned", err)
+	}
+}
+
+func TestUpdateAttributes_RejectsUnknownObject(t *testing.T) {
+	t.Parallel()
+	reg, _, _ := newTestRegistry(t, &recordingEventLog{})
+	err := reg.UpdateAttributes(context.Background(), "fed", 1, 99, map[core.AttributeHandle][]byte{1: {0x01}}, nil)
+	if !errors.Is(err, core.ErrObjectNotFound) {
+		t.Errorf("UpdateAttributes on unknown object: err = %v, want ErrObjectNotFound", err)
+	}
+}
+
+func TestUpdateAttributes_NoSelfDelivery(t *testing.T) {
+	t.Parallel()
+	reg, declMgr, outbox := newTestRegistry(t, &recordingEventLog{})
+	ctx := context.Background()
+	_ = declMgr.PublishObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{2})
+	_ = declMgr.SubscribeObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{2}) // self
+	_ = declMgr.SubscribeObjectClassAttributes(ctx, "fed", 2, 7, []core.AttributeHandle{2}) // peer
+	obj, _, _ := reg.Register(ctx, "fed", 1, 7, "")
+	preCount := len(outbox.Records())
+
+	if err := reg.UpdateAttributes(ctx, "fed", 1, obj, map[core.AttributeHandle][]byte{2: {0xAB}}, nil); err != nil {
+		t.Fatalf("UpdateAttributes: %v", err)
+	}
+	updates := outbox.Records()[preCount:]
+	for _, r := range updates {
+		if r.Federate == 1 {
+			t.Errorf("self-delivery: producer 1 received its own update")
+		}
+	}
+	if len(updates) != 1 || updates[0].Federate != 2 {
+		t.Errorf("expected fanout to [2] only, got %+v", updates)
+	}
+}
+
 func TestRegister_PreExistingInstancesNotReDiscovered(t *testing.T) {
 	t.Parallel()
 	// Subscribers that joined BEFORE second Register should see exactly
