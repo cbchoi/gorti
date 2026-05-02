@@ -28,40 +28,51 @@ type HLAoctet struct{}
 // OctetBoundary returns the alignment boundary for HLAoctet (1 byte).
 func (HLAoctet) OctetBoundary() int { return 1 }
 
-// Encode accepts byte/uint8 directly and int values in [0, 255].
+// Encode accepts byte/uint8 directly and integer / float64 values
+// representable as a byte (0..255).
 func (HLAoctet) Encode(v any) ([]byte, error) {
+	b, err := octetFromAny(v)
+	if err != nil {
+		return nil, err
+	}
+	return []byte{b}, nil
+}
+
+// octetFromAny coerces a Go value to a single byte in [0,255]. It accepts
+// byte, the signed and unsigned integer widths typically produced by
+// hand-written Go and JSON decoding, and float64 (provided the value is
+// integral and in range).
+func octetFromAny(v any) (byte, error) {
 	switch x := v.(type) {
 	case byte:
-		return []byte{x}, nil
+		return x, nil
 	case int:
-		if x < 0 || x > 0xFF {
-			return nil, fmt.Errorf("encoding: HLAoctet value %d out of range [0,255]", x)
-		}
-		return []byte{byte(x)}, nil
+		return rangeCheckByte(int64(x))
 	case int32:
-		if x < 0 || x > 0xFF {
-			return nil, fmt.Errorf("encoding: HLAoctet value %d out of range [0,255]", x)
-		}
-		return []byte{byte(x)}, nil
+		return rangeCheckByte(int64(x))
 	case int64:
-		if x < 0 || x > 0xFF {
-			return nil, fmt.Errorf("encoding: HLAoctet value %d out of range [0,255]", x)
-		}
-		return []byte{byte(x)}, nil
+		return rangeCheckByte(x)
 	case uint:
 		if x > 0xFF {
-			return nil, fmt.Errorf("encoding: HLAoctet value %d out of range [0,255]", x)
+			return 0, fmt.Errorf("encoding: HLAoctet value %d out of range [0,255]", x)
 		}
-		return []byte{byte(x)}, nil
+		return byte(x), nil
 	case float64:
 		// JSON numeric vector values arrive here as float64.
-		if x != float64(int64(x)) || x < 0 || x > 0xFF {
-			return nil, fmt.Errorf("encoding: HLAoctet value %v not an integer in [0,255]", x)
+		if x != float64(int64(x)) {
+			return 0, fmt.Errorf("encoding: HLAoctet value %v not an integer", x)
 		}
-		return []byte{byte(int64(x))}, nil
+		return rangeCheckByte(int64(x))
 	default:
-		return nil, fmt.Errorf("encoding: HLAoctet cannot encode %T", v)
+		return 0, fmt.Errorf("encoding: HLAoctet cannot encode %T", v)
 	}
+}
+
+func rangeCheckByte(x int64) (byte, error) {
+	if x < 0 || x > 0xFF {
+		return 0, fmt.Errorf("encoding: HLAoctet value %d out of range [0,255]", x)
+	}
+	return byte(x), nil
 }
 
 // Decode reads exactly one byte. Returns the byte as uint8 and n=1.
