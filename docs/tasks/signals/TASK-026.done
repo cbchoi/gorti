@@ -1,0 +1,33 @@
+# TASK-026 — eventlog replayer; sub-branch agent/a/m2-w2b-eventlog-replayer
+
+## Cut-1 scope notes
+
+- `eventlog.Replayer` implements both passthrough (synthetic-body / nil
+  components) and proto-dispatch (real `*rtiv1.Event` body oneof routed
+  through `core.FederationStore` and `core.ObjectRegistry`).
+- Spec test `TestSpec_M2_Replay_ByteIdentical` is GREEN via passthrough
+  (the orchestrator-supplied fixture builds a synthetic source).
+- Spec test `TestSpec_M2_Replay_DivergenceIsFatal` REMAINS `t.Skip` —
+  the orchestrator's scaffold owes a frozen-test update to wire the
+  divergence-injection harness against the new
+  `eventlog.ErrReplayDivergence` sentinel and the optional
+  `ReplayerOptions.CapturedBuffer`. Flag this as a contract-change-
+  request candidate post-merge. The internal package test
+  `TestReplayer_Replay_DivergenceIsFatal` covers the same guarantee in
+  `rti/internal/eventlog/replayer_test.go`.
+
+## Header-byte caveat (M2 cut-1 stance)
+
+Byte-equality is asserted from offset `HeaderSize` onward only. The
+header `CreatedAtNs` field is by-construction a wall-clock recording at
+`NewWriter` time and excluded from the determinism contract. Magic /
+version / federation / mode / seed match by construction because the
+replay harness wires the same `WriterOptions` into the captured Writer.
+
+## Coverage
+
+- `rti/internal/eventlog/...` total: 90.9% (covers writer, reader,
+  replayer, format, doc).
+- `replayer.go`: NewReplayer 100%, Replay 100%, dispatch/dispatch
+  branches 71-100% (uncovered branches are defensive: non-eventRecord
+  source, unknown body type — both unreachable from production).
