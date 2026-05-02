@@ -40,11 +40,18 @@ func newTestObjectRegistry(t *testing.T) (*object.Registry, *fakeOutbox, *declar
 //
 // Implements: FR-OM-1, NFR-DET-1.
 func TestSpec_M2_Object_Register_AssignsMonotonicHandle(t *testing.T) {
-	reg, _, _ := newTestObjectRegistry(t)
+	reg, _, declMgr := newTestObjectRegistry(t)
 	if reg == nil {
 		t.Skip("object.Registry not yet wired")
 	}
 	ctx := context.Background()
+
+	// Producer must publish before Register; this is the auth check
+	// asserted independently by Register_RejectsUnpublished. The current
+	// test focuses on the monotonic-handle invariant once auth passes.
+	if err := declMgr.PublishObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{1}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
 
 	for i := 0; i < 5; i++ {
 		h, _, err := reg.Register(ctx, "fed", 1, 7, "")
