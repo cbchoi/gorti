@@ -55,6 +55,10 @@ var primitiveCodecs = map[string]Codec{
 	"HLAboolean":     HLAboolean{},
 	"HLAASCIIchar":   HLAASCIIchar{},
 	"HLAunicodeChar": HLAunicodeChar{},
+
+	// --- HLAstring family (TASK-013) ---
+	"HLAASCIIstring":   HLAASCIIstring{},
+	"HLAunicodeString": HLAunicodeString{},
 }
 
 // PrimitiveByName returns the Codec for an HLA Evolved primitive type by its
