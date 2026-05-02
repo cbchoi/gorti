@@ -3,6 +3,10 @@ package federation_test
 import (
 	"context"
 	"errors"
+	"math/rand"
+	"sort"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -208,6 +212,243 @@ func TestCreateFederation_DuplicateName_ReturnsSentinel(t *testing.T) {
 	if !errors.Is(e, core.ErrFederationAlreadyExists) {
 		t.Errorf("second create: %v, want ErrFederationAlreadyExists", e)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// TASK-021: JoinFederation tests
+// ---------------------------------------------------------------------------
+
+// TestJoinFederation_UnknownFederation_ReturnsNotFound verifies that joining
+// a federation that was never created returns the documented sentinel.
+func TestJoinFederation_UnknownFederation_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_, jerr := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "ghost", FederateName: "alice",
+	})
+	if !errors.Is(jerr, core.ErrFederationNotFound) {
+		t.Errorf("Join unknown federation: %v, want ErrFederationNotFound", jerr)
+	}
+}
+
+// TestJoinFederation_DuplicateName_ReturnsAlreadyJoined verifies that two
+// joins with the same federate name return the documented sentinel.
+func TestJoinFederation_DuplicateName_ReturnsAlreadyJoined(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	req := core.JoinFederationRequest{Federation: "x", FederateName: "alice"}
+	if _, e := mgr.JoinFederation(context.Background(), req); e != nil {
+		t.Fatalf("first join: %v", e)
+	}
+	_, e := mgr.JoinFederation(context.Background(), req)
+	if !errors.Is(e, core.ErrFederateAlreadyJoined) {
+		t.Errorf("duplicate join: %v, want ErrFederateAlreadyJoined", e)
+	}
+}
+
+// TestJoinFederation_HandleEqualsSortPositionInCurrentRoster verifies the
+// determinism invariant: at join time, the returned handle equals the
+// joining federate's sort-position within (current roster + the new
+// federate). Re-key on join keeps handle order = name sort order.
+//
+// This is the per-call observable behavior. The federate's handle MAY
+// shift later if a smaller-named federate joins (replay determinism is
+// preserved because the same shifts replay identically).
+func TestJoinFederation_HandleEqualsSortPositionInCurrentRoster(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "det")
+	cases := []struct {
+		joining string
+		// rosterAfter must be sorted; want = position of joining name
+		// in this list (1-based).
+		rosterAfter []string
+	}{
+		{"echo", []string{"echo"}},                                  // alone -> 1
+		{"alpha", []string{"alpha", "echo"}},                        // smaller -> 1
+		{"delta", []string{"alpha", "delta", "echo"}},               // middle -> 2
+		{"bravo", []string{"alpha", "bravo", "delta", "echo"}},      // -> 2
+		{"charlie", []string{"alpha", "bravo", "charlie", "delta", "echo"}}, // -> 3
+	}
+	for _, c := range cases {
+		h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+			Federation: "det", FederateName: c.joining,
+		})
+		if err != nil {
+			t.Fatalf("Join %s: %v", c.joining, err)
+		}
+		want := core.FederateHandle(0)
+		for i, n := range c.rosterAfter {
+			if n == c.joining {
+				want = core.FederateHandle(i + 1)
+				break
+			}
+		}
+		if h != want {
+			t.Errorf("Join %s in roster %v: got handle %d, want %d (sort position)",
+				c.joining, c.rosterAfter, h, want)
+		}
+	}
+}
+
+// TestProperty_JoinFederation_HandleAlwaysMatchesSortPositionAtJoin asserts
+// that for any permutation of arrival order, every join returns
+// (sort-rank-in-current-roster). This is the strong determinism property:
+// the function value is purely determined by the name + the current
+// roster, NOT by goroutine scheduling or wall-clock.
+func TestProperty_JoinFederation_HandleAlwaysMatchesSortPositionAtJoin(t *testing.T) {
+	t.Parallel()
+	names := []string{"alice", "bob", "carol", "dave", "eve", "frank", "grace"}
+	rng := rand.New(rand.NewSource(42)) //nolint:gosec // test-only
+	for trial := 0; trial < 10; trial++ {
+		shuffled := append([]string(nil), names...)
+		rng.Shuffle(len(shuffled), func(i, j int) {
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		})
+		fed := core.FederationName("trial-" + strconv.Itoa(trial))
+		mgr, err := federation.New(validOptions())
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		if cerr := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{
+			Name:       fed,
+			FOMModules: []core.FOMModule{{XML: []byte("<x/>")}},
+			Mode:       core.ModeVerbose,
+		}); cerr != nil {
+			t.Fatalf("Create %s: %v", fed, cerr)
+		}
+		joined := []string{}
+		for _, n := range shuffled {
+			joined = append(joined, n)
+			sort.Strings(joined)
+			expected := core.FederateHandle(0)
+			for i, jn := range joined {
+				if jn == n {
+					expected = core.FederateHandle(i + 1)
+					break
+				}
+			}
+			h, jerr := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+				Federation: fed, FederateName: n,
+			})
+			if jerr != nil {
+				t.Fatalf("trial %d Join %s: %v", trial, n, jerr)
+			}
+			if h != expected {
+				t.Errorf("trial %d arrival %v: %s got handle %d, want sort-position %d",
+					trial, shuffled, n, h, expected)
+			}
+		}
+	}
+}
+
+// TestJoinFederation_NilEventLog_DoesNotPanic verifies that the cut-1
+// nil-EventLog tolerance covers Join (the path that would otherwise call
+// EventLog.Append for FederateJoined).
+func TestJoinFederation_NilEventLog_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+	opts := validOptions()
+	opts.EventLog = nil
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if cerr := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{
+		Name:       "x",
+		FOMModules: []core.FOMModule{{XML: []byte("<x/>")}},
+		Mode:       core.ModeVerbose,
+	}); cerr != nil {
+		t.Fatalf("Create: %v", cerr)
+	}
+	if _, jerr := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	}); jerr != nil {
+		t.Fatalf("Join with nil EventLog: %v", jerr)
+	}
+}
+
+// TestJoinFederation_AppendsEventBeforeReturn verifies the write-ahead
+// invariant: EventLog.Append is invoked exactly once per successful Join,
+// and the federation name passed matches the request.
+func TestJoinFederation_AppendsEventBeforeReturn(t *testing.T) {
+	t.Parallel()
+	rec := &recordingEventLog{}
+	opts := validOptions()
+	opts.EventLog = rec
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if cerr := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{
+		Name:       "x",
+		FOMModules: []core.FOMModule{{XML: []byte("<x/>")}},
+		Mode:       core.ModeVerbose,
+	}); cerr != nil {
+		t.Fatalf("Create: %v", cerr)
+	}
+	if _, jerr := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	}); jerr != nil {
+		t.Fatalf("Join: %v", jerr)
+	}
+	calls := rec.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("EventLog.Append calls = %d, want 1", len(calls))
+	}
+	if calls[0].fed != "x" {
+		t.Errorf("Append fed = %q, want %q", calls[0].fed, "x")
+	}
+}
+
+// mustNewWithFederation builds a Manager + creates the named federation,
+// failing the test on any error. Reduces boilerplate in Join/Resign tests.
+func mustNewWithFederation(t *testing.T, name core.FederationName) *federation.Manager {
+	t.Helper()
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if cerr := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{
+		Name:       name,
+		FOMModules: []core.FOMModule{{XML: []byte("<x/>")}},
+		Mode:       core.ModeVerbose,
+	}); cerr != nil {
+		t.Fatalf("Create %s: %v", name, cerr)
+	}
+	return mgr
+}
+
+// recordingEventLog captures every Append for assertion. Goroutine-safe.
+type recordingEventLog struct {
+	mu    sync.Mutex
+	calls []recordedAppend
+}
+
+type recordedAppend struct {
+	fed core.FederationName
+	evt core.EventRecord
+}
+
+func (r *recordingEventLog) Append(_ context.Context, fed core.FederationName, evt core.EventRecord) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, recordedAppend{fed: fed, evt: evt})
+	return nil
+}
+
+func (*recordingEventLog) Sync(_ context.Context, _ core.FederationName) error { return nil }
+func (*recordingEventLog) OpenReader(_ context.Context, _ string) (core.EventLogReader, error) {
+	return nil, errors.New("recordingEventLog: OpenReader unsupported")
+}
+
+func (r *recordingEventLog) Calls() []recordedAppend {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]recordedAppend, len(r.calls))
+	copy(out, r.calls)
+	return out
 }
 
 func contains(s, sub string) bool {
