@@ -4,6 +4,11 @@ import (
 	"testing"
 )
 
+const (
+	mutatedSentinel  = "MUTATED"
+	tamperedSentinel = "TAMPERED"
+)
+
 // TestNewFOM_NilSlices_ReturnsEmptyFOM asserts that the zero-input case
 // produces a non-nil FOM whose accessors return empty slices. Callers can
 // rely on this to avoid nil-checking everywhere.
@@ -110,22 +115,22 @@ func TestNewFOM_DefensiveCopyOfInputSlices(t *testing.T) {
 	f := NewFOM(objects, interactions, data)
 
 	// Mutate caller's slices; the FOM must not observe these mutations.
-	objects[0].Name = "MUTATED"
-	interactions[0].Name = "MUTATED"
-	data[0] = &BasicData{NameField: "MUTATED"}
+	objects[0].Name = mutatedSentinel
+	interactions[0].Name = mutatedSentinel
+	data[0] = &BasicData{NameField: mutatedSentinel}
 
 	for _, oc := range f.ObjectClasses() {
-		if oc.Name == "MUTATED" {
+		if oc.Name == mutatedSentinel {
 			t.Errorf("FOM.ObjectClasses observed caller mutation of input slice")
 		}
 	}
 	for _, ic := range f.InteractionClasses() {
-		if ic.Name == "MUTATED" {
+		if ic.Name == mutatedSentinel {
 			t.Errorf("FOM.InteractionClasses observed caller mutation of input slice")
 		}
 	}
 	for _, dt := range f.DataTypes() {
-		if dt.Name() == "MUTATED" {
+		if dt.Name() == mutatedSentinel {
 			t.Errorf("FOM.DataTypes observed caller mutation of input slice")
 		}
 	}
@@ -143,11 +148,11 @@ func TestObjectClasses_ReturnsCopy(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("expected non-empty ObjectClasses")
 	}
-	got[0].Name = "TAMPERED"
+	got[0].Name = tamperedSentinel
 
 	again := f.ObjectClasses()
 	for _, oc := range again {
-		if oc.Name == "TAMPERED" {
+		if oc.Name == tamperedSentinel {
 			t.Fatalf("ObjectClasses() returned writable handle to internal state")
 		}
 	}
@@ -165,11 +170,11 @@ func TestInteractionClasses_ReturnsCopy(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("expected non-empty InteractionClasses")
 	}
-	got[0].Name = "TAMPERED"
+	got[0].Name = tamperedSentinel
 
 	again := f.InteractionClasses()
 	for _, ic := range again {
-		if ic.Name == "TAMPERED" {
+		if ic.Name == tamperedSentinel {
 			t.Fatalf("InteractionClasses() returned writable handle to internal state")
 		}
 	}
