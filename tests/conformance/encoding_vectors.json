@@ -427,7 +427,6 @@
       "notes": "TASK-012; ZWNBSP / BOM U+FEFF"
     },
     {
-      "_disabled": true,
       "id": "fixed-record-octet-float64",
       "type": {
         "kind": "HLAfixedRecord",
@@ -439,6 +438,107 @@
       "value": {"a": 5, "b": 1.0},
       "bytes": "0500000000000000 3ff0000000000000",
       "notes": "EXAMPLE composite vector; commented (_disabled) until Agent B implements composite codec via CodecFor; padding to 8-byte boundary then float64"
+    },
+    {
+      "id": "fixed-record-int32-int32-no-padding",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {"name": "x", "type": "HLAinteger32BE"},
+          {"name": "y", "type": "HLAinteger32BE"}
+        ]
+      },
+      "value": {"x": 1, "y": -1},
+      "bytes": "00000001ffffffff",
+      "notes": "TASK-016 / TASK-017 records begin: two int32 fields pack tight; no inter-field padding; record boundary 4"
+    },
+    {
+      "id": "fixed-record-int32-float64-pad4",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {"name": "i", "type": "HLAinteger32BE"},
+          {"name": "d", "type": "HLAfloat64BE"}
+        ]
+      },
+      "value": {"i": 1, "d": 0.5},
+      "bytes": "00000001000000003fe0000000000000",
+      "notes": "TASK-016: 4 padding octets after int32 so float64 begins at offset 8; record boundary 8"
+    },
+    {
+      "id": "fixed-record-nested-octet-record-octet-float64",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {"name": "a", "type": "HLAoctet"},
+          {"name": "inner", "type": {
+            "kind": "HLAfixedRecord",
+            "fields": [
+              {"name": "x", "type": "HLAoctet"},
+              {"name": "y", "type": "HLAfloat64BE"}
+            ]
+          }}
+        ]
+      },
+      "value": {"a": 7, "inner": {"x": 9, "y": 1.0}},
+      "bytes": "07000000000000000900000000000000 3ff0000000000000",
+      "notes": "TASK-016: nested record padding resets at inner record's start; outer pads 7 bytes after octet to align inner on 8, inner pads 7 after its octet to align float64"
+    },
+    {
+      "id": "variant-record-int32-disc-1-octet",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {"discriminant": 1, "type": "HLAoctet"},
+          {"discriminant": 2, "type": "HLAfloat64BE"}
+        ]
+      },
+      "value": {"discriminator": 1, "value": 171},
+      "bytes": "00000001ab",
+      "notes": "TASK-017: discriminator=1 selects HLAoctet alternative; offset after int32 disc (4) is already aligned to octet boundary (1) so no inter-field padding; record OctetBoundary 8 = max(disc 4, alts {1,8})"
+    },
+    {
+      "id": "variant-record-int32-disc-2-float64",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {"discriminant": 1, "type": "HLAoctet"},
+          {"discriminant": 2, "type": "HLAfloat64BE"}
+        ]
+      },
+      "value": {"discriminator": 2, "value": 1.0},
+      "bytes": "00000002000000003ff0000000000000",
+      "notes": "TASK-017: discriminator=2 selects HLAfloat64BE; 4 padding bytes after int32 disc so float64 begins at offset 8; record boundary 8"
+    },
+    {
+      "id": "variant-record-int32-disc-1-octet-int32-alt",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {"discriminant": 1, "type": "HLAoctet"},
+          {"discriminant": 2, "type": "HLAinteger32BE"}
+        ]
+      },
+      "value": {"discriminator": 1, "value": 5},
+      "bytes": "0000000105",
+      "notes": "TASK-017: record OctetBoundary 4 = max(4, {1,4}); disc=1 selects HLAoctet; offset 4 aligned to boundary 1, no padding"
+    },
+    {
+      "id": "variant-record-int32-disc-2-int32-alt",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {"discriminant": 1, "type": "HLAoctet"},
+          {"discriminant": 2, "type": "HLAinteger32BE"}
+        ]
+      },
+      "value": {"discriminator": 2, "value": 42},
+      "bytes": "000000020000002a",
+      "notes": "TASK-017 / TASK-016 records end: discriminator=2 selects int32 alt; offset 4 already aligned for int32 boundary so no inter-field padding"
     }
   ]
 }
