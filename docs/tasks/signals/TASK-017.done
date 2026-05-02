@@ -1,0 +1,24 @@
+- agent: agent-b
+- branch: agent/b/m1-encoding-records
+- final-commit: pending-this-commit
+- timestamp: 2026-04-29
+- pr: pending
+- summary: |
+    HLAvariantRecord composite codec implemented per IEEE 1516.2-2010 §4.
+    Discriminator value selects the alternative codec at runtime; padding
+    between discriminator and selected alternative is computed from start
+    of record to the alternative's OctetBoundary. Record-level
+    OctetBoundary = max(disc, max alt) so nesting carries worst-case
+    alignment outward. Unknown-discriminator paths on Encode and Decode
+    return ErrEncTypeMismatch wrapped with context.
+    4 new variant-record vectors land in tests/conformance/encoding_vectors.json
+    in the contiguous TASK-016 / TASK-017 records block, exercising both
+    {HLAoctet, HLAfloat64BE} and {HLAoctet, HLAinteger32BE} alternative sets
+    and three distinct padding shapes (no pad, 4-byte pad, octet alt).
+    Coverage on rti/pkg/encoding/variant_record.go: ~93% (>= 80%).
+- acceptance:
+    - 4 variant-record vectors covering different discriminator branches
+    - explicit byte-layout assertions (not round-trip-only)
+    - unknown-discriminator -> errors.Is(err, ErrEncTypeMismatch)
+    - golangci-lint clean on rti/pkg/encoding
+    - additive-only on encoding_vectors.json

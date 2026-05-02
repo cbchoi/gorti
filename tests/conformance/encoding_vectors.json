@@ -1,7 +1,7 @@
 {
   "version": 1,
   "_meta": {
-    "purpose": "Golden cross-language byte vectors for HLA Evolved encoding rules per IEEE 1516.2-2010 §4.",
+    "purpose": "Golden cross-language byte vectors for HLA Evolved encoding rules per IEEE 1516.2-2010 \u00a74.",
     "owner": "orchestrator at M0; Agent B may add vectors during M1; Agent C must produce byte-identical output.",
     "format": "Each vector has id, type (string for primitive, object for composite), value (JSON), bytes (lowercase hex, no separators), optional notes.",
     "stability": "Vectors are additive only; do not delete or modify after agents have implemented against them. New diagnostics: file a contract-change-request."
@@ -401,28 +401,28 @@
     {
       "id": "unicode-char-omega",
       "type": "HLAunicodeChar",
-      "value": "Ω",
+      "value": "\u03a9",
       "bytes": "03a9",
       "notes": "TASK-012; Greek capital Omega U+03A9"
     },
     {
       "id": "unicode-char-han",
       "type": "HLAunicodeChar",
-      "value": "中",
+      "value": "\u4e2d",
       "bytes": "4e2d",
       "notes": "TASK-012; CJK ideograph U+4E2D"
     },
     {
       "id": "unicode-char-pi",
       "type": "HLAunicodeChar",
-      "value": "π",
+      "value": "\u03c0",
       "bytes": "03c0",
       "notes": "TASK-012; Greek small letter pi U+03C0"
     },
     {
       "id": "unicode-char-bom",
       "type": "HLAunicodeChar",
-      "value": "﻿",
+      "value": "\ufeff",
       "bytes": "feff",
       "notes": "TASK-012; ZWNBSP / BOM U+FEFF"
     },
@@ -471,86 +471,314 @@
     {
       "id": "unicode-string-omega",
       "type": "HLAunicodeString",
-      "value": "Ω",
+      "value": "\u03a9",
       "bytes": "0000000103a9",
       "notes": "TASK-013; length 1 code unit, U+03A9 Greek capital omega"
     },
     {
       "id": "fixed-array-int32-3",
-      "type": {"kind": "HLAfixedArray", "element": "HLAinteger32BE", "cardinality": 3},
-      "value": [1, 2, 3],
+      "type": {
+        "kind": "HLAfixedArray",
+        "element": "HLAinteger32BE",
+        "cardinality": 3
+      },
+      "value": [
+        1,
+        2,
+        3
+      ],
       "bytes": "000000010000000200000003",
       "notes": "TASK-014/015/018 composite block begin; HLAfixedArray of 3 int32BE; 4-byte boundary, no inter-element padding"
     },
     {
       "id": "fixed-array-float64-2",
-      "type": {"kind": "HLAfixedArray", "element": "HLAfloat64BE", "cardinality": 2},
-      "value": [1.0, 0.5],
+      "type": {
+        "kind": "HLAfixedArray",
+        "element": "HLAfloat64BE",
+        "cardinality": 2
+      },
+      "value": [
+        1.0,
+        0.5
+      ],
       "bytes": "3ff00000000000003fe0000000000000",
       "notes": "TASK-014; HLAfixedArray of 2 float64BE; 8-byte boundary, no inter-element padding because each element fills its boundary"
     },
     {
       "id": "fixed-array-octet-5",
-      "type": {"kind": "HLAfixedArray", "element": "HLAoctet", "cardinality": 5},
-      "value": [1, 2, 3, 4, 5],
+      "type": {
+        "kind": "HLAfixedArray",
+        "element": "HLAoctet",
+        "cardinality": 5
+      },
+      "value": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
       "bytes": "0102030405",
       "notes": "TASK-014; HLAfixedArray of 5 HLAoctet; 1-byte boundary, no padding"
     },
     {
       "id": "variable-array-int32-empty",
-      "type": {"kind": "HLAvariableArray", "element": "HLAinteger32BE"},
+      "type": {
+        "kind": "HLAvariableArray",
+        "element": "HLAinteger32BE"
+      },
       "value": [],
       "bytes": "00000000",
       "notes": "TASK-015; HLAvariableArray empty: just the 4-byte zero length prefix"
     },
     {
       "id": "variable-array-int32-2",
-      "type": {"kind": "HLAvariableArray", "element": "HLAinteger32BE"},
-      "value": [1, 2],
+      "type": {
+        "kind": "HLAvariableArray",
+        "element": "HLAinteger32BE"
+      },
+      "value": [
+        1,
+        2
+      ],
       "bytes": "000000020000000100000002",
       "notes": "TASK-015; HLAvariableArray of 2 int32BE"
     },
     {
       "id": "variable-array-float64-3",
-      "type": {"kind": "HLAvariableArray", "element": "HLAfloat64BE"},
-      "value": [1.0, 0.5, -2.0],
+      "type": {
+        "kind": "HLAvariableArray",
+        "element": "HLAfloat64BE"
+      },
+      "value": [
+        1.0,
+        0.5,
+        -2.0
+      ],
       "bytes": "00000003000000003ff00000000000003fe0000000000000c000000000000000",
       "notes": "TASK-015; HLAvariableArray of 3 float64BE; padding test: 4-byte length prefix + 4 bytes pad to reach 8-byte float64 boundary, then 3 doubles"
     },
     {
       "id": "opaque-empty",
-      "type": {"kind": "HLAopaqueData"},
+      "type": {
+        "kind": "HLAopaqueData"
+      },
       "value": "",
       "bytes": "00000000",
       "notes": "TASK-018; empty opaque blob; 4-byte zero length prefix"
     },
     {
       "id": "opaque-deadbeef",
-      "type": {"kind": "HLAopaqueData"},
+      "type": {
+        "kind": "HLAopaqueData"
+      },
       "value": "deadbeef",
       "bytes": "00000004deadbeef",
       "notes": "TASK-018; 4-byte payload (hex-encoded in value field)"
     },
     {
       "id": "opaque-three-bytes",
-      "type": {"kind": "HLAopaqueData"},
+      "type": {
+        "kind": "HLAopaqueData"
+      },
       "value": "010203",
       "bytes": "00000003010203",
       "notes": "TASK-014/015/018 composite block end; 3-byte payload (hex-encoded in value field)"
     },
     {
-      "_disabled": true,
       "id": "fixed-record-octet-float64",
       "type": {
         "kind": "HLAfixedRecord",
         "fields": [
-          {"name": "a", "type": "HLAoctet"},
-          {"name": "b", "type": "HLAfloat64BE"}
+          {
+            "name": "a",
+            "type": "HLAoctet"
+          },
+          {
+            "name": "b",
+            "type": "HLAfloat64BE"
+          }
         ]
       },
-      "value": {"a": 5, "b": 1.0},
-      "bytes": "0500000000000000 3ff0000000000000",
-      "notes": "EXAMPLE composite vector; commented (_disabled) until Agent B implements composite codec via CodecFor; padding to 8-byte boundary then float64"
+      "value": {
+        "a": 5,
+        "b": 1.0
+      },
+      "bytes": "05000000000000003ff0000000000000",
+      "notes": "Fixed-record: HLAoctet + 7 padding bytes + HLAfloat64BE; 8-byte record boundary"
+    },
+    {
+      "id": "fixed-record-int32-int32-no-padding",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {
+            "name": "x",
+            "type": "HLAinteger32BE"
+          },
+          {
+            "name": "y",
+            "type": "HLAinteger32BE"
+          }
+        ]
+      },
+      "value": {
+        "x": 1,
+        "y": -1
+      },
+      "bytes": "00000001ffffffff",
+      "notes": "TASK-016 / TASK-017 records begin: two int32 fields pack tight; no inter-field padding; record boundary 4"
+    },
+    {
+      "id": "fixed-record-int32-float64-pad4",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {
+            "name": "i",
+            "type": "HLAinteger32BE"
+          },
+          {
+            "name": "d",
+            "type": "HLAfloat64BE"
+          }
+        ]
+      },
+      "value": {
+        "i": 1,
+        "d": 0.5
+      },
+      "bytes": "00000001000000003fe0000000000000",
+      "notes": "TASK-016: 4 padding octets after int32 so float64 begins at offset 8; record boundary 8"
+    },
+    {
+      "id": "fixed-record-nested-octet-record-octet-float64",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {
+            "name": "a",
+            "type": "HLAoctet"
+          },
+          {
+            "name": "inner",
+            "type": {
+              "kind": "HLAfixedRecord",
+              "fields": [
+                {
+                  "name": "x",
+                  "type": "HLAoctet"
+                },
+                {
+                  "name": "y",
+                  "type": "HLAfloat64BE"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "value": {
+        "a": 7,
+        "inner": {
+          "x": 9,
+          "y": 1.0
+        }
+      },
+      "bytes": "07000000000000000900000000000000 3ff0000000000000",
+      "notes": "TASK-016: nested record padding resets at inner record's start; outer pads 7 bytes after octet to align inner on 8, inner pads 7 after its octet to align float64"
+    },
+    {
+      "id": "variant-record-int32-disc-1-octet",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAfloat64BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 1,
+        "value": 171
+      },
+      "bytes": "00000001ab",
+      "notes": "TASK-017: discriminator=1 selects HLAoctet alternative; offset after int32 disc (4) is already aligned to octet boundary (1) so no inter-field padding; record OctetBoundary 8 = max(disc 4, alts {1,8})"
+    },
+    {
+      "id": "variant-record-int32-disc-2-float64",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAfloat64BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 2,
+        "value": 1.0
+      },
+      "bytes": "00000002000000003ff0000000000000",
+      "notes": "TASK-017: discriminator=2 selects HLAfloat64BE; 4 padding bytes after int32 disc so float64 begins at offset 8; record boundary 8"
+    },
+    {
+      "id": "variant-record-int32-disc-1-octet-int32-alt",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAinteger32BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 1,
+        "value": 5
+      },
+      "bytes": "0000000105",
+      "notes": "TASK-017: record OctetBoundary 4 = max(4, {1,4}); disc=1 selects HLAoctet; offset 4 aligned to boundary 1, no padding"
+    },
+    {
+      "id": "variant-record-int32-disc-2-int32-alt",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAinteger32BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 2,
+        "value": 42
+      },
+      "bytes": "000000020000002a",
+      "notes": "TASK-017 / TASK-016 records end: discriminator=2 selects int32 alt; offset 4 already aligned for int32 boundary so no inter-field padding"
     }
   ]
 }
