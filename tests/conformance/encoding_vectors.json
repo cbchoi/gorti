@@ -114,6 +114,136 @@
       "notes": "UTF-16 BE; octet boundary 2"
     },
     {
+      "id": "int16be-zero",
+      "type": "HLAinteger16BE",
+      "value": 0,
+      "bytes": "0000",
+      "notes": "octet boundary 2"
+    },
+    {
+      "id": "int16be-one",
+      "type": "HLAinteger16BE",
+      "value": 1,
+      "bytes": "0001"
+    },
+    {
+      "id": "int16be-neg-one",
+      "type": "HLAinteger16BE",
+      "value": -1,
+      "bytes": "ffff",
+      "notes": "two's complement"
+    },
+    {
+      "id": "int16be-max",
+      "type": "HLAinteger16BE",
+      "value": 32767,
+      "bytes": "7fff"
+    },
+    {
+      "id": "int16be-min",
+      "type": "HLAinteger16BE",
+      "value": -32768,
+      "bytes": "8000",
+      "notes": "two's complement"
+    },
+    {
+      "id": "int16le-zero",
+      "type": "HLAinteger16LE",
+      "value": 0,
+      "bytes": "0000",
+      "notes": "octet boundary 2"
+    },
+    {
+      "id": "int16le-one",
+      "type": "HLAinteger16LE",
+      "value": 1,
+      "bytes": "0100"
+    },
+    {
+      "id": "int16le-neg-one",
+      "type": "HLAinteger16LE",
+      "value": -1,
+      "bytes": "ffff"
+    },
+    {
+      "id": "int16le-max",
+      "type": "HLAinteger16LE",
+      "value": 32767,
+      "bytes": "ff7f"
+    },
+    {
+      "id": "int16le-min",
+      "type": "HLAinteger16LE",
+      "value": -32768,
+      "bytes": "0080",
+      "notes": "two's complement, little-endian"
+    },
+    {
+      "id": "int32le-zero",
+      "type": "HLAinteger32LE",
+      "value": 0,
+      "bytes": "00000000",
+      "notes": "octet boundary 4"
+    },
+    {
+      "id": "int32le-one",
+      "type": "HLAinteger32LE",
+      "value": 1,
+      "bytes": "01000000"
+    },
+    {
+      "id": "int32le-neg-one",
+      "type": "HLAinteger32LE",
+      "value": -1,
+      "bytes": "ffffffff"
+    },
+    {
+      "id": "int32le-max",
+      "type": "HLAinteger32LE",
+      "value": 2147483647,
+      "bytes": "ffffff7f"
+    },
+    {
+      "id": "int32le-min",
+      "type": "HLAinteger32LE",
+      "value": -2147483648,
+      "bytes": "00000080",
+      "notes": "two's complement, little-endian"
+    },
+    {
+      "id": "int64le-zero",
+      "type": "HLAinteger64LE",
+      "value": 0,
+      "bytes": "0000000000000000",
+      "notes": "octet boundary 8"
+    },
+    {
+      "id": "int64le-one",
+      "type": "HLAinteger64LE",
+      "value": 1,
+      "bytes": "0100000000000000"
+    },
+    {
+      "id": "int64le-neg-one",
+      "type": "HLAinteger64LE",
+      "value": -1,
+      "bytes": "ffffffffffffffff"
+    },
+    {
+      "id": "int64le-large",
+      "type": "HLAinteger64LE",
+      "value": 9007199254740992,
+      "bytes": "0000000000002000",
+      "notes": "2^53; largest exact integer round-trip through JSON float64"
+    },
+    {
+      "id": "int64le-large-neg",
+      "type": "HLAinteger64LE",
+      "value": -9007199254740992,
+      "bytes": "000000000000e0ff",
+      "notes": "-2^53; exact-integer round-trip, two's complement little-endian"
+    },
+    {
       "_disabled": true,
       "id": "fixed-record-octet-float64",
       "type": {
