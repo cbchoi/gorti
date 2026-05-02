@@ -105,3 +105,54 @@ func (e *fakeEventRecord) Seq() uint64 { return e.seq }
 
 // errCanned is a sentinel for "any error" assertions in spec tests.
 var errCanned = errors.New("canned test error")
+
+// ===========================================================================
+// permissiveEventLog — multi-federation core.EventLog that records every
+// Append and accepts any federation name. Real eventlog.Writer enforces
+// single-federation, which is correct for production but inconvenient for
+// fixture tests that exercise multiple federations through one Manager.
+// ===========================================================================
+
+type permissiveEventLog struct {
+	mu        sync.Mutex
+	nextSeq   uint64
+	appended  []permissiveAppend
+}
+
+type permissiveAppend struct {
+	Federation core.FederationName
+	Seq        uint64
+	Event      core.EventRecord
+}
+
+func newPermissiveEventLog() *permissiveEventLog {
+	return &permissiveEventLog{}
+}
+
+// Append assigns the next monotonic seq, records the call, and returns nil.
+// It does NOT marshal or persist; spec tests that need on-disk format use
+// the real eventlog.Writer directly.
+func (l *permissiveEventLog) Append(_ context.Context, fed core.FederationName, evt core.EventRecord) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.nextSeq++
+	if e, ok := evt.(*fakeEventRecord); ok {
+		e.seq = l.nextSeq
+	}
+	l.appended = append(l.appended, permissiveAppend{Federation: fed, Seq: l.nextSeq, Event: evt})
+	return nil
+}
+
+func (*permissiveEventLog) Sync(_ context.Context, _ core.FederationName) error { return nil }
+
+func (*permissiveEventLog) OpenReader(_ context.Context, _ string) (core.EventLogReader, error) {
+	return nil, errors.New("permissiveEventLog: OpenReader not supported in fixtures")
+}
+
+func (l *permissiveEventLog) Appended() []permissiveAppend {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]permissiveAppend, len(l.appended))
+	copy(out, l.appended)
+	return out
+}

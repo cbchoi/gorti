@@ -9,52 +9,34 @@ import (
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/eventlog"
 	"github.com/cbchoi/gorti/rti/internal/federation"
 )
 
-// newTestFederationManager builds a federation.Manager wired with the
-// fakes most tests want. Returns the manager, the in-memory log buffer
-// (for inspection), and the FOM repo (for canned-error injection).
-func newTestFederationManager(t *testing.T) (*federation.Manager, *eventlog.Writer, *fakeFOMRepo) {
+// newTestFederationManager builds a federation.Manager wired with fakes.
+// Uses a permissive multi-federation EventLog so a single Manager can
+// host multiple federations across test cases (the production
+// eventlog.Writer is single-federation by design).
+//
+// Returns the manager, the permissive log (for inspection), and the
+// FOM repo (for canned-error injection).
+func newTestFederationManager(t *testing.T) (*federation.Manager, *permissiveEventLog, *fakeFOMRepo) {
 	t.Helper()
-	clk := core.NewFakeClock(time.Unix(0, 0))
+	log := newPermissiveEventLog()
 	repo := newFakeFOMRepo()
-	// Each test gets its own log buffer; the writer header validation is
-	// covered separately in eventlog_test.go.
-	w, err := eventlog.NewWriter(eventlog.WriterOptions{
-		Sink:       newDiscardSink(),
-		Federation: "_test",
-		Mode:       core.ModeVerbose,
-		Seed:       1,
-		Clock:      clk,
-	})
-	if err != nil {
-		// Stub returns ErrNotImplemented; that's OK — federation tests
-		// can still proceed with a nil writer. They reach the
-		// federation manager's stub before touching the log.
-		w = nil
-	}
-	mgr, mErr := federation.New(federation.Options{
-		Clock:               clk,
-		EventLog:            w,
+	mgr, err := federation.New(federation.Options{
+		Clock:               core.NewFakeClock(time.Unix(0, 0)),
+		EventLog:            log,
 		FOMs:                repo,
 		DefaultStallTimeout: 60,
 	})
-	if mErr != nil {
-		// Until New is implemented, mgr is nil — tests must not deref it
-		// before exercising the public API. The first method call hits
-		// the stub and returns ErrNotImplemented.
-		t.Logf("federation.New returned: %v (expected during M2 RED phase)", mErr)
+	if err != nil {
+		// Until federation.New is implemented, mgr is nil — tests must
+		// not deref it before exercising the public API. The first method
+		// call hits the stub and returns ErrNotImplemented.
+		t.Logf("federation.New returned: %v (expected during M2 RED phase)", err)
 	}
-	return mgr, w, repo
+	return mgr, log, repo
 }
-
-// discardSink swallows writes. Used until eventlog.Writer is real.
-type discardSink struct{}
-
-func newDiscardSink() *discardSink                { return &discardSink{} }
-func (*discardSink) Write(p []byte) (int, error) { return len(p), nil }
 
 // TestSpec_M2_CreateFederation_Happy: a brand-new federation with valid
 // FOM modules is created without error.
