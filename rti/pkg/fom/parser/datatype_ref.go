@@ -2,52 +2,50 @@ package parser
 
 import (
 	"fmt"
+
+	"github.com/cbchoi/gorti/rti/pkg/fom/mim"
 )
 
 // datatypeRefValidator emits FOM-001 for every attribute or parameter
 // whose declared dataType name does not resolve to either a MIM-provided
-// primitive or a type declared in the FOM module.
+// dataType or a type declared in the FOM module.
 //
-// TODO(#1): replace mimPrimitives with a lookup against the loaded MIM
-// (rti/pkg/fom/mim) once TASK-008 lands. The hard-coded set below covers
-// only the basic-data primitives the M1 spec tests reference; a full MIM
-// also publishes simpleData (HLAcount, HLAtime, ...) and standard
-// enumerations that user FOMs may reference.
+// The MIM-provided set is sourced from the embedded standard MIM via
+// mim.StandardMIMHandle (TASK-008 / TASK-009). Names covered include the
+// basic representations (HLAinteger*, HLAfloat*, HLAoctet*), the simpleData
+// aliases (HLAboolean, HLAhandle, HLAASCIIchar, HLAunicodeChar) and the
+// arrayData strings (HLAASCIIstring, HLAunicodeString, HLAopaqueData) — i.e.
+// every name the standard MIM declares.
 type datatypeRefValidator struct{}
 
 func init() {
 	diagnosers = append(diagnosers, datatypeRefValidator{})
 }
 
-// mimPrimitives is the closed set of HLA Evolved basic data type names from
-// IEEE 1516.2-2010 §6.2 (Annex B baseline). Used until TASK-008 lands a
-// real MIM repository.
-var mimPrimitives = map[string]struct{}{
-	"HLAinteger16BE":   {},
-	"HLAinteger16LE":   {},
-	"HLAinteger32BE":   {},
-	"HLAinteger32LE":   {},
-	"HLAinteger64BE":   {},
-	"HLAinteger64LE":   {},
-	"HLAfloat32BE":     {},
-	"HLAfloat32LE":     {},
-	"HLAfloat64BE":     {},
-	"HLAfloat64LE":     {},
-	"HLAoctet":         {},
-	"HLAoctetPairBE":   {},
-	"HLAoctetPairLE":   {},
-	"HLAboolean":       {},
-	"HLAASCIIchar":     {},
-	"HLAunicodeChar":   {},
-	"HLAASCIIstring":   {},
-	"HLAunicodeString": {},
-	"HLAopaqueData":    {},
+// mimDataTypeNames returns the set of dataType names declared by the
+// embedded standard MIM. If the MIM cannot be loaded (build-time bug in
+// the vendored XML), returns nil; the caller treats that as an empty set
+// and FOM-001 firing for every previously-resolved name surfaces the
+// problem loudly. The set is recomputed on every call rather than cached
+// to keep the code path stateless; mim.StandardMIMHandle is itself
+// memoized so the underlying parse runs at most once per process.
+func mimDataTypeNames() map[string]struct{} {
+	base, err := mim.StandardMIMHandle()
+	if err != nil || base == nil {
+		return nil
+	}
+	out := make(map[string]struct{}, len(base.DataTypes()))
+	for _, dt := range base.DataTypes() {
+		out[dt.Name()] = struct{}{}
+	}
+	return out
 }
 
 func (datatypeRefValidator) Run(in diagnosticInput) []Diagnostic {
 	if in.fom == nil {
 		return nil
 	}
+	mimNames := mimDataTypeNames()
 	declared := map[string]struct{}{}
 	for _, dt := range in.fom.DataTypes() {
 		declared[dt.Name()] = struct{}{}
@@ -56,7 +54,7 @@ func (datatypeRefValidator) Run(in diagnosticInput) []Diagnostic {
 		if name == "" {
 			return true
 		}
-		if _, ok := mimPrimitives[name]; ok {
+		if _, ok := mimNames[name]; ok {
 			return true
 		}
 		_, ok := declared[name]
