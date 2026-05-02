@@ -114,6 +114,76 @@
       "notes": "UTF-16 BE; octet boundary 2"
     },
     {
+      "id": "octet-zero",
+      "type": "HLAoctet",
+      "value": 0,
+      "bytes": "00",
+      "notes": "TASK-012; min unsigned single byte"
+    },
+    {
+      "id": "octet-one",
+      "type": "HLAoctet",
+      "value": 1,
+      "bytes": "01",
+      "notes": "TASK-012"
+    },
+    {
+      "id": "octet-max",
+      "type": "HLAoctet",
+      "value": 255,
+      "bytes": "ff",
+      "notes": "TASK-012; max unsigned single byte"
+    },
+    {
+      "id": "ascii-char-tilde",
+      "type": "HLAASCIIchar",
+      "value": "~",
+      "bytes": "7e",
+      "notes": "TASK-012; high printable ASCII"
+    },
+    {
+      "id": "ascii-char-zero",
+      "type": "HLAASCIIchar",
+      "value": "0",
+      "bytes": "30",
+      "notes": "TASK-012"
+    },
+    {
+      "id": "ascii-char-space",
+      "type": "HLAASCIIchar",
+      "value": " ",
+      "bytes": "20",
+      "notes": "TASK-012"
+    },
+    {
+      "id": "unicode-char-omega",
+      "type": "HLAunicodeChar",
+      "value": "Ω",
+      "bytes": "03a9",
+      "notes": "TASK-012; Greek capital Omega U+03A9"
+    },
+    {
+      "id": "unicode-char-han",
+      "type": "HLAunicodeChar",
+      "value": "中",
+      "bytes": "4e2d",
+      "notes": "TASK-012; CJK ideograph U+4E2D"
+    },
+    {
+      "id": "unicode-char-pi",
+      "type": "HLAunicodeChar",
+      "value": "π",
+      "bytes": "03c0",
+      "notes": "TASK-012; Greek small letter pi U+03C0"
+    },
+    {
+      "id": "unicode-char-bom",
+      "type": "HLAunicodeChar",
+      "value": "﻿",
+      "bytes": "feff",
+      "notes": "TASK-012; ZWNBSP / BOM U+FEFF"
+    },
+    {
       "_disabled": true,
       "id": "fixed-record-octet-float64",
       "type": {
