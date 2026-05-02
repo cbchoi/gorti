@@ -3,6 +3,9 @@ package federation
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
+	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
@@ -12,6 +15,10 @@ import (
 // turn green as functionality is added.
 var ErrNotImplemented = errors.New("federation: not implemented (Agent A M2 deliverable)")
 
+// defaultStallTimeoutSeconds is the cut-1 default applied when callers leave
+// Options.DefaultStallTimeout at zero. Per srs.md §10.2 M3 stall test.
+const defaultStallTimeoutSeconds = 60
+
 // Manager implements core.FederationStore. It owns the per-federation roster
 // state (federates, mode, FOM handle, stall config) and emits federation-
 // lifecycle events to its EventLog.
@@ -20,7 +27,29 @@ var ErrNotImplemented = errors.New("federation: not implemented (Agent A M2 deli
 // mutex; a future M5 perf task may shard if benchmarks demand it.
 type Manager struct {
 	opts Options
-	// Internal state lives in the implementation; declared in M2 by Agent A.
+
+	mu          sync.RWMutex
+	federations map[core.FederationName]*federationState
+}
+
+// federationState is the per-federation in-memory record. Mutations require
+// the federation's own write lock (acquired via Manager.mu plus the per-
+// federation mu); reads can use the read lock.
+type federationState struct {
+	mu sync.RWMutex
+
+	name         core.FederationName
+	mode         core.Mode
+	stallTimeout time.Duration
+	seed         uint64
+	fom          core.FOMHandle
+
+	// nameToHandle and handleToName are kept consistent: handles are
+	// reassigned by sort order of name on every join (deterministic per
+	// docs/agent-a-rti-core.md §5.5). For cut 1 the recompute is O(N log N);
+	// optimization deferred per dispatch brief ARCH section.
+	nameToHandle map[string]core.FederateHandle
+	handleToName map[core.FederateHandle]string
 }
 
 // Options bundles Manager dependencies. Nil values use sensible defaults
@@ -50,8 +79,24 @@ type Options struct {
 
 // New constructs a Manager. Returns an error if any required dependency in
 // opts is nil. The returned Manager is ready for concurrent use.
+//
+// Required: Clock, FOMs. Optional: EventLog (cut-1 relaxation — when nil,
+// federation-lifecycle events are silently dropped; Wave 1B implements the
+// real EventLog and W4 wiring then supplies a non-nil writer in production).
 func New(opts Options) (*Manager, error) {
-	return &Manager{opts: opts}, ErrNotImplemented
+	if opts.Clock == nil {
+		return nil, errors.New("federation: Options.Clock is required")
+	}
+	if opts.FOMs == nil {
+		return nil, errors.New("federation: Options.FOMs is required")
+	}
+	if opts.DefaultStallTimeout == 0 {
+		opts.DefaultStallTimeout = defaultStallTimeoutSeconds
+	}
+	return &Manager{
+		opts:        opts,
+		federations: map[core.FederationName]*federationState{},
+	}, nil
 }
 
 // CreateFederation implements core.FederationStore. See SRS §FR-FM-1.
@@ -65,9 +110,34 @@ func New(opts Options) (*Manager, error) {
 //   - Returns the assigned seed in CreateFederationResponse via the gRPC
 //     handler layer (this method only signals success/error).
 func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederationRequest) error {
-	_ = ctx
-	_ = req
-	return ErrNotImplemented
+	if req.Name == "" {
+		return core.ErrFederationInvalidName
+	}
+	fom, err := m.opts.FOMs.Load(ctx, req.FOMModules)
+	if err != nil {
+		return fmt.Errorf("federation %q create: %w", req.Name, err)
+	}
+
+	stall := req.StallTimeout
+	if stall == 0 {
+		stall = time.Duration(m.opts.DefaultStallTimeout) * time.Second
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.federations[req.Name]; exists {
+		return core.ErrFederationAlreadyExists
+	}
+	m.federations[req.Name] = &federationState{
+		name:         req.Name,
+		mode:         req.Mode,
+		stallTimeout: stall,
+		seed:         req.Seed,
+		fom:          fom,
+		nameToHandle: map[string]core.FederateHandle{},
+		handleToName: map[core.FederateHandle]string{},
+	}
+	return nil
 }
 
 // DestroyFederation implements core.FederationStore. See SRS §FR-FM-5.
