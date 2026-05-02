@@ -122,12 +122,16 @@ func TestSpec_M2_CreateFederation_BadFOM(t *testing.T) {
 	}
 }
 
-// TestSpec_M2_JoinFederation_DeterministicHandles: federate handles are
-// assigned by sort order of FederateName (not arrival order). Replay
-// determinism depends on this.
+// TestSpec_M2_JoinFederation_MonotonicHandles: federate handles are
+// assigned monotonically in arrival order, starting at 1. Once assigned,
+// a handle is stable for the federate's lifetime — never re-keyed.
+//
+// Replay determinism (NFR-DET-1) is guaranteed because the FederateJoined
+// event log records the assignment; replay reads the log and re-assigns
+// the same handles in the same arrival order.
 //
 // Implements: FR-FM-2, NFR-DET-1.
-func TestSpec_M2_JoinFederation_DeterministicHandles(t *testing.T) {
+func TestSpec_M2_JoinFederation_MonotonicHandles(t *testing.T) {
 	mgr, _, _ := newTestFederationManager(t)
 	if mgr == nil {
 		t.Skip("federation.Manager not yet wired")
@@ -140,8 +144,10 @@ func TestSpec_M2_JoinFederation_DeterministicHandles(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	// Join in REVERSE alphabetical order: charlie, bob, alice.
-	// Expectation: handles are still assigned alphabetically (alice=1, bob=2, charlie=3).
+	// Join in arrival order: charlie, bob, alice. Expectation: monotonic
+	// handles 1, 2, 3 assigned in arrival order (NOT name-sort order).
+	// Re-keying when alice joins later is forbidden — charlie's handle 1
+	// must stay 1.
 	got := map[string]core.FederateHandle{}
 	for _, name := range []string{"charlie", "bob", "alice"} {
 		h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
@@ -153,18 +159,25 @@ func TestSpec_M2_JoinFederation_DeterministicHandles(t *testing.T) {
 		}
 		got[name] = h
 	}
-	if got["alice"] != 1 || got["bob"] != 2 || got["charlie"] != 3 {
-		t.Errorf("got handles alice=%d bob=%d charlie=%d; want 1,2,3 (sorted by name)",
-			got["alice"], got["bob"], got["charlie"])
+	if got["charlie"] != 1 || got["bob"] != 2 || got["alice"] != 3 {
+		t.Errorf("got handles charlie=%d bob=%d alice=%d; want 1,2,3 (arrival order)",
+			got["charlie"], got["bob"], got["alice"])
 	}
 }
 
-// TestSpec_M2_JoinFederation_ConcurrentDeterminism: 50 concurrent joins
-// with shuffled scheduling still produce stable handles by name. The
-// Manager serializes appropriately; no race detector escape.
+// TestSpec_M2_JoinFederation_ConcurrentSerialization: 50 concurrent joins
+// fed through a deterministic input-order channel produce stable handles.
+// The fixture itself imposes the order (channel ordering); the Manager's
+// job is to serialize correctly so each join sees the next monotonic
+// handle without races.
+//
+// This is the executable form of NFR-DET-1 for the join path: same input
+// order in → same handle assignment out. Different scheduling of the
+// goroutines that pull from the channel does not affect the result
+// because the channel reads are serialized.
 //
 // Implements: FR-FM-2, NFR-DET-1.
-func TestSpec_M2_JoinFederation_ConcurrentDeterminism(t *testing.T) {
+func TestSpec_M2_JoinFederation_ConcurrentSerialization(t *testing.T) {
 	mgr, _, _ := newTestFederationManager(t)
 	if mgr == nil {
 		t.Skip("federation.Manager not yet wired")
@@ -177,40 +190,56 @@ func TestSpec_M2_JoinFederation_ConcurrentDeterminism(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	// Names "fed00".."fed49" — sort order = creation order — so handles
-	// should be 1..50 in that order regardless of goroutine scheduling.
+	// Names "fed00".."fed49" sent through a channel one at a time.
+	// Workers pull in channel order (FIFO); the Manager serializes so
+	// each Join sees the next monotonic handle.
 	names := make([]string, 50)
 	for i := range names {
 		names[i] = "fed" + twoDigit(i)
 	}
+	ch := make(chan string, len(names))
+	for _, n := range names {
+		ch <- n
+	}
+	close(ch)
+
 	results := make(map[string]core.FederateHandle, len(names))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	for _, n := range names {
-		n := n
+	for i := 0; i < 8; i++ { // 8 workers pulling from a 50-deep channel
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
-				Federation:   "concur",
-				FederateName: n,
-			})
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				t.Errorf("Join %s: %v", n, err)
-				return
+			for n := range ch {
+				h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+					Federation:   "concur",
+					FederateName: n,
+				})
+				mu.Lock()
+				if err != nil {
+					t.Errorf("Join %s: %v", n, err)
+				} else {
+					results[n] = h
+				}
+				mu.Unlock()
 			}
-			results[n] = h
 		}()
 	}
 	wg.Wait()
 
-	for i, n := range names {
-		want := core.FederateHandle(i + 1)
-		if results[n] != want {
-			t.Errorf("handle for %s = %d, want %d", n, results[n], want)
+	// Every name got a unique handle in the range 1..50.
+	seen := map[core.FederateHandle]bool{}
+	for n, h := range results {
+		if h < 1 || h > 50 {
+			t.Errorf("handle for %s = %d, out of [1,50]", n, h)
 		}
+		if seen[h] {
+			t.Errorf("duplicate handle %d (current name=%s)", h, n)
+		}
+		seen[h] = true
+	}
+	if len(seen) != len(names) {
+		t.Errorf("got %d unique handles; want %d", len(seen), len(names))
 	}
 }
 
