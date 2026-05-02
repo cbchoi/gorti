@@ -34,10 +34,11 @@ func main() {
 	logDir := flag.String("log-dir", "", "directory for per-federation event log files (empty = require explicit set)")
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFormat := flag.String("log-format", "json", "log format: json|text")
-	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo")
+	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo|replay-from-log")
 	pingpongRounds := flag.Int("pingpong-rounds", 1000, "rounds for pingpong-demo mode")
 	pingpongFederation := flag.String("pingpong-federation", "pingpong", "federation name for pingpong-demo mode")
 	pingpongDeterministic := flag.Bool("pingpong-deterministic", false, "use FakeClock so the event-log body is byte-deterministic across runs")
+	replayInput := flag.String("replay-input", "", "source event-log file path for replay-from-log mode")
 	flag.Parse()
 
 	logger := buildLogger(*logLevel, *logFormat)
@@ -47,12 +48,37 @@ func main() {
 	case "pingpong-demo":
 		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir, *pingpongDeterministic)
 		return
+	case "replay-from-log":
+		runReplayMain(logger, *replayInput, *logDir)
+		return
 	case "server", "":
 		runServerMain(logger, *listen, *metricsListen, *logDir)
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
 		os.Exit(2)
 	}
+}
+
+// runReplayMain feeds an existing event log through eventlog.NewReplayer
+// and writes the captured stream into logDir. Used by the
+// examples/go-pingpong/replay_test.go harness to satisfy the M2 gate's
+// "feed log back through fresh RTI; assert byte-identical" contract.
+func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
+	if inputPath == "" {
+		logger.Error("replay-from-log requires -replay-input")
+		os.Exit(2)
+	}
+	if logDir == "" {
+		logger.Error("replay-from-log requires -log-dir")
+		os.Exit(2)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := runReplayFromFile(ctx, inputPath, logDir); err != nil {
+		logger.Error("replay failed", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("replay complete", "input", inputPath, "output_dir", logDir)
 }
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until

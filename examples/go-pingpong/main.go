@@ -119,3 +119,37 @@ func rtidCommand(args exampleArgs) (string, []string, error) {
 	}
 	return "go", append([]string{"run", "./rti/cmd/rtid"}, common...), nil
 }
+
+// replayArgs configures runReplay: drive an existing event-log file
+// through rtid -mode=replay-from-log and capture the new stream into
+// outputDir.
+type replayArgs struct {
+	InputLogPath string
+	OutputDir    string
+	RtidBinary   string
+}
+
+// runReplay shells out to "rtid -mode=replay-from-log" so the replay
+// path goes through the production eventlog.NewReplayer. Returns when
+// the subprocess exits.
+func runReplay(ctx context.Context, args replayArgs) error {
+	rtidArgs := []string{
+		"-mode=replay-from-log",
+		"-replay-input=" + args.InputLogPath,
+		"-log-dir=" + args.OutputDir,
+		"-log-format=text",
+	}
+	var name string
+	var fullArgs []string
+	if args.RtidBinary != "" {
+		name = args.RtidBinary
+		fullArgs = rtidArgs
+	} else {
+		name = "go"
+		fullArgs = append([]string{"run", "./rti/cmd/rtid"}, rtidArgs...)
+	}
+	cmd := exec.CommandContext(ctx, name, fullArgs...) //nolint:gosec // controlled args
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	return cmd.Run()
+}
