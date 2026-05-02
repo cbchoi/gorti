@@ -427,6 +427,55 @@
       "notes": "TASK-012; ZWNBSP / BOM U+FEFF"
     },
     {
+      "id": "ascii-string-empty",
+      "type": "HLAASCIIstring",
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-013; 4-byte BE length prefix == 0; octet boundary 4"
+    },
+    {
+      "id": "ascii-string-hello",
+      "type": "HLAASCIIstring",
+      "value": "hello",
+      "bytes": "0000000568656c6c6f",
+      "notes": "TASK-013; length 5, ASCII payload"
+    },
+    {
+      "id": "ascii-string-space",
+      "type": "HLAASCIIstring",
+      "value": " ",
+      "bytes": "0000000120",
+      "notes": "TASK-013; length 1, single space"
+    },
+    {
+      "id": "ascii-string-A",
+      "type": "HLAASCIIstring",
+      "value": "A",
+      "bytes": "0000000141",
+      "notes": "TASK-013; length 1, single ASCII letter"
+    },
+    {
+      "id": "unicode-string-empty",
+      "type": "HLAunicodeString",
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-013; 4-byte BE length prefix == 0 code units"
+    },
+    {
+      "id": "unicode-string-hello",
+      "type": "HLAunicodeString",
+      "value": "hello",
+      "bytes": "0000000500680065006c006c006f",
+      "notes": "TASK-013; length 5 code units, UTF-16BE payload (4 + 10 = 14 bytes)"
+    },
+    {
+      "id": "unicode-string-omega",
+      "type": "HLAunicodeString",
+      "value": "Ω",
+      "bytes": "0000000103a9",
+      "notes": "TASK-013; length 1 code unit, U+03A9 Greek capital omega"
+    },
+    {
       "_disabled": true,
       "id": "fixed-record-octet-float64",
       "type": {
