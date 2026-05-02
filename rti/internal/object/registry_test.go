@@ -347,3 +347,85 @@ func TestRegister_RejectsDuplicateExplicitName(t *testing.T) {
 		t.Errorf("duplicate name should be rejected")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TASK-031 — Discover fanout invariants
+// ---------------------------------------------------------------------------
+
+func TestRegister_DiscoverFanoutInSortedSubscriberOrder(t *testing.T) {
+	t.Parallel()
+	reg, declMgr, outbox := newTestRegistry(t, &recordingEventLog{})
+	ctx := context.Background()
+
+	// Subscribe out of arrival order; SubscribersFor returns sorted, so
+	// fanout must too.
+	for _, h := range []core.FederateHandle{11, 3, 7} {
+		_ = declMgr.SubscribeObjectClassAttributes(ctx, "fed", h, 7, []core.AttributeHandle{1})
+	}
+	_ = declMgr.PublishObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{1})
+
+	if _, _, err := reg.Register(ctx, "fed", 1, 7, ""); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	got := outbox.Records()
+	want := []core.FederateHandle{3, 7, 11}
+	if len(got) != len(want) {
+		t.Fatalf("Discover fanout to %d federates: %v; want %v", len(got), got, want)
+	}
+	for i, w := range want {
+		if got[i].Federate != w {
+			t.Errorf("[%d]: fanout to %d, want %d", i, got[i].Federate, w)
+		}
+	}
+}
+
+func TestRegister_DiscoverSkipsProducer(t *testing.T) {
+	t.Parallel()
+	reg, declMgr, outbox := newTestRegistry(t, &recordingEventLog{})
+	ctx := context.Background()
+	_ = declMgr.PublishObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{1})
+	_ = declMgr.SubscribeObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{1}) // self
+	_ = declMgr.SubscribeObjectClassAttributes(ctx, "fed", 5, 7, []core.AttributeHandle{1}) // peer
+
+	if _, _, err := reg.Register(ctx, "fed", 1, 7, ""); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	for _, r := range outbox.Records() {
+		if r.Federate == 1 {
+			t.Errorf("producer 1 received its own Discover: %+v", r)
+		}
+	}
+	got := outbox.Records()
+	if len(got) != 1 || got[0].Federate != 5 {
+		t.Errorf("Discover fanout = %+v; want one send to federate 5", got)
+	}
+}
+
+func TestRegister_PreExistingInstancesNotReDiscovered(t *testing.T) {
+	t.Parallel()
+	// Subscribers that joined BEFORE second Register should see exactly
+	// ONE Discover event for the second instance — never a re-Discover
+	// for the first instance.
+	reg, declMgr, outbox := newTestRegistry(t, &recordingEventLog{})
+	ctx := context.Background()
+	_ = declMgr.PublishObjectClassAttributes(ctx, "fed", 1, 7, []core.AttributeHandle{1})
+	_ = declMgr.SubscribeObjectClassAttributes(ctx, "fed", 5, 7, []core.AttributeHandle{1})
+
+	h1, _, _ := reg.Register(ctx, "fed", 1, 7, "")
+	h2, _, _ := reg.Register(ctx, "fed", 1, 7, "")
+
+	got := outbox.Records()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 Discover sends (one per Register), got %d: %+v", len(got), got)
+	}
+	ev1 := got[0].Event.(*outboundEvent).Inner().GetDiscover()
+	ev2 := got[1].Event.(*outboundEvent).Inner().GetDiscover()
+	if ev1.GetObjectHandle() != uint64(h1) {
+		t.Errorf("first Discover handle = %d, want %d", ev1.GetObjectHandle(), h1)
+	}
+	if ev2.GetObjectHandle() != uint64(h2) {
+		t.Errorf("second Discover handle = %d, want %d", ev2.GetObjectHandle(), h2)
+	}
+}
