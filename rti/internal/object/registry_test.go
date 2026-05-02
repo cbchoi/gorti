@@ -516,6 +516,85 @@ func TestUpdateAttributes_NoSelfDelivery(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// TASK-033 — SendInteraction / Receive path
+// ---------------------------------------------------------------------------
+
+func TestSendInteraction_FansReceiveInSortedOrder(t *testing.T) {
+	t.Parallel()
+	log := &recordingEventLog{}
+	reg, declMgr, outbox := newTestRegistry(t, log)
+	ctx := context.Background()
+	_ = declMgr.PublishInteractionClass(ctx, "fed", 1, 11)
+	for _, h := range []core.FederateHandle{8, 4, 6} {
+		_ = declMgr.SubscribeInteractionClass(ctx, "fed", h, 11)
+	}
+
+	if err := reg.SendInteraction(ctx, "fed", 1, 11, map[core.ParameterHandle][]byte{1: {0xCA, 0xFE}, 2: {0xBA}}, nil); err != nil {
+		t.Fatalf("SendInteraction: %v", err)
+	}
+
+	logs := log.Records()
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 eventlog append, got %d", len(logs))
+	}
+	body := logs[0].Event.(eventCarrier).Inner().GetInterSent()
+	if body == nil {
+		t.Fatalf("InteractionSent body missing: %+v", logs[0].Event.(eventCarrier).Inner())
+	}
+	if body.GetInteractionClassHandle() != 11 || body.GetProducerFederateHandle() != 1 {
+		t.Errorf("InteractionSent = %+v, want class=11 producer=1", body)
+	}
+
+	got := outbox.Records()
+	want := []core.FederateHandle{4, 6, 8}
+	if len(got) != len(want) {
+		t.Fatalf("Receive fanout = %+v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i].Federate != w {
+			t.Errorf("[%d]: Receive to %d, want %d", i, got[i].Federate, w)
+		}
+		ev := got[i].Event.(*outboundEvent).Inner().GetReceive()
+		if ev == nil {
+			t.Errorf("[%d]: outbound event has no Receive body", i)
+			continue
+		}
+		if ev.GetInteractionClassHandle() != 11 {
+			t.Errorf("[%d]: Receive.InteractionClassHandle = %d, want 11", i, ev.GetInteractionClassHandle())
+		}
+		if got, ok := ev.GetParameters()[1]; !ok || len(got) != 2 || got[0] != 0xCA || got[1] != 0xFE {
+			t.Errorf("[%d]: Receive.Parameters[1] = %v, want [0xCA, 0xFE]", i, got)
+		}
+	}
+}
+
+func TestSendInteraction_RejectsUnpublishedProducer(t *testing.T) {
+	t.Parallel()
+	reg, _, _ := newTestRegistry(t, &recordingEventLog{})
+	err := reg.SendInteraction(context.Background(), "fed", 99, 11, map[core.ParameterHandle][]byte{1: {0x01}}, nil)
+	if !errors.Is(err, core.ErrInteractionClassNotPublished) {
+		t.Errorf("SendInteraction by non-publisher: err = %v, want ErrInteractionClassNotPublished", err)
+	}
+}
+
+func TestSendInteraction_NoSelfDelivery(t *testing.T) {
+	t.Parallel()
+	reg, declMgr, outbox := newTestRegistry(t, &recordingEventLog{})
+	ctx := context.Background()
+	_ = declMgr.PublishInteractionClass(ctx, "fed", 1, 11)
+	_ = declMgr.SubscribeInteractionClass(ctx, "fed", 1, 11) // self
+	_ = declMgr.SubscribeInteractionClass(ctx, "fed", 4, 11) // peer
+
+	if err := reg.SendInteraction(ctx, "fed", 1, 11, map[core.ParameterHandle][]byte{1: {0x01}}, nil); err != nil {
+		t.Fatalf("SendInteraction: %v", err)
+	}
+	got := outbox.Records()
+	if len(got) != 1 || got[0].Federate != 4 {
+		t.Errorf("Receive fanout = %+v, want one send to federate 4", got)
+	}
+}
+
 func TestRegister_PreExistingInstancesNotReDiscovered(t *testing.T) {
 	t.Parallel()
 	// Subscribers that joined BEFORE second Register should see exactly
