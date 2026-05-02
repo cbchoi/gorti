@@ -315,82 +315,124 @@ func convertMIMDataTypes(in *mimXMLDataTypes) []model.DataType {
 		return nil
 	}
 	var out []model.DataType
-	if in.BasicDataRepresentations != nil {
-		for _, b := range in.BasicDataRepresentations.BasicData {
-			out = append(out, &model.BasicData{
-				NameField:      b.Name,
-				Size:           b.Size,
-				Endian:         b.Endian,
-				Interpretation: b.Interpretation,
-				Encoding:       b.Encoding,
-			})
-		}
+	out = append(out, convertMIMBasicData(in.BasicDataRepresentations)...)
+	out = append(out, convertMIMSimpleData(in.SimpleDataTypes)...)
+	out = append(out, convertMIMEnumeratedData(in.EnumeratedDataTypes)...)
+	out = append(out, convertMIMArrayData(in.ArrayDataTypes)...)
+	out = append(out, convertMIMFixedRecordData(in.FixedRecordDataTypes)...)
+	out = append(out, convertMIMVariantRecordData(in.VariantRecordDataTypes)...)
+	return out
+}
+
+func convertMIMBasicData(in *mimXMLBasicDataReps) []model.DataType {
+	if in == nil {
+		return nil
 	}
-	if in.SimpleDataTypes != nil {
-		for _, s := range in.SimpleDataTypes.SimpleData {
-			out = append(out, &model.SimpleData{
-				NameField:      s.Name,
-				Representation: s.Representation,
-				Units:          s.Units,
-				Resolution:     s.Resolution,
-				Accuracy:       s.Accuracy,
-			})
-		}
+	out := make([]model.DataType, 0, len(in.BasicData))
+	for _, b := range in.BasicData {
+		out = append(out, &model.BasicData{
+			NameField:      b.Name,
+			Size:           b.Size,
+			Endian:         b.Endian,
+			Interpretation: b.Interpretation,
+			Encoding:       b.Encoding,
+		})
 	}
-	if in.EnumeratedDataTypes != nil {
-		for _, e := range in.EnumeratedDataTypes.EnumeratedData {
-			enums := make([]model.Enumerator, len(e.Enumerator))
-			for i, en := range e.Enumerator {
-				enums[i] = model.Enumerator{Name: en.Name, Values: en.Values}
+	return out
+}
+
+func convertMIMSimpleData(in *mimXMLSimpleDataTypes) []model.DataType {
+	if in == nil {
+		return nil
+	}
+	out := make([]model.DataType, 0, len(in.SimpleData))
+	for _, s := range in.SimpleData {
+		out = append(out, &model.SimpleData{
+			NameField:      s.Name,
+			Representation: s.Representation,
+			Units:          s.Units,
+			Resolution:     s.Resolution,
+			Accuracy:       s.Accuracy,
+		})
+	}
+	return out
+}
+
+func convertMIMEnumeratedData(in *mimXMLEnumDataTypes) []model.DataType {
+	if in == nil {
+		return nil
+	}
+	out := make([]model.DataType, 0, len(in.EnumeratedData))
+	for _, e := range in.EnumeratedData {
+		enums := make([]model.Enumerator, len(e.Enumerator))
+		for i, en := range e.Enumerator {
+			enums[i] = model.Enumerator{Name: en.Name, Values: en.Values}
+		}
+		out = append(out, &model.EnumeratedData{
+			NameField:      e.Name,
+			Representation: e.Representation,
+			Enumerators:    enums,
+		})
+	}
+	return out
+}
+
+func convertMIMArrayData(in *mimXMLArrayDataTypes) []model.DataType {
+	if in == nil {
+		return nil
+	}
+	out := make([]model.DataType, 0, len(in.ArrayData))
+	for _, a := range in.ArrayData {
+		out = append(out, &model.ArrayData{
+			NameField:   a.Name,
+			DataType:    a.DataType,
+			Cardinality: a.Cardinality,
+			Encoding:    a.Encoding,
+		})
+	}
+	return out
+}
+
+func convertMIMFixedRecordData(in *mimXMLFixedRecTypes) []model.DataType {
+	if in == nil {
+		return nil
+	}
+	out := make([]model.DataType, 0, len(in.FixedRecordData))
+	for _, f := range in.FixedRecordData {
+		fields := make([]model.RecordField, len(f.Field))
+		for i, ff := range f.Field {
+			fields[i] = model.RecordField{Name: ff.Name, DataType: ff.DataType}
+		}
+		out = append(out, &model.FixedRecordData{
+			NameField: f.Name,
+			Fields:    fields,
+			Encoding:  f.Encoding,
+		})
+	}
+	return out
+}
+
+func convertMIMVariantRecordData(in *mimXMLVariantRecTypes) []model.DataType {
+	if in == nil {
+		return nil
+	}
+	out := make([]model.DataType, 0, len(in.VariantRecordData))
+	for _, v := range in.VariantRecordData {
+		alts := make([]model.VariantAlternative, len(v.Alternative))
+		for i, a := range v.Alternative {
+			alts[i] = model.VariantAlternative{
+				Enumerator: a.Enumerator,
+				Name:       a.Name,
+				DataType:   a.DataType,
 			}
-			out = append(out, &model.EnumeratedData{
-				NameField:      e.Name,
-				Representation: e.Representation,
-				Enumerators:    enums,
-			})
 		}
-	}
-	if in.ArrayDataTypes != nil {
-		for _, a := range in.ArrayDataTypes.ArrayData {
-			out = append(out, &model.ArrayData{
-				NameField:   a.Name,
-				DataType:    a.DataType,
-				Cardinality: a.Cardinality,
-				Encoding:    a.Encoding,
-			})
-		}
-	}
-	if in.FixedRecordDataTypes != nil {
-		for _, f := range in.FixedRecordDataTypes.FixedRecordData {
-			fields := make([]model.RecordField, len(f.Field))
-			for i, ff := range f.Field {
-				fields[i] = model.RecordField{Name: ff.Name, DataType: ff.DataType}
-			}
-			out = append(out, &model.FixedRecordData{
-				NameField: f.Name,
-				Fields:    fields,
-				Encoding:  f.Encoding,
-			})
-		}
-	}
-	if in.VariantRecordDataTypes != nil {
-		for _, v := range in.VariantRecordDataTypes.VariantRecordData {
-			alts := make([]model.VariantAlternative, len(v.Alternative))
-			for i, a := range v.Alternative {
-				alts[i] = model.VariantAlternative{
-					Enumerator: a.Enumerator,
-					Name:       a.Name,
-					DataType:   a.DataType,
-				}
-			}
-			out = append(out, &model.VariantRecordData{
-				NameField:        v.Name,
-				DiscriminantName: v.DiscriminantName,
-				DiscriminantType: v.DataType,
-				Alternatives:     alts,
-				Encoding:         v.Encoding,
-			})
-		}
+		out = append(out, &model.VariantRecordData{
+			NameField:        v.Name,
+			DiscriminantName: v.DiscriminantName,
+			DiscriminantType: v.DataType,
+			Alternatives:     alts,
+			Encoding:         v.Encoding,
+		})
 	}
 	return out
 }
