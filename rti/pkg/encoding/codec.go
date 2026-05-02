@@ -31,6 +31,20 @@ func CodecFor(dt any) (Codec, error) {
 // "HLAoctet", "HLAASCIIchar", "HLAunicodeChar"). Returns an error for unknown
 // or composite types. Convenience for tests and bridges that work in name form.
 func PrimitiveByName(name string) (Codec, error) {
-	_ = name
-	return nil, ErrNotImplemented
+	switch name {
+	case "HLAinteger16BE":
+		return HLAinteger16BE{}, nil
+	case "HLAinteger16LE":
+		return HLAinteger16LE{}, nil
+	case "HLAinteger32BE":
+		return HLAinteger32BE{}, nil
+	case "HLAinteger32LE":
+		return HLAinteger32LE{}, nil
+	case "HLAinteger64BE":
+		return HLAinteger64BE{}, nil
+	case "HLAinteger64LE":
+		return HLAinteger64LE{}, nil
+	default:
+		return nil, ErrNotImplemented
+	}
 }

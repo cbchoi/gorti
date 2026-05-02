@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 )
@@ -221,8 +222,11 @@ func TestSpec_IntegerCodec_DecodeShortBuffer(t *testing.T) {
 		buf []byte
 	}{
 		{"HLAinteger16BE", []byte{0x01}},
+		{"HLAinteger16LE", []byte{0x01}},
+		{"HLAinteger32BE", []byte{0x01, 0x02}},
 		{"HLAinteger32LE", []byte{0x01, 0x02}},
 		{"HLAinteger64BE", []byte{0x01, 0x02, 0x03, 0x04}},
+		{"HLAinteger64LE", []byte{0x01, 0x02, 0x03, 0x04}},
 	}
 
 	for _, tc := range cases {
@@ -245,5 +249,57 @@ func TestSpec_PrimitiveByName_Unknown(t *testing.T) {
 
 	if _, err := PrimitiveByName("HLAimaginary42BE"); err == nil {
 		t.Errorf("PrimitiveByName(unknown): expected error, got nil")
+	}
+}
+
+// TestSpec_IntegerCodec_AcceptsNativeIntWidths covers the remaining native
+// signed integer input types (int, int64) so the type-coercion helper has
+// every branch exercised.
+func TestSpec_IntegerCodec_AcceptsNativeIntWidths(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		typ string
+		v   any
+		hex string
+	}{
+		{"HLAinteger32BE", int(7), "00000007"},
+		{"HLAinteger64BE", int64(7), "0000000000000007"},
+		{"HLAinteger64BE", int(7), "0000000000000007"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(fmt.Sprintf("%s/%T", tc.typ, tc.v), func(t *testing.T) {
+			t.Parallel()
+			codec, _ := PrimitiveByName(tc.typ)
+			got, err := codec.Encode(tc.v)
+			if err != nil {
+				t.Fatalf("Encode(%v): %v", tc.v, err)
+			}
+			want, _ := hex.DecodeString(tc.hex)
+			if !bytes.Equal(got, want) {
+				t.Errorf("Encode(%v) = %x, want %x", tc.v, got, want)
+			}
+		})
+	}
+}
+
+// TestSpec_IntegerCodec_RejectsNonIntegralFloat ensures the float64 input
+// path rejects fractional or non-finite values rather than silently
+// truncating.
+func TestSpec_IntegerCodec_RejectsNonIntegralFloat(t *testing.T) {
+	t.Parallel()
+
+	codec, _ := PrimitiveByName("HLAinteger32BE")
+
+	for _, v := range []float64{0.5, math.NaN(), math.Inf(1), math.Inf(-1), 1e30} {
+		v := v
+		t.Run(fmt.Sprintf("v=%v", v), func(t *testing.T) {
+			t.Parallel()
+			if _, err := codec.Encode(v); err == nil {
+				t.Errorf("Encode(%v): expected error, got nil", v)
+			}
+		})
 	}
 }
