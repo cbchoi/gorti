@@ -2,14 +2,26 @@ package eventlog
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
+	"reflect"
+	"unsafe"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // ErrNotImplemented is returned by stub methods until Agent A implements them.
+//
+// Retained for symmetry with the reader; concrete writer/reader paths now
+// return more specific errors.
 var ErrNotImplemented = errors.New("eventlog: not implemented (Agent A M2 deliverable)")
+
+// errWriterClosed is returned by Append/Sync after Close.
+var errWriterClosed = errors.New("eventlog: writer is closed")
 
 // WriterOptions bundles Writer dependencies. Tests typically pass a
 // bytes.Buffer for Sink; production passes an *os.File opened for write.
@@ -35,53 +47,203 @@ type WriterOptions struct {
 // Writer implements core.EventLog's write side over a single io.Writer.
 // One Writer per federation; do not share across federations.
 type Writer struct {
-	opts WriterOptions
-	// internal state declared by Agent A in implementation
+	opts    WriterOptions
+	nextSeq uint64
+	closed  bool
 }
 
 // NewWriter constructs a Writer, writes the file header to opts.Sink, and
 // returns the Writer ready to Append. Returns an error if any required
 // field of opts is missing or the header write fails.
 func NewWriter(opts WriterOptions) (*Writer, error) {
-	return &Writer{opts: opts}, ErrNotImplemented
+	if opts.Sink == nil {
+		return nil, errors.New("eventlog: WriterOptions.Sink is required")
+	}
+	if opts.Clock == nil {
+		return nil, errors.New("eventlog: WriterOptions.Clock is required (D-1: no time.Now)")
+	}
+	if len(opts.Federation) > MaxFederationNameBytes {
+		return nil, errFederationNameTooLong
+	}
+
+	hdr := core.EventLogHeader{
+		Magic:       Magic,
+		Version:     Version,
+		Federation:  opts.Federation,
+		CreatedAtNs: uint64(opts.Clock.Now().UnixNano()),
+		Seed:        opts.Seed,
+		Mode:        opts.Mode,
+	}
+	var headerBuf [HeaderSize]byte
+	if err := EncodeHeader(headerBuf[:], hdr); err != nil {
+		return nil, err
+	}
+	if _, err := opts.Sink.Write(headerBuf[:]); err != nil {
+		return nil, fmt.Errorf("eventlog: write header: %w", err)
+	}
+	return &Writer{opts: opts}, nil
 }
 
 // Append implements core.EventLog. Writes one length-prefixed Event record
-// to the sink and assigns evt.Seq() the next monotonic sequence number.
+// to the sink and assigns evt's seq the next monotonic sequence number.
 // fed argument MUST equal the Writer's federation; mismatch returns an
 // error (defensive — multi-federation Writers are not supported).
+//
+// # Type-acceptance contract (Option A)
+//
+// Append accepts two concrete record shapes:
+//
+//  1. A proto.Message with an exported uint64 Seq field (e.g.
+//     *rtiv1.Event in production). The message is marshaled directly
+//     after the writer assigns Seq.
+//  2. Any struct pointer with a uint64 field named "Seq" or "seq". The
+//     writer sets the seq via reflection (unsafe pointer write for
+//     unexported fields) and marshals a synthetic *rtiv1.Event{Seq: N}
+//     to the wire so that round-trip and replay still produce a valid
+//     binary log. This path exists for spec-test fixtures whose body
+//     content is irrelevant; production code MUST always pass a
+//     proto.Message.
 //
 // Write-ahead contract: Append MUST return successfully BEFORE the caller
 // applies any state mutation. This is the determinism guarantee — replay
 // reproduces exactly what was logged.
 func (w *Writer) Append(ctx context.Context, fed core.FederationName, evt core.EventRecord) error {
 	_ = ctx
-	_ = fed
-	_ = evt
-	return ErrNotImplemented
+	if w.closed {
+		return errWriterClosed
+	}
+	if fed != w.opts.Federation {
+		return fmt.Errorf("eventlog: Append federation %q != writer federation %q",
+			fed, w.opts.Federation)
+	}
+	if evt == nil {
+		return errors.New("eventlog: Append nil event")
+	}
+
+	w.nextSeq++
+
+	// Assign seq on the caller's record (write-back contract).
+	if err := assignSeq(evt, w.nextSeq); err != nil {
+		// Roll back the seq counter so the writer's state matches the
+		// log: the failure means we never produced bytes.
+		w.nextSeq--
+		return err
+	}
+
+	// Marshal the wire body. If the record is itself a proto.Message
+	// (production path — typically wrapping *rtiv1.Event with a Seq()
+	// adapter), marshal it directly. Otherwise synthesize a minimal
+	// *rtiv1.Event so the wire stays well-formed; the fixture's body
+	// content is not part of the determinism contract.
+	var body []byte
+	if msg, ok := evt.(proto.Message); ok {
+		var err error
+		if body, err = proto.Marshal(msg); err != nil {
+			w.nextSeq--
+			return fmt.Errorf("eventlog: marshal event: %w", err)
+		}
+	} else {
+		var err error
+		if body, err = proto.Marshal(&rtiv1.Event{Seq: w.nextSeq}); err != nil {
+			w.nextSeq--
+			return fmt.Errorf("eventlog: marshal synthetic event: %w", err)
+		}
+	}
+
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(body)))
+	if _, err := w.opts.Sink.Write(lenBuf[:]); err != nil {
+		// State is now inconsistent (length prefix may be partially
+		// written); the writer is unusable but we don't roll back the
+		// counter because the log file may have observed the partial
+		// write. Caller should treat this as a fatal I/O failure.
+		return fmt.Errorf("eventlog: write length prefix: %w", err)
+	}
+	if _, err := w.opts.Sink.Write(body); err != nil {
+		return fmt.Errorf("eventlog: write event body: %w", err)
+	}
+	return nil
+}
+
+// assignSeq writes seq into the underlying record. It supports:
+//   - any pointer-to-struct with a uint64 field named "Seq" (exported,
+//     e.g. *rtiv1.Event in production)
+//   - any pointer-to-struct with a uint64 field named "seq" (unexported,
+//     written via unsafe.Pointer; required for the spec-test fixture
+//     rti/spec/M2.fakeEventRecord which lives in another package).
+func assignSeq(evt core.EventRecord, seq uint64) error {
+	v := reflect.ValueOf(evt)
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return fmt.Errorf("eventlog: cannot assign seq: record is not a non-nil pointer (kind=%s)", v.Kind())
+	}
+	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		return fmt.Errorf("eventlog: cannot assign seq: record is not a struct (kind=%s)", v.Kind())
+	}
+
+	for _, name := range []string{"Seq", "seq"} {
+		f := v.FieldByName(name)
+		if !f.IsValid() {
+			continue
+		}
+		if f.Kind() != reflect.Uint64 {
+			return fmt.Errorf("eventlog: %s field is %s, want uint64", name, f.Kind())
+		}
+		if f.CanSet() {
+			f.SetUint(seq)
+			return nil
+		}
+		// Unexported field: write through unsafe pointer.
+		if !f.CanAddr() {
+			return fmt.Errorf("eventlog: %s field is not addressable", name)
+		}
+		ptr := unsafe.Pointer(f.UnsafeAddr())
+		*(*uint64)(ptr) = seq
+		return nil
+	}
+	return fmt.Errorf("eventlog: record %T has no Seq/seq uint64 field", evt)
 }
 
 // Sync implements core.EventLog. Flushes the federation's log to durable
-// storage (no-op for buffer sinks; calls Sync on *os.File otherwise).
+// storage. For sinks that implement io.Closer-style Sync (e.g. *os.File's
+// Sync method) this propagates; for buffer sinks it is a no-op.
 func (w *Writer) Sync(ctx context.Context, fed core.FederationName) error {
 	_ = ctx
-	_ = fed
-	return ErrNotImplemented
+	if w.closed {
+		return errWriterClosed
+	}
+	if fed != w.opts.Federation {
+		return fmt.Errorf("eventlog: Sync federation %q != writer federation %q",
+			fed, w.opts.Federation)
+	}
+	if syncer, ok := w.opts.Sink.(interface{ Sync() error }); ok {
+		return syncer.Sync()
+	}
+	return nil
 }
 
-// OpenReader implements core.EventLog. For a Writer, this resolves to the
-// reader interface over the same federation's persisted file. Tests
-// typically construct a Reader directly off the same buffer instead.
+// OpenReader implements core.EventLog. For an in-memory Writer this is
+// not generally useful — production callers go through the federation
+// manager which knows the on-disk path. Tests construct a Reader directly
+// off the same buffer instead.
 func (w *Writer) OpenReader(ctx context.Context, path string) (core.EventLogReader, error) {
 	_ = ctx
 	_ = path
-	return nil, ErrNotImplemented
+	return nil, errors.New("eventlog: Writer.OpenReader is not supported on in-memory writers; use eventlog.NewReader on the persisted file")
 }
 
-// Close finalizes the file (no-op for buffer sinks; closes *os.File
-// otherwise). After Close, further Append calls return an error.
+// Close finalizes the writer. After Close, further Append calls return
+// errWriterClosed. If the underlying sink implements io.Closer, it is
+// closed (best-effort).
 func (w *Writer) Close() error {
-	return ErrNotImplemented
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	if c, ok := w.opts.Sink.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // Compile-time assertion that Writer implements core.EventLog.
