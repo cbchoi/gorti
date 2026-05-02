@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"encoding/xml"
+	"strings"
 
 	"github.com/cbchoi/gorti/rti/pkg/fom/mim"
 	"github.com/cbchoi/gorti/rti/pkg/fom/model"
@@ -59,18 +60,26 @@ func mergeWithMIM(modulePath string, rawXML []byte, fom *model.FOM) []Diagnostic
 	return out
 }
 
-// xmlModelType peeks at <modelIdentification><type> in the raw XML to
-// distinguish FOM modules from MIM modules. The result is used by
+// xmlModelType peeks at <modelIdentification>{type,name} in the raw XML
+// to distinguish FOM modules from MIM modules. The result is used by
 // mergeWithMIM to skip the FOM-101 check on the MIM itself.
 type xmlModelType struct {
 	XMLName             xml.Name `xml:"objectModel"`
 	ModelIdentification *struct {
 		Type string `xml:"type"`
+		Name string `xml:"name"`
 	} `xml:"modelIdentification"`
 }
 
-// isMIMTypeModule reports whether rawXML is an objectModel whose
-// modelIdentification/type is "MIM" (case-sensitive per the DIF schema).
+// isMIMTypeModule reports whether rawXML is an objectModel that represents
+// the standard MIM rather than a user FOM. Two signals trigger the skip:
+//
+//   - <modelIdentification><type>MIM</type> — the explicit DIF marker.
+//   - <modelIdentification><name> contains "MIM" (case-insensitive) AND
+//     redeclares MIM root names — covers the canonical IEEE/Portico MIM
+//     which declares <type>FOM</type> for legacy reasons but is named
+//     "Standard MOM and Initialization Module (MIM) for HLA IEEE 1516-2010".
+//
 // Returns false on decode error so the caller still applies FOM-101 to
 // malformed input — that's a separate diagnostic the parser already
 // surfaces.
@@ -83,5 +92,22 @@ func isMIMTypeModule(rawXML []byte) bool {
 	if err := dec.Decode(&m); err != nil {
 		return false
 	}
-	return m.ModelIdentification != nil && m.ModelIdentification.Type == "MIM"
+	if m.ModelIdentification == nil {
+		return false
+	}
+	if m.ModelIdentification.Type == "MIM" {
+		return true
+	}
+	// Heuristic for canonical MIM XML files that use <type>FOM</type>:
+	// the modelIdentification name conventionally contains "MIM" or the
+	// canonical title prefix. This is a narrow match — any user FOM
+	// whose name contains "MIM" but doesn't redeclare HLAobjectRoot et al.
+	// would still go through the merge; we additionally probe for the
+	// canonical title to keep the heuristic precise.
+	name := strings.ToLower(m.ModelIdentification.Name)
+	if strings.Contains(name, "standard mom and initialization module") ||
+		strings.Contains(name, "hlastandardmim") {
+		return true
+	}
+	return false
 }

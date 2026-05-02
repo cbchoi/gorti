@@ -1,14 +1,27 @@
 // Package mim embeds the standard MIM and HLAstandardMIM XML modules and
 // exposes them as parsed *model.FOM handles for downstream validators.
 //
-// Provenance: the two XML files in this directory (standard-mim.xml and
-// hla-standard-mim.xml) are interim, hand-derived approximations of the
-// IEEE-published artifacts (1516.2-2010 Annex B and 1516.1-2010 §4.13). They
-// are orchestrator-vendored per docs/ORTHOGONALITY.md §2 (row added
-// 2026-05-02); Agent B reads them via //go:embed but never modifies them.
-// Each XML file carries its own <!-- PROVENANCE NOTICE --> comment block;
-// canonical sourcing is tracked in https://github.com/cbchoi/gorti/issues/1
-// and is scheduled for post-M1 work.
+// Provenance:
+//
+//   - standard-mim.xml — canonical IEEE 1516.1-2010 standard MIM, sourced
+//     from the openlvc/portico project (CDDL-1.0; the MIM file itself
+//     carries an explicit IEEE royalty-free attribution license at the
+//     top of the XML). Retrieved 2026-05-02 from
+//     github.com/openlvc/portico/blob/fcae8013d183308d34d06fc1b379e630969aca3f/codebase/resources/jars/portico.jar/etc/ieee1516e/HLAstandardMIM.xml
+//     blob sha 713d00066034d5895dc1240be920bd66b27d7f31
+//     content sha256 649f008a0f2a25c29e94a777b0d0995b77f4553910cc9b675156fbe17c9bf513
+//     The IEEE attribution required by the file's own header comment
+//     ("Reprinted with permission from IEEE 1516.1(TM)-2010") is
+//     preserved in the XML itself; do not strip those comments. Issue #1
+//     is closed by this commit.
+//
+//   - hla-standard-mim.xml — empty wrapper module (the standard MIM is
+//     self-sufficient for cut-1; this file exists so the //go:embed
+//     pair stays uniform with downstream MIM-merge logic).
+//
+// Both files are orchestrator-vendored per docs/ORTHOGONALITY.md §2 (row
+// added 2026-05-02); Agent B reads them via //go:embed but never modifies
+// them. Each XML file carries its own provenance comment block.
 //
 // Determinism: this package is pure data. StandardMIMBytes and
 // HLAStandardMIMBytes return defensive copies of the embedded byte slices

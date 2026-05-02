@@ -1,19 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Interim HLAstandardMIM module for the gorti project.
+  Empty HLAstandardMIM wrapper module for the gorti project.
 
-  PROVENANCE NOTICE — READ BEFORE USING DOWNSTREAM:
+  PROVENANCE NOTICE:
 
-  This file is an INTERIM hand-derived approximation of the HLAstandardMIM
-  module per IEEE Std 1516.1-2010 §4.13. It is NOT a verbatim copy of any
-  IEEE-published artifact; for cut-1, the standard MIM (`standard-mim.xml`
-  in this directory) is canonical, and this file is a thin wrapper that
-  loads on top with no additional declarations. This satisfies parser
-  contract checks (FR-FOM-3) without claiming spec-faithfulness.
-
-  Canonical sourcing tracked in:
-
-      https://github.com/cbchoi/gorti/issues/1
+  The canonical IEEE 1516.1-2010 standard MIM lives alongside this file at
+  ./standard-mim.xml (sourced from openlvc/portico CDDL distribution per
+  the package doc in embed.go). This wrapper exists so the //go:embed
+  directives in embed.go stay symmetric with downstream merge logic; it
+  contains no declarations of its own. If a future cut requires a real
+  HLAstandardMIM-distinct-from-MIM module (per 1516.1-2010 §4.13 letter
+  vs. spirit), populate this file then.
 
   Owner: orchestrator (vendored exception per docs/ORTHOGONALITY.md §2).
 -->

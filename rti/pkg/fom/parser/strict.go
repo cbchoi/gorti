@@ -123,6 +123,11 @@ var annexAElements = map[string]struct{}{
 	"other":                  {},
 	"glyph":                  {},
 
+	// Annotations: <notes> (the container) is in the top-level section
+	// list above; <note> is each individual annotation entry, allowed
+	// across most parent elements per DIF Annex A.
+	"note": {},
+
 	// Objects / interactions.
 	"objectClass":      {},
 	"interactionClass": {},
