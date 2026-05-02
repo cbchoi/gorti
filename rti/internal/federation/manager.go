@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -93,10 +95,33 @@ func New(opts Options) (*Manager, error) {
 	if opts.DefaultStallTimeout == 0 {
 		opts.DefaultStallTimeout = defaultStallTimeoutSeconds
 	}
+	// Normalize a typed-nil EventLog (e.g. (*eventlog.Writer)(nil) wrapped in
+	// the core.EventLog interface) to true nil. The cut-1 contract treats
+	// nil as "do not emit"; a typed-nil interface would otherwise dispatch
+	// methods on a nil pointer and panic.
+	if isNilInterface(opts.EventLog) {
+		opts.EventLog = nil
+	}
 	return &Manager{
 		opts:        opts,
 		federations: map[core.FederationName]*federationState{},
 	}, nil
+}
+
+// isNilInterface reports whether v is a true nil interface or a typed-nil
+// (interface holding a nil concrete pointer). This is needed because Go's
+// `iface == nil` is false for typed-nil values.
+func isNilInterface(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+		return rv.IsNil()
+	default:
+		return false
+	}
 }
 
 // CreateFederation implements core.FederationStore. See SRS §FR-FM-1.
@@ -158,12 +183,107 @@ func (m *Manager) DestroyFederation(ctx context.Context, name core.FederationNam
 // handles. Tests in tests/spec/M2/federation_test.go assert this with a
 // concurrent-join scenario across 50 goroutines.
 //
-// Emits FederateJoined event to EventLog before returning the handle.
+// Emits FederateJoined event to EventLog before returning the handle
+// (write-ahead): the event is durable before the in-memory roster is
+// observable to subsequent calls.
 func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationRequest) (core.FederateHandle, error) {
-	_ = ctx
-	_ = req
-	return core.InvalidFederateHandle, ErrNotImplemented
+	if req.FederateName == "" {
+		return core.InvalidFederateHandle, errors.New("federation: JoinFederationRequest.FederateName is required")
+	}
+
+	m.mu.RLock()
+	fs, ok := m.federations[req.Federation]
+	m.mu.RUnlock()
+	if !ok {
+		return core.InvalidFederateHandle, core.ErrFederationNotFound
+	}
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	if _, dup := fs.nameToHandle[req.FederateName]; dup {
+		return core.InvalidFederateHandle, core.ErrFederateAlreadyJoined
+	}
+
+	// Insert + re-key so that handles 1..N follow sort order of name.
+	// Cut 1: O(N log N) per join (acceptable for N < 100). Optimization
+	// deferred per docs/agent-a-rti-core.md §M5.
+	names := make([]string, 0, len(fs.nameToHandle)+1)
+	names = append(names, req.FederateName)
+	for n := range fs.nameToHandle {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	fs.nameToHandle = make(map[string]core.FederateHandle, len(names))
+	fs.handleToName = make(map[core.FederateHandle]string, len(names))
+	for i, n := range names {
+		h := core.FederateHandle(i + 1)
+		fs.nameToHandle[n] = h
+		fs.handleToName[h] = n
+	}
+	assigned := fs.nameToHandle[req.FederateName]
+
+	// Write-ahead: append before returning. EventLog optional in cut 1.
+	if m.opts.EventLog != nil {
+		if err := m.opts.EventLog.Append(ctx, req.Federation, federateJoinedEvent{
+			fed:      req.Federation,
+			federate: req.FederateName,
+			handle:   assigned,
+			at:       m.opts.Clock.Now(),
+		}); err != nil {
+			// Roll back the roster mutation so the join is atomic on the
+			// event log boundary; the caller sees a clean failure.
+			delete(fs.nameToHandle, req.FederateName)
+			delete(fs.handleToName, assigned)
+			// Re-key the surviving names to dense 1..N-1.
+			rekeyDense(fs)
+			return core.InvalidFederateHandle, fmt.Errorf("federation %q join %q: eventlog append: %w",
+				req.Federation, req.FederateName, err)
+		}
+	}
+	return assigned, nil
 }
+
+// rekeyDense rebuilds nameToHandle/handleToName so that handles are
+// 1..len(nameToHandle) in sorted-name order. Caller holds fs.mu.
+func rekeyDense(fs *federationState) {
+	names := make([]string, 0, len(fs.nameToHandle))
+	for n := range fs.nameToHandle {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	fs.nameToHandle = make(map[string]core.FederateHandle, len(names))
+	fs.handleToName = make(map[core.FederateHandle]string, len(names))
+	for i, n := range names {
+		h := core.FederateHandle(i + 1)
+		fs.nameToHandle[n] = h
+		fs.handleToName[h] = n
+	}
+}
+
+// federateJoinedEvent is the event written to EventLog when a federate
+// joins. It implements core.EventRecord with a placeholder Seq() until
+// the real Protobuf event type lands (see proto/rti/v1/eventlog.proto +
+// W1B's writer.go). The event log assigns the durable seq on Append.
+type federateJoinedEvent struct {
+	fed      core.FederationName
+	federate string
+	handle   core.FederateHandle
+	at       time.Time
+	seq      uint64
+}
+
+func (e federateJoinedEvent) Seq() uint64 { return e.seq }
+
+// federateResignedEvent mirrors federateJoinedEvent for resign.
+type federateResignedEvent struct {
+	fed      core.FederationName
+	federate string
+	handle   core.FederateHandle
+	at       time.Time
+	seq      uint64
+}
+
+func (e federateResignedEvent) Seq() uint64 { return e.seq }
 
 // ResignFederation implements core.FederationStore. See SRS §FR-FM-3.
 //
