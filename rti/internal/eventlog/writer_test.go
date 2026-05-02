@@ -9,22 +9,11 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
 
-// fakeRecord is a minimal core.EventRecord used by the writer's unit
-// tests. The Seq field is exported (uppercase) so the writer can assign
-// to it via reflection without resorting to unsafe pointer arithmetic;
-// the spec-test fixture (rti/spec/M2.fakeEventRecord) uses a lowercase
-// field, exercising the unsafe path. Both must work.
-type fakeRecord struct {
-	Seq uint64
-	Tag string
-}
-
-func (e *fakeRecord) Seq_() uint64 { return e.Seq }
-
-// Writer interfaces require Seq() — adapt manually.
-type fakeRecordSeq struct{ inner *fakeRecord }
-
-func (e *fakeRecordSeq) Seq() uint64 { return e.inner.Seq }
+// (No exported-field record type: Go prohibits a method and a field
+// sharing the same name on a struct, and core.EventRecord requires a
+// Seq() method. Production wraps *rtiv1.Event in an adapter; tests
+// exercise the unsafe-pointer path through unexportedSeqRecord, which
+// matches the spec fixture rti/spec/M2.fakeEventRecord verbatim.)
 
 func newWriterForTest(t *testing.T, fed core.FederationName, sink *bytes.Buffer) *Writer {
 	t.Helper()
@@ -96,26 +85,6 @@ func TestNewWriter_RejectsLongFederation(t *testing.T) {
 	})
 	if err == nil {
 		t.Errorf("NewWriter on long federation name returned nil error")
-	}
-}
-
-// TestWriter_AppendAssignsMonotonicSeq_ExportedField: Append assigns
-// monotonic seq numbers starting at 1 to a record with an exported
-// `Seq` field.
-func TestWriter_AppendAssignsMonotonicSeq_ExportedField(t *testing.T) {
-	var buf bytes.Buffer
-	w := newWriterForTest(t, "seq", &buf)
-	defer w.Close()
-
-	for i := 0; i < 4; i++ {
-		evt := &fakeRecord{}
-		adapter := &fakeRecordSeq{inner: evt}
-		if err := w.Append(context.Background(), "seq", adapter); err != nil {
-			t.Fatalf("Append[%d]: %v", i, err)
-		}
-		if evt.Seq != uint64(i+1) {
-			t.Errorf("Append[%d] assigned seq = %d, want %d", i, evt.Seq, i+1)
-		}
 	}
 }
 
