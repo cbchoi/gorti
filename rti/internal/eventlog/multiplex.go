@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // WriterFactory builds a per-federation Writer on demand. Production wires
@@ -79,13 +82,95 @@ func NewMultiplexWriter(opts MultiplexOptions) (*MultiplexWriter, error) {
 
 // Append implements core.EventLog. Routes to the per-federation Writer,
 // lazily creating it on the first call for that federation.
+//
+// The Writer requires its EventRecord arg to be a non-nil pointer (so
+// reflection-based seq assignment is addressable). The federation
+// manager and object registry currently emit value-typed event records
+// in some paths; ensurePointerRecord wraps any non-pointer record in an
+// addressable copy so the Writer's reflection succeeds. This is a
+// production-wiring concession local to the multiplexer — the W1B
+// Writer's contract stays unchanged.
 func (m *MultiplexWriter) Append(ctx context.Context, fed core.FederationName, evt core.EventRecord) error {
 	w, err := m.writerFor(fed)
 	if err != nil {
 		return err
 	}
-	return w.Append(ctx, fed, evt)
+	return w.Append(ctx, fed, ensurePointerRecord(evt))
 }
+
+// ensurePointerRecord normalizes the inbound record into a shape the
+// W1B Writer's reflection-based assignSeq can write through. Three
+// production-shape inputs are recognized:
+//
+//  1. *rtiv1.Event-shaped wrappers (proto.Message that ProtoReflects to
+//     an Event) — these may have a private `pb *rtiv1.Event` field
+//     which the Writer's reflection cannot reach. We unwrap and rewrap
+//     in a protoRecord whose embedded *rtiv1.Event exposes Seq via
+//     promotion.
+//  2. Pointer-to-struct with a public/private Seq field — pass through;
+//     the Writer's existing reflection handles it.
+//  3. Value-typed structs (e.g. the federation manager's
+//     federateJoinedEvent) — copy into an addressable pointer wrapper
+//     so the Writer's UnsafeAddr write-back succeeds.
+//
+// Records that don't match any shape pass through unchanged (the Writer
+// will return its own descriptive error).
+func ensurePointerRecord(evt core.EventRecord) core.EventRecord {
+	if evt == nil {
+		return evt
+	}
+	if pb := extractProtoEvent(evt); pb != nil {
+		return &protoRecord{Event: pb}
+	}
+	rv := reflect.ValueOf(evt)
+	if rv.Kind() == reflect.Pointer {
+		return evt
+	}
+	if rv.Kind() != reflect.Struct {
+		return evt
+	}
+	p := reflect.New(rv.Type())
+	p.Elem().Set(rv)
+	wrapped, ok := p.Interface().(core.EventRecord)
+	if !ok {
+		return evt
+	}
+	return wrapped
+}
+
+// extractProtoEvent recovers the underlying *rtiv1.Event from common
+// production wrappers. Returns nil when the record is not a proto event
+// wrapper.
+//
+// The federation manager + object registry both wrap *rtiv1.Event
+// inside a struct that satisfies core.EventRecord (Seq() method) and
+// proto.Message (ProtoReflect delegates to the inner Event). The
+// Writer's reflection-based assignSeq cannot reach into private
+// fields; round-tripping through proto.Marshal recovers a fresh
+// *rtiv1.Event we can wrap in a protoRecord whose embedded pointer
+// exposes Seq via promotion.
+func extractProtoEvent(evt core.EventRecord) *rtiv1.Event {
+	msg, ok := evt.(proto.Message)
+	if !ok {
+		return nil
+	}
+	if pb, ok := msg.(*rtiv1.Event); ok {
+		return pb
+	}
+	b, err := proto.Marshal(msg)
+	if err != nil {
+		return nil
+	}
+	pb := &rtiv1.Event{}
+	if err := proto.Unmarshal(b, pb); err != nil {
+		return nil
+	}
+	return pb
+}
+
+// (protoRecord is declared in replayer.go in this same package; the
+// multiplexer reuses it so wire-shape stays consistent between
+// passthrough replay and live append.)
 
 // Sync implements core.EventLog. Returns ErrFederationNotFound if no
 // writer has been opened for fed (no Append observed yet).

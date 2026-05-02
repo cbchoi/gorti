@@ -34,21 +34,37 @@ func main() {
 	logDir := flag.String("log-dir", "", "directory for per-federation event log files (empty = require explicit set)")
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFormat := flag.String("log-format", "json", "log format: json|text")
+	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo")
+	pingpongRounds := flag.Int("pingpong-rounds", 1000, "rounds for pingpong-demo mode")
+	pingpongFederation := flag.String("pingpong-federation", "pingpong", "federation name for pingpong-demo mode")
 	flag.Parse()
 
 	logger := buildLogger(*logLevel, *logFormat)
 	slog.SetDefault(logger)
 
-	if *logDir == "" {
-		// In-memory backed log lives only in this process. Production
-		// callers MUST supply --log-dir for persistent event logs.
+	switch *mode {
+	case "pingpong-demo":
+		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir)
+		return
+	case "server", "":
+		runServerMain(logger, *listen, *metricsListen, *logDir)
+	default:
+		logger.Error("unknown --mode", "mode", *mode)
+		os.Exit(2)
+	}
+}
+
+// runServerMain boots the gRPC server + metrics endpoint and blocks until
+// SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
+func runServerMain(logger *slog.Logger, listen, metricsListen, logDir string) {
+	if logDir == "" {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
 	}
 
 	srv, err := newRTID(rtidConfig{
-		ListenAddr:        *listen,
-		MetricsListenAddr: *metricsListen,
-		LogDir:            *logDir,
+		ListenAddr:        listen,
+		MetricsListenAddr: metricsListen,
+		LogDir:            logDir,
 		Logger:            logger,
 	})
 	if err != nil {
@@ -63,6 +79,27 @@ func main() {
 		logger.Error("rtid serve exited with error", "err", err)
 		os.Exit(1)
 	}
+}
+
+// runPingpongMain runs the pingpong demo and exits. logDir, when set,
+// gets per-federation .log files written into it (same format as server
+// mode); empty means the demo runs without persistence.
+func runPingpongMain(logger *slog.Logger, federation string, rounds int, logDir string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	stats, err := runPingpongDemo(ctx, pingpongConfig{
+		FederationName: core.FederationName(federation),
+		Rounds:         rounds,
+		LogDir:         logDir,
+	})
+	if err != nil {
+		logger.Error("pingpong-demo failed", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("pingpong-demo complete",
+		"rounds", stats.RoundsCompleted,
+		"elapsed_ms", stats.Elapsed.Milliseconds(),
+	)
 }
 
 // rtidConfig bundles the runnable configuration. main.go translates flags
