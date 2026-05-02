@@ -530,6 +530,120 @@ func TestResignFederation_UnsupportedAction_ReturnsError(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// TASK-023: DestroyFederation + List tests
+// ---------------------------------------------------------------------------
+
+// TestDestroyFederation_Unknown_ReturnsNotFound verifies the documented
+// sentinel for an unknown federation name.
+func TestDestroyFederation_Unknown_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got := mgr.DestroyFederation(context.Background(), "ghost")
+	if !errors.Is(got, core.ErrFederationNotFound) {
+		t.Errorf("Destroy ghost: %v, want ErrFederationNotFound", got)
+	}
+}
+
+// TestDestroyFederation_RejectsWhenJoined verifies that the federation
+// cannot be destroyed while any federate is joined.
+func TestDestroyFederation_RejectsWhenJoined(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	if _, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	}); err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	got := mgr.DestroyFederation(context.Background(), "x")
+	if !errors.Is(got, core.ErrFederationHasFederatesJoined) {
+		t.Errorf("Destroy while joined: %v, want ErrFederationHasFederatesJoined", got)
+	}
+}
+
+// TestDestroyFederation_AfterAllResigned_Succeeds verifies that destroy
+// succeeds once all federates have resigned. Federation is removed from
+// the registry so a subsequent Create with the same name succeeds.
+func TestDestroyFederation_AfterAllResigned_Succeeds(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	})
+	if err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	if rerr := mgr.ResignFederation(context.Background(), "x", h,
+		core.ResignActionUnconditionallyDivestAttributes); rerr != nil {
+		t.Fatalf("Resign: %v", rerr)
+	}
+	if derr := mgr.DestroyFederation(context.Background(), "x"); derr != nil {
+		t.Fatalf("Destroy: %v", derr)
+	}
+	// Federation is removed: re-create with same name succeeds.
+	if cerr := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{
+		Name:       "x",
+		FOMModules: []core.FOMModule{{XML: []byte("<x/>")}},
+		Mode:       core.ModeVerbose,
+	}); cerr != nil {
+		t.Errorf("re-Create after Destroy: %v", cerr)
+	}
+}
+
+// TestList_ReturnsNameSortedSummaries verifies that List returns all
+// federations in name-sorted order with accurate FederatesJoined count.
+func TestList_ReturnsNameSortedSummaries(t *testing.T) {
+	t.Parallel()
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// Create in non-sorted insertion order.
+	for _, n := range []string{"charlie", "alpha", "bravo"} {
+		if cerr := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{
+			Name:       core.FederationName(n),
+			FOMModules: []core.FOMModule{{XML: []byte("<x/>")}},
+			Mode:       core.ModeVerbose,
+		}); cerr != nil {
+			t.Fatalf("Create %s: %v", n, cerr)
+		}
+	}
+	// Join two federates into bravo to exercise the count.
+	for _, fn := range []string{"f1", "f2"} {
+		if _, jerr := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+			Federation: "bravo", FederateName: fn,
+		}); jerr != nil {
+			t.Fatalf("Join %s: %v", fn, jerr)
+		}
+	}
+	got, err := mgr.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	names := make([]string, len(got))
+	for i, s := range got {
+		names[i] = string(s.Name)
+	}
+	want := []string{"alpha", "bravo", "charlie"}
+	if len(names) != len(want) {
+		t.Fatalf("List length = %d, want %d (got %v)", len(names), len(want), names)
+	}
+	for i, n := range want {
+		if names[i] != n {
+			t.Errorf("List[%d].Name = %q, want %q (full=%v)", i, names[i], n, names)
+		}
+	}
+	// Verify the join count for bravo is 2.
+	for _, s := range got {
+		if s.Name == "bravo" && s.FederatesJoined != 2 {
+			t.Errorf("bravo.FederatesJoined = %d, want 2", s.FederatesJoined)
+		}
+	}
+}
+
 // mustNewWithFederation builds a Manager + creates the named federation,
 // failing the test on any error. Reduces boilerplate in Join/Resign tests.
 func mustNewWithFederation(t *testing.T, name core.FederationName) *federation.Manager {
