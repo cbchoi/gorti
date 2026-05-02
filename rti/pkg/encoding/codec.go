@@ -6,7 +6,12 @@
 // contract-change-request.
 package encoding
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/cbchoi/gorti/rti/pkg/fom/model"
+)
 
 // ErrNotImplemented is returned by stub functions until Agent B implements them.
 var ErrNotImplemented = errors.New("encoding: not implemented (Agent B M1 deliverable)")
@@ -19,11 +24,18 @@ type Codec interface {
 }
 
 // CodecFor returns the Codec for the given FOM data type descriptor.
-// The dt parameter is opaque at this contract layer; concrete dataType types
-// live in rti/pkg/fom/model (Agent B).
+// The dt parameter is opaque at this contract layer; the model package's
+// DataType sum (rti/pkg/fom/model) is the concrete shape callers pass.
 func CodecFor(dt any) (Codec, error) {
-	_ = dt
-	return nil, ErrNotImplemented
+	switch t := dt.(type) {
+	case nil:
+		return nil, fmt.Errorf("encoding: CodecFor(nil)")
+	case string:
+		return primitiveByName(t)
+	case model.DataType:
+		return codecForModelType(t)
+	}
+	return nil, fmt.Errorf("encoding: CodecFor cannot dispatch %T", dt)
 }
 
 // PrimitiveByName returns the Codec for an HLA Evolved primitive type by its
@@ -31,6 +43,5 @@ func CodecFor(dt any) (Codec, error) {
 // "HLAoctet", "HLAASCIIchar", "HLAunicodeChar"). Returns an error for unknown
 // or composite types. Convenience for tests and bridges that work in name form.
 func PrimitiveByName(name string) (Codec, error) {
-	_ = name
-	return nil, ErrNotImplemented
+	return primitiveByName(name)
 }

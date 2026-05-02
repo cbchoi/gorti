@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/cbchoi/gorti/rti/pkg/encoding"
+	"github.com/cbchoi/gorti/rti/pkg/fom/model"
 )
 
 // vectorFile is the canonical golden vector set, byte-equal across Go and Python.
@@ -16,7 +19,7 @@ const vectorFile = "tests/conformance/encoding_vectors.json"
 
 type vector struct {
 	ID    string `json:"id"`
-	Type  any    `json:"type"`  // string for primitives; object {kind, ...} for composites
+	Type  any    `json:"type"` // string for primitives; object {kind, ...} for composites
 	Value any    `json:"value"`
 	Bytes string `json:"bytes"` // hex
 	Notes string `json:"notes,omitempty"`
@@ -105,29 +108,137 @@ func TestSpec_M1_PrimitiveVectorsRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSpec_M1_CompositeVectorsRoundTrip is the spec for composite encoding.
-// Initially a placeholder — Agent B fills in the codec construction from the
-// composite type descriptors, then this test exercises the same round-trip.
+// TestSpec_M1_CompositeVectorsRoundTrip exercises encoding.CodecFor over the
+// composite vectors. Each vector's Type is a {"kind": "...", ...} descriptor
+// that we lift into a model.DataType, hand to CodecFor, and exercise:
 //
-// Composite vectors in encoding_vectors.json have Type as an object
-// {"kind": "HLAfixedRecord"|"HLAfixedArray"|..., ...}.
+//  1. encode(value) == bytes
+//  2. decode(bytes) consumes all input
+//  3. encode(decode(bytes)) == bytes  (round-trip)
+//
+// The third assertion is what catches padding bugs without needing a deep
+// recursive value comparator.
 //
 // Implements: FR-ENC-1, FR-ENC-2 (composite).
 func TestSpec_M1_CompositeVectorsRoundTrip(t *testing.T) {
 	composites := 0
 	for _, v := range loadVectors(t) {
-		if _, ok := v.Type.(map[string]any); ok {
-			composites++
+		m, ok := v.Type.(map[string]any)
+		if !ok {
+			continue
 		}
+		composites++
+		v := v
+		typeMap := m
+		t.Run(v.ID, func(t *testing.T) {
+			t.Parallel()
+
+			dt, err := compositeFromTypeMap(typeMap)
+			if err != nil {
+				t.Fatalf("build dataType from %v: %v", typeMap, err)
+			}
+			codec, err := encoding.CodecFor(dt)
+			if err != nil {
+				t.Fatalf("CodecFor(%T): %v", dt, err)
+			}
+
+			expected, err := hex.DecodeString(stripHexWhitespace(v.Bytes))
+			if err != nil {
+				t.Fatalf("hex %q: %v", v.Bytes, err)
+			}
+
+			got, err := codec.Encode(v.Value)
+			if err != nil {
+				t.Fatalf("Encode(%v): %v", v.Value, err)
+			}
+			if !bytes.Equal(got, expected) {
+				t.Fatalf("encode mismatch: got %x, want %x", got, expected)
+			}
+
+			decoded, n, err := codec.Decode(expected)
+			if err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			if n != len(expected) {
+				t.Errorf("Decode consumed %d, want %d", n, len(expected))
+			}
+
+			re, err := codec.Encode(decoded)
+			if err != nil {
+				t.Fatalf("re-Encode(decoded=%v): %v", decoded, err)
+			}
+			if !bytes.Equal(re, expected) {
+				t.Errorf("round-trip byte mismatch: got %x, want %x", re, expected)
+			}
+		})
 	}
 	if composites == 0 {
 		t.Skip("no composite vectors in fixture set yet")
 	}
+}
 
-	// Agent B: implement encoding.CodecFor(typeDescriptor) and exercise it
-	// here against the composite vectors. Until then, this is a placeholder
-	// that documents the contract.
-	t.Skipf("composite codec build is pending Agent B implementation (%d vectors waiting)", composites)
+// compositeFromTypeMap converts the JSON type descriptor used in vectors
+// into a model.DataType that encoding.CodecFor can dispatch on.
+func compositeFromTypeMap(m map[string]any) (model.DataType, error) {
+	kind, _ := m["kind"].(string)
+	switch kind {
+	case "HLAfixedRecord":
+		raw, ok := m["fields"].([]any)
+		if !ok {
+			return nil, fmt.Errorf("HLAfixedRecord: missing fields")
+		}
+		fields := make([]model.RecordField, len(raw))
+		for i, fr := range raw {
+			fm, _ := fr.(map[string]any)
+			name, _ := fm["name"].(string)
+			ft, _ := fm["type"].(string)
+			fields[i] = model.RecordField{Name: name, DataType: ft}
+		}
+		return &model.FixedRecordData{TypeName: "anonymous", Field: fields}, nil
+	case "HLAfixedArray":
+		elem, _ := m["element"].(string)
+		card, _ := m["cardinality"].(float64)
+		return &model.ArrayData{
+			TypeName:    "anonymous",
+			DataType:    elem,
+			Cardinality: strconv.Itoa(int(card)),
+		}, nil
+	case "HLAvariableArray":
+		elem, _ := m["element"].(string)
+		return &model.ArrayData{
+			TypeName:    "anonymous",
+			DataType:    elem,
+			Cardinality: "Dynamic",
+		}, nil
+	case "HLAvariantRecord":
+		disc, _ := m["discriminantType"].(string)
+		raw, _ := m["alternatives"].([]any)
+		alts := make([]model.VariantAlternative, len(raw))
+		for i, ar := range raw {
+			am, _ := ar.(map[string]any)
+			enum, _ := am["enumerator"].(string)
+			ty, _ := am["type"].(string)
+			alts[i] = model.VariantAlternative{Enumerator: enum, DataType: ty}
+		}
+		return &model.VariantRecordData{
+			TypeName:    "anonymous",
+			DataType:    disc,
+			Alternative: alts,
+		}, nil
+	}
+	return nil, fmt.Errorf("unknown composite kind %q", kind)
+}
+
+func stripHexWhitespace(s string) string {
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			continue
+		}
+		out = append(out, c)
+	}
+	return string(out)
 }
 
 // valuesEqual compares decoded values to vector values, accommodating that
