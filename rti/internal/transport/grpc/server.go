@@ -123,35 +123,5 @@ func (s *Server) Register(grpcServer any) error {
 	return nil
 }
 
-// declarationService is a stub shell owned by W3B (TASK-035). The W3B
-// branch replaces this struct + constructor with the real handler that
-// implements rtiv1.DeclarationServiceServer.
-type declarationService struct {
-	decl *declaration.Manager // TODO(W3B/TASK-035): use in real handler
-}
-
-func newDeclarationService(m *declaration.Manager) *declarationService {
-	return &declarationService{decl: m}
-}
-
-// objectService is a stub shell owned by W3C (TASK-036). The W3C branch
-// replaces this struct + constructor with the real handler that
-// implements rtiv1.ObjectServiceServer.
-type objectService struct {
-	objects core.ObjectRegistry // TODO(W3C/TASK-036): use in real handler
-}
-
-func newObjectService(o core.ObjectRegistry) *objectService {
-	return &objectService{objects: o}
-}
-
-// streamService is a stub shell owned by W3C (TASK-036). The W3C branch
-// replaces this struct + constructor with the real handler that
-// implements rtiv1.StreamServiceServer.
-type streamService struct {
-	outbox core.Outbox // TODO(W3C/TASK-036): use in real handler
-}
-
-func newStreamService(o core.Outbox) *streamService {
-	return &streamService{outbox: o}
-}
+// declarationService, objectService, streamService — real implementations
+// land in declaration.go (W3B), object.go and stream.go (W3C).
