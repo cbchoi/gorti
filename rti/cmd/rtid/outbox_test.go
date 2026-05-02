@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
 // fakeOutboundEvent satisfies core.OutboundEvent without requiring a real
@@ -17,13 +16,6 @@ import (
 type fakeOutboundEvent struct{ seq uint64 }
 
 func (e *fakeOutboundEvent) Seq() uint64 { return e.seq }
-
-// realOutboundEvent wraps an *rtiv1.FederateEvent so the channel sees the
-// shape the production stream handler converts back into a wire message.
-type realOutboundEvent struct{ pb *rtiv1.FederateEvent }
-
-func (e *realOutboundEvent) Seq() uint64                  { return e.pb.Seq }
-func (e *realOutboundEvent) Inner() *rtiv1.FederateEvent  { return e.pb }
 
 // TestMultiOutbox_SendDeliversToSubscriber: a Send to (fed, h) appears on
 // the channel returned by Subscribe(fed, h).

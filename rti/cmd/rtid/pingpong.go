@@ -61,22 +61,77 @@ func runPingpongDemo(ctx context.Context, cfg pingpongConfig) (pingpongStats, er
 		return pingpongStats{}, errors.New("pingpong: FederationName is required")
 	}
 
+	rt, cleanup, err := buildPingpongRuntime(cfg)
+	if err != nil {
+		return pingpongStats{}, err
+	}
+	defer cleanup()
+
+	pingHandle, pongHandle, err := pingpongJoin(ctx, cfg, rt)
+	if err != nil {
+		return pingpongStats{}, err
+	}
+	if err := pingpongDeclarations(ctx, cfg, rt, pingHandle, pongHandle); err != nil {
+		return pingpongStats{}, err
+	}
+
+	pingChan, _, err := rt.outbox.Subscribe(ctx, cfg.FederationName, pingHandle)
+	if err != nil {
+		return pingpongStats{}, err
+	}
+	pongChan, _, err := rt.outbox.Subscribe(ctx, cfg.FederationName, pongHandle)
+	if err != nil {
+		return pingpongStats{}, err
+	}
+
+	start := rt.clock.Now()
+	pongDone := startPongWorker(ctx, cfg, rt, pongHandle, pongChan)
+	if err := drivePingLoop(ctx, cfg, rt, pingHandle, pingChan); err != nil {
+		return pingpongStats{}, err
+	}
+	if err := <-pongDone; err != nil {
+		return pingpongStats{}, err
+	}
+	elapsed := rt.clock.Now().Sub(start)
+
+	if err := pingpongResign(ctx, cfg, rt, pingHandle, pongHandle); err != nil {
+		return pingpongStats{}, err
+	}
+	if err := rt.log.Sync(ctx, cfg.FederationName); err != nil {
+		return pingpongStats{}, err
+	}
+	return pingpongStats{RoundsCompleted: cfg.Rounds, Elapsed: elapsed}, nil
+}
+
+// pingpongRuntime bundles the in-process components for the demo so the
+// helper functions don't need a long argument list.
+type pingpongRuntime struct {
+	clock   core.Clock
+	log     core.EventLog
+	fedMgr  *federation.Manager
+	declMgr *declaration.Manager
+	objReg  *object.Registry
+	outbox  *syncOutbox
+}
+
+// buildPingpongRuntime constructs the components and returns a cleanup
+// closing any owned event log.
+func buildPingpongRuntime(cfg pingpongConfig) (*pingpongRuntime, func(), error) {
 	var clock core.Clock = core.NewRealClock()
 	if cfg.Deterministic {
 		clock = core.NewFakeClock(time.Unix(0, 0))
 	}
 	log, ownsLog, err := pingpongEventLog(cfg, clock)
 	if err != nil {
-		return pingpongStats{}, err
+		return nil, func() {}, err
 	}
-	if ownsLog {
-		defer func() {
+	cleanup := func() {
+		if ownsLog {
 			if mw, ok := log.(*eventlog.MultiplexWriter); ok {
 				_ = mw.Close()
 			}
-		}()
+		}
 	}
-
 	foms := newPingpongFOMRepo()
 	fedMgr, err := federation.New(federation.Options{
 		Clock:    clock,
@@ -84,7 +139,8 @@ func runPingpongDemo(ctx context.Context, cfg pingpongConfig) (pingpongStats, er
 		FOMs:     foms,
 	})
 	if err != nil {
-		return pingpongStats{}, err
+		cleanup()
+		return nil, func() {}, err
 	}
 	declMgr := declaration.New()
 	outbox := newSyncOutbox()
@@ -96,104 +152,112 @@ func runPingpongDemo(ctx context.Context, cfg pingpongConfig) (pingpongStats, er
 		Clock:        clock,
 	})
 	if err != nil {
-		return pingpongStats{}, err
+		cleanup()
+		return nil, func() {}, err
 	}
+	return &pingpongRuntime{
+		clock: clock, log: log, fedMgr: fedMgr,
+		declMgr: declMgr, objReg: objReg, outbox: outbox,
+	}, cleanup, nil
+}
 
-	if err := fedMgr.CreateFederation(ctx, core.CreateFederationRequest{
+// pingpongJoin creates the federation and joins both federates.
+func pingpongJoin(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime) (core.FederateHandle, core.FederateHandle, error) {
+	if err := rt.fedMgr.CreateFederation(ctx, core.CreateFederationRequest{
 		Name: cfg.FederationName,
 		Mode: core.ModeVerbose,
 		Seed: 1,
 	}); err != nil {
-		return pingpongStats{}, fmt.Errorf("pingpong: CreateFederation: %w", err)
+		return 0, 0, fmt.Errorf("pingpong: CreateFederation: %w", err)
 	}
-
-	pingHandle, err := fedMgr.JoinFederation(ctx, core.JoinFederationRequest{
+	pingHandle, err := rt.fedMgr.JoinFederation(ctx, core.JoinFederationRequest{
 		Federation: cfg.FederationName, FederateName: "ping",
 	})
 	if err != nil {
-		return pingpongStats{}, fmt.Errorf("pingpong: ping Join: %w", err)
+		return 0, 0, fmt.Errorf("pingpong: ping Join: %w", err)
 	}
-	pongHandle, err := fedMgr.JoinFederation(ctx, core.JoinFederationRequest{
+	pongHandle, err := rt.fedMgr.JoinFederation(ctx, core.JoinFederationRequest{
 		Federation: cfg.FederationName, FederateName: "pong",
 	})
 	if err != nil {
-		return pingpongStats{}, fmt.Errorf("pingpong: pong Join: %w", err)
+		return 0, 0, fmt.Errorf("pingpong: pong Join: %w", err)
 	}
+	return pingHandle, pongHandle, nil
+}
 
-	const honkClass = core.InteractionClassHandle(1)
-	const ackClass = core.InteractionClassHandle(2)
+// pingpongDeclarations records publish/subscribe for honk + ack.
+func pingpongDeclarations(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, ping, pong core.FederateHandle) error {
+	for _, op := range []struct {
+		fn func(context.Context, core.FederationName, core.FederateHandle, core.InteractionClassHandle) error
+		h  core.FederateHandle
+		c  core.InteractionClassHandle
+	}{
+		{rt.declMgr.PublishInteractionClass, ping, honkClass},
+		{rt.declMgr.SubscribeInteractionClass, ping, ackClass},
+		{rt.declMgr.PublishInteractionClass, pong, ackClass},
+		{rt.declMgr.SubscribeInteractionClass, pong, honkClass},
+	} {
+		if err := op.fn(ctx, cfg.FederationName, op.h, op.c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	if err := declMgr.PublishInteractionClass(ctx, cfg.FederationName, pingHandle, honkClass); err != nil {
-		return pingpongStats{}, err
-	}
-	if err := declMgr.SubscribeInteractionClass(ctx, cfg.FederationName, pingHandle, ackClass); err != nil {
-		return pingpongStats{}, err
-	}
-	if err := declMgr.PublishInteractionClass(ctx, cfg.FederationName, pongHandle, ackClass); err != nil {
-		return pingpongStats{}, err
-	}
-	if err := declMgr.SubscribeInteractionClass(ctx, cfg.FederationName, pongHandle, honkClass); err != nil {
-		return pingpongStats{}, err
-	}
-
-	pingChan, _, err := outbox.Subscribe(ctx, cfg.FederationName, pingHandle)
-	if err != nil {
-		return pingpongStats{}, err
-	}
-	pongChan, _, err := outbox.Subscribe(ctx, cfg.FederationName, pongHandle)
-	if err != nil {
-		return pingpongStats{}, err
-	}
-
-	pongDone := make(chan error, 1)
+// startPongWorker launches the pong-side loop and returns a channel
+// that yields its terminal error (nil on clean completion).
+func startPongWorker(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, pong core.FederateHandle, pongChan <-chan core.OutboundEvent) <-chan error {
+	done := make(chan error, 1)
 	go func() {
 		for i := 0; i < cfg.Rounds; i++ {
 			select {
 			case <-pongChan:
 			case <-ctx.Done():
-				pongDone <- ctx.Err()
+				done <- ctx.Err()
 				return
 			}
-			if err := objReg.SendInteraction(ctx, cfg.FederationName, pongHandle, ackClass, nil, nil); err != nil {
-				pongDone <- fmt.Errorf("pong: SendInteraction: %w", err)
+			if err := rt.objReg.SendInteraction(ctx, cfg.FederationName, pong, ackClass, nil, nil); err != nil {
+				done <- fmt.Errorf("pong: SendInteraction: %w", err)
 				return
 			}
 		}
-		pongDone <- nil
+		done <- nil
 	}()
+	return done
+}
 
-	start := clock.Now()
+// drivePingLoop runs the ping side of the round-trip.
+func drivePingLoop(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, ping core.FederateHandle, pingChan <-chan core.OutboundEvent) error {
 	for i := 0; i < cfg.Rounds; i++ {
-		if err := objReg.SendInteraction(ctx, cfg.FederationName, pingHandle, honkClass, nil, nil); err != nil {
-			return pingpongStats{}, fmt.Errorf("ping: SendInteraction: %w", err)
+		if err := rt.objReg.SendInteraction(ctx, cfg.FederationName, ping, honkClass, nil, nil); err != nil {
+			return fmt.Errorf("ping: SendInteraction: %w", err)
 		}
 		select {
 		case <-pingChan:
 		case <-ctx.Done():
-			return pingpongStats{}, ctx.Err()
+			return ctx.Err()
 		}
 	}
-
-	if err := <-pongDone; err != nil {
-		return pingpongStats{}, err
-	}
-	elapsed := clock.Now().Sub(start)
-
-	if err := fedMgr.ResignFederation(ctx, cfg.FederationName, pingHandle, core.ResignActionUnconditionallyDivestAttributes); err != nil {
-		return pingpongStats{}, err
-	}
-	if err := fedMgr.ResignFederation(ctx, cfg.FederationName, pongHandle, core.ResignActionUnconditionallyDivestAttributes); err != nil {
-		return pingpongStats{}, err
-	}
-	if err := log.Sync(ctx, cfg.FederationName); err != nil {
-		return pingpongStats{}, err
-	}
-
-	return pingpongStats{
-		RoundsCompleted: cfg.Rounds,
-		Elapsed:         elapsed,
-	}, nil
+	return nil
 }
+
+// pingpongResign cleans up both federates.
+func pingpongResign(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, ping, pong core.FederateHandle) error {
+	for _, h := range []core.FederateHandle{ping, pong} {
+		if err := rt.fedMgr.ResignFederation(ctx, cfg.FederationName, h, core.ResignActionUnconditionallyDivestAttributes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// honkClass / ackClass are the two interaction classes the demo uses.
+// Hand-managed (the permissive FOM repo accepts any handle); 1 and 2
+// are stable across runs which keeps the eventlog body deterministic.
+const (
+	honkClass = core.InteractionClassHandle(1)
+	ackClass  = core.InteractionClassHandle(2)
+)
 
 // pingpongEventLog returns the EventLog for this run plus an owns flag
 // indicating whether the caller must Close it.

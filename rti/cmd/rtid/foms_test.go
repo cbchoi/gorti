@@ -153,6 +153,96 @@ func TestFOMRepository_GetUnknown(t *testing.T) {
 	}
 }
 
+// TestFOMRepository_LookupAttribute_AndParameter: with a loaded FOM,
+// the (1, "position") and (1, "Honk-style param") lookups follow the
+// indexed-from-1 contract.
+func TestFOMRepository_LookupAttributeAndParameter(t *testing.T) {
+	repo := newFOMRepository()
+	h, err := repo.Load(context.Background(), []core.FOMModule{
+		{Path: "lookup", XML: minimalFOMXML(t)},
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cls, ok := h.LookupObjectClass("Vehicle")
+	if !ok {
+		t.Fatalf("no Vehicle class")
+	}
+	if _, ok := h.LookupAttribute(cls, "position"); !ok {
+		t.Errorf("LookupAttribute(Vehicle, position) not found")
+	}
+	if _, ok := h.LookupAttribute(cls, "ghost"); ok {
+		t.Errorf("LookupAttribute(Vehicle, ghost) returned ok=true")
+	}
+	if _, ok := h.LookupAttribute(99, "position"); ok {
+		t.Errorf("LookupAttribute(99, position) returned ok=true for invalid class")
+	}
+	// LookupParameter on Honk has no params; should return false.
+	ic, _ := h.LookupInteractionClass("Honk")
+	if _, ok := h.LookupParameter(ic, "anything"); ok {
+		t.Errorf("LookupParameter(Honk, anything) returned ok=true")
+	}
+	if _, ok := h.LookupParameter(99, "x"); ok {
+		t.Errorf("LookupParameter(99, x) returned ok=true for invalid class")
+	}
+}
+
+// TestFOMRepository_LeafNameQualified: the leafName helper handles both
+// HLA-qualified ("HLAobjectRoot.Vehicle") and plain ("Vehicle") forms.
+func TestFOMRepository_LeafNameQualified(t *testing.T) {
+	repo := newFOMRepository()
+	h, err := repo.Load(context.Background(), []core.FOMModule{
+		{Path: "qual", XML: minimalFOMXML(t)},
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, ok := h.LookupObjectClass("HLAobjectRoot.Vehicle"); !ok {
+		t.Errorf("LookupObjectClass(HLAobjectRoot.Vehicle) not found")
+	}
+	if _, ok := h.LookupInteractionClass("HLAinteractionRoot.Honk"); !ok {
+		t.Errorf("LookupInteractionClass(HLAinteractionRoot.Honk) not found")
+	}
+}
+
+// TestFOMRepository_LoadInvalidXML_DiagnosticsAggregated: when the
+// parser surfaces FOM-* diagnostics, Load returns them in the error.
+func TestFOMRepository_LoadDiagnosticsInError(t *testing.T) {
+	// A FOM with a duplicate attribute should surface FOM-004.
+	bad := []byte(`<?xml version="1.0"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>dup-attr</name><type>FOM</type><version>1</version>
+    <modificationDate>2026-01-01</modificationDate>
+    <securityClassification>U</securityClassification>
+    <description>x</description><useHistory>none</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name><sharing>PublishSubscribe</sharing><semantics>x</semantics>
+        <attribute><name>pos</name><dataType>HLAfloat64BE</dataType><updateType>P</updateType>
+          <updateCondition>NA</updateCondition><ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation>
+          <order>TimeStamp</order><semantics>x</semantics></attribute>
+        <attribute><name>pos</name><dataType>HLAfloat64BE</dataType><updateType>P</updateType>
+          <updateCondition>NA</updateCondition><ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation>
+          <order>TimeStamp</order><semantics>x</semantics></attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+</objectModel>`)
+	repo := newFOMRepository()
+	_, err := repo.Load(context.Background(), []core.FOMModule{
+		{Path: "dup", XML: bad},
+	})
+	if err == nil {
+		t.Errorf("Load with duplicate attribute returned nil error")
+	}
+}
+
 // TestFOMRepository_RememberAndGet: after RememberFor records a federation's
 // handle, Get returns the same handle.
 func TestFOMRepository_RememberAndGet(t *testing.T) {

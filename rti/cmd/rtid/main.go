@@ -73,8 +73,9 @@ func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
 		os.Exit(2)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if err := runReplayFromFile(ctx, inputPath, logDir); err != nil {
+	err := runReplayFromFile(ctx, inputPath, logDir)
+	cancel()
+	if err != nil {
 		logger.Error("replay failed", "err", err)
 		os.Exit(1)
 	}
@@ -100,10 +101,10 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir string) {
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
-	if err := srv.Serve(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("rtid serve exited with error", "err", err)
+	serveErr := srv.Serve(ctx)
+	cancel()
+	if serveErr != nil && !errors.Is(serveErr, context.Canceled) {
+		logger.Error("rtid serve exited with error", "err", serveErr)
 		os.Exit(1)
 	}
 }
@@ -113,13 +114,13 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir string) {
 // mode); empty means the demo runs without persistence.
 func runPingpongMain(logger *slog.Logger, federation string, rounds int, logDir string, deterministic bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	stats, err := runPingpongDemo(ctx, pingpongConfig{
 		FederationName: core.FederationName(federation),
 		Rounds:         rounds,
 		LogDir:         logDir,
 		Deterministic:  deterministic,
 	})
+	cancel()
 	if err != nil {
 		logger.Error("pingpong-demo failed", "err", err)
 		os.Exit(1)
