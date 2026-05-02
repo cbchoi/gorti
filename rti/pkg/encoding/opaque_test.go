@@ -121,3 +121,51 @@ func TestComposite_HLAopaqueData_EncodeAcceptsNilSlice(t *testing.T) {
 		t.Errorf("Encode(nil []byte) = %x, want 00000000", got)
 	}
 }
+
+// TestSpec_HLAopaqueData_EncodeAcceptsHexString covers the JSON-loading
+// path: vectors in tests/conformance/encoding_vectors.json deliver opaque
+// values as hex-encoded strings ("deadbeef" → 4 bytes 0xde 0xad 0xbe 0xef)
+// because JSON has no native bytes type. The codec must accept this form
+// in addition to []byte; otherwise composite spec tests regress.
+//
+// Implements: FR-ENC-1, FR-ENC-2 (opaque); fixes the gap surfaced by
+// TestSpec_M1_CompositeVectorsRoundTrip/opaque-* on JSON-shaped vectors.
+func TestSpec_HLAopaqueData_EncodeAcceptsHexString(t *testing.T) {
+	t.Parallel()
+	codec := NewOpaqueData()
+
+	cases := []struct {
+		name  string
+		value any
+		want  string // hex
+	}{
+		{"empty string", "", "00000000"},
+		{"deadbeef hex string", "deadbeef", "00000004deadbeef"},
+		{"three-byte hex", "010203", "00000003010203"},
+		{"uppercase hex tolerated", "DEADBEEF", "00000004deadbeef"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := codec.Encode(tc.value)
+			if err != nil {
+				t.Fatalf("Encode(%q): %v", tc.value, err)
+			}
+			want, _ := hex.DecodeString(tc.want)
+			if !bytes.Equal(got, want) {
+				t.Errorf("Encode(%q) = %x, want %x", tc.value, got, want)
+			}
+		})
+	}
+}
+
+// TestSpec_HLAopaqueData_EncodeRejectsNonHexString — invalid hex still
+// produces an error rather than silently encoding garbage.
+func TestSpec_HLAopaqueData_EncodeRejectsNonHexString(t *testing.T) {
+	t.Parallel()
+	codec := NewOpaqueData()
+	if _, err := codec.Encode("not-hex-content!"); err == nil {
+		t.Error("Encode(non-hex string): want error, got nil")
+	}
+}

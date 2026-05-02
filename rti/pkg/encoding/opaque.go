@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 )
@@ -24,12 +25,29 @@ func NewOpaqueData() Codec { return opaqueDataCodec{} }
 // OctetBoundary returns 4.
 func (opaqueDataCodec) OctetBoundary() int { return 4 }
 
-// Encode accepts []byte (nil is treated as empty) and emits the length
-// prefix + raw bytes.
+// Encode accepts []byte (nil is treated as empty) OR a hex-encoded string
+// (the JSON conformance-vector convention; "deadbeef" → 4 bytes). Emits
+// the length prefix + raw bytes.
 func (opaqueDataCodec) Encode(v any) ([]byte, error) {
-	xs, ok := v.([]byte)
-	if !ok {
-		return nil, fmt.Errorf("encoding: HLAopaqueData cannot encode %T (want []byte)", v)
+	var xs []byte
+	switch t := v.(type) {
+	case []byte:
+		xs = t
+	case string:
+		// JSON has no native bytes type; conformance vectors use hex
+		// strings (e.g. "deadbeef" → []byte{0xde, 0xad, 0xbe, 0xef}).
+		// Empty string → empty byte slice.
+		if t == "" {
+			xs = nil
+		} else {
+			decoded, err := hex.DecodeString(t)
+			if err != nil {
+				return nil, fmt.Errorf("encoding: HLAopaqueData cannot decode string as hex: %w", err)
+			}
+			xs = decoded
+		}
+	default:
+		return nil, fmt.Errorf("encoding: HLAopaqueData cannot encode %T (want []byte or hex string)", v)
 	}
 	out := make([]byte, 4+len(xs))
 	binary.BigEndian.PutUint32(out[:4], uint32(len(xs)))
