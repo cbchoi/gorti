@@ -53,6 +53,8 @@ func Parse(modules []Module) (Result, error) {
 	var (
 		objectClasses      []model.ObjectClass
 		interactionClasses []model.InteractionClass
+		dataTypes          []model.DataType
+		diagnostics        []Diagnostic
 	)
 
 	for _, m := range modules {
@@ -60,15 +62,35 @@ func Parse(modules []Module) (Result, error) {
 		if err != nil {
 			return Result{}, fmt.Errorf("parse module %q: %w", m.Path, err)
 		}
+		var (
+			modObjects      []model.ObjectClass
+			modInteractions []model.InteractionClass
+		)
 		if om.Objects != nil {
-			flattenObjectClasses(om.Objects.ObjectClass, "", &objectClasses)
+			flattenObjectClasses(om.Objects.ObjectClass, "", &modObjects)
 		}
 		if om.Interactions != nil {
-			flattenInteractionClasses(om.Interactions.InteractionClass, "", &interactionClasses)
+			flattenInteractionClasses(om.Interactions.InteractionClass, "", &modInteractions)
 		}
+		modDataTypes := convertDataTypes(om.DataTypes)
+
+		modFOM := model.NewFOM(modObjects, modInteractions, modDataTypes)
+		diagnostics = append(diagnostics, runDiagnosers(diagnosticInput{
+			modulePath: m.Path,
+			xml:        m.XML,
+			fom:        modFOM,
+			raw:        om,
+		})...)
+
+		objectClasses = append(objectClasses, modObjects...)
+		interactionClasses = append(interactionClasses, modInteractions...)
+		dataTypes = append(dataTypes, modDataTypes...)
 	}
 
-	fom := model.NewFOM(objectClasses, interactionClasses, nil)
+	if len(diagnostics) > 0 {
+		return Result{Diagnostics: diagnostics}, nil
+	}
+	fom := model.NewFOM(objectClasses, interactionClasses, dataTypes)
 	return Result{FOM: fom}, nil
 }
 
