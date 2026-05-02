@@ -6,6 +6,48 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-02 (M1 follow-ups — canonical MIM landed, issue #1 resolved, octet-pair vectors added, JSON coercion fixes)
+
+Two follow-ups carried over from the M1 closure round, both resolved this same day.
+
+### Canonical MIM (issue #1 → resolved)
+
+Replaced the interim hand-derived MIM with the canonical IEEE 1516.1-2010 standard MIM, sourced from openlvc/portico (CDDL-1.0). The file itself carries an explicit IEEE royalty-free attribution license at its head; that header comment is preserved verbatim. Provenance, blob sha (`713d000…`), content sha256 (`649f008a…`), and retrieval date recorded in `rti/pkg/fom/mim/embed.go`'s package doc.
+
+Two follow-on fixes were needed to integrate the canonical content:
+
+- **`<note>` added to the DIF Annex A whitelist** in `rti/pkg/fom/parser/strict.go`. The canonical MIM uses the singular annotation element which our interim file hadn't needed; all other 64 distinct elements were already covered.
+- **`isMIMTypeModule` heuristic widened** in `rti/pkg/fom/parser/mim_merge.go`. The canonical MIM declares `<type>FOM</type>` (not `<type>MIM</type>`) for historical-compat reasons; without widening, `parser.Parse` on the embedded MIM self-collides via FOM-101 on every shared name. The new heuristic also matches modelIdentification names containing "Standard MOM and Initialization Module" or "HLAstandardMIM" (case-insensitive).
+
+`hla-standard-mim.xml` re-classified from "interim approximation" to "empty wrapper" since the canonical MIM is fully self-sufficient for cut-1.
+
+Issue #1 is closed by the orchestrator's commit `0e37c62`. The PAT in this conversation could not close the GitHub issue programmatically — user closes manually.
+
+### HLAoctetPair vectors + JSON coercion
+
+Two coupled changes closed the second M1 follow-up:
+
+- **`tests/conformance/encoding_vectors.json`** gained 6 new vectors covering `HLAoctetPairBE` (zero, mixed `[0xAB, 0xCD]`, max) and `HLAoctetPairLE` (same logical values + asymmetric to exercise byte-swap).
+- **`rti/pkg/encoding/byte.go`**: `octetPairBytes` accepts `[]any` (the JSON-array form) in addition to `[2]byte` and `[]byte`. New `coerceOctet` helper narrows each element from float64/int/byte with range checking.
+- **`tests/spec/M1/encoding_vectors_test.go`**: `valuesEqual` gains a `[]any` case comparing against `[2]byte` (and `[]byte` for symmetry); both element types reuse the existing float64-coercion path. Frozen-file edit by orchestrator: purely additive, no existing case altered.
+
+Earlier the same day, two additional JSON-coercion fixes had landed for the composite spec test (variant-record discriminator round-trip canonicalization in `variant_record.go`; opaque-data hex-string acceptance in `opaque.go`). All composite vector subtests now pass byte-identical.
+
+### Net M1 state at close
+
+```
+M1: DONE
+  ✓ 10 bad-FOM fixtures committed
+  ✓ TestSpec_M1_BadFOMDiagnostics (all 10 codes including FOM-101)
+  ✓ TestSpec_M1_PrimitiveVectorsRoundTrip (53 + 6 octet-pair = 59 subtests)
+  ✓ TestSpec_M1_CompositeVectorsRoundTrip (17 subtests)
+  ✓ rti/pkg/encoding coverage = 95.9%
+```
+
+No regressions. Issue #1 closed. Both M1 follow-ups absorbed. Ready to dispatch M2 once the orchestrator pre-writes `tests/spec/M2/`.
+
+---
+
 ## 2026-05-02 (Wave 1 + Wave 2 + Wave 3 dispatch) — M1 driven from 0 to 9/10 BadFOM + full primitive + composite codecs; issue #1 interim resolution
 
 Spawned three waves of orchestrator-driven sub-agents (worktree-isolated `general-purpose` agents role-playing Agent B) to drive M1 toward DONE.
