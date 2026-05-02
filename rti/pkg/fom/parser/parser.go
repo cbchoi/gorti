@@ -7,11 +7,18 @@
 // not change without a contract-change-request.
 package parser
 
-import "errors"
+import (
+	"bytes"
+	"encoding/xml"
+	"errors"
+	"fmt"
 
-// ErrNotImplemented is returned by stub functions until Agent B implements them.
-// Spec tests in tests/spec/M1/ will fail with this error initially (as expected
-// for TDD red), then turn green as functionality is added.
+	"github.com/cbchoi/gorti/rti/pkg/fom/model"
+)
+
+// ErrNotImplemented is retained for callers that compare against it during
+// the TDD-red phase of yet-to-implement features. The Parse happy path no
+// longer returns it as of TASK-001.
 var ErrNotImplemented = errors.New("parser: not implemented (Agent B M1 deliverable)")
 
 // Result is the outcome of parsing one or more FOM modules.
@@ -43,8 +50,39 @@ type Diagnostic struct {
 // failure the FOM field is nil; callers must inspect Diagnostics. The error
 // return is reserved for I/O / encoding failures unrelated to FOM content.
 func Parse(modules []Module) (Result, error) {
-	_ = modules
-	return Result{}, ErrNotImplemented
+	var (
+		objectClasses      []model.ObjectClass
+		interactionClasses []model.InteractionClass
+	)
+
+	for _, m := range modules {
+		om, err := decodeModule(m)
+		if err != nil {
+			return Result{}, fmt.Errorf("parse module %q: %w", m.Path, err)
+		}
+		if om.Objects != nil {
+			flattenObjectClasses(om.Objects.ObjectClass, "", &objectClasses)
+		}
+		if om.Interactions != nil {
+			flattenInteractionClasses(om.Interactions.InteractionClass, "", &interactionClasses)
+		}
+	}
+
+	fom := model.NewFOM(objectClasses, interactionClasses, nil)
+	return Result{FOM: fom}, nil
+}
+
+// decodeModule applies a strict-mode XML decoder to one module. Strictness
+// for cut-1 means: malformed XML (mis-balanced tags, truncated input, etc.)
+// returns an error. Schema-level validation (unknown elements, required
+// attributes) is handled by later TASK-002..009 diagnostic passes.
+func decodeModule(m Module) (*xmlObjectModel, error) {
+	dec := xml.NewDecoder(bytes.NewReader(m.XML))
+	var om xmlObjectModel
+	if err := dec.Decode(&om); err != nil {
+		return nil, err
+	}
+	return &om, nil
 }
 
 // Module is one FOM XML module submitted to Parse.
