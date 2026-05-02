@@ -80,6 +80,119 @@
       "notes": "exactly representable; safe for cross-language equality"
     },
     {
+      "id": "float32be-zero",
+      "type": "HLAfloat32BE",
+      "value": 0.0,
+      "bytes": "00000000",
+      "notes": "TASK-011 float family begin"
+    },
+    {
+      "id": "float32be-neg-one",
+      "type": "HLAfloat32BE",
+      "value": -1.0,
+      "bytes": "bf800000"
+    },
+    {
+      "id": "float32be-half",
+      "type": "HLAfloat32BE",
+      "value": 0.5,
+      "bytes": "3f000000",
+      "notes": "exactly representable single"
+    },
+    {
+      "id": "float32be-neg-half",
+      "type": "HLAfloat32BE",
+      "value": -0.5,
+      "bytes": "bf000000"
+    },
+    {
+      "id": "float32be-two",
+      "type": "HLAfloat32BE",
+      "value": 2.0,
+      "bytes": "40000000"
+    },
+    {
+      "id": "float32be-quarter",
+      "type": "HLAfloat32BE",
+      "value": 0.25,
+      "bytes": "3e800000"
+    },
+    {
+      "id": "float32le-zero",
+      "type": "HLAfloat32LE",
+      "value": 0.0,
+      "bytes": "00000000"
+    },
+    {
+      "id": "float32le-one",
+      "type": "HLAfloat32LE",
+      "value": 1.0,
+      "bytes": "0000803f",
+      "notes": "IEEE 754 single, LE; octet boundary 4"
+    },
+    {
+      "id": "float32le-half",
+      "type": "HLAfloat32LE",
+      "value": 0.5,
+      "bytes": "0000003f"
+    },
+    {
+      "id": "float32le-neg-two",
+      "type": "HLAfloat32LE",
+      "value": -2.0,
+      "bytes": "000000c0"
+    },
+    {
+      "id": "float64be-zero",
+      "type": "HLAfloat64BE",
+      "value": 0.0,
+      "bytes": "0000000000000000"
+    },
+    {
+      "id": "float64be-neg-half",
+      "type": "HLAfloat64BE",
+      "value": -0.5,
+      "bytes": "bfe0000000000000"
+    },
+    {
+      "id": "float64be-two",
+      "type": "HLAfloat64BE",
+      "value": 2.0,
+      "bytes": "4000000000000000"
+    },
+    {
+      "id": "float64be-quarter",
+      "type": "HLAfloat64BE",
+      "value": 0.25,
+      "bytes": "3fd0000000000000"
+    },
+    {
+      "id": "float64le-zero",
+      "type": "HLAfloat64LE",
+      "value": 0.0,
+      "bytes": "0000000000000000"
+    },
+    {
+      "id": "float64le-one",
+      "type": "HLAfloat64LE",
+      "value": 1.0,
+      "bytes": "000000000000f03f",
+      "notes": "IEEE 754 double, LE; octet boundary 8"
+    },
+    {
+      "id": "float64le-half",
+      "type": "HLAfloat64LE",
+      "value": 0.5,
+      "bytes": "000000000000e03f"
+    },
+    {
+      "id": "float64le-neg-two",
+      "type": "HLAfloat64LE",
+      "value": -2.0,
+      "bytes": "00000000000000c0",
+      "notes": "TASK-011 float family end"
+    },
+    {
       "id": "boolean-true",
       "type": "HLAboolean",
       "value": true,

@@ -1,0 +1,22 @@
+- agent: agent-b
+- branch: agent/b/task-011-float-codecs
+- timestamp: 2026-04-29T00:00:00Z
+- pr: pending
+- summary: |
+    Implemented HLAfloat32BE/LE and HLAfloat64BE/LE primitive codecs in
+    rti/pkg/encoding/float.go using math.Float{32,64}bits + encoding/binary.
+    Wired PrimitiveByName in codec.go to dispatch the four float names; the
+    case block is grouped and bracketed with comments to allow mechanical
+    merge with concurrent TASK-010 (integers) and TASK-012 (strings).
+    Added 18 exactly-representable float vectors to
+    tests/conformance/encoding_vectors.json (additive only): 6 HLAfloat32BE,
+    4 HLAfloat32LE, 4 HLAfloat64BE, 4 HLAfloat64LE.
+    Coverage on rti/pkg/encoding: 91.7% (Encode/Decode/OctetBoundary 100%
+    on each of the 4 codec types).
+    golangci-lint clean on owned paths.
+- acceptance:
+    - all 4 float types resolve via PrimitiveByName (yes)
+    - all float vectors round-trip byte-identical (yes)
+    - coverage on float.go >= 80% (yes — 100% on Encode/Decode/OctetBoundary)
+    - no existing vector modified or deleted (yes — additive only)
+    - golangci-lint clean on owned paths (yes)
