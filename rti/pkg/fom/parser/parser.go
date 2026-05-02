@@ -7,13 +7,7 @@
 // not change without a contract-change-request.
 package parser
 
-import (
-	"encoding/xml"
-	"errors"
-	"fmt"
-
-	"github.com/cbchoi/gorti/rti/pkg/fom/model"
-)
+import "errors"
 
 // ErrNotImplemented is returned by stub functions until Agent B implements them.
 // Spec tests in tests/spec/M1/ will fail with this error initially (as expected
@@ -49,52 +43,8 @@ type Diagnostic struct {
 // failure the FOM field is nil; callers must inspect Diagnostics. The error
 // return is reserved for I/O / encoding failures unrelated to FOM content.
 func Parse(modules []Module) (Result, error) {
-	var (
-		objectClasses      []*model.ObjectClass
-		interactionClasses []*model.InteractionClass
-		diagnostics        []Diagnostic
-	)
-
-	for _, m := range modules {
-		diagnostics = append(diagnostics, checkStrict(m.Path, m.XML)...)
-
-		var doc xmlObjectModel
-		if err := xml.Unmarshal(m.XML, &doc); err != nil {
-			return Result{}, fmt.Errorf("parser: %s: %w", m.Path, err)
-		}
-		moduleObjects := flattenObjectClasses(doc.Objects.Roots)
-		moduleInteractions := flattenInteractionClasses(doc.Interactions.Roots)
-		declared := declaredDataTypeNames(doc.DataTypes)
-
-		diagnostics = append(diagnostics, checkMIMRedefinition(m.Path, declared)...)
-		diagnostics = append(diagnostics, checkVariantDiscriminators(m.Path, doc.DataTypes.VariantRecordDataTypes)...)
-		diagnostics = append(diagnostics, checkStructure(m.Path, moduleObjects, moduleInteractions, declared)...)
-
-		objectClasses = append(objectClasses, moduleObjects...)
-		interactionClasses = append(interactionClasses, moduleInteractions...)
-	}
-
-	if len(diagnostics) > 0 {
-		return Result{Diagnostics: diagnostics}, nil
-	}
-	fom := model.NewFOM(objectClasses, interactionClasses, nil)
-	return Result{FOM: fom}, nil
-}
-
-// checkStructure runs the per-module structural validation passes that all
-// depend on the flattened model: cycles (FOM-002), multi-parents (FOM-003),
-// attribute dups (FOM-004), parameter dups (FOM-005), object parents
-// (FOM-011), interaction parents (FOM-012), dataType refs (FOM-001).
-func checkStructure(path string, objects []*model.ObjectClass, interactions []*model.InteractionClass, declared map[string]struct{}) []Diagnostic {
-	var out []Diagnostic
-	out = append(out, checkCycles(path, objects)...)
-	out = append(out, checkMultipleParents(path, objects)...)
-	out = append(out, checkDuplicateAttributes(path, objects)...)
-	out = append(out, checkDuplicateParameters(path, interactions)...)
-	out = append(out, checkParents(path, objects)...)
-	out = append(out, checkInteractionParents(path, interactions)...)
-	out = append(out, checkDataTypeRefs(path, objects, interactions, declared)...)
-	return out
+	_ = modules
+	return Result{}, ErrNotImplemented
 }
 
 // Module is one FOM XML module submitted to Parse.

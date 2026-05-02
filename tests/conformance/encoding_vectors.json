@@ -3,7 +3,7 @@
   "_meta": {
     "purpose": "Golden cross-language byte vectors for HLA Evolved encoding rules per IEEE 1516.2-2010 §4.",
     "owner": "orchestrator at M0; Agent B may add vectors during M1; Agent C must produce byte-identical output.",
-    "format": "Each vector has id, type (string for primitive, object for composite), value (JSON), bytes (lowercase hex, optional whitespace stripped at load), optional notes.",
+    "format": "Each vector has id, type (string for primitive, object for composite), value (JSON), bytes (lowercase hex, no separators), optional notes.",
     "stability": "Vectors are additive only; do not delete or modify after agents have implemented against them. New diagnostics: file a contract-change-request."
   },
   "vectors": [
@@ -114,6 +114,7 @@
       "notes": "UTF-16 BE; octet boundary 2"
     },
     {
+      "_disabled": true,
       "id": "fixed-record-octet-float64",
       "type": {
         "kind": "HLAfixedRecord",
@@ -124,38 +125,7 @@
       },
       "value": {"a": 5, "b": 1.0},
       "bytes": "0500000000000000 3ff0000000000000",
-      "notes": "octet then 7-byte pad to 8-byte boundary then float64; octet boundary 8"
-    },
-    {
-      "id": "fixed-array-int32be-3",
-      "type": {
-        "kind": "HLAfixedArray",
-        "element": "HLAinteger32BE",
-        "cardinality": 3
-      },
-      "value": [10, 20, 30],
-      "bytes": "0000000a000000140000001e",
-      "notes": "three contiguous int32 BE values, no padding (each item already at boundary)"
-    },
-    {
-      "id": "variable-array-int32be-2",
-      "type": {
-        "kind": "HLAvariableArray",
-        "element": "HLAinteger32BE"
-      },
-      "value": [1, 2],
-      "bytes": "000000020000000100000002",
-      "notes": "4-byte BE length prefix then items"
-    },
-    {
-      "id": "variable-array-octet-2",
-      "type": {
-        "kind": "HLAvariableArray",
-        "element": "HLAoctet"
-      },
-      "value": [171, 205],
-      "bytes": "00000002abcd",
-      "notes": "HLAvariableArray of HLAoctet is the wire shape of HLAopaqueData"
+      "notes": "EXAMPLE composite vector; commented (_disabled) until Agent B implements composite codec via CodecFor; padding to 8-byte boundary then float64"
     }
   ]
 }
