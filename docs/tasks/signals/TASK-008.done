@@ -1,0 +1,15 @@
+- agent: agent-b
+- branch: agent/b/m1-mim-merge-fom101
+- bundle: TASK-008 + TASK-009 (Wave 3 dispatch efficiency, orchestrator-bundled)
+- final-commit: pending sentinel commit
+- pr: pending
+- summary: |
+    Embedded the orchestrator-vendored standard MIM and HLAstandardMIM via
+    //go:embed in rti/pkg/fom/mim/embed.go. Exposes:
+      - StandardMIMBytes / HLAStandardMIMBytes: defensive byte copies.
+      - StandardMIMHandle: memoized parsed *model.FOM (sync.Once).
+    The XML files were not modified.
+- acceptance:
+    - go test ./rti/pkg/fom/mim/... green (12 tests).
+    - Provenance comments in package doc + each XML file's PROVENANCE NOTICE.
+    - Coverage on rti/pkg/fom/mim: 76.4% (>= 75%).
