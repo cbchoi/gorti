@@ -99,8 +99,8 @@ func (s *fakeStream) Send(evt *rtiv1.FederateEvent) error {
 func (s *fakeStream) SetHeader(metadata.MD) error  { return nil }
 func (s *fakeStream) SendHeader(metadata.MD) error { return nil }
 func (s *fakeStream) SetTrailer(metadata.MD)      {}
-func (s *fakeStream) SendMsg(m interface{}) error  { return nil }
-func (s *fakeStream) RecvMsg(m interface{}) error  { return nil }
+func (s *fakeStream) SendMsg(_ interface{}) error { return nil }
+func (s *fakeStream) RecvMsg(_ interface{}) error { return nil }
 
 // fakeOutboundEvent satisfies core.OutboundEvent and exposes Inner() so the
 // handler's toFederateEvent can recover the proto.

@@ -8,58 +8,49 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// errToStatus maps a core sentinel error to a gRPC status. Mapping mirrors
-// the table in proto/rti/v1/errors.proto and docs/idd.md §1.1.4. Unknown
-// errors collapse to Internal so callers always observe a valid status.
-//
-// nil input returns nil so handlers can write `return nil, errToStatus(err)`
+// sentinelToCode maps every core sentinel error to a gRPC status code.
+// The table mirrors proto/rti/v1/errors.proto and docs/idd.md §1.1.4.
+// Errors not in the table collapse to codes.Internal.
+var sentinelToCode = []struct {
+	err  error
+	code codes.Code
+}{
+	// Federation lifecycle.
+	{core.ErrFederationNotFound, codes.NotFound},
+	{core.ErrFederationAlreadyExists, codes.AlreadyExists},
+	{core.ErrFederationHasFederatesJoined, codes.FailedPrecondition},
+	{core.ErrFederationHalted, codes.FailedPrecondition},
+	{core.ErrFederationInvalidName, codes.InvalidArgument},
+
+	// Federate lifecycle.
+	{core.ErrFederateNotJoined, codes.FailedPrecondition},
+	{core.ErrFederateAlreadyJoined, codes.AlreadyExists},
+
+	// Object / interaction.
+	{core.ErrObjectNotFound, codes.NotFound},
+	{core.ErrObjectClassNotPublished, codes.FailedPrecondition},
+	{core.ErrObjectClassNotFound, codes.NotFound},
+	{core.ErrAttributeNotOwned, codes.PermissionDenied},
+	{core.ErrAttributeNotFound, codes.NotFound},
+	{core.ErrInteractionClassNotPublished, codes.FailedPrecondition},
+	{core.ErrObjectHandleInvalid, codes.InvalidArgument},
+
+	// Wire-level.
+	{core.ErrWireVersionMismatch, codes.FailedPrecondition},
+	{core.ErrWireMalformedMessage, codes.InvalidArgument},
+}
+
+// errToStatus maps a core sentinel error to a gRPC status. nil input
+// returns nil so handlers can write `return nil, errToStatus(err)`
 // without an extra branch.
 func errToStatus(err error) error {
 	if err == nil {
 		return nil
 	}
-	switch {
-	// Federation lifecycle.
-	case errors.Is(err, core.ErrFederationNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, core.ErrFederationAlreadyExists):
-		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, core.ErrFederationHasFederatesJoined):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrFederationHalted):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrFederationInvalidName):
-		return status.Error(codes.InvalidArgument, err.Error())
-
-	// Federate lifecycle.
-	case errors.Is(err, core.ErrFederateNotJoined):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrFederateAlreadyJoined):
-		return status.Error(codes.AlreadyExists, err.Error())
-
-	// Object / interaction.
-	case errors.Is(err, core.ErrObjectNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, core.ErrObjectClassNotPublished):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrObjectClassNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, core.ErrAttributeNotOwned):
-		return status.Error(codes.PermissionDenied, err.Error())
-	case errors.Is(err, core.ErrAttributeNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, core.ErrInteractionClassNotPublished):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrObjectHandleInvalid):
-		return status.Error(codes.InvalidArgument, err.Error())
-
-	// Wire-level.
-	case errors.Is(err, core.ErrWireVersionMismatch):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrWireMalformedMessage):
-		return status.Error(codes.InvalidArgument, err.Error())
-
-	default:
-		return status.Error(codes.Internal, err.Error())
+	for _, m := range sentinelToCode {
+		if errors.Is(err, m.err) {
+			return status.Error(m.code, err.Error())
+		}
 	}
+	return status.Error(codes.Internal, err.Error())
 }

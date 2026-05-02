@@ -11,6 +11,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// fedXName is reused across object handler tests; pulled out to a const
+// to satisfy goconst.
+const fedXName = "fedX"
+
 // stubObjectRegistry records calls and returns canned answers, so handler
 // tests assert request/response translation without a real registry.
 type stubObjectRegistry struct {
@@ -77,7 +81,7 @@ func TestObjectService_RegisterObjectInstance_Happy_ReturnsHandleAndName(t *test
 
 	resp, err := svc.RegisterObjectInstance(context.Background(), &rtiv1.RegisterObjectRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:    "fedX",
+		FederationName:    fedXName,
 		FederateHandle:    7,
 		ObjectClassHandle: 3,
 		ObjectName:        "",
@@ -95,7 +99,7 @@ func TestObjectService_RegisterObjectInstance_Happy_ReturnsHandleAndName(t *test
 		t.Fatalf("Register calls = %d, want 1", len(stub.regCalls))
 	}
 	got := stub.regCalls[0]
-	if got.Federation != "fedX" || got.Producer != 7 || got.Class != 3 || got.Name != "" {
+	if got.Federation != fedXName || got.Producer != 7 || got.Class != 3 || got.Name != "" {
 		t.Errorf("Register call = %+v, want fedX/7/3/empty", got)
 	}
 }
@@ -164,7 +168,7 @@ func TestObjectService_UpdateAttributeValues_Happy_RO(t *testing.T) {
 	svc := newObjectService(stub)
 	_, err := svc.UpdateAttributeValues(context.Background(), &rtiv1.UpdateAttributeValuesRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName: "fedX",
+		FederationName: fedXName,
 		FederateHandle: 7,
 		ObjectHandle:   11,
 		Attributes: map[uint64][]byte{
@@ -179,7 +183,7 @@ func TestObjectService_UpdateAttributeValues_Happy_RO(t *testing.T) {
 		t.Fatalf("Update calls = %d, want 1", len(stub.updCalls))
 	}
 	got := stub.updCalls[0]
-	if got.Federation != "fedX" || got.Producer != 7 || got.Object != 11 {
+	if got.Federation != fedXName || got.Producer != 7 || got.Object != 11 {
 		t.Errorf("Update call = %+v", got)
 	}
 	if got.TS != nil {
@@ -196,7 +200,7 @@ func TestObjectService_UpdateAttributeValues_Happy_TSO(t *testing.T) {
 	ts := 3.5
 	_, err := svc.UpdateAttributeValues(context.Background(), &rtiv1.UpdateAttributeValuesRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName: "fedX",
+		FederationName: fedXName,
 		FederateHandle: 7,
 		ObjectHandle:   11,
 		Attributes:     map[uint64][]byte{1: []byte("v")},
@@ -274,7 +278,7 @@ func TestObjectService_SendInteraction_Happy_RO(t *testing.T) {
 	svc := newObjectService(stub)
 	_, err := svc.SendInteraction(context.Background(), &rtiv1.SendInteractionRequest{
 		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:         "fedX",
+		FederationName:         fedXName,
 		FederateHandle:         7,
 		InteractionClassHandle: 5,
 		Parameters: map[uint64][]byte{
@@ -288,7 +292,7 @@ func TestObjectService_SendInteraction_Happy_RO(t *testing.T) {
 		t.Fatalf("Send calls = %d, want 1", len(stub.sendCalls))
 	}
 	got := stub.sendCalls[0]
-	if got.Federation != "fedX" || got.Producer != 7 || got.Class != 5 {
+	if got.Federation != fedXName || got.Producer != 7 || got.Class != 5 {
 		t.Errorf("Send call = %+v", got)
 	}
 	if got.TS != nil {
@@ -305,7 +309,7 @@ func TestObjectService_SendInteraction_Happy_TSO(t *testing.T) {
 	ts := 9.25
 	_, err := svc.SendInteraction(context.Background(), &rtiv1.SendInteractionRequest{
 		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:         "fedX",
+		FederationName:         fedXName,
 		FederateHandle:         7,
 		InteractionClassHandle: 5,
 		LogicalTime:            &ts,
