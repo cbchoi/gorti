@@ -288,19 +288,50 @@ func (e federateResignedEvent) Seq() uint64 { return e.seq }
 // ResignFederation implements core.FederationStore. See SRS §FR-FM-3.
 //
 // Cut 1: only ResignActionUnconditionallyDivestAttributes is supported.
-// Other actions return core.ErrFederateAlreadyJoined-style sentinel
-// (specific code TBD; spec test names the expected error).
+// Other actions return a "not supported in cut 1" error.
 //
-// Idempotency: resign of an already-resigned federate returns
-// core.ErrFederateNotJoined.
+// Idempotency: resign of an already-resigned (or never-joined) federate
+// returns core.ErrFederateNotJoined. Resign on an unknown federation
+// returns core.ErrFederationNotFound.
 //
-// Emits FederateResigned event before returning.
+// Emits FederateResigned event to EventLog BEFORE the roster mutation
+// (write-ahead): on Append failure the resign is rejected and the roster
+// is unchanged so the eventlog and in-memory state stay consistent.
 func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction) error {
-	_ = ctx
-	_ = fed
-	_ = h
-	_ = action
-	return ErrNotImplemented
+	if action != core.ResignActionUnconditionallyDivestAttributes {
+		return fmt.Errorf("federation %q resign handle %d: action %d not supported in cut 1 "+
+			"(only UnconditionallyDivestAttributes)", fed, h, action)
+	}
+
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return core.ErrFederationNotFound
+	}
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	name, joined := fs.handleToName[h]
+	if !joined {
+		return core.ErrFederateNotJoined
+	}
+
+	if m.opts.EventLog != nil {
+		if err := m.opts.EventLog.Append(ctx, fed, federateResignedEvent{
+			fed:      fed,
+			federate: name,
+			handle:   h,
+			at:       m.opts.Clock.Now(),
+		}); err != nil {
+			return fmt.Errorf("federation %q resign %q: eventlog append: %w", fed, name, err)
+		}
+	}
+
+	delete(fs.nameToHandle, name)
+	delete(fs.handleToName, h)
+	rekeyDense(fs)
+	return nil
 }
 
 // List implements core.FederationStore. Returns federations in
