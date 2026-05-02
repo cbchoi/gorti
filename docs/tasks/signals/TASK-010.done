@@ -1,0 +1,21 @@
+- agent: agent-b
+- branch: agent/b/task-010-integer-codecs
+- final-commit: pending
+- pr: pending
+- summary: |
+    Implemented HLAinteger16/32/64 BE+LE codecs in rti/pkg/encoding/integer.go.
+    Wired PrimitiveByName to the six integer types in rti/pkg/encoding/codec.go
+    (Codec/CodecFor/PrimitiveByName signatures unchanged from M0).
+    Added 20 golden vectors for HLAinteger16BE, HLAinteger16LE, HLAinteger32LE,
+    HLAinteger64LE in tests/conformance/encoding_vectors.json (additive only;
+    existing entries untouched).
+    All integer subtests of TestSpec_M1_PrimitiveVectorsRoundTrip pass.
+    Coverage on rti/pkg/encoding/integer.go: 96.5% (statements).
+    golangci-lint clean on rti/pkg/encoding/.
+- acceptance:
+    - all integer types resolve via PrimitiveByName
+    - all integer-related vectors round-trip green
+    - coverage on integer.go >= 80% (achieved 96.5%)
+    - additive-only on encoding_vectors.json (no existing entry modified or deleted)
+    - golangci-lint clean on owned paths
+    - sentinel is final commit
