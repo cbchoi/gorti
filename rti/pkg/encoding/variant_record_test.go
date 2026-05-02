@@ -228,3 +228,52 @@ func TestVariantRecord_Decode_ShortBuffer(t *testing.T) {
 		t.Errorf("short for alternative payload: want error, got nil")
 	}
 }
+
+// TestSpec_VariantRecord_JSONFloat64Discriminator covers the JSON-loading
+// path: vectors loaded from encoding_vectors.json arrive with float64
+// discriminator values (because encoding/json deserializes JSON numbers
+// as float64), but the alternatives map is keyed on the discriminator
+// codec's canonical Go type (int32 for HLAinteger32BE). The codec must
+// canonicalize the input discriminator before lookup, otherwise every
+// JSON-driven variant-record vector regresses.
+//
+// Implements: FR-ENC-1, FR-ENC-2 (variant record); fixes the gap surfaced
+// by TestSpec_M1_CompositeVectorsRoundTrip/variant-record-* on JSON-shaped
+// composite vectors.
+func TestSpec_VariantRecord_JSONFloat64Discriminator(t *testing.T) {
+	t.Parallel()
+
+	// Same codec shape as TestSpec_VariantRecord_DiscOctetAlt (int32
+	// discriminator, HLAoctet/float64 alts), but Encode receives the
+	// discriminator as float64(1.0) — the JSON form.
+	codec := NewVariantRecord(HLAinteger32BE{}, map[any]Codec{
+		int32(1): HLAoctet{},
+		int32(2): hlaFloat64BE{},
+	})
+
+	got, err := codec.Encode(map[string]any{
+		"discriminator": float64(1.0),
+		"value":         float64(0xAB), // JSON also delivers value as float64
+	})
+	if err != nil {
+		t.Fatalf("Encode with float64 disc: %v", err)
+	}
+	// Same expected bytes as the int32-disc case: 4 bytes of disc + 1 byte alt.
+	want, _ := hex.DecodeString("00000001ab")
+	if !bytes.Equal(got, want) {
+		t.Fatalf("Encode = %x, want %x", got, want)
+	}
+
+	// And float64(2.0) -> selects the float64 alt (with 4-byte pad).
+	got, err = codec.Encode(map[string]any{
+		"discriminator": float64(2.0),
+		"value":         float64(1.0),
+	})
+	if err != nil {
+		t.Fatalf("Encode with float64 disc=2: %v", err)
+	}
+	want, _ = hex.DecodeString("00000002000000003ff0000000000000")
+	if !bytes.Equal(got, want) {
+		t.Fatalf("Encode = %x, want %x", got, want)
+	}
+}
