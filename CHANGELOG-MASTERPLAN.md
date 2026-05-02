@@ -6,6 +6,60 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-02 (M2 pre-work — orchestrator-frozen stubs + spec tests + wave-based dispatch plan)
+
+Closed M1, opened M2. Pre-work delivered so Agent A can start working through the M2 wave model.
+
+### What landed
+
+- **Frozen-shape stubs** in five new Agent A packages, each with package doc + `Manager`/`Writer`/`Registry`/`Server` type + `Options` struct + constructor + interface-method stubs returning `ErrNotImplemented`. Compile-time `var _ core.Foo = (*X)(nil)` assertions guard against signature drift:
+  - `rti/internal/federation/{doc,manager}.go` — implements `core.FederationStore`
+  - `rti/internal/eventlog/{doc,format,writer,reader,replayer}.go` — implements `core.EventLog` + `core.EventLogReader`
+  - `rti/internal/declaration/{doc,manager}.go` — pure data, no core interface
+  - `rti/internal/object/{doc,registry}.go` — implements `core.ObjectRegistry`
+  - `rti/internal/transport/grpc/{doc,server}.go` — composes the four core services
+- **Orchestrator-frozen spec tests** at `rti/spec/M2/*.go` (NOT `tests/spec/M2/`). 7 files: `doc.go`, `fixtures.go`, `federation_test.go`, `eventlog_test.go`, `declaration_test.go`, `object_test.go`, `replay_test.go`, `grpc_test.go`. Spec tests RED-by-design — every test's first call into a stub fails with the package's `ErrNotImplemented` sentinel. Agent A turns them green per task.
+- **`docs/M2_DISPATCH_PLAN.md`** documents the wave model (4 waves, up to 3 sub-agents per wave, total 8 sub-agents). Critical path is Wave 1 → Wave 2 → Wave 3 → Wave 4. Includes per-wave file-ownership table, dependency graph, sentinel-bundling pattern, and dispatch checklist.
+- **All 21 M2 task briefs** (`docs/tasks/TASK-020.md` through `TASK-040.md`) gain a Notes-section reference to `docs/M2_DISPATCH_PLAN.md`.
+- **Path convention amended**: M2+ spec tests live at `rti/spec/M<x>/`, not `tests/spec/M<x>/`. Reason: Go's `internal` package rule blocks `tests/...` from importing `rti/internal/*`. M1 stays at `tests/spec/M1/` because it imports only public packages (`rti/pkg/fom`, `rti/pkg/encoding`); future milestones whose work is in `rti/internal/` follow the M2 convention.
+- **`scripts/check-milestones.sh`** updated: M2 + M3 spec-test directory probes now look at `rti/spec/M<x>/` instead of `tests/spec/M<x>/`. M1 probe unchanged.
+
+### Design-for-testability decisions baked into the stubs
+
+- **Options pattern**: every constructor takes a value-type `Options` struct. Tests substitute `FakeClock`, in-memory `EventLog`, fake `Outbox`, fake `FOMRepository` without touching production wiring.
+- **Inline-fake test pattern** (per `docs/TDD.md` §7.5): the spec test fixtures (`rti/spec/M2/fixtures.go` + `grpc_test.go`'s `stubFedStore`/`stubObjectRegistry`) use small struct fakes, not mocking frameworks. Each fake records calls; tests inspect via simple slice comparisons.
+- **Compile-time interface assertions**: `var _ core.FederationStore = (*Manager)(nil)` lines at the bottom of each stub file. Removing a required method fails the build at that line, not deep inside Agent A's implementation.
+- **Stubs populate their fields**: `New` returns `&Manager{opts: opts}, ErrNotImplemented` rather than `nil, ErrNotImplemented`. Spec tests proceed past construction and fail loudly on the FIRST genuine method call, giving clearer signal about which method needs implementation.
+
+### Wave model (full doc in `docs/M2_DISPATCH_PLAN.md`)
+
+```
+Wave 1 (3 parallel) — federation + eventlog + declaration
+   ↓
+Wave 2 (1–2 parallel) — object registry, then eventlog replayer
+   ↓
+Wave 3 (3 parallel) — gRPC FederationService / DeclarationService / ObjectService+StreamService
+   ↓
+Wave 4 (1 sub-agent) — cmd/rtid wiring + go-pingpong example + harnesses (M2 gate)
+```
+
+Total: 4 waves, 8 sub-agents. Same proven structure as M1 (which closed in 3 waves + ~9 sub-agents in one session).
+
+### State after this commit
+
+- `M0: DONE`, `M1: DONE`, `M2: IN_PROGRESS (1/4)` — only spec-test directory probe is now green; the other three M2 probes (`go-pingpong/main.go`, determinism harness, replay harness) remain pending Agent A's Wave 4 work.
+- No regressions on M1.
+- `make verify` (build + lint + tests) passes for everything except the deliberately-RED M2 spec tests.
+
+### Next concrete actions (orchestrator)
+
+1. Dispatch Wave 1: spawn three sub-agents (W1A federation, W1B eventlog, W1C declaration) in one parallel `Agent` call.
+2. Review + merge each branch on completion.
+3. Re-run milestone-check, expect M2 IN_PROGRESS (still — Wave 4 hasn't run yet).
+4. Continue through Waves 2, 3, 4.
+
+---
+
 ## 2026-05-02 (M1 follow-ups — canonical MIM landed, issue #1 resolved, octet-pair vectors added, JSON coercion fixes)
 
 Two follow-ups carried over from the M1 closure round, both resolved this same day.

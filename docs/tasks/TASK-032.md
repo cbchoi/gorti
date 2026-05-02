@@ -37,3 +37,7 @@
 - [ ] Encode happens via `rti/pkg/encoding.CodecFor(...)` — no inline encoding.
 - [ ] Write-ahead: event log entry committed before fanout.
 - [ ] `make verify` green.
+
+## Notes / hints
+
+- **Wave dispatch**: this task is part of `docs/M2_DISPATCH_PLAN.md` — confirm the wave (W1A/W1B/W1C/W2A/W2B/W3A/W3B/W3C/W4) and respect file ownership for parallel orthogonality.

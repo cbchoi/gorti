@@ -41,4 +41,6 @@ Reference example: two Go federates "ping" and "pong" exchange 1000 interactions
 
 ## Notes / hints
 
+- **Wave dispatch**: this task is part of `docs/M2_DISPATCH_PLAN.md` — confirm the wave (W1A/W1B/W1C/W2A/W2B/W3A/W3B/W3C/W4) and respect file ownership for parallel orthogonality.
+
 - May embed a minimal FOM under `examples/go-pingpong/` if needed; per `docs/ORTHOGONALITY.md` §4 reference the canonical FOM in `tests/conformance/foms/good/` rather than copying.

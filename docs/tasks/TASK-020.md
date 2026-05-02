@@ -43,5 +43,7 @@ Implement `core.FederationStore.CreateFederation` — calls `rti/pkg/fom` for pa
 
 ## Notes / hints
 
+- **Wave dispatch**: this task is part of `docs/M2_DISPATCH_PLAN.md` — confirm the wave (W1A/W1B/W1C/W2A/W2B/W3A/W3B/W3C/W4) and respect file ownership for parallel orthogonality.
+
 - **Pre-dispatch prerequisite:** `tests/spec/M2/` must exist on `main` (orchestrator pre-work). Until then, this TASK is dispatched but blocked.
 - Use `rti/pkg/fom/parser.Parse` + `rti/pkg/fom/mim.Merge` to validate the FOM modules supplied in `CreateFederationRequest`.

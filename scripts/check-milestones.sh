@@ -263,8 +263,8 @@ check_m2() {
   echo "Exit: examples/go-pingpong/ deterministic across 10 runs; replay byte-identical"
   local pass=0 total=4
 
-  [ -d tests/spec/M2 ] && { present "tests/spec/M2/ committed"; pass=$((pass+1)); } \
-                      || pending "tests/spec/M2/ pending orchestrator pre-work"
+  [ -d rti/spec/M2 ] && { present "rti/spec/M2/ committed"; pass=$((pass+1)); } \
+                      || pending "rti/spec/M2/ pending orchestrator pre-work"
   [ -f examples/go-pingpong/main.go ] && { present "examples/go-pingpong/main.go exists"; pass=$((pass+1)); } \
                                        || pending "examples/go-pingpong/ not yet built"
   [ -f examples/go-pingpong/determinism_test.go ] && { present "go-pingpong determinism harness"; pass=$((pass+1)); } \
@@ -283,8 +283,8 @@ check_m3() {
   echo "Exit: examples/go-timed/ deterministic across 20 randomized scenarios; stall timeout fires"
   local pass=0 total=4
 
-  [ -d tests/spec/M3 ] && { present "tests/spec/M3/ committed"; pass=$((pass+1)); } \
-                       || pending "tests/spec/M3/ pending orchestrator pre-work"
+  [ -d rti/spec/M3 ] && { present "rti/spec/M3/ committed"; pass=$((pass+1)); } \
+                      || pending "rti/spec/M3/ pending orchestrator pre-work"
   [ -f examples/go-timed/main.go ] && { present "examples/go-timed/main.go exists"; pass=$((pass+1)); } \
                                     || pending "examples/go-timed/ not yet built"
   [ -f examples/go-timed/determinism_test.go ] && { present "go-timed 20-scenario harness"; pass=$((pass+1)); } \

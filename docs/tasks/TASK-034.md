@@ -39,3 +39,7 @@ Implement `FederationService` (CreateFederation, DestroyFederation, JoinFederati
 - [ ] Each error in `proto/rti/v1/errors.proto` reachable from at least one test input.
 - [ ] Handlers use small inline fakes of `core.FederationStore` (NOT mocking frameworks) per `docs/agent-a-rti-core.md` §5.5.
 - [ ] `make verify` green.
+
+## Notes / hints
+
+- **Wave dispatch**: this task is part of `docs/M2_DISPATCH_PLAN.md` — confirm the wave (W1A/W1B/W1C/W2A/W2B/W3A/W3B/W3C/W4) and respect file ownership for parallel orthogonality.

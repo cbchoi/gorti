@@ -41,4 +41,6 @@ Implement `core.EventLog.OpenReader` and `EventLogReader.Next`. Reader iterates 
 
 ## Notes / hints
 
+- **Wave dispatch**: this task is part of `docs/M2_DISPATCH_PLAN.md` — confirm the wave (W1A/W1B/W1C/W2A/W2B/W3A/W3B/W3C/W4) and respect file ownership for parallel orthogonality.
+
 - `EventLogReader` interface defined in `rti/internal/core/eventlog.go` (frozen).
