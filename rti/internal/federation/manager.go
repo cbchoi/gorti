@@ -46,12 +46,21 @@ type federationState struct {
 	seed         uint64
 	fom          core.FOMHandle
 
-	// nameToHandle and handleToName are kept consistent: handles are
-	// reassigned by sort order of name on every join (deterministic per
-	// docs/agent-a-rti-core.md §5.5). For cut 1 the recompute is O(N log N);
-	// optimization deferred per dispatch brief ARCH section.
-	nameToHandle map[string]core.FederateHandle
-	handleToName map[core.FederateHandle]string
+	// nameToHandle and handleToName are kept consistent. Handles are
+	// assigned by a per-federation monotonic counter (nextFederateHandle):
+	// every successful Join increments the counter and assigns the new
+	// value as the federate's handle. Existing handles are NEVER reassigned
+	// — once a federate has a handle, that handle is stable for the
+	// federate's lifetime. This matches industry RTI behavior (Portico,
+	// Pitch, MAK) and the behavior an online algorithm can guarantee.
+	//
+	// Determinism: replay re-reads the FederateJoined events from the
+	// EventLog in append order and reassigns the same handles in the same
+	// order. The per-call value depends only on the prior log content, not
+	// on goroutine scheduling.
+	nextFederateHandle uint64
+	nameToHandle       map[string]core.FederateHandle
+	handleToName       map[core.FederateHandle]string
 }
 
 // Options bundles Manager dependencies. Nil values use sensible defaults
@@ -154,13 +163,14 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		return core.ErrFederationAlreadyExists
 	}
 	m.federations[req.Name] = &federationState{
-		name:         req.Name,
-		mode:         req.Mode,
-		stallTimeout: stall,
-		seed:         req.Seed,
-		fom:          fom,
-		nameToHandle: map[string]core.FederateHandle{},
-		handleToName: map[core.FederateHandle]string{},
+		name:               req.Name,
+		mode:               req.Mode,
+		stallTimeout:       stall,
+		seed:               req.Seed,
+		fom:                fom,
+		nextFederateHandle: 0, // first Join produces handle 1
+		nameToHandle:       map[string]core.FederateHandle{},
+		handleToName:       map[core.FederateHandle]string{},
 	}
 	return nil
 }
@@ -188,11 +198,21 @@ func (m *Manager) DestroyFederation(_ context.Context, name core.FederationName)
 
 // JoinFederation implements core.FederationStore. See SRS §FR-FM-2.
 //
-// Determinism contract: FederateHandles are assigned by sort order of
-// FederateName, NOT arrival order. This is the cornerstone of replay
-// determinism — multiple agents joining concurrently still get stable
-// handles. Tests in tests/spec/M2/federation_test.go assert this with a
-// concurrent-join scenario across 50 goroutines.
+// Determinism contract: FederateHandles are assigned by a per-federation
+// monotonic counter — handle = nextFederateHandle++ for each successful
+// join. Existing handles are NEVER reassigned: once a federate is at
+// handle N, it stays at N for its lifetime in this federation. Resigned
+// handles are NOT reused (the counter only goes up).
+//
+// This matches industry RTI behavior (Portico, Pitch, MAK) and is the
+// only assignment scheme an online algorithm can guarantee — sort-order
+// re-keying would require future knowledge of which names will arrive.
+//
+// Replay determinism (NFR-DET-1) is preserved by the EventLog: replay
+// reads FederateJoined events in their durable order and reassigns the
+// same handle to the same name. Concurrent goroutines serialize on the
+// per-federation lock, so the channel that orders the inputs to
+// JoinFederation is the channel that orders handle assignment.
 //
 // Emits FederateJoined event to EventLog before returning the handle
 // (write-ahead): the event is durable before the in-memory roster is
@@ -215,23 +235,13 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 		return core.InvalidFederateHandle, core.ErrFederateAlreadyJoined
 	}
 
-	// Insert + re-key so that handles 1..N follow sort order of name.
-	// Cut 1: O(N log N) per join (acceptable for N < 100). Optimization
-	// deferred per docs/agent-a-rti-core.md §M5.
-	names := make([]string, 0, len(fs.nameToHandle)+1)
-	names = append(names, req.FederateName)
-	for n := range fs.nameToHandle {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	fs.nameToHandle = make(map[string]core.FederateHandle, len(names))
-	fs.handleToName = make(map[core.FederateHandle]string, len(names))
-	for i, n := range names {
-		h := core.FederateHandle(i + 1)
-		fs.nameToHandle[n] = h
-		fs.handleToName[h] = n
-	}
-	assigned := fs.nameToHandle[req.FederateName]
+	// Monotonic counter: every successful join gets the next value, never
+	// reused. Existing federates are untouched — their handles stay stable
+	// across other joins/resigns.
+	fs.nextFederateHandle++
+	assigned := core.FederateHandle(fs.nextFederateHandle)
+	fs.nameToHandle[req.FederateName] = assigned
+	fs.handleToName[assigned] = req.FederateName
 
 	// Write-ahead: append before returning. EventLog optional in cut 1.
 	if m.opts.EventLog != nil {
@@ -242,33 +252,18 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 			at:       m.opts.Clock.Now(),
 		}); err != nil {
 			// Roll back the roster mutation so the join is atomic on the
-			// event log boundary; the caller sees a clean failure.
+			// event log boundary; the caller sees a clean failure. The
+			// counter is intentionally NOT decremented — handles are
+			// never reused, so the next join skips this slot. This keeps
+			// the eventlog's seq monotonic with the live roster's
+			// nextFederateHandle even on append failure recovery.
 			delete(fs.nameToHandle, req.FederateName)
 			delete(fs.handleToName, assigned)
-			// Re-key the surviving names to dense 1..N-1.
-			rekeyDense(fs)
 			return core.InvalidFederateHandle, fmt.Errorf("federation %q join %q: eventlog append: %w",
 				req.Federation, req.FederateName, err)
 		}
 	}
 	return assigned, nil
-}
-
-// rekeyDense rebuilds nameToHandle/handleToName so that handles are
-// 1..len(nameToHandle) in sorted-name order. Caller holds fs.mu.
-func rekeyDense(fs *federationState) {
-	names := make([]string, 0, len(fs.nameToHandle))
-	for n := range fs.nameToHandle {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	fs.nameToHandle = make(map[string]core.FederateHandle, len(names))
-	fs.handleToName = make(map[core.FederateHandle]string, len(names))
-	for i, n := range names {
-		h := core.FederateHandle(i + 1)
-		fs.nameToHandle[n] = h
-		fs.handleToName[h] = n
-	}
 }
 
 // federateJoinedEvent is the event written to EventLog when a federate
@@ -339,9 +334,12 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 		}
 	}
 
+	// Resign deletes the slot; the monotonic counter is NOT rolled back, so
+	// resigned handles are never reused. This preserves replay determinism:
+	// the FederateJoined event for handle h is durable, and replay sees
+	// exactly the same handle-to-name binding even after the resign.
 	delete(fs.nameToHandle, name)
 	delete(fs.handleToName, h)
-	rekeyDense(fs)
 	return nil
 }
 

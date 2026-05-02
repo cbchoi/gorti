@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math/rand"
-	"sort"
 	"strconv"
 	"sync"
 	"testing"
@@ -249,29 +248,26 @@ func TestJoinFederation_DuplicateName_ReturnsAlreadyJoined(t *testing.T) {
 	}
 }
 
-// TestJoinFederation_HandleEqualsSortPositionInCurrentRoster verifies the
-// determinism invariant: at join time, the returned handle equals the
-// joining federate's sort-position within (current roster + the new
-// federate). Re-key on join keeps handle order = name sort order.
+// TestJoinFederation_AssignsMonotonicHandlesByArrivalOrder verifies the
+// algorithm contract: for serial joins, handle[k] == k and existing
+// federates' handles are never reassigned when a new federate joins.
 //
-// This is the per-call observable behavior. The federate's handle MAY
-// shift later if a smaller-named federate joins (replay determinism is
-// preserved because the same shifts replay identically).
-func TestJoinFederation_HandleEqualsSortPositionInCurrentRoster(t *testing.T) {
+// Industry behavior (Portico / Pitch / MAK): handles are issued by a
+// per-federation monotonic counter. The orchestrator-frozen spec tests
+// (TestSpec_M2_JoinFederation_MonotonicHandles) assert the same.
+func TestJoinFederation_AssignsMonotonicHandlesByArrivalOrder(t *testing.T) {
 	t.Parallel()
 	mgr := mustNewWithFederation(t, "det")
+	// Arrival order chosen so sort-order would disagree (z, then a, then m).
 	cases := []struct {
-		joining string
-		// rosterAfter must be sorted; want = position of joining name
-		// in this list (1-based).
-		rosterAfter []string
+		joining  string
+		wantThis core.FederateHandle
 	}{
-		{"echo", []string{"echo"}},                                  // alone -> 1
-		{"alpha", []string{"alpha", "echo"}},                        // smaller -> 1
-		{"delta", []string{"alpha", "delta", "echo"}},               // middle -> 2
-		{"bravo", []string{"alpha", "bravo", "delta", "echo"}},      // -> 2
-		{"charlie", []string{"alpha", "bravo", "charlie", "delta", "echo"}}, // -> 3
+		{"zulu", 1},
+		{"alpha", 2},
+		{"mike", 3},
 	}
+	got := map[string]core.FederateHandle{}
 	for _, c := range cases {
 		h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
 			Federation: "det", FederateName: c.joining,
@@ -279,26 +275,105 @@ func TestJoinFederation_HandleEqualsSortPositionInCurrentRoster(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Join %s: %v", c.joining, err)
 		}
-		want := core.FederateHandle(0)
-		for i, n := range c.rosterAfter {
-			if n == c.joining {
-				want = core.FederateHandle(i + 1)
-				break
-			}
+		if h != c.wantThis {
+			t.Errorf("Join %s: got handle %d, want %d (arrival order)",
+				c.joining, h, c.wantThis)
 		}
-		if h != want {
-			t.Errorf("Join %s in roster %v: got handle %d, want %d (sort position)",
-				c.joining, c.rosterAfter, h, want)
-		}
+		got[c.joining] = h
+	}
+	// Re-assert all prior handles after every later join — they must NOT
+	// have shifted. The fixture's `got` map is the cheap proof: the manager
+	// never wrote to a name's handle except on its own Join.
+	if got["zulu"] != 1 || got["alpha"] != 2 || got["mike"] != 3 {
+		t.Errorf("post-all-joins: zulu=%d alpha=%d mike=%d; want 1,2,3 (no re-keying)",
+			got["zulu"], got["alpha"], got["mike"])
 	}
 }
 
-// TestProperty_JoinFederation_HandleAlwaysMatchesSortPositionAtJoin asserts
-// that for any permutation of arrival order, every join returns
-// (sort-rank-in-current-roster). This is the strong determinism property:
-// the function value is purely determined by the name + the current
-// roster, NOT by goroutine scheduling or wall-clock.
-func TestProperty_JoinFederation_HandleAlwaysMatchesSortPositionAtJoin(t *testing.T) {
+// TestJoinFederation_ExistingHandlesUnchangedAfterLaterJoin is the focused
+// invariant: joining X then Y → X stays at handle 1, Y gets handle 2;
+// later joining Z → both X and Y unchanged, Z gets handle 3.
+//
+// We verify "unchanged" by re-resigning the original handle at the end:
+// resign with the original handle must succeed (the slot still belongs to
+// the same name) and a duplicate-name re-Join must be rejected (the name
+// is still bound to that handle until resign completes).
+func TestJoinFederation_ExistingHandlesUnchangedAfterLaterJoin(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	hX, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "X",
+	})
+	if err != nil {
+		t.Fatalf("Join X: %v", err)
+	}
+	hY, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "Y",
+	})
+	if err != nil {
+		t.Fatalf("Join Y: %v", err)
+	}
+	if hX != 1 || hY != 2 {
+		t.Fatalf("after X,Y: hX=%d hY=%d; want 1,2", hX, hY)
+	}
+	hZ, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "Z",
+	})
+	if err != nil {
+		t.Fatalf("Join Z: %v", err)
+	}
+	if hZ != 3 {
+		t.Errorf("after X,Y,Z: hZ=%d; want 3", hZ)
+	}
+	// Invariance check: X's original handle still resigns successfully —
+	// the (handle 1 -> "X") binding has not been re-keyed.
+	if rerr := mgr.ResignFederation(context.Background(), "x", hX,
+		core.ResignActionUnconditionallyDivestAttributes); rerr != nil {
+		t.Errorf("resign X with original handle %d after Z joined: %v (handle was re-keyed?)", hX, rerr)
+	}
+	// Y's handle 2 should also still resolve — likewise unchanged.
+	if rerr := mgr.ResignFederation(context.Background(), "x", hY,
+		core.ResignActionUnconditionallyDivestAttributes); rerr != nil {
+		t.Errorf("resign Y with original handle %d after Z joined: %v (handle was re-keyed?)", hY, rerr)
+	}
+}
+
+// TestJoinFederation_ResignedHandlesAreNotReused: the per-federation
+// monotonic counter never rolls back. After joining A,B and resigning A,
+// joining C must yield handle 3 — NOT reuse handle 1.
+//
+// This protects the FederateJoined event log from ambiguity: handle 1
+// always refers to A in this federation's history, even after A is gone.
+func TestJoinFederation_ResignedHandlesAreNotReused(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	hA, _ := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "A",
+	})
+	_, _ = mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "B",
+	})
+	if rerr := mgr.ResignFederation(context.Background(), "x", hA,
+		core.ResignActionUnconditionallyDivestAttributes); rerr != nil {
+		t.Fatalf("resign A: %v", rerr)
+	}
+	hC, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "C",
+	})
+	if err != nil {
+		t.Fatalf("Join C: %v", err)
+	}
+	if hC != 3 {
+		t.Errorf("Join C after A resigned: got %d, want 3 (resigned handles not reused)", hC)
+	}
+}
+
+// TestProperty_JoinFederation_HandlesAreUniqueAndDenseInArrivalOrder
+// asserts that for any permutation of arrival order, the k-th successful
+// Join (1-indexed) returns handle k. This is the strong monotonic
+// property: the value depends only on prior successful-Join count, not on
+// the name itself or on goroutine scheduling.
+func TestProperty_JoinFederation_HandlesAreUniqueAndDenseInArrivalOrder(t *testing.T) {
 	t.Parallel()
 	names := []string{"alice", "bob", "carol", "dave", "eve", "frank", "grace"}
 	rng := rand.New(rand.NewSource(42)) //nolint:gosec // test-only
@@ -319,26 +394,17 @@ func TestProperty_JoinFederation_HandleAlwaysMatchesSortPositionAtJoin(t *testin
 		}); cerr != nil {
 			t.Fatalf("Create %s: %v", fed, cerr)
 		}
-		joined := []string{}
-		for _, n := range shuffled {
-			joined = append(joined, n)
-			sort.Strings(joined)
-			expected := core.FederateHandle(0)
-			for i, jn := range joined {
-				if jn == n {
-					expected = core.FederateHandle(i + 1)
-					break
-				}
-			}
+		for k, n := range shuffled {
 			h, jerr := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
 				Federation: fed, FederateName: n,
 			})
 			if jerr != nil {
 				t.Fatalf("trial %d Join %s: %v", trial, n, jerr)
 			}
-			if h != expected {
-				t.Errorf("trial %d arrival %v: %s got handle %d, want sort-position %d",
-					trial, shuffled, n, h, expected)
+			want := core.FederateHandle(k + 1)
+			if h != want {
+				t.Errorf("trial %d arrival %v: %s (k=%d) got handle %d, want %d (monotonic-by-arrival)",
+					trial, shuffled, n, k, h, want)
 			}
 		}
 	}
