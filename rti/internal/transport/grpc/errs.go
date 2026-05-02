@@ -43,12 +43,17 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrFederateAlreadyJoined):
 		return status.Error(codes.AlreadyExists, err.Error())
 
+	// PermissionDenied — federate lacks authority for the operation.
+	// Distinct from FailedPrecondition (state-forbids) because the action
+	// itself is unauthorized regardless of state.
+	case errors.Is(err, core.ErrAttributeNotOwned):
+		return status.Error(codes.PermissionDenied, err.Error())
+
 	// FailedPrecondition — entity exists but state forbids the action.
 	case errors.Is(err, core.ErrFederateNotJoined),
 		errors.Is(err, core.ErrFederationHasFederatesJoined),
 		errors.Is(err, core.ErrFederationHalted),
 		errors.Is(err, core.ErrObjectClassNotPublished),
-		errors.Is(err, core.ErrAttributeNotOwned),
 		errors.Is(err, core.ErrInteractionClassNotPublished),
 		errors.Is(err, core.ErrTimeNotRegulating),
 		errors.Is(err, core.ErrTimeNotConstrained),
