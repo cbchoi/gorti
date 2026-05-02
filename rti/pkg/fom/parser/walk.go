@@ -7,12 +7,13 @@ import (
 )
 
 // xmlObjectModel mirrors the root <objectModel> element of IEEE 1516-2010
-// DIF XML (Annex A) for cut-1 parsing. Only sections needed for TASK-001
-// are mapped; later tasks add more nodes.
+// DIF XML (Annex A) for cut-1 parsing. Only sections needed by the current
+// diagnostic passes are mapped; later tasks add more nodes.
 type xmlObjectModel struct {
 	XMLName      xml.Name         `xml:"objectModel"`
 	Objects      *xmlObjects      `xml:"objects"`
 	Interactions *xmlInteractions `xml:"interactions"`
+	DataTypes    *xmlDataTypes    `xml:"dataTypes"`
 }
 
 type xmlObjects struct {
@@ -119,6 +120,188 @@ func convertParameters(in []xmlParameter) []model.Parameter {
 		out[i] = model.Parameter{
 			Name:     p.Name,
 			DataType: p.DataType,
+		}
+	}
+	return out
+}
+
+// xmlDataTypes mirrors <dataTypes> per Annex A. Only the sections needed by
+// the current diagnostic passes are parsed; future tasks (encoder M1) add
+// more.
+type xmlDataTypes struct {
+	BasicDataRepresentations *xmlBasicDataReps    `xml:"basicDataRepresentations"`
+	SimpleDataTypes          *xmlSimpleDataTypes  `xml:"simpleDataTypes"`
+	EnumeratedDataTypes      *xmlEnumDataTypes    `xml:"enumeratedDataTypes"`
+	ArrayDataTypes           *xmlArrayDataTypes   `xml:"arrayDataTypes"`
+	FixedRecordDataTypes     *xmlFixedRecTypes    `xml:"fixedRecordDataTypes"`
+	VariantRecordDataTypes   *xmlVariantRecTypes  `xml:"variantRecordDataTypes"`
+}
+
+type xmlBasicDataReps struct {
+	BasicData []xmlBasicData `xml:"basicData"`
+}
+
+type xmlBasicData struct {
+	Name           string `xml:"name"`
+	Size           int    `xml:"size"`
+	Endian         string `xml:"endian"`
+	Interpretation string `xml:"interpretation"`
+	Encoding       string `xml:"encoding"`
+}
+
+type xmlSimpleDataTypes struct {
+	SimpleData []xmlSimpleData `xml:"simpleData"`
+}
+
+type xmlSimpleData struct {
+	Name           string `xml:"name"`
+	Representation string `xml:"representation"`
+	Units          string `xml:"units"`
+	Resolution     string `xml:"resolution"`
+	Accuracy       string `xml:"accuracy"`
+}
+
+type xmlEnumDataTypes struct {
+	EnumeratedData []xmlEnumeratedData `xml:"enumeratedData"`
+}
+
+type xmlEnumeratedData struct {
+	Name           string         `xml:"name"`
+	Representation string         `xml:"representation"`
+	Enumerator     []xmlEnumerator `xml:"enumerator"`
+}
+
+type xmlEnumerator struct {
+	Name   string `xml:"name"`
+	Values string `xml:"values"`
+}
+
+type xmlArrayDataTypes struct {
+	ArrayData []xmlArrayData `xml:"arrayData"`
+}
+
+type xmlArrayData struct {
+	Name        string `xml:"name"`
+	DataType    string `xml:"dataType"`
+	Cardinality string `xml:"cardinality"`
+	Encoding    string `xml:"encoding"`
+}
+
+type xmlFixedRecTypes struct {
+	FixedRecordData []xmlFixedRecordData `xml:"fixedRecordData"`
+}
+
+type xmlFixedRecordData struct {
+	Name     string         `xml:"name"`
+	Encoding string         `xml:"encoding"`
+	Field    []xmlRecField  `xml:"field"`
+}
+
+type xmlRecField struct {
+	Name     string `xml:"name"`
+	DataType string `xml:"dataType"`
+}
+
+type xmlVariantRecTypes struct {
+	VariantRecordData []xmlVariantRecordData `xml:"variantRecordData"`
+}
+
+type xmlVariantRecordData struct {
+	Name             string             `xml:"name"`
+	Encoding         string             `xml:"encoding"`
+	DiscriminantName string             `xml:"discriminant"`
+	DataType         string             `xml:"dataType"`
+	Alternative      []xmlVariantAlt    `xml:"alternative"`
+}
+
+type xmlVariantAlt struct {
+	Enumerator string `xml:"enumerator"`
+	Name       string `xml:"name"`
+	DataType   string `xml:"dataType"`
+}
+
+// convertDataTypes flattens the <dataTypes> XML section into a slice of
+// model.DataType. Returns nil if no data types are declared.
+func convertDataTypes(in *xmlDataTypes) []model.DataType {
+	if in == nil {
+		return nil
+	}
+	var out []model.DataType
+	if in.BasicDataRepresentations != nil {
+		for _, b := range in.BasicDataRepresentations.BasicData {
+			out = append(out, &model.BasicData{
+				NameField:      b.Name,
+				Size:           b.Size,
+				Endian:         b.Endian,
+				Interpretation: b.Interpretation,
+				Encoding:       b.Encoding,
+			})
+		}
+	}
+	if in.SimpleDataTypes != nil {
+		for _, s := range in.SimpleDataTypes.SimpleData {
+			out = append(out, &model.SimpleData{
+				NameField:      s.Name,
+				Representation: s.Representation,
+				Units:          s.Units,
+				Resolution:     s.Resolution,
+				Accuracy:       s.Accuracy,
+			})
+		}
+	}
+	if in.EnumeratedDataTypes != nil {
+		for _, e := range in.EnumeratedDataTypes.EnumeratedData {
+			enums := make([]model.Enumerator, len(e.Enumerator))
+			for i, en := range e.Enumerator {
+				enums[i] = model.Enumerator{Name: en.Name, Values: en.Values}
+			}
+			out = append(out, &model.EnumeratedData{
+				NameField:      e.Name,
+				Representation: e.Representation,
+				Enumerators:    enums,
+			})
+		}
+	}
+	if in.ArrayDataTypes != nil {
+		for _, a := range in.ArrayDataTypes.ArrayData {
+			out = append(out, &model.ArrayData{
+				NameField:   a.Name,
+				DataType:    a.DataType,
+				Cardinality: a.Cardinality,
+				Encoding:    a.Encoding,
+			})
+		}
+	}
+	if in.FixedRecordDataTypes != nil {
+		for _, f := range in.FixedRecordDataTypes.FixedRecordData {
+			fields := make([]model.RecordField, len(f.Field))
+			for i, ff := range f.Field {
+				fields[i] = model.RecordField{Name: ff.Name, DataType: ff.DataType}
+			}
+			out = append(out, &model.FixedRecordData{
+				NameField: f.Name,
+				Fields:    fields,
+				Encoding:  f.Encoding,
+			})
+		}
+	}
+	if in.VariantRecordDataTypes != nil {
+		for _, v := range in.VariantRecordDataTypes.VariantRecordData {
+			alts := make([]model.VariantAlternative, len(v.Alternative))
+			for i, a := range v.Alternative {
+				alts[i] = model.VariantAlternative{
+					Enumerator: a.Enumerator,
+					Name:       a.Name,
+					DataType:   a.DataType,
+				}
+			}
+			out = append(out, &model.VariantRecordData{
+				NameField:        v.Name,
+				DiscriminantName: v.DiscriminantName,
+				DiscriminantType: v.DataType,
+				Alternatives:     alts,
+				Encoding:         v.Encoding,
+			})
 		}
 	}
 	return out
