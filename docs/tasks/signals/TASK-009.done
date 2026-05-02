@@ -1,0 +1,25 @@
+- agent: agent-b
+- branch: agent/b/m1-mim-merge-fom101
+- bundle: TASK-008 + TASK-009 (Wave 3 dispatch efficiency, orchestrator-bundled)
+- final-commit: pending sentinel commit
+- pr: pending
+- summary: |
+    Implemented mim.Merge(base, user) (cut-1, single user module on top of
+    standard MIM) and wired FOM-101 redefine detection into parser.Parse.
+    Detection rules:
+      - User dataType colliding with MIM dataType -> FOM-101.
+      - MIM object class with user-added attributes -> FOM-101.
+      - MIM interaction class with user-added parameters -> FOM-101.
+      - Pass-through inheritance (HLAobjectRoot / HLAinteractionRoot used
+        as roots with no attributes/parameters added) -> NOT FOM-101.
+    parser/mim_merge.go skips MIM-typed modules to avoid self-collision on
+    the embedded MIM itself.
+    Refactored parser/datatype_ref.go to consume mim.StandardMIMHandle
+    instead of the hardcoded mimPrimitives set; TODO(#1) marker removed.
+- acceptance:
+    - tests/spec/M1/parser_diagnostics_test.go BadFOMDiagnostics 10/10 PASS
+      (FOM-001 / 002 / 003 / 004 / 005 / 009 / 011 / 012 / 013 / 101).
+    - go test ./rti/pkg/fom/... green.
+    - golangci-lint clean on rti/pkg/fom/...
+    - Coverage on rti/pkg/fom/mim: 76.4% (>= 75%).
+    - No edits to orchestrator-vendored XML files.
