@@ -182,6 +182,23 @@ func valuesEqual(got, want any) bool {
 	case string:
 		g, ok := got.(string)
 		return ok && g == w
+	case []any:
+		// JSON-array form (e.g. [171, 205] for an octet pair) compared
+		// against the codec's returned byte-array or byte-slice.
+		switch g := got.(type) {
+		case [2]byte:
+			return len(w) == 2 && valuesEqual(float64(g[0]), w[0]) && valuesEqual(float64(g[1]), w[1])
+		case []byte:
+			if len(g) != len(w) {
+				return false
+			}
+			for i := range g {
+				if !valuesEqual(float64(g[i]), w[i]) {
+					return false
+				}
+			}
+			return true
+		}
 	}
 	return false
 }

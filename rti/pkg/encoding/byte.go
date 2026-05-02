@@ -141,8 +141,44 @@ func octetPairBytes(v any) (byte, byte, error) {
 			return 0, 0, fmt.Errorf("encoding: HLAoctetPair requires exactly 2 bytes, got %d", len(x))
 		}
 		return x[0], x[1], nil
+	case []any:
+		// JSON-array form: encoding/json delivers numeric arrays as
+		// []any whose elements are float64.
+		if len(x) != 2 {
+			return 0, 0, fmt.Errorf("encoding: HLAoctetPair requires exactly 2 elements, got %d", len(x))
+		}
+		a, errA := coerceOctet(x[0])
+		if errA != nil {
+			return 0, 0, errA
+		}
+		b, errB := coerceOctet(x[1])
+		if errB != nil {
+			return 0, 0, errB
+		}
+		return a, b, nil
 	default:
 		return 0, 0, fmt.Errorf("encoding: HLAoctetPair cannot encode %T", v)
+	}
+}
+
+// coerceOctet narrows an any to a single octet, accepting the integer-y
+// forms JSON deserialization can produce.
+func coerceOctet(v any) (byte, error) {
+	switch x := v.(type) {
+	case float64:
+		if x < 0 || x > 255 || x != float64(int(x)) {
+			return 0, fmt.Errorf("encoding: HLAoctetPair element %v out of byte range", x)
+		}
+		return byte(x), nil
+	case int:
+		if x < 0 || x > 255 {
+			return 0, fmt.Errorf("encoding: HLAoctetPair element %d out of byte range", x)
+		}
+		return byte(x), nil
+	case byte:
+		return x, nil
+	default:
+		return 0, fmt.Errorf("encoding: HLAoctetPair element has unexpected type %T", v)
 	}
 }
 

@@ -476,6 +476,65 @@
       "notes": "TASK-013; length 1 code unit, U+03A9 Greek capital omega"
     },
     {
+      "id": "octet-pair-be-zero",
+      "type": "HLAoctetPairBE",
+      "value": [
+        0,
+        0
+      ],
+      "bytes": "0000",
+      "notes": "octet boundary 2; logical [0x00, 0x00] in BE order"
+    },
+    {
+      "id": "octet-pair-be-abcd",
+      "type": "HLAoctetPairBE",
+      "value": [
+        171,
+        205
+      ],
+      "bytes": "abcd",
+      "notes": "logical [0xAB, 0xCD] in BE order"
+    },
+    {
+      "id": "octet-pair-be-max",
+      "type": "HLAoctetPairBE",
+      "value": [
+        255,
+        255
+      ],
+      "bytes": "ffff"
+    },
+    {
+      "id": "octet-pair-le-zero",
+      "type": "HLAoctetPairLE",
+      "value": [
+        0,
+        0
+      ],
+      "bytes": "0000",
+      "notes": "logical [0x00, 0x00] in LE byte order on the wire (still 0x00 0x00)"
+    },
+    {
+      "id": "octet-pair-le-abcd",
+      "type": "HLAoctetPairLE",
+      "value": [
+        171,
+        205
+      ],
+      "bytes": "cdab",
+      "notes": "logical [0xAB, 0xCD] swapped to [0xCD, 0xAB] on the wire"
+    },
+    {
+      "id": "octet-pair-le-asym",
+      "type": "HLAoctetPairLE",
+      "value": [
+        16,
+        32
+      ],
+      "bytes": "2010",
+      "notes": "logical [0x10, 0x20] swapped"
+    },
+    {
       "id": "fixed-array-int32-3",
       "type": {
         "kind": "HLAfixedArray",
