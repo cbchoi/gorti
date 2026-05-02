@@ -71,15 +71,26 @@ func (r *VariantRecord) Encode(v any) ([]byte, error) {
 	if !present {
 		return nil, fmt.Errorf("encoding: HLAvariantRecord missing %q key", "value")
 	}
-	alt, ok := r.alternatives[d]
+
+	// Canonicalize the discriminator before alt-map lookup. JSON-loaded
+	// vectors deliver numeric discriminators as float64 even when the
+	// codec's canonical Go type is e.g. int32; round-tripping through
+	// the discriminator codec produces the canonical value, which is
+	// what the alternatives map is keyed on (see NewVariantRecord doc).
+	discBytes, err := r.disc.Encode(d)
+	if err != nil {
+		return nil, fmt.Errorf("encoding: HLAvariantRecord discriminator: %w", err)
+	}
+	canonical, _, err := r.disc.Decode(discBytes)
+	if err != nil {
+		return nil, fmt.Errorf("encoding: HLAvariantRecord discriminator decode: %w", err)
+	}
+	alt, ok := r.alternatives[canonical]
 	if !ok {
 		return nil, fmt.Errorf("%w: HLAvariantRecord no alternative for discriminator %v (%T)", ErrEncTypeMismatch, d, d)
 	}
 
-	out, err := r.disc.Encode(d)
-	if err != nil {
-		return nil, fmt.Errorf("encoding: HLAvariantRecord discriminator: %w", err)
-	}
+	out := append([]byte(nil), discBytes...)
 	out = padToBoundary(out, alt.OctetBoundary())
 	altBytes, err := alt.Encode(val)
 	if err != nil {
