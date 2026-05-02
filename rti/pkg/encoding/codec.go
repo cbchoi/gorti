@@ -29,40 +29,41 @@ func CodecFor(dt any) (Codec, error) {
 	return nil, ErrNotImplemented
 }
 
+// primitiveCodecs maps HLA Evolved primitive names to their Codec instances.
+// Each task branch (TASK-010 integers, TASK-011 floats, TASK-012 byte/bool/char,
+// TASK-013 strings, ...) appends its family in a clearly-delimited block so
+// concurrent additions merge with minimal friction.
+var primitiveCodecs = map[string]Codec{
+	// --- HLAinteger family (TASK-010) ---
+	"HLAinteger16BE": HLAinteger16BE{},
+	"HLAinteger16LE": HLAinteger16LE{},
+	"HLAinteger32BE": HLAinteger32BE{},
+	"HLAinteger32LE": HLAinteger32LE{},
+	"HLAinteger64BE": HLAinteger64BE{},
+	"HLAinteger64LE": HLAinteger64LE{},
+
+	// --- HLAfloat family (TASK-011) ---
+	"HLAfloat32BE": hlaFloat32BE{},
+	"HLAfloat32LE": hlaFloat32LE{},
+	"HLAfloat64BE": hlaFloat64BE{},
+	"HLAfloat64LE": hlaFloat64LE{},
+
+	// --- HLAoctet / HLAboolean / HLAchar family (TASK-012) ---
+	"HLAoctet":       HLAoctet{},
+	"HLAoctetPairBE": HLAoctetPairBE{},
+	"HLAoctetPairLE": HLAoctetPairLE{},
+	"HLAboolean":     HLAboolean{},
+	"HLAASCIIchar":   HLAASCIIchar{},
+	"HLAunicodeChar": HLAunicodeChar{},
+}
+
 // PrimitiveByName returns the Codec for an HLA Evolved primitive type by its
 // canonical name (e.g. "HLAinteger32BE", "HLAfloat64BE", "HLAboolean",
 // "HLAoctet", "HLAASCIIchar", "HLAunicodeChar"). Returns an error for unknown
 // or composite types. Convenience for tests and bridges that work in name form.
-//
-// NOTE for merge: the cases below are intentionally grouped by primitive
-// family so that concurrent task branches (TASK-010 integers, TASK-011
-// floats, TASK-012 strings, etc.) can extend this switch with minimal
-// merge friction. Keep the float family contiguous.
 func PrimitiveByName(name string) (Codec, error) {
-	switch name {
-	// --- HLAinteger family (TASK-010) ---
-	case "HLAinteger16BE":
-		return HLAinteger16BE{}, nil
-	case "HLAinteger16LE":
-		return HLAinteger16LE{}, nil
-	case "HLAinteger32BE":
-		return HLAinteger32BE{}, nil
-	case "HLAinteger32LE":
-		return HLAinteger32LE{}, nil
-	case "HLAinteger64BE":
-		return HLAinteger64BE{}, nil
-	case "HLAinteger64LE":
-		return HLAinteger64LE{}, nil
-	// --- HLAfloat family (TASK-011) ---
-	case "HLAfloat32BE":
-		return hlaFloat32BE{}, nil
-	case "HLAfloat32LE":
-		return hlaFloat32LE{}, nil
-	case "HLAfloat64BE":
-		return hlaFloat64BE{}, nil
-	case "HLAfloat64LE":
-		return hlaFloat64LE{}, nil
-	default:
-		return nil, fmt.Errorf("encoding: PrimitiveByName(%q): unknown or unimplemented primitive type", name)
+	if c, ok := primitiveCodecs[name]; ok {
+		return c, nil
 	}
+	return nil, fmt.Errorf("encoding: PrimitiveByName(%q): unknown or unimplemented primitive type", name)
 }

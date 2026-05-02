@@ -1,0 +1,18 @@
+- agent: agent-b
+- branch: agent/b/task-012-byte-codecs
+- final-commit: pending-this-commit
+- timestamp: 2026-04-29
+- pr: pending
+- summary: |
+    HLAoctet, HLAoctetPairBE/LE, HLAboolean, HLAASCIIchar, and
+    HLAunicodeChar (UTF-16BE BMP) primitive codecs implemented per
+    IEEE 1516.2-2010 §4. PrimitiveByName resolves the six new names.
+    Vectors added for HLAoctet, HLAASCIIchar, HLAunicodeChar.
+    Coverage on rti/pkg/encoding/byte.go: 100%.
+- acceptance:
+    - 6 types resolve via PrimitiveByName
+    - corresponding spec vectors round-trip green
+    - byte.go coverage 100% (>= 80%)
+    - golangci-lint clean
+    - additive vectors only; no existing vector modified
+    - octet-pair vectors deferred (see PR description / vectors commit)
