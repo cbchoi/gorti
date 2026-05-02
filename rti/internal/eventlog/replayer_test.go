@@ -151,15 +151,6 @@ func TestReplayer_Replay_SyntheticByteIdentical(t *testing.T) {
 	}
 }
 
-// divergentSink wraps a *Writer but mutates one byte of the body after
-// it has been written, simulating a deterministic-replay violation. The
-// Replayer's post-replay byte comparison must catch the divergence.
-type divergentSink struct {
-	inner    *Writer
-	captured *bytes.Buffer
-	flipAt   int // absolute offset (post-header) to flip
-}
-
 // TestReplayer_Replay_DivergenceIsFatal: when the captured sink already
 // contains body bytes BEFORE Replay starts, Replay returns
 // ErrReplayDivergence. This is the cut-1 divergence-detection signal:
