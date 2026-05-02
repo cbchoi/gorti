@@ -73,7 +73,7 @@ Required fields:
 
 | Field | Value |
 |---|---|
-| Status | DISPATCHED / IN_PROGRESS / IN_REVIEW / DONE / CANCELLED |
+| Status | DISPATCHED / IN_PROGRESS / IN_REVIEW / DONE / CANCELLED / BLOCKED |
 | Assignee | agent-a / agent-b / agent-c |
 | Milestone | M0 / M1 / M2 / M3 / M4 / M5 |
 | Created | YYYY-MM-DD |
@@ -174,7 +174,9 @@ Agent B works TASK-001 through TASK-004 sequentially or interleaved by orchestra
 
 ---
 
-## 7. Cancellation
+## 7. Cancellation and blocking
+
+### 7.1 Cancellation
 
 Tasks can be cancelled by setting `Status: CANCELLED` and explaining in the file's Notes section. Reasons include:
 
@@ -183,6 +185,16 @@ Tasks can be cancelled by setting `Status: CANCELLED` and explaining in the file
 - A defect in another agent's code requires re-scoping.
 
 Cancelled tasks are not deleted; they remain in `docs/tasks/` for traceability. The orchestrator opens a replacement TASK-NNN if needed.
+
+### 7.2 Blocking
+
+A task whose `Depends-on:` chain is satisfied may still be unsafe to start because of an external blocker — most commonly an open `contract-change-request:` issue. In that case the orchestrator sets `Status: BLOCKED` and writes a `## Blocked (YYYY-MM-DD)` section in the task file referencing the blocker (issue number, PR, or other artifact).
+
+Agents MUST NOT pick up a BLOCKED task. Once the external blocker is resolved, the orchestrator flips the status back to `DISPATCHED` (and updates the `Updated:` field) before the agent acks. Blocked tasks count against the milestone backlog the same as other tasks; they are not cancelled and their ID is not reused.
+
+The distinction:
+- `Depends-on:` is a **task-graph** dependency (must wait for upstream `TASK-MMM.done` to land on `main`).
+- `BLOCKED` is an **external-artifact** dependency (must wait for a non-task event — issue resolution, contract decision, third-party data arrival).
 
 ---
 

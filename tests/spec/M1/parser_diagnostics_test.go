@@ -98,9 +98,19 @@ func TestSpec_M1_BadFOMDiagnostics(t *testing.T) {
 			description: "object class hierarchy contains a cycle",
 		},
 		{
+			name:        "FOM-003-multiple-parents.xml",
+			expectCode:  "FOM-003",
+			description: "object class declared under more than one parent",
+		},
+		{
 			name:        "FOM-004-duplicate-attribute.xml",
 			expectCode:  "FOM-004",
 			description: "attribute name duplicated within a class",
+		},
+		{
+			name:        "FOM-005-duplicate-parameter.xml",
+			expectCode:  "FOM-005",
+			description: "parameter name duplicated within an interaction",
 		},
 		{
 			name:        "FOM-009-unknown-element.xml",
@@ -111,6 +121,16 @@ func TestSpec_M1_BadFOMDiagnostics(t *testing.T) {
 			name:        "FOM-011-missing-parent-class.xml",
 			expectCode:  "FOM-011",
 			description: "class references non-existent parent",
+		},
+		{
+			name:        "FOM-012-missing-interaction-parent.xml",
+			expectCode:  "FOM-012",
+			description: "interaction class not nested under HLAinteractionRoot",
+		},
+		{
+			name:        "FOM-013-variant-no-discriminator.xml",
+			expectCode:  "FOM-013",
+			description: "variantRecordData missing discriminant",
 		},
 		{
 			name:        "FOM-101-redefines-mim-type.xml",

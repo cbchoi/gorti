@@ -48,3 +48,8 @@ issues:
       linters: [revive, gocyclo, errcheck, staticcheck]
     - path: tests/spec/
       linters: [gocyclo]
+    # rti/internal/core/clock.go is the single sanctioned wrapper around
+    # time.Now (the whole reason core.Clock exists). Everywhere else,
+    # forbidigo's time.Now ban applies — see CODING_CONVENTIONS.md D-1.
+    - path: rti/internal/core/clock\.go
+      linters: [forbidigo]

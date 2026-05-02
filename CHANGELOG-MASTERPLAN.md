@@ -6,6 +6,42 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-02 — Backlog committed; lint unblocked; M1 spec extended; discipline drift recorded
+
+Material reconciliation between planned and actual state. No agent status reports yet (M1 still in flight); this revision is orchestrator-driven from observed working-tree drift.
+
+### What landed on `main`
+
+- **89 TASK files committed** to `docs/tasks/TASK-001.md` … `TASK-089.md`. The full M1..M5 backlog is now reachable via `git log` on `main`. Until this commit, agents had been working off untracked TASK files — the protocol requirement that "orchestrator commits TASK file to `main`" (see `docs/DISPATCH.md` §2 step 3) was not being honored.
+- **TASK-084 cancelled** (per its own decision rule — TASK-080 perf baseline absent; do not optimize speculatively per `docs/agent-b-fom-encoding.md` §4 anti-goal). File retained for traceability per `docs/DISPATCH.md` §7.1; ID-084 will not be reused.
+- **TASK-008 and TASK-009 marked `BLOCKED`** by [issue #1](https://github.com/cbchoi/gorti/issues/1) (canonical MIM XML sourcing). Agent B should not progress these until orchestrator resolves the contract-change-request and lands canonical MIM content.
+- **`.golangci.yml` amended** to exclude `rti/internal/core/clock.go` from `forbidigo`'s `time.Now` ban. That file is the deliberate single sanctioned wrapper around `time.Now` (the whole reason `core.Clock` exists); without this exclude every PR fails `make verify`.
+- **`.gitignore` extended** with `.tools/` and `.tmp/` — ad-hoc local toolchain caches (one local cache was 333 MB) that must never enter the repo.
+- **`tests/spec/M1/parser_diagnostics_test.go`** extended for FOM-003, FOM-005, FOM-012, FOM-013 (the 4 codes the M1 exit criterion of "10 malformed FOMs" requires beyond the original 6). Pairs with 4 new bad-FOM fixtures under `tests/conformance/foms/bad/`. Unblocks TASK-086..089 dispatch.
+- **`tests/spec/M1/encoding_vectors_test.go` composite extension deferred** — the upgrade (lifting composite vector `{kind, ...}` Type descriptors into `model.DataType` values to drive `encoding.CodecFor`) imports `rti/pkg/fom/model`, a package that does not yet exist on `main`. Landing the test now would break `go test ./...`. The extension stays in the stash and lands together with TASK-019 (Agent B's M1 exit task) so the test moves from `t.Skip` to passing in a single coherent step.
+- **`docs/DISPATCH.md` §3 + new §7.2**: `BLOCKED` added to the canonical Status enumeration. New §7.2 distinguishes task-graph dependencies (`Depends-on:`) from external-artifact blockers (BLOCKED).
+
+### Discipline drift recorded (not penalised, but called out)
+
+- **Sentinel-without-merged-TASK** on `agent/c/codegen-setup`: 14 commits including TASK-050..062 sentinels were created on a topic branch while the corresponding `docs/tasks/TASK-NNN.md` briefs were not yet on `main`. Per `docs/DISPATCH.md` §10, sentinels reference the TASK file as their durable signal; without the brief on `main` the sentinel is dangling. Recommended remediation: rebase that branch onto the new `main` (this commit), so the sentinels land alongside their briefs.
+- **Multiple IN_PROGRESS per agent** (Agent C did TASK-050..062 in 14 sequential commits without orchestrator review/merge between each). `docs/DISPATCH.md` §4.4 caps at one IN_PROGRESS per agent. The branch will need staged review (sentinel-by-sentinel) before merging.
+- **Substantial uncommitted Agent B work** for TASK-001..009 + TASK-086..089: ~30 untracked Go source files. Not lost — preserved in stash + working-tree fragments — but never committed via TDD-discipline. Agent B should redo the work properly with red-green commit pattern per `docs/TDD.md` §3, since the existing fragments lack the test-first commit history reviewers walk.
+- **Frozen-path violation (cosmetic only)**: `rti/internal/core/errors.go` and `rti/internal/core/federation.go` had local gofmt alignment changes from someone running `make fmt` over the whole tree. No semantic change. The pre-commit hook should have rejected if anyone tried to commit on an agent branch; this commit absorbs the cosmetic fix on `main`.
+
+### What is NOT in this commit
+
+- Agent C's pysdk encoding/codegen work on `agent/c/codegen-setup` — left for review-and-merge cycle per `docs/DISPATCH.md` §10.
+- Agent B's parser/model/MIM/encoding work in the working tree — left for proper test-first redo on a clean topic branch.
+- Resolution of issue #1 (canonical MIM XML) — pending orchestrator decision on sourcing path.
+
+### Next concrete actions (orchestrator)
+
+1. Resolve [issue #1](https://github.com/cbchoi/gorti/issues/1): pick a sourcing path (Portico CDDL is the recommendation) and commit canonical MIM XML to `rti/pkg/fom/mim/`. Flip TASK-008 and TASK-009 back to `DISPATCHED`.
+2. Triage `agent/c/codegen-setup`: rebase onto this `main`, then merge sentinels in order with review per `docs/DISPATCH.md` §10.
+3. Re-dispatch TASK-001 to Agent B on a clean topic branch off this `main`.
+
+---
+
 ## 2026-04-28 (later) — M0 deliverables produced; orthogonality + dispatch + sentinel locked
 
 Built out M0 contracts and scaffolding under `/workspace/gorti/`:

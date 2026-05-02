@@ -36,3 +36,8 @@ Thumbs.db
 # Project-local
 eventlogs/
 *.local.yaml
+
+# Local toolchain + scratch caches. Never commit — they balloon the repo and
+# are reproducible from CI.
+.tools/
+.tmp/

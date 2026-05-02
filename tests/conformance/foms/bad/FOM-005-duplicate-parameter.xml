@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-005 fixture: interaction class declares the same parameter name twice.
+  Symmetric to FOM-004 (duplicate attribute), targeting interactions.
+
+  Expected diagnostic: FOM-005.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-005-duplicate-parameter</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-29</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: duplicate parameter name in interaction.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass><name>HLAobjectRoot</name></objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>Dup</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <semantics>Duplicate parameter name.</semantics>
+        <parameter>
+          <name>seq</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>Sequence number.</semantics>
+        </parameter>
+        <parameter>
+          <name>seq</name>
+          <dataType>HLAinteger64BE</dataType>
+          <semantics>Reused name.</semantics>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+</objectModel>

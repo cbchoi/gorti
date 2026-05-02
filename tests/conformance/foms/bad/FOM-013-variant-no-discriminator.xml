@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-013 fixture: variant record declared without a <discriminant>
+  element. The standard requires every variantRecordData to name the
+  discriminator field; without it, encoding is undefined.
+
+  Expected diagnostic: FOM-013.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-013-variant-no-discriminator</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-29</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: variantRecordData missing discriminant.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass><name>HLAobjectRoot</name></objectClass>
+  </objects>
+  <interactions>
+    <interactionClass><name>HLAinteractionRoot</name></interactionClass>
+  </interactions>
+  <dataTypes>
+    <variantRecordDataTypes>
+      <variantRecordData>
+        <name>BrokenVariant</name>
+        <dataType>HLAinteger32BE</dataType>
+        <encoding>HLAvariantRecord</encoding>
+        <semantics>Missing discriminant field.</semantics>
+        <alternative>
+          <enumerator>1</enumerator>
+          <name>v1</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>Branch one.</semantics>
+        </alternative>
+      </variantRecordData>
+    </variantRecordDataTypes>
+  </dataTypes>
+</objectModel>
