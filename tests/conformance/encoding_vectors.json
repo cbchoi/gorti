@@ -427,6 +427,118 @@
       "notes": "TASK-012; ZWNBSP / BOM U+FEFF"
     },
     {
+      "id": "ascii-string-empty",
+      "type": "HLAASCIIstring",
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-013; 4-byte BE length prefix == 0; octet boundary 4"
+    },
+    {
+      "id": "ascii-string-hello",
+      "type": "HLAASCIIstring",
+      "value": "hello",
+      "bytes": "0000000568656c6c6f",
+      "notes": "TASK-013; length 5, ASCII payload"
+    },
+    {
+      "id": "ascii-string-space",
+      "type": "HLAASCIIstring",
+      "value": " ",
+      "bytes": "0000000120",
+      "notes": "TASK-013; length 1, single space"
+    },
+    {
+      "id": "ascii-string-A",
+      "type": "HLAASCIIstring",
+      "value": "A",
+      "bytes": "0000000141",
+      "notes": "TASK-013; length 1, single ASCII letter"
+    },
+    {
+      "id": "unicode-string-empty",
+      "type": "HLAunicodeString",
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-013; 4-byte BE length prefix == 0 code units"
+    },
+    {
+      "id": "unicode-string-hello",
+      "type": "HLAunicodeString",
+      "value": "hello",
+      "bytes": "0000000500680065006c006c006f",
+      "notes": "TASK-013; length 5 code units, UTF-16BE payload (4 + 10 = 14 bytes)"
+    },
+    {
+      "id": "unicode-string-omega",
+      "type": "HLAunicodeString",
+      "value": "Ω",
+      "bytes": "0000000103a9",
+      "notes": "TASK-013; length 1 code unit, U+03A9 Greek capital omega"
+    },
+    {
+      "id": "fixed-array-int32-3",
+      "type": {"kind": "HLAfixedArray", "element": "HLAinteger32BE", "cardinality": 3},
+      "value": [1, 2, 3],
+      "bytes": "000000010000000200000003",
+      "notes": "TASK-014/015/018 composite block begin; HLAfixedArray of 3 int32BE; 4-byte boundary, no inter-element padding"
+    },
+    {
+      "id": "fixed-array-float64-2",
+      "type": {"kind": "HLAfixedArray", "element": "HLAfloat64BE", "cardinality": 2},
+      "value": [1.0, 0.5],
+      "bytes": "3ff00000000000003fe0000000000000",
+      "notes": "TASK-014; HLAfixedArray of 2 float64BE; 8-byte boundary, no inter-element padding because each element fills its boundary"
+    },
+    {
+      "id": "fixed-array-octet-5",
+      "type": {"kind": "HLAfixedArray", "element": "HLAoctet", "cardinality": 5},
+      "value": [1, 2, 3, 4, 5],
+      "bytes": "0102030405",
+      "notes": "TASK-014; HLAfixedArray of 5 HLAoctet; 1-byte boundary, no padding"
+    },
+    {
+      "id": "variable-array-int32-empty",
+      "type": {"kind": "HLAvariableArray", "element": "HLAinteger32BE"},
+      "value": [],
+      "bytes": "00000000",
+      "notes": "TASK-015; HLAvariableArray empty: just the 4-byte zero length prefix"
+    },
+    {
+      "id": "variable-array-int32-2",
+      "type": {"kind": "HLAvariableArray", "element": "HLAinteger32BE"},
+      "value": [1, 2],
+      "bytes": "000000020000000100000002",
+      "notes": "TASK-015; HLAvariableArray of 2 int32BE"
+    },
+    {
+      "id": "variable-array-float64-3",
+      "type": {"kind": "HLAvariableArray", "element": "HLAfloat64BE"},
+      "value": [1.0, 0.5, -2.0],
+      "bytes": "00000003000000003ff00000000000003fe0000000000000c000000000000000",
+      "notes": "TASK-015; HLAvariableArray of 3 float64BE; padding test: 4-byte length prefix + 4 bytes pad to reach 8-byte float64 boundary, then 3 doubles"
+    },
+    {
+      "id": "opaque-empty",
+      "type": {"kind": "HLAopaqueData"},
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-018; empty opaque blob; 4-byte zero length prefix"
+    },
+    {
+      "id": "opaque-deadbeef",
+      "type": {"kind": "HLAopaqueData"},
+      "value": "deadbeef",
+      "bytes": "00000004deadbeef",
+      "notes": "TASK-018; 4-byte payload (hex-encoded in value field)"
+    },
+    {
+      "id": "opaque-three-bytes",
+      "type": {"kind": "HLAopaqueData"},
+      "value": "010203",
+      "bytes": "00000003010203",
+      "notes": "TASK-014/015/018 composite block end; 3-byte payload (hex-encoded in value field)"
+    },
+    {
       "_disabled": true,
       "id": "fixed-record-octet-float64",
       "type": {
