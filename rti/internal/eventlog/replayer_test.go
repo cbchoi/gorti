@@ -160,22 +160,15 @@ type divergentSink struct {
 	flipAt   int // absolute offset (post-header) to flip
 }
 
-// TestReplayer_Replay_DivergenceIsFatal: when the captured log differs
-// from the source mid-stream, Replay returns ErrReplayDivergence. We
-// simulate divergence by mutating a byte in the captured buffer
-// after replay, then re-asserting through a custom comparison hook.
+// TestReplayer_Replay_DivergenceIsFatal: when the captured sink already
+// contains body bytes BEFORE Replay starts, Replay returns
+// ErrReplayDivergence. This is the cut-1 divergence-detection signal:
+// the captured stream's body region must be empty at Replay entry, and
+// must equal the source's body region at Replay exit.
 //
-// Since the Replayer compares at end-of-Replay, the simplest test is to
-// pre-seed the captured buffer with a header that differs from the
-// source's body region — i.e. provoke the writer to emit different
-// bytes. Easiest path: build two different sources (different N or
-// different fed name) and confirm a comparison helper rejects them.
-//
-// We test the public guarantee: if the captured stream's body bytes
-// don't match the source's body bytes, Replay returns
-// ErrReplayDivergence. Inject divergence by appending an extra event to
-// the capturing sink BEFORE Replay runs, so the captured stream starts
-// with extra bytes — Replay sees the mismatch and returns the sentinel.
+// We exercise the entry-time check by pre-appending one rogue event to
+// the captured sink before invoking Replay. The CapturedBuffer
+// reference is supplied so the Replayer can observe the pre-state.
 func TestReplayer_Replay_DivergenceIsFatal(t *testing.T) {
 	src := buildSyntheticSourceLog(t, "div", 2)
 	r, err := NewReader(bytes.NewReader(src))
@@ -184,7 +177,7 @@ func TestReplayer_Replay_DivergenceIsFatal(t *testing.T) {
 	}
 	defer r.Close()
 
-	w, _ := newCapturingSink(t, "div")
+	w, capBuf := newCapturingSink(t, "div")
 	defer w.Close()
 
 	// Pre-pollute the captured sink with one rogue event before replay.
@@ -194,8 +187,9 @@ func TestReplayer_Replay_DivergenceIsFatal(t *testing.T) {
 	}
 
 	rep, err := NewReplayer(ReplayerOptions{
-		Source:        r,
-		CapturingSink: w,
+		Source:         r,
+		CapturingSink:  w,
+		CapturedBuffer: capBuf,
 	})
 	if err != nil {
 		t.Fatalf("NewReplayer: %v", err)
