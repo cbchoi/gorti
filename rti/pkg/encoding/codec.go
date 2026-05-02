@@ -6,7 +6,10 @@
 // contract-change-request.
 package encoding
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrNotImplemented is returned by stub functions until Agent B implements them.
 var ErrNotImplemented = errors.New("encoding: not implemented (Agent B M1 deliverable)")
@@ -30,7 +33,24 @@ func CodecFor(dt any) (Codec, error) {
 // canonical name (e.g. "HLAinteger32BE", "HLAfloat64BE", "HLAboolean",
 // "HLAoctet", "HLAASCIIchar", "HLAunicodeChar"). Returns an error for unknown
 // or composite types. Convenience for tests and bridges that work in name form.
+//
+// NOTE for merge: the cases below are intentionally grouped by primitive
+// family so that concurrent task branches (TASK-010 integers, TASK-011
+// floats, TASK-012 strings, etc.) can extend this switch with minimal
+// merge friction. Keep the float family contiguous.
 func PrimitiveByName(name string) (Codec, error) {
-	_ = name
-	return nil, ErrNotImplemented
+	switch name {
+	// --- HLAfloat family (TASK-011) ---
+	case "HLAfloat32BE":
+		return hlaFloat32BE{}, nil
+	case "HLAfloat32LE":
+		return hlaFloat32LE{}, nil
+	case "HLAfloat64BE":
+		return hlaFloat64BE{}, nil
+	case "HLAfloat64LE":
+		return hlaFloat64LE{}, nil
+	// --- end HLAfloat family ---
+	default:
+		return nil, fmt.Errorf("encoding: PrimitiveByName(%q): unknown or unimplemented primitive type", name)
+	}
 }

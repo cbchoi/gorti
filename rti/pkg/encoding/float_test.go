@@ -88,20 +88,19 @@ func TestSpec_FloatPrimitiveCodecs_RoundTrip(t *testing.T) {
 			if n != tc.valueSize {
 				t.Errorf("Decode consumed %d bytes, want %d", n, tc.valueSize)
 			}
+			// Decoders always return float64 (widened from float32 for the
+			// 32-bit codecs) for cross-language equality with the Python
+			// encoder, which has only one float type.
+			g, ok := decoded.(float64)
+			if !ok {
+				t.Fatalf("Decode returned %T, want float64", decoded)
+			}
 			switch want := tc.value.(type) {
 			case float32:
-				g, ok := decoded.(float32)
-				if !ok {
-					t.Fatalf("Decode returned %T, want float32", decoded)
-				}
-				if g != want {
-					t.Errorf("Decode round-trip: got %v, want %v", g, want)
+				if g != float64(want) {
+					t.Errorf("Decode round-trip: got %v, want %v", g, float64(want))
 				}
 			case float64:
-				g, ok := decoded.(float64)
-				if !ok {
-					t.Fatalf("Decode returned %T, want float64", decoded)
-				}
 				if g != want {
 					t.Errorf("Decode round-trip: got %v, want %v", g, want)
 				}
@@ -146,13 +145,17 @@ func TestSpec_FloatPrimitiveCodecs_DecodeShortBuffer(t *testing.T) {
 func TestSpec_FloatPrimitiveCodecs_EncodeWrongType(t *testing.T) {
 	t.Parallel()
 
+	// Note: float32 and float64 are mutually accepted (with conversion) by
+	// both float32 and float64 codecs to support JSON-loaded vector values
+	// and the Python decoder. This test asserts that *non-float* types are
+	// rejected.
 	cases := []struct {
 		typeName string
 		bad      any
 	}{
-		{"HLAfloat32BE", float64(1.0)},
-		{"HLAfloat32LE", "not-a-float"},
-		{"HLAfloat64BE", float32(1.0)},
+		{"HLAfloat32BE", "not-a-float"},
+		{"HLAfloat32LE", []byte{0x00}},
+		{"HLAfloat64BE", true},
 		{"HLAfloat64LE", 42},
 	}
 
