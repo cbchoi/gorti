@@ -75,7 +75,12 @@ func Parse(modules []Module) (Result, error) {
 		modDataTypes := convertDataTypes(om.DataTypes)
 
 		modFOM := model.NewFOM(modObjects, modInteractions, modDataTypes)
-		diagnostics = append(diagnostics, runDiagnosers(m.Path, modFOM, om)...)
+		diagnostics = append(diagnostics, runDiagnosers(diagnosticInput{
+			modulePath: m.Path,
+			xml:        m.XML,
+			fom:        modFOM,
+			raw:        om,
+		})...)
 
 		objectClasses = append(objectClasses, modObjects...)
 		interactionClasses = append(interactionClasses, modInteractions...)
