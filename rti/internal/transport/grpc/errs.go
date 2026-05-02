@@ -54,7 +54,8 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrTimeNotConstrained),
 		errors.Is(err, core.ErrTimeAlreadyRegulating),
 		errors.Is(err, core.ErrTimeAlreadyConstrained),
-		errors.Is(err, core.ErrTimeRequestInPast):
+		errors.Is(err, core.ErrTimeRequestInPast),
+		errors.Is(err, core.ErrWireVersionMismatch):
 		return status.Error(codes.FailedPrecondition, err.Error())
 
 	// InvalidArgument — caller-supplied value violates the contract.

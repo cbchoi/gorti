@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -185,41 +184,5 @@ func protoResignActionToCore(a rtiv1.ResignAction) core.ResignAction {
 	}
 }
 
-// errToStatus is the canonical core-sentinel -> gRPC status mapping for
-// FederationService. Unknown errors collapse to Internal so the caller
-// sees a clean code; the original error is preserved as the status
-// description for log correlation.
-//
-//	core sentinel                          | gRPC code
-//	---------------------------------------|--------------------
-//	ErrFederationNotFound                  | NotFound
-//	ErrFederationAlreadyExists             | AlreadyExists
-//	ErrFederationHasFederatesJoined        | FailedPrecondition
-//	ErrFederateNotJoined                   | FailedPrecondition
-//	ErrFederateAlreadyJoined               | AlreadyExists
-//	ErrFederationInvalidName               | InvalidArgument
-//	ErrWireVersionMismatch                 | FailedPrecondition
-//	(other / wrapped)                      | Internal
-func errToStatus(err error) error {
-	if err == nil {
-		return nil
-	}
-	switch {
-	case errors.Is(err, core.ErrFederationNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, core.ErrFederationAlreadyExists):
-		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, core.ErrFederationHasFederatesJoined):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrFederateNotJoined):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, core.ErrFederateAlreadyJoined):
-		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, core.ErrFederationInvalidName):
-		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, core.ErrWireVersionMismatch):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	default:
-		return status.Error(codes.Internal, err.Error())
-	}
-}
+// errToStatus moved to errs.go (shared across federation/declaration/
+// object/stream service handlers).
