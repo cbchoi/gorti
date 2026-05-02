@@ -685,7 +685,7 @@
           "y": 1.0
         }
       },
-      "bytes": "07000000000000000900000000000000 3ff0000000000000",
+      "bytes": "070000000000000009000000000000003ff0000000000000",
       "notes": "TASK-016: nested record padding resets at inner record's start; outer pads 7 bytes after octet to align inner on 8, inner pads 7 after its octet to align float64"
     },
     {

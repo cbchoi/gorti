@@ -106,28 +106,49 @@ func TestSpec_M1_PrimitiveVectorsRoundTrip(t *testing.T) {
 }
 
 // TestSpec_M1_CompositeVectorsRoundTrip is the spec for composite encoding.
-// Initially a placeholder — Agent B fills in the codec construction from the
-// composite type descriptors, then this test exercises the same round-trip.
+// Each composite vector's Type is a JSON-deserialized map[string]any like
+// {"kind": "HLAfixedArray", "element": "...", "cardinality": N}; it is fed to
+// encoding.CodecFor (which accepts any) and the resulting Codec is exercised
+// for byte-identical encode + reversible decode.
 //
-// Composite vectors in encoding_vectors.json have Type as an object
-// {"kind": "HLAfixedRecord"|"HLAfixedArray"|..., ...}.
-//
-// Implements: FR-ENC-1, FR-ENC-2 (composite).
+// Implements: FR-ENC-1, FR-ENC-2 (composite); M1 milestone gate.
 func TestSpec_M1_CompositeVectorsRoundTrip(t *testing.T) {
-	composites := 0
 	for _, v := range loadVectors(t) {
-		if _, ok := v.Type.(map[string]any); ok {
-			composites++
+		descriptor, ok := v.Type.(map[string]any)
+		if !ok {
+			continue // primitive, exercised by TestSpec_M1_PrimitiveVectorsRoundTrip
 		}
-	}
-	if composites == 0 {
-		t.Skip("no composite vectors in fixture set yet")
-	}
+		v := v
+		t.Run(v.ID, func(t *testing.T) {
+			t.Parallel()
 
-	// Agent B: implement encoding.CodecFor(typeDescriptor) and exercise it
-	// here against the composite vectors. Until then, this is a placeholder
-	// that documents the contract.
-	t.Skipf("composite codec build is pending Agent B implementation (%d vectors waiting)", composites)
+			codec, err := encoding.CodecFor(descriptor)
+			if err != nil {
+				t.Fatalf("CodecFor(%v): %v", descriptor, err)
+			}
+			expected, err := hex.DecodeString(v.Bytes)
+			if err != nil {
+				t.Fatalf("hex %q: %v", v.Bytes, err)
+			}
+
+			got, err := codec.Encode(v.Value)
+			if err != nil {
+				t.Fatalf("Encode(%v): %v", v.Value, err)
+			}
+			if !bytes.Equal(got, expected) {
+				t.Fatalf("encode mismatch: got %x, want %x", got, expected)
+			}
+
+			decoded, n, err := codec.Decode(expected)
+			if err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			if n != len(expected) {
+				t.Errorf("Decode consumed %d bytes, want %d", n, len(expected))
+			}
+			_ = decoded // round-trip equality is exercised inside the encoding package's own dispatch_test.go
+		})
+	}
 }
 
 // valuesEqual compares decoded values to vector values, accommodating that
