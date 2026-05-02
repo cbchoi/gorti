@@ -66,6 +66,13 @@ func newFedSvc(s core.FederationStore) *federationService {
 
 func wireV1() rtiv1.WireVersion { return rtiv1.WireVersion_WIRE_VERSION_V1 }
 
+// fedAlpha is a stable test federation name used across cases. Extracted
+// to dodge goconst noise on the duplicated literal.
+const (
+	fedAlphaName                     = "alpha"
+	fedAlpha     core.FederationName = fedAlphaName
+)
+
 // ===========================================================================
 // CreateFederation
 // ===========================================================================
@@ -76,7 +83,7 @@ func TestCreateFederation_Happy_TranslatesProtoToCoreAndEchoesSeed(t *testing.T)
 
 	req := &rtiv1.CreateFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 		FomModules: []*rtiv1.FOMModule{
 			{Path: "f.xml", Xml: []byte("<a/>")},
 		},
@@ -98,7 +105,7 @@ func TestCreateFederation_Happy_TranslatesProtoToCoreAndEchoesSeed(t *testing.T)
 		t.Fatalf("createCalls=%d, want 1", len(fake.createCalls))
 	}
 	got := fake.createCalls[0]
-	if got.Name != core.FederationName("alpha") {
+	if got.Name != fedAlpha {
 		t.Errorf("Name=%q, want alpha", got.Name)
 	}
 	if got.Mode != core.ModeVerbose {
@@ -127,7 +134,7 @@ func TestCreateFederation_BadWireVersion_ReturnsFailedPrecondition(t *testing.T)
 	svc := newFedSvc(&fakeFedStore{})
 	_, err := svc.CreateFederation(context.Background(), &rtiv1.CreateFederationRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_UNSPECIFIED,
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Errorf("code=%v, want FailedPrecondition; err=%v", status.Code(err), err)
@@ -138,7 +145,7 @@ func TestCreateFederation_AlreadyExists_MapsToAlreadyExists(t *testing.T) {
 	svc := newFedSvc(&fakeFedStore{createErr: core.ErrFederationAlreadyExists})
 	_, err := svc.CreateFederation(context.Background(), &rtiv1.CreateFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if status.Code(err) != codes.AlreadyExists {
 		t.Errorf("code=%v, want AlreadyExists; err=%v", status.Code(err), err)
@@ -160,7 +167,7 @@ func TestCreateFederation_UnknownError_MapsToInternal(t *testing.T) {
 	svc := newFedSvc(&fakeFedStore{createErr: errors.New("disk on fire")})
 	_, err := svc.CreateFederation(context.Background(), &rtiv1.CreateFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if status.Code(err) != codes.Internal {
 		t.Errorf("code=%v, want Internal; err=%v", status.Code(err), err)
@@ -192,7 +199,7 @@ func TestDestroyFederation_Happy_TranslatesAndReturnsEmpty(t *testing.T) {
 	svc := newFedSvc(fake)
 	resp, err := svc.DestroyFederation(context.Background(), &rtiv1.DestroyFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if err != nil {
 		t.Fatalf("DestroyFederation: %v", err)
@@ -200,8 +207,8 @@ func TestDestroyFederation_Happy_TranslatesAndReturnsEmpty(t *testing.T) {
 	if resp == nil {
 		t.Fatal("nil empty response")
 	}
-	if len(fake.destroyCalls) != 1 || fake.destroyCalls[0] != "alpha" {
-		t.Errorf("destroyCalls=%v, want [alpha]", fake.destroyCalls)
+	if len(fake.destroyCalls) != 1 || fake.destroyCalls[0] != fedAlpha {
+		t.Errorf("destroyCalls=%v, want [%s]", fake.destroyCalls, fedAlpha)
 	}
 }
 
@@ -228,7 +235,7 @@ func TestDestroyFederation_HasFederates_MapsToFailedPrecondition(t *testing.T) {
 	svc := newFedSvc(&fakeFedStore{destroyErr: core.ErrFederationHasFederatesJoined})
 	_, err := svc.DestroyFederation(context.Background(), &rtiv1.DestroyFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Errorf("code=%v, want FailedPrecondition", status.Code(err))
@@ -244,7 +251,7 @@ func TestJoinFederation_Happy_ReturnsAssignedHandle(t *testing.T) {
 	svc := newFedSvc(fake)
 	resp, err := svc.JoinFederation(context.Background(), &rtiv1.JoinFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 		FederateName:   "fa",
 	})
 	if err != nil {
@@ -254,7 +261,7 @@ func TestJoinFederation_Happy_ReturnsAssignedHandle(t *testing.T) {
 		t.Errorf("FederateHandle=%d, want 7", resp.GetFederateHandle())
 	}
 	if len(fake.joinCalls) != 1 ||
-		fake.joinCalls[0].Federation != "alpha" ||
+		fake.joinCalls[0].Federation != fedAlpha ||
 		fake.joinCalls[0].FederateName != "fa" {
 		t.Errorf("joinCalls=%v", fake.joinCalls)
 	}
@@ -284,7 +291,7 @@ func TestJoinFederation_AlreadyJoined_MapsToAlreadyExists(t *testing.T) {
 	svc := newFedSvc(&fakeFedStore{joinErr: core.ErrFederateAlreadyJoined})
 	_, err := svc.JoinFederation(context.Background(), &rtiv1.JoinFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 		FederateName:   "fa",
 	})
 	if status.Code(err) != codes.AlreadyExists {
@@ -301,7 +308,7 @@ func TestResignFederation_Happy_TranslatesActionAndReturnsEmpty(t *testing.T) {
 	svc := newFedSvc(fake)
 	resp, err := svc.ResignFederation(context.Background(), &rtiv1.ResignFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 		FederateHandle: 3,
 		Action:         rtiv1.ResignAction_RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES,
 	})
@@ -315,7 +322,7 @@ func TestResignFederation_Happy_TranslatesActionAndReturnsEmpty(t *testing.T) {
 		t.Fatalf("resignCalls=%d, want 1", len(fake.resignCalls))
 	}
 	c := fake.resignCalls[0]
-	if c.Fed != "alpha" || c.Handle != 3 || c.Action != core.ResignActionUnconditionallyDivestAttributes {
+	if c.Fed != fedAlpha || c.Handle != 3 || c.Action != core.ResignActionUnconditionallyDivestAttributes {
 		t.Errorf("resignCall=%+v, want {alpha 3 UnconditionallyDivest}", c)
 	}
 }
@@ -332,7 +339,7 @@ func TestResignFederation_NotJoined_MapsToFailedPrecondition(t *testing.T) {
 	svc := newFedSvc(&fakeFedStore{resignErr: core.ErrFederateNotJoined})
 	_, err := svc.ResignFederation(context.Background(), &rtiv1.ResignFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 		FederateHandle: 3,
 		Action:         rtiv1.ResignAction_RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES,
 	})
@@ -360,7 +367,7 @@ func TestResignFederation_FederationNotFound_MapsToNotFound(t *testing.T) {
 
 func TestListFederations_Happy_TranslatesEntries(t *testing.T) {
 	fake := &fakeFedStore{listResp: []core.FederationSummary{
-		{Name: "alpha", Mode: core.ModeVerbose, FederatesJoined: 2},
+		{Name: fedAlpha, Mode: core.ModeVerbose, FederatesJoined: 2},
 		{Name: "beta", Mode: core.ModeBestEffort, FederatesJoined: 0},
 	}}
 	svc := newFedSvc(fake)
@@ -374,7 +381,7 @@ func TestListFederations_Happy_TranslatesEntries(t *testing.T) {
 		t.Fatalf("len(federations)=%d, want %d", got, want)
 	}
 	a := resp.GetFederations()[0]
-	if a.GetName() != "alpha" || a.GetMode() != rtiv1.Mode_MODE_VERBOSE || a.GetFederatesJoined() != 2 {
+	if a.GetName() != fedAlphaName || a.GetMode() != rtiv1.Mode_MODE_VERBOSE || a.GetFederatesJoined() != 2 {
 		t.Errorf("federations[0]=%+v, want {alpha VERBOSE 2}", a)
 	}
 	b := resp.GetFederations()[1]
@@ -422,7 +429,7 @@ func TestWireVersionMismatch_MapsToFailedPrecondition(t *testing.T) {
 	svc := newFedSvc(&fakeFedStore{createErr: core.ErrWireVersionMismatch})
 	_, err := svc.CreateFederation(context.Background(), &rtiv1.CreateFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Errorf("code=%v, want FailedPrecondition", status.Code(err))
@@ -435,17 +442,17 @@ func TestWrappedSentinel_StillMapsCorrectly(t *testing.T) {
 	svc := newFedSvc(&fakeFedStore{destroyErr: wrapped})
 	_, err := svc.DestroyFederation(context.Background(), &rtiv1.DestroyFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if status.Code(err) != codes.Internal {
 		t.Errorf("bare-string error should map to Internal; got %v", status.Code(err))
 	}
 
 	// Properly wrapped sentinel must propagate through errors.Is.
-	svc2 := newFedSvc(&fakeFedStore{destroyErr: wrap("federation %q destroy", core.ErrFederationNotFound, "alpha")})
+	svc2 := newFedSvc(&fakeFedStore{destroyErr: wrap("federation %q destroy", core.ErrFederationNotFound, fedAlphaName)})
 	_, err = svc2.DestroyFederation(context.Background(), &rtiv1.DestroyFederationRequest{
 		WireVersion:    wireV1(),
-		FederationName: "alpha",
+		FederationName: fedAlphaName,
 	})
 	if status.Code(err) != codes.NotFound {
 		t.Errorf("wrapped sentinel should map to NotFound; got %v", status.Code(err))
