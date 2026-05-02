@@ -37,6 +37,7 @@ func main() {
 	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo")
 	pingpongRounds := flag.Int("pingpong-rounds", 1000, "rounds for pingpong-demo mode")
 	pingpongFederation := flag.String("pingpong-federation", "pingpong", "federation name for pingpong-demo mode")
+	pingpongDeterministic := flag.Bool("pingpong-deterministic", false, "use FakeClock so the event-log body is byte-deterministic across runs")
 	flag.Parse()
 
 	logger := buildLogger(*logLevel, *logFormat)
@@ -44,7 +45,7 @@ func main() {
 
 	switch *mode {
 	case "pingpong-demo":
-		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir)
+		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir, *pingpongDeterministic)
 		return
 	case "server", "":
 		runServerMain(logger, *listen, *metricsListen, *logDir)
@@ -84,13 +85,14 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir string) {
 // runPingpongMain runs the pingpong demo and exits. logDir, when set,
 // gets per-federation .log files written into it (same format as server
 // mode); empty means the demo runs without persistence.
-func runPingpongMain(logger *slog.Logger, federation string, rounds int, logDir string) {
+func runPingpongMain(logger *slog.Logger, federation string, rounds int, logDir string, deterministic bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	stats, err := runPingpongDemo(ctx, pingpongConfig{
 		FederationName: core.FederationName(federation),
 		Rounds:         rounds,
 		LogDir:         logDir,
+		Deterministic:  deterministic,
 	})
 	if err != nil {
 		logger.Error("pingpong-demo failed", "err", err)

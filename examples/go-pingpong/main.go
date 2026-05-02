@@ -60,6 +60,10 @@ type exampleArgs struct {
 	FederationName string
 	Rounds         int
 	LogDir         string
+	// Deterministic forces rtid to use a FakeClock so the captured
+	// event-log body is byte-identical across runs. The determinism
+	// harness sets this; production runs leave it false.
+	Deterministic bool
 	// RtidBinary, when set, points at a pre-built rtid binary on disk.
 	// When empty, the example invokes "go run ./rti/cmd/rtid" relative
 	// to the module root (which the test discovers via repoRoot()).
@@ -106,6 +110,9 @@ func rtidCommand(args exampleArgs) (string, []string, error) {
 	}
 	if args.LogDir != "" {
 		common = append(common, "-log-dir="+args.LogDir)
+	}
+	if args.Deterministic {
+		common = append(common, "-pingpong-deterministic")
 	}
 	if args.RtidBinary != "" {
 		return args.RtidBinary, common, nil

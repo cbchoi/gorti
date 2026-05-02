@@ -33,6 +33,13 @@ type pingpongConfig struct {
 	// inject a *bytes.Buffer-backed MultiplexWriter to capture the
 	// stream for byte-comparison.
 	EventLog core.EventLog
+
+	// Deterministic, when true, uses a fixed FakeClock so the
+	// per-record wall_ns is identical across runs. Enables the
+	// determinism harness; production runs leave this false to use the
+	// real wall clock (the wall_ns field is informational per proto/
+	// rti/v1/eventlog.proto).
+	Deterministic bool
 }
 
 // pingpongStats summarizes a completed run.
@@ -54,7 +61,10 @@ func runPingpongDemo(ctx context.Context, cfg pingpongConfig) (pingpongStats, er
 		return pingpongStats{}, errors.New("pingpong: FederationName is required")
 	}
 
-	clock := core.NewRealClock()
+	var clock core.Clock = core.NewRealClock()
+	if cfg.Deterministic {
+		clock = core.NewFakeClock(time.Unix(0, 0))
+	}
 	log, ownsLog, err := pingpongEventLog(cfg, clock)
 	if err != nil {
 		return pingpongStats{}, err
