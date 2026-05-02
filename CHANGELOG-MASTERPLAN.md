@@ -6,6 +6,75 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-02 (M2 — DONE; 4 waves, 9 sub-agents)
+
+M2 closed in one session. **`scripts/check-milestones.sh` reports `M2: DONE (4/4)`** — examples/go-pingpong runs deterministically across 10 runs and replays byte-identical (NFR-DET-1, NFR-DET-2). Pingpong runtime: 268ms for 1000 round-trips (M2 budget was 5s).
+
+### Wave summary
+
+| Wave | Sub-agents | Tasks closed | Key deliverable |
+|---|---|---|---|
+| W1 | 3 parallel (W1A federation, W1B eventlog, W1C declaration) | TASK-020..025 + 027..029 | Federation lifecycle + EventLog Writer/Reader + DeclarationManager |
+| W2 | 2 parallel (W2A object, W2B replayer) | TASK-026 + 030..033 | Object Registry + EventLog Replayer (passthrough + proto-dispatch) |
+| W3 | 3 parallel (W3A federation+server, W3B declaration, W3C object+stream) | TASK-034..036 | gRPC handlers (16 RPCs total) + Server compose + SubscribableOutbox forward-decl |
+| W4 | 1 sequential (M2 gate) | TASK-037..040 | cmd/rtid wiring + Prometheus + go-pingpong + determinism + replay harness |
+
+Total: 9 sub-agents, 21 tasks closed (TASK-020..040), 33 of 33 M2 spec subtests green, 100+ unit tests across 5 new packages, all `-race` clean, `golangci-lint` clean.
+
+### Notable findings + corrections during M2
+
+Two spec-test bugs that sub-agents flagged as orchestrator-side errors and the orchestrator corrected:
+
+- **W1A**: original `JoinFederation_DeterministicHandles` asserted handles match the federate's FINAL sort-position in the COMPLETE roster — requires future knowledge no online algorithm can satisfy. Standard HLA assigns monotonic handles in arrival order; replay determinism comes from the FederateJoined event log, not from a sort-order property. Spec test rewritten to match this. Algorithm switched from "re-key on each join" to "monotonic counter."
+
+- **W2A**: `Object_Register_AssignsMonotonicHandle` and `Register_RejectsUnpublished` were mutually unsatisfiable (same setup, contradictory assertions). Fixed by adding the missing publish call to the monotonic-handle test.
+
+Both surfaced via the spec-clarification protocol (`docs/AGENTS.md` §7) — sub-agents implemented per-spec, then explicitly flagged the inconsistency in their reports. The right discipline.
+
+### Architectural forward-declarations resolved in W4
+
+- **Multi-federation EventLog router**: W1B's Writer is single-federation by design (correct for production where each federation has its own log file). W2A flagged the gap; W4 implemented `eventlog.MultiplexWriter` that routes Append/Sync per federation, lazily opening per-federation Writers via a pluggable factory (file-backed in production, bytes.Buffer in tests).
+
+- **Production `SubscribableOutbox`**: W3C declared the interface in `transport/grpc/stream.go` (additive, transport-grpc-local, no `core` change). W4 implemented `MultiOutbox` in `cmd/rtid/outbox.go` — per-federate channels with bounded capacity, returns `core.ErrFederateOverflow` on overflow per the `core.Outbox` contract.
+
+### W4 architectural concessions worth flagging
+
+- **examples/go-pingpong subprocess shim**: Go's `internal` package rule blocks `examples/...` from importing `rti/internal/...` or generated proto. The pingpong demo logic lives in `rti/cmd/rtid/pingpong.go` (allowed via Agent A's owned cmd path); `examples/go-pingpong/main.go` is a thin wrapper that subprocess-execs `rtid -mode=pingpong-demo`. Functionally identical to a literal in-process import; `examples/` retains its symbolic role as the documentation-facing demo location.
+
+- **Hand-rolled Prometheus exposition**: rather than add `github.com/prometheus/client_golang` (a runtime dep that requires a separate `deps:` PR per `docs/AGENTS.md` §8/9), W4 hand-wrote ~60 lines of Prom text format covering the four NFR-OPS-1 gauges (federations, federates per fed, eventlog seq per fed, object handles per fed). Future PR can swap in client_golang if/when richer metrics are needed.
+
+- **`-pingpong-deterministic` flag**: the demo's `Event.wall_ns` field is informational per the proto comment, but it varied across runs because production wires `RealClock`. The new flag wires `FakeClock` fixed at epoch into the demo so the captured body is byte-identical across runs (the field is documented as informational; the determinism contract excludes it). Production runs leave the flag false; it's solely a testing affordance.
+
+- **Eventlog coverage 83.9%** (W4 brief asked for 90%). The `rti/internal/eventlog` package coverage ceiling is bounded by the W2B Replayer's error branches, which W4 cannot exercise without modifying the frozen-by-merge replayer.go. Meets the project minimum (`docs/CODING_CONVENTIONS.md` §2.5 = 80%).
+
+### Dispatch protocol footnote
+
+Two W3 sub-agents (W3B and W3C) both wrote `errs.go` per the brief's "shared helper" guidance — orchestrator picked W3B's canonical version at merge time and merged W3C's version-specific test cases by adding the missing `ErrAttributeNotOwned` → `PermissionDenied` branch (W3C's semantically correct mapping; W3B had it under FailedPrecondition). The merge-time conflict resolution was straightforward thanks to both agents producing consistent core mappings.
+
+W3A's stub `declarationService`/`objectService`/`streamService` types in `server.go` were removed pre-merge to avoid type redeclaration conflicts with W3B/W3C's real types. This is a recurring pattern when sibling sub-agents own distinct files but one needs to forward-reference the others' constructors — the lead sub-agent (W3A) defines stubs to ship standalone; the orchestrator removes them at merge time.
+
+### State after M2
+
+```
+M0: DONE
+M1: DONE
+M2: DONE (4/4)   ← shipped this session
+M3: NOT_STARTED
+M4: NOT_STARTED
+M5: NOT_STARTED
+No regressions.
+```
+
+Outstanding: CI workflow file (`/tmp/ci-fix.patch`, commit `c42f380`) cannot be pushed without `workflow` PAT scope; user disabled the workflow via web UI as a workaround.
+
+### Next concrete actions (orchestrator)
+
+- Pre-write `tests/spec/M3/` (or `rti/spec/M3/`) for time management — the M3 milestone gate.
+- Decompose M3 into a wave model and update `docs/M3_DISPATCH_PLAN.md` (or extend M2's plan).
+- M3 is owned by Agent A; smaller surface area than M2 (TASK-041..049 = 9 tasks vs M2's 21).
+
+---
+
 ## 2026-05-02 (M2 pre-work — orchestrator-frozen stubs + spec tests + wave-based dispatch plan)
 
 Closed M1, opened M2. Pre-work delivered so Agent A can start working through the M2 wave model.
