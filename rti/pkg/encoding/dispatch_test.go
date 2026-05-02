@@ -3,6 +3,7 @@ package encoding
 import (
 	"bytes"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/cbchoi/gorti/rti/pkg/fom/model"
@@ -509,7 +510,10 @@ func TestSpec_CodecFor_RoundTripCompositeVectors(t *testing.T) {
 
 			value := normalizeValue(v.descriptor, v.value)
 
-			expected, err := hex.DecodeString(v.bytesHex)
+			// Some vectors include cosmetic whitespace inside the hex
+			// for readability; strip before decoding.
+			cleanedHex := strings.ReplaceAll(v.bytesHex, " ", "")
+			expected, err := hex.DecodeString(cleanedHex)
 			if err != nil {
 				t.Fatalf("hex %q: %v", v.bytesHex, err)
 			}
@@ -533,6 +537,280 @@ func TestSpec_CodecFor_RoundTripCompositeVectors(t *testing.T) {
 				t.Errorf("decode mismatch: got %v, want %v", dec, value)
 			}
 		})
+	}
+}
+
+// TestSpec_CodecFor_Model_ArrayElementUnknown rejects an ArrayData
+// whose element type is not a primitive.
+func TestSpec_CodecFor_Model_ArrayElementUnknown(t *testing.T) {
+	t.Parallel()
+
+	dt := &model.ArrayData{NameField: "Bad", DataType: "HLAimaginary", Cardinality: "3"}
+	if _, err := CodecFor(dt); err == nil {
+		t.Errorf("CodecFor with unknown array element: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_Model_ArrayCardinalityNegative rejects negative
+// numeric cardinalities. NewFixedArray panics on negative; the
+// dispatcher must reject the input before reaching the constructor.
+func TestSpec_CodecFor_Model_ArrayCardinalityNegative(t *testing.T) {
+	t.Parallel()
+
+	dt := &model.ArrayData{NameField: "Bad", DataType: "HLAoctet", Cardinality: "-1"}
+	if _, err := CodecFor(dt); err == nil {
+		t.Errorf("CodecFor with negative cardinality: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_Model_VariantRecord_BadDiscriminator rejects a
+// VariantRecordData whose declared discriminator is not a known
+// primitive type.
+func TestSpec_CodecFor_Model_VariantRecord_BadDiscriminator(t *testing.T) {
+	t.Parallel()
+
+	dt := &model.VariantRecordData{
+		NameField:        "Bad",
+		DiscriminantName: "kind",
+		DiscriminantType: "HLAimaginary",
+		Alternatives: []model.VariantAlternative{
+			{Enumerator: "1", Name: "x", DataType: "HLAoctet"},
+		},
+	}
+	if _, err := CodecFor(dt); err == nil {
+		t.Errorf("CodecFor with unknown variant discriminator: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_Model_VariantRecord_UnsupportedDiscriminatorType
+// rejects a discriminator type that is technically a primitive but not
+// supported as a variant key (e.g. an HLAfloat32BE — the spec doesn't
+// define equality semantics for float keys).
+func TestSpec_CodecFor_Model_VariantRecord_UnsupportedDiscriminatorType(t *testing.T) {
+	t.Parallel()
+
+	dt := &model.VariantRecordData{
+		NameField:        "Bad",
+		DiscriminantName: "kind",
+		DiscriminantType: "HLAfloat32BE",
+		Alternatives: []model.VariantAlternative{
+			{Enumerator: "1", Name: "x", DataType: "HLAoctet"},
+		},
+	}
+	if _, err := CodecFor(dt); err == nil {
+		t.Errorf("CodecFor with float discriminator: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_Model_VariantRecord_UnknownAltType rejects a
+// VariantRecordData whose alternative names a non-primitive type.
+func TestSpec_CodecFor_Model_VariantRecord_UnknownAltType(t *testing.T) {
+	t.Parallel()
+
+	dt := &model.VariantRecordData{
+		NameField:        "Bad",
+		DiscriminantName: "kind",
+		DiscriminantType: "HLAinteger32BE",
+		Alternatives: []model.VariantAlternative{
+			{Enumerator: "1", Name: "x", DataType: "HLAimaginary"},
+		},
+	}
+	if _, err := CodecFor(dt); err == nil {
+		t.Errorf("CodecFor with unknown variant alt type: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_Model_VariantRecord_DiscriminatorTypes covers the
+// dispatcher's handling of each supported discriminator-type-to-Go-type
+// mapping (int16, int32, int64, octet, boolean) by encoding a sample
+// value through each.
+func TestSpec_CodecFor_Model_VariantRecord_DiscriminatorTypes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		discType string
+		alts     []model.VariantAlternative
+	}{
+		{"HLAinteger16BE", []model.VariantAlternative{{Enumerator: "1", Name: "a", DataType: "HLAoctet"}}},
+		{"HLAinteger16LE", []model.VariantAlternative{{Enumerator: "1", Name: "a", DataType: "HLAoctet"}}},
+		{"HLAinteger32LE", []model.VariantAlternative{{Enumerator: "1", Name: "a", DataType: "HLAoctet"}}},
+		{"HLAinteger64BE", []model.VariantAlternative{{Enumerator: "1", Name: "a", DataType: "HLAoctet"}}},
+		{"HLAinteger64LE", []model.VariantAlternative{{Enumerator: "1", Name: "a", DataType: "HLAoctet"}}},
+		{"HLAoctet", []model.VariantAlternative{{Enumerator: "1", Name: "a", DataType: "HLAoctet"}}},
+		{"HLAboolean", []model.VariantAlternative{{Enumerator: "true", Name: "a", DataType: "HLAoctet"}}},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.discType, func(t *testing.T) {
+			t.Parallel()
+			dt := &model.VariantRecordData{
+				NameField:        "T",
+				DiscriminantName: "kind",
+				DiscriminantType: tc.discType,
+				Alternatives:     tc.alts,
+			}
+			c, err := CodecFor(dt)
+			if err != nil {
+				t.Fatalf("CodecFor(%s): %v", tc.discType, err)
+			}
+			if c == nil {
+				t.Fatalf("CodecFor returned nil codec for %s", tc.discType)
+			}
+		})
+	}
+}
+
+// TestSpec_CodecFor_Model_VariantRecord_BadEnumerator_TypeSpecific
+// covers the toInt64Loose error path for each integer discriminator type
+// when fed a non-numeric string enumerator.
+func TestSpec_CodecFor_Model_VariantRecord_BadEnumerator_TypeSpecific(t *testing.T) {
+	t.Parallel()
+
+	for _, discType := range []string{
+		"HLAinteger16BE", "HLAinteger32BE", "HLAinteger64BE", "HLAoctet", "HLAboolean",
+	} {
+		discType := discType
+		t.Run(discType, func(t *testing.T) {
+			t.Parallel()
+			dt := &model.VariantRecordData{
+				NameField:        "Bad",
+				DiscriminantName: "kind",
+				DiscriminantType: discType,
+				Alternatives: []model.VariantAlternative{
+					{Enumerator: "not-a-value", Name: "x", DataType: "HLAoctet"},
+				},
+			}
+			if _, err := CodecFor(dt); err == nil {
+				t.Errorf("CodecFor %s with non-numeric enumerator: want error, got nil", discType)
+			}
+		})
+	}
+}
+
+// TestSpec_CodecFor_Model_VariantRecord_OctetOutOfRange rejects an
+// HLAoctet enumerator that doesn't fit in [0,255].
+func TestSpec_CodecFor_Model_VariantRecord_OctetOutOfRange(t *testing.T) {
+	t.Parallel()
+
+	dt := &model.VariantRecordData{
+		NameField:        "Bad",
+		DiscriminantName: "kind",
+		DiscriminantType: "HLAoctet",
+		Alternatives: []model.VariantAlternative{
+			{Enumerator: "999", Name: "x", DataType: "HLAoctet"},
+		},
+	}
+	if _, err := CodecFor(dt); err == nil {
+		t.Errorf("CodecFor with out-of-range octet enumerator: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_JSON_FixedRecord_BadFieldShape rejects malformed
+// field entries (non-object, missing name, missing type).
+func TestSpec_CodecFor_JSON_FixedRecord_BadFieldShape(t *testing.T) {
+	t.Parallel()
+
+	cases := []map[string]any{
+		{"kind": "HLAfixedRecord", "fields": []any{"not-a-map"}},
+		{"kind": "HLAfixedRecord", "fields": []any{
+			map[string]any{"type": "HLAoctet"}, // missing name
+		}},
+		{"kind": "HLAfixedRecord", "fields": []any{
+			map[string]any{"name": "x"}, // missing type
+		}},
+		{"kind": "HLAfixedRecord", "fields": []any{
+			map[string]any{"name": "x", "type": 42}, // type wrong shape
+		}},
+	}
+	for i, desc := range cases {
+		if _, err := CodecFor(desc); err == nil {
+			t.Errorf("case %d: want error, got nil", i)
+		}
+	}
+}
+
+// TestSpec_CodecFor_JSON_VariantRecord_BadDescriptors rejects malformed
+// variant-record descriptors.
+func TestSpec_CodecFor_JSON_VariantRecord_BadDescriptors(t *testing.T) {
+	t.Parallel()
+
+	cases := []map[string]any{
+		{"kind": "HLAvariantRecord"},                                   // missing discriminator
+		{"kind": "HLAvariantRecord", "discriminator": 1},               // discriminator not a string
+		{"kind": "HLAvariantRecord", "discriminator": "HLAimaginary"},  // unknown discriminator primitive
+		{
+			"kind":          "HLAvariantRecord",
+			"discriminator": "HLAinteger32BE",
+			"alternatives":  []any{"not-a-map"},
+		},
+		{
+			"kind":          "HLAvariantRecord",
+			"discriminator": "HLAinteger32BE",
+			"alternatives": []any{
+				map[string]any{"discriminant": "not-a-number", "type": "HLAoctet"},
+			},
+		},
+		{
+			"kind":          "HLAvariantRecord",
+			"discriminator": "HLAinteger32BE",
+			"alternatives": []any{
+				map[string]any{"discriminant": float64(1), "type": "HLAimaginary"},
+			},
+		},
+	}
+	for i, desc := range cases {
+		if _, err := CodecFor(desc); err == nil {
+			t.Errorf("case %d (%v): want error, got nil", i, desc)
+		}
+	}
+}
+
+// TestSpec_CodecFor_JSON_VariableArray_MissingElement rejects a
+// variable-array descriptor without an "element" key.
+func TestSpec_CodecFor_JSON_VariableArray_MissingElement(t *testing.T) {
+	t.Parallel()
+
+	desc := map[string]any{"kind": "HLAvariableArray"}
+	if _, err := CodecFor(desc); err == nil {
+		t.Errorf("CodecFor JSON variable array missing element: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_JSON_KindNotString rejects descriptors whose "kind"
+// is not a string.
+func TestSpec_CodecFor_JSON_KindNotString(t *testing.T) {
+	t.Parallel()
+
+	desc := map[string]any{"kind": 42}
+	if _, err := CodecFor(desc); err == nil {
+		t.Errorf("CodecFor with non-string kind: want error, got nil")
+	}
+}
+
+// TestSpec_CodecFor_JSON_FixedArray_CardinalityVariants exercises the
+// jsonCardinality helper across its supported and rejected input shapes.
+func TestSpec_CodecFor_JSON_FixedArray_CardinalityVariants(t *testing.T) {
+	t.Parallel()
+
+	good := []any{float64(2), int(2), int64(2)}
+	for _, c := range good {
+		desc := map[string]any{
+			"kind": "HLAfixedArray", "element": "HLAoctet", "cardinality": c,
+		}
+		if _, err := CodecFor(desc); err != nil {
+			t.Errorf("CodecFor cardinality %v (%T): unexpected error %v", c, c, err)
+		}
+	}
+	bad := []any{
+		float64(-1), float64(2.5), int(-1), int64(-1), "two",
+	}
+	for _, c := range bad {
+		desc := map[string]any{
+			"kind": "HLAfixedArray", "element": "HLAoctet", "cardinality": c,
+		}
+		if _, err := CodecFor(desc); err == nil {
+			t.Errorf("CodecFor cardinality %v (%T): want error, got nil", c, c)
+		}
 	}
 }
 

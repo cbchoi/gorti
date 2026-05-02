@@ -22,11 +22,19 @@ type Codec interface {
 }
 
 // CodecFor returns the Codec for the given FOM data type descriptor.
-// The dt parameter is opaque at this contract layer; concrete dataType types
-// live in rti/pkg/fom/model (Agent B).
+// The dt parameter is opaque at this contract layer; concrete dataType
+// types live in rti/pkg/fom/model. CodecFor accepts any of:
+//
+//   - a model.DataType (the production path Agent A's RTI uses);
+//   - a map[string]any with a "kind" key (the JSON-fixture path the
+//     conformance vectors use);
+//   - a string naming a primitive (convenience for callers that have
+//     already extracted the name).
+//
+// Switch logic lives in dispatch.go so this file remains the public
+// API surface and primitive registry.
 func CodecFor(dt any) (Codec, error) {
-	_ = dt
-	return nil, ErrNotImplemented
+	return dispatch(dt)
 }
 
 // primitiveCodecs maps HLA Evolved primitive names to their Codec instances.
