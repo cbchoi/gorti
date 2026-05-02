@@ -7,12 +7,13 @@ import (
 )
 
 // TestPrimitive_StringCodecs_RoundTrip is the table-driven specification for
-// the two HLA Evolved string primitives introduced by TASK-013:
+// the two HLA Evolved string primitives introduced by TASK-013.
 //
-//   - HLAASCIIstring   4-byte BE length prefix (count of code units)
-//                      + N single-byte ASCII characters; OctetBoundary == 4.
-//   - HLAunicodeString 4-byte BE length prefix (count of UTF-16 code units)
-//                      + N two-byte UTF-16BE code units; OctetBoundary == 4.
+// HLAASCIIstring is a 4-byte BE length prefix (count of code units, where
+// each code unit is one byte) followed by the ASCII payload; OctetBoundary
+// is 4. HLAunicodeString uses the same 4-byte BE prefix (count of UTF-16
+// code units) followed by N two-byte UTF-16BE code units; OctetBoundary
+// is also 4.
 //
 // Surrogate pairs (non-BMP code points) are intentionally out of scope per
 // the TASK-013 brief; the encoder is required to reject them.
