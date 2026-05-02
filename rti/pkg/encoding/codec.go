@@ -6,7 +6,10 @@
 // contract-change-request.
 package encoding
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrNotImplemented is returned by stub functions until Agent B implements them.
 var ErrNotImplemented = errors.New("encoding: not implemented (Agent B M1 deliverable)")
@@ -31,6 +34,21 @@ func CodecFor(dt any) (Codec, error) {
 // "HLAoctet", "HLAASCIIchar", "HLAunicodeChar"). Returns an error for unknown
 // or composite types. Convenience for tests and bridges that work in name form.
 func PrimitiveByName(name string) (Codec, error) {
-	_ = name
-	return nil, ErrNotImplemented
+	switch name {
+	// --- BEGIN TASK-012 byte-level primitives (Agent B) -----------------
+	case "HLAoctet":
+		return HLAoctet{}, nil
+	case "HLAoctetPairBE":
+		return HLAoctetPairBE{}, nil
+	case "HLAoctetPairLE":
+		return HLAoctetPairLE{}, nil
+	case "HLAboolean":
+		return HLAboolean{}, nil
+	case "HLAASCIIchar":
+		return HLAASCIIchar{}, nil
+	case "HLAunicodeChar":
+		return HLAunicodeChar{}, nil
+	// --- END TASK-012 byte-level primitives -----------------------------
+	}
+	return nil, fmt.Errorf("encoding: unknown primitive type %q", name)
 }

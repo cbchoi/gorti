@@ -231,3 +231,116 @@ func TestPrimitive_ByteCodecs_UnknownName(t *testing.T) {
 		t.Errorf("PrimitiveByName(\"HLAnotAType\") returned nil error")
 	}
 }
+
+// TestPrimitive_HLAoctet_NumericTypeWidth covers all integer-width inputs
+// HLAoctet is documented to accept and pins their range checks.
+func TestPrimitive_HLAoctet_NumericTypeWidth(t *testing.T) {
+	t.Parallel()
+	codec := HLAoctet{}
+
+	// Each accepted type must encode 0xAB to a single byte.
+	for _, v := range []any{int32(0xAB), int64(0xAB), uint(0xAB), float64(0xAB)} {
+		got, err := codec.Encode(v)
+		if err != nil {
+			t.Errorf("Encode(%T %v): %v", v, v, err)
+			continue
+		}
+		if !bytes.Equal(got, []byte{0xAB}) {
+			t.Errorf("Encode(%T %v) = %x, want ab", v, v, got)
+		}
+	}
+	// Range errors per width.
+	for _, v := range []any{int32(-1), int32(256), int64(-1), int64(256), uint(256), float64(-1), float64(256), float64(0.5)} {
+		if _, err := codec.Encode(v); err == nil {
+			t.Errorf("Encode(%T %v) returned nil error, want range error", v, v)
+		}
+	}
+	// Unsupported type.
+	if _, err := codec.Encode(struct{}{}); err == nil {
+		t.Errorf("Encode(struct{}) returned nil error, want type error")
+	}
+}
+
+// TestPrimitive_HLAoctetPair_AcceptsByteSlice exercises the []byte form
+// of octetPairBytes and its length-mismatch error path.
+func TestPrimitive_HLAoctetPair_AcceptsByteSlice(t *testing.T) {
+	t.Parallel()
+	be := HLAoctetPairBE{}
+	le := HLAoctetPairLE{}
+
+	got, err := be.Encode([]byte{0xAB, 0xCD})
+	if err != nil || !bytes.Equal(got, []byte{0xAB, 0xCD}) {
+		t.Errorf("BE Encode([]byte{ab,cd}) = %x, %v", got, err)
+	}
+	got, err = le.Encode([]byte{0xAB, 0xCD})
+	if err != nil || !bytes.Equal(got, []byte{0xCD, 0xAB}) {
+		t.Errorf("LE Encode([]byte{ab,cd}) = %x, %v", got, err)
+	}
+
+	// Wrong length and unsupported type.
+	if _, err := be.Encode([]byte{0xAB}); err == nil {
+		t.Errorf("BE Encode([]byte len 1) returned nil error")
+	}
+	if _, err := le.Encode([]byte{0xAB, 0xCD, 0xEF}); err == nil {
+		t.Errorf("LE Encode([]byte len 3) returned nil error")
+	}
+	if _, err := be.Encode("ab"); err == nil {
+		t.Errorf("BE Encode(string) returned nil error")
+	}
+}
+
+// TestPrimitive_HLAASCIIchar_DecodeRejectsHighBit ensures decoder enforces
+// the 0..127 range on the input byte.
+func TestPrimitive_HLAASCIIchar_DecodeRejectsHighBit(t *testing.T) {
+	t.Parallel()
+	codec := HLAASCIIchar{}
+	if _, _, err := codec.Decode([]byte{0x80}); err == nil {
+		t.Errorf("Decode(0x80) returned nil error, want range error")
+	}
+	// Empty string Encode rejected.
+	if _, err := codec.Encode(""); err == nil {
+		t.Errorf("Encode(\"\") returned nil error, want length error")
+	}
+	// Non-ASCII byte and high rune rejected.
+	if _, err := codec.Encode(byte(0x80)); err == nil {
+		t.Errorf("Encode(byte 0x80) returned nil error")
+	}
+	if _, err := codec.Encode(rune(-1)); err == nil {
+		t.Errorf("Encode(rune -1) returned nil error")
+	}
+	// Non-ASCII string rejected.
+	if _, err := codec.Encode(string([]byte{0x80})); err == nil {
+		t.Errorf("Encode(\"\\x80\") returned nil error")
+	}
+	// Unsupported type.
+	if _, err := codec.Encode(1.5); err == nil {
+		t.Errorf("Encode(float64) returned nil error")
+	}
+}
+
+// TestPrimitive_HLAunicodeChar_DecodeRejectsSurrogate ensures decoder
+// rejects unpaired UTF-16 surrogate code units.
+func TestPrimitive_HLAunicodeChar_DecodeRejectsSurrogate(t *testing.T) {
+	t.Parallel()
+	codec := HLAunicodeChar{}
+	// 0xD800 is the start of the high-surrogate range.
+	if _, _, err := codec.Decode([]byte{0xD8, 0x00}); err == nil {
+		t.Errorf("Decode(0xD800) returned nil error, want surrogate error")
+	}
+	// Encode side: surrogate rune rejected.
+	if _, err := codec.Encode(rune(0xD800)); err == nil {
+		t.Errorf("Encode(rune 0xD800) returned nil error")
+	}
+	// Empty string rejected.
+	if _, err := codec.Encode(""); err == nil {
+		t.Errorf("Encode(\"\") returned nil error")
+	}
+	// Negative rune rejected.
+	if _, err := codec.Encode(rune(-1)); err == nil {
+		t.Errorf("Encode(rune -1) returned nil error")
+	}
+	// Unsupported type.
+	if _, err := codec.Encode(1.5); err == nil {
+		t.Errorf("Encode(float64) returned nil error")
+	}
+}
