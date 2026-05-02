@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Interim Standard MIM (Management and Initialization Model) for the gorti project.
+
+  PROVENANCE NOTICE — READ BEFORE USING DOWNSTREAM:
+
+  This file is an INTERIM, hand-derived approximation of the standard MIM defined
+  by IEEE Std 1516.2-2010 Annex B. It is NOT a verbatim copy of any IEEE-published
+  artifact; it captures only the structural minimum the parser, the FOM-101
+  redefine-MIM-type detector, and the M1 milestone gate require to function.
+
+  Canonical sourcing — replacing this interim file with a verifiable IEEE/SISO-
+  hosted artifact (or a license-compatible Portico CDDL excerpt) — is tracked in:
+
+      https://github.com/cbchoi/gorti/issues/1
+
+  Until that issue is resolved, do NOT rely on this file for cross-RTI
+  interoperability or for spec-compliance claims. The named types and classes
+  here are sufficient for in-tree development; they are deliberately incomplete.
+
+  Owner: orchestrator (vendored exception per docs/ORTHOGONALITY.md §2 — note the
+  rti/pkg/fom/mim/*.xml entries marked Orchestrator-vendored). Agent B reads
+  these via //go:embed; Agent B does not modify these XML files directly.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>HLAstandardMIM</name>
+    <type>MIM</type>
+    <version>2010-interim</version>
+    <modificationDate>2026-05-02</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Interim Management and Initialization Model. See provenance notice in source.</description>
+    <useHistory>Internal to gorti project; not for cross-RTI use.</useHistory>
+  </modelIdentification>
+
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <sharing>Neither</sharing>
+      <semantics>Universal root of all object class hierarchies per 1516.1-2010.</semantics>
+      <objectClass>
+        <name>HLAmanager</name>
+        <sharing>Neither</sharing>
+        <semantics>Container for federation-management object classes.</semantics>
+        <objectClass>
+          <name>HLAfederate</name>
+          <sharing>PublishSubscribe</sharing>
+          <semantics>Federate metadata published by the RTI.</semantics>
+          <attribute>
+            <name>HLAfederateHandle</name>
+            <dataType>HLAhandle</dataType>
+            <updateType>Static</updateType>
+            <updateCondition>NA</updateCondition>
+            <ownership>NoTransfer</ownership>
+            <sharing>Publish</sharing>
+            <transportation>HLAreliable</transportation>
+            <order>Receive</order>
+            <semantics>The handle assigned by the RTI at join.</semantics>
+          </attribute>
+          <attribute>
+            <name>HLAfederateName</name>
+            <dataType>HLAunicodeString</dataType>
+            <updateType>Static</updateType>
+            <updateCondition>NA</updateCondition>
+            <ownership>NoTransfer</ownership>
+            <sharing>Publish</sharing>
+            <transportation>HLAreliable</transportation>
+            <order>Receive</order>
+            <semantics>The federate name supplied at join.</semantics>
+          </attribute>
+        </objectClass>
+      </objectClass>
+    </objectClass>
+  </objects>
+
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>Neither</sharing>
+      <transportation>HLAreliable</transportation>
+      <order>Receive</order>
+      <semantics>Universal root of all interaction class hierarchies per 1516.1-2010.</semantics>
+    </interactionClass>
+  </interactions>
+
+  <dataTypes>
+    <basicDataRepresentations>
+      <basicData>
+        <name>HLAinteger16BE</name>
+        <size>16</size>
+        <interpretation>Two's-complement signed integer, big-endian.</interpretation>
+        <endian>Big</endian>
+        <encoding>16-bit signed integer.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAinteger16LE</name>
+        <size>16</size>
+        <interpretation>Two's-complement signed integer, little-endian.</interpretation>
+        <endian>Little</endian>
+        <encoding>16-bit signed integer.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAinteger32BE</name>
+        <size>32</size>
+        <interpretation>Two's-complement signed integer, big-endian.</interpretation>
+        <endian>Big</endian>
+        <encoding>32-bit signed integer.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAinteger32LE</name>
+        <size>32</size>
+        <interpretation>Two's-complement signed integer, little-endian.</interpretation>
+        <endian>Little</endian>
+        <encoding>32-bit signed integer.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAinteger64BE</name>
+        <size>64</size>
+        <interpretation>Two's-complement signed integer, big-endian.</interpretation>
+        <endian>Big</endian>
+        <encoding>64-bit signed integer.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAinteger64LE</name>
+        <size>64</size>
+        <interpretation>Two's-complement signed integer, little-endian.</interpretation>
+        <endian>Little</endian>
+        <encoding>64-bit signed integer.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAfloat32BE</name>
+        <size>32</size>
+        <interpretation>IEEE 754 single-precision float, big-endian.</interpretation>
+        <endian>Big</endian>
+        <encoding>IEEE 754 single.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAfloat32LE</name>
+        <size>32</size>
+        <interpretation>IEEE 754 single-precision float, little-endian.</interpretation>
+        <endian>Little</endian>
+        <encoding>IEEE 754 single.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAfloat64BE</name>
+        <size>64</size>
+        <interpretation>IEEE 754 double-precision float, big-endian.</interpretation>
+        <endian>Big</endian>
+        <encoding>IEEE 754 double.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAfloat64LE</name>
+        <size>64</size>
+        <interpretation>IEEE 754 double-precision float, little-endian.</interpretation>
+        <endian>Little</endian>
+        <encoding>IEEE 754 double.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAoctet</name>
+        <size>8</size>
+        <interpretation>Single uninterpreted octet.</interpretation>
+        <endian>Big</endian>
+        <encoding>Raw byte.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAoctetPairBE</name>
+        <size>16</size>
+        <interpretation>Two octets in big-endian order.</interpretation>
+        <endian>Big</endian>
+        <encoding>Raw two bytes.</encoding>
+      </basicData>
+      <basicData>
+        <name>HLAoctetPairLE</name>
+        <size>16</size>
+        <interpretation>Two octets in little-endian order.</interpretation>
+        <endian>Little</endian>
+        <encoding>Raw two bytes.</encoding>
+      </basicData>
+    </basicDataRepresentations>
+    <simpleDataTypes>
+      <simpleData>
+        <name>HLAboolean</name>
+        <representation>HLAinteger32BE</representation>
+        <units>NA</units>
+        <resolution>NA</resolution>
+        <accuracy>NA</accuracy>
+        <semantics>Boolean encoded as 32-bit big-endian integer (0 or 1).</semantics>
+      </simpleData>
+      <simpleData>
+        <name>HLAASCIIchar</name>
+        <representation>HLAoctet</representation>
+        <units>NA</units>
+        <resolution>NA</resolution>
+        <accuracy>NA</accuracy>
+        <semantics>Single ASCII character.</semantics>
+      </simpleData>
+      <simpleData>
+        <name>HLAunicodeChar</name>
+        <representation>HLAoctetPairBE</representation>
+        <units>NA</units>
+        <resolution>NA</resolution>
+        <accuracy>NA</accuracy>
+        <semantics>UTF-16BE code unit.</semantics>
+      </simpleData>
+      <simpleData>
+        <name>HLAhandle</name>
+        <representation>HLAinteger64BE</representation>
+        <units>NA</units>
+        <resolution>NA</resolution>
+        <accuracy>NA</accuracy>
+        <semantics>Opaque RTI-assigned handle.</semantics>
+      </simpleData>
+    </simpleDataTypes>
+    <enumeratedDataTypes/>
+    <arrayDataTypes>
+      <arrayData>
+        <name>HLAASCIIstring</name>
+        <dataType>HLAASCIIchar</dataType>
+        <cardinality>Dynamic</cardinality>
+        <encoding>HLAvariableArray</encoding>
+        <semantics>Length-prefixed array of HLAASCIIchar.</semantics>
+      </arrayData>
+      <arrayData>
+        <name>HLAunicodeString</name>
+        <dataType>HLAunicodeChar</dataType>
+        <cardinality>Dynamic</cardinality>
+        <encoding>HLAvariableArray</encoding>
+        <semantics>Length-prefixed array of HLAunicodeChar (UTF-16BE).</semantics>
+      </arrayData>
+      <arrayData>
+        <name>HLAopaqueData</name>
+        <dataType>HLAoctet</dataType>
+        <cardinality>Dynamic</cardinality>
+        <encoding>HLAvariableArray</encoding>
+        <semantics>Length-prefixed array of opaque octets.</semantics>
+      </arrayData>
+    </arrayDataTypes>
+    <fixedRecordDataTypes/>
+    <variantRecordDataTypes/>
+  </dataTypes>
+</objectModel>

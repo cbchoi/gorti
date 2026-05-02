@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Status | BLOCKED |
+| Status | DISPATCHED |
 | Assignee | agent-b |
 | Milestone | M1 |
 | Created | 2026-04-29 |
 | Updated | 2026-05-02 |
-| Depends-on | TASK-002, TASK-008 (transitively blocked by issue #1) |
+| Depends-on | TASK-002, TASK-008 |
 | Blocks | none |
 
 ## Goal
@@ -43,6 +43,6 @@ Implement `Merge(base FOM, user FOM) (FOM, error)` for cut 1: load MIM, then loa
 
 - "Redefines" means: any name (object class, interaction class, dataType) the MIM declares that the user also declares.
 
-## Blocked (2026-05-02)
+## Interim resolution (2026-05-02 later)
 
-Transitively blocked by [issue #1](https://github.com/cbchoi/gorti/issues/1) via TASK-008. The FOM-101 collision check compares user-declared names against MIM names; running it on placeholder MIM content gives false positives/negatives. Wait for TASK-008's MIM sourcing to land on `main`.
+Unblocked alongside TASK-008. Issue #1 has an interim resolution (orchestrator-vendored MIM XML at `rti/pkg/fom/mim/`); the FOM-101 collision check now has a stable name set to compare against. Canonical sourcing remains tracked in issue #1 for post-M1 work.

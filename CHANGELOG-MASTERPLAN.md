@@ -6,6 +6,38 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-02 (Wave 1 + Wave 2 + Wave 3 dispatch) — M1 driven from 0 to 9/10 BadFOM + full primitive + composite codecs; issue #1 interim resolution
+
+Spawned three waves of orchestrator-driven sub-agents (worktree-isolated `general-purpose` agents role-playing Agent B) to drive M1 toward DONE.
+
+**Wave 1 (4 parallel sub-agents)**: TASK-001 (parser+model skeleton), TASK-010 (integer codecs), TASK-011 (float codecs), TASK-012 (octet/boolean/char codecs). All four merged on `main` at `f2d8ae0`. Outcomes:
+- Parser+model package green; spec test `TestSpec_M1_ParseMinimalGoodFOM_NoDiagnostics` passes; coverage parser=69.6% / model=73.7%.
+- 16 primitive codecs (6 integer + 4 float + 6 byte/bool/char families) byte-identical to golden vectors; coverage on each ≥90%.
+- 38 new vectors in `tests/conformance/encoding_vectors.json` (additive-only).
+- `PrimitiveByName` refactored from a giant switch to a `primitiveCodecs` map dispatch (gocyclo limit was being exceeded).
+- HLAoctetPair vectors NOT added — the orchestrator-frozen spec test's `valuesEqual` helper doesn't handle `[2]byte` vs `[]any{f64,f64}`. Sub-agent flagged for future orchestrator-side helper extension.
+
+**Wave 2 (3 parallel sub-agents)**: parser diagnostics bundle (TASK-003..007 + 086..089 — 9 codes in one branch via the new `diagnoser` registry pattern), strings + arrays + opaque (TASK-013/014/015/018), records (TASK-016/017 with `_disabled` flag dropped from `fixed-record-octet-float64` and the embedded literal-space typo in its `bytes` field corrected by orchestrator). All three merged at `08bf89a`. Outcomes:
+- Spec test `TestSpec_M1_BadFOMDiagnostics`: 9/10 subtests green (all except FOM-101 which depends on TASK-009).
+- All composite codecs implemented as constructor functions (`NewFixedArray`, `NewVariableArray`, `NewFixedRecord`, `NewVariantRecord`, `NewOpaqueData`).
+- 24 more vectors added (string + composite). Total now 88.
+- Coverage on `rti/pkg/encoding` package: 96.0%; on `rti/pkg/fom/parser`: 83.3%.
+- `diagnoser` registry pattern: each FOM-NNN detector lives in its own file, registers via `init()`, runs from `Parse` after the structural walk. Trades a tiny abstraction for ~9 future-merge-conflict-free additions.
+
+**Issue #1 — interim resolution (orchestrator)**: hand-derived faithful MIM committed at `rti/pkg/fom/mim/standard-mim.xml` and `hla-standard-mim.xml` with strong "INTERIM" provenance comments pointing at issue #1 for canonical sourcing post-M1. `docs/ORTHOGONALITY.md` §2 amended to mark these two specific XML files as orchestrator-vendored; Agent B reads them via `//go:embed` but does not edit. TASK-008 and TASK-009 unblocked (`Status: BLOCKED` → `Status: DISPATCHED`); their Notes record the interim resolution.
+
+**Wave 3 (planned, dispatching next)**: TASK-008+009 bundle (MIM embed + Merge + FOM-101 detection — closes the last red M1 spec subtest) and TASK-019 (CodecFor wiring + composite vector test goes from `t.Skip` to green). Two parallel sub-agents.
+
+After Wave 3 lands, the orchestrator's `scripts/check-milestones.sh` will report **M1: DONE (4/4)** assuming no regressions.
+
+**Process notes**:
+- Sub-agents pushed to `origin` directly to enable orchestrator review-and-merge from the main worktree. No agent had write access to `main`.
+- Three task-bundle commits ship with their bundle's TASK-NNN sentinels touched together (per the bundled-dispatch decision documented in each commit body); strict one-PR-per-task is relaxed for sub-agent dispatch efficiency, with documentation in the sentinel commit.
+- W2A introduced an architectural-pattern improvement (the `diagnoser` registry) that the orchestrator should formalize in `docs/sdd.md` as the standard pattern for "many-validator" components. Tracked as future-doc-update work; not a blocker.
+- Pre-existing `fixed-record-octet-float64` vector had a literal space in its `bytes` field. Orchestrator removed the space at merge time as a "fix-broken-placeholder" (the entry was `_disabled` until W2C enabled it; no test had ever exercised the broken bytes), with the rationale that this is not "modifying a working vector" forbidden by additive-only policy but rather "fixing a placeholder typo before activation."
+
+---
+
 ## 2026-05-02 — Backlog committed; lint unblocked; M1 spec extended; discipline drift recorded
 
 Material reconciliation between planned and actual state. No agent status reports yet (M1 still in flight); this revision is orchestrator-driven from observed working-tree drift.

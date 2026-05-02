@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| Status | BLOCKED |
+| Status | DISPATCHED |
 | Assignee | agent-b |
 | Milestone | M1 |
 | Created | 2026-04-29 |
 | Updated | 2026-05-02 |
-| Depends-on | TASK-001, **issue #1 (canonical MIM XML sourcing)** |
+| Depends-on | TASK-001 |
 | Blocks | TASK-009 |
 
 ## Goal
@@ -44,6 +44,12 @@ Embed the IEEE/SISO standard MIM and `HLAstandardMIM` XML files into the `rti/pk
 - The full MIM must be embedded — do not skip pieces because they're tedious (`docs/agent-b-fom-encoding.md` §7).
 - The embedded XML files are not in `tests/conformance/foms/`; they live in the package itself.
 
-## Blocked (2026-05-02)
+## Interim resolution (2026-05-02 later)
 
-Status moved to BLOCKED pending resolution of [issue #1](https://github.com/cbchoi/gorti/issues/1) (`contract-change-request: source real IEEE 1516.2-2010 Annex B / 1516.1-2010 §4.13 MIM XML`). The orchestrator must commit canonical MIM XML to `main` first; otherwise this task lands on placeholder content that violates `docs/srs.md` §1 standard-conformance and breaks cross-RTI portability. Agent B is idle on this task — see `docs/DISPATCH.md` §5 idle protocol.
+Issue #1 received an interim resolution: orchestrator committed `rti/pkg/fom/mim/standard-mim.xml` and `hla-standard-mim.xml` as a hand-derived faithful approximation, with a strong provenance comment marking them interim. Per the updated `docs/ORTHOGONALITY.md` §2, those two specific XML files are now orchestrator-vendored; Agent B reads them via `//go:embed` but does not edit them.
+
+This task is now DISPATCHED. Agent B's scope tightens accordingly:
+
+- **In scope**: write `rti/pkg/fom/mim/embed.go` with `//go:embed` directives loading the vendored XML; write `rti/pkg/fom/mim/embed_test.go` asserting both files parse cleanly through `parser.Parse`.
+- **Out of scope**: editing the XML files (orchestrator-vendored).
+- **Out of scope**: replacing the interim XML with canonical IEEE/SISO content — that remains the action on issue #1, scheduled post-M1.

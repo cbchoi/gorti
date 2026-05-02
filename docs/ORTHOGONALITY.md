@@ -80,7 +80,8 @@ Top-level paths and their owners. `**` is recursive (all descendants).
 | `rti/internal/transport/grpc/**` | **Agent A** | gRPC service handlers |
 | `rti/internal/genproto/**` | (Generated) | Output of `make proto`; gitignored. Edits forbidden; regenerate instead. |
 | `rti/pkg/fom/parser/**` | **Agent B** | FOM XML parser; signature stub from M0 (frozen-shape) |
-| `rti/pkg/fom/mim/**` | **Agent B** | Embedded MIM + merge logic |
+| `rti/pkg/fom/mim/standard-mim.xml`, `hla-standard-mim.xml` | Orchestrator (vendored) | Interim MIM XML; canonical sourcing tracked in issue #1. Agent B reads via `//go:embed`; never edits. |
+| `rti/pkg/fom/mim/**` (everything else: `embed.go`, `merge.go`, tests) | **Agent B** | Embedded MIM wiring + merge logic |
 | `rti/pkg/fom/model/**` | **Agent B** | Immutable FOM data structures |
 | `rti/pkg/fom/doc.go` | **Agent B** | Top-level package doc |
 | `rti/pkg/encoding/**` | **Agent B** | HLA Evolved encoding rules |
