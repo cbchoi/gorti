@@ -402,6 +402,134 @@ func TestJoinFederation_AppendsEventBeforeReturn(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// TASK-022: ResignFederation tests
+// ---------------------------------------------------------------------------
+
+// TestResignFederation_UnknownFederation_ReturnsNotFound: resigning against
+// a federation that was never created returns the documented sentinel.
+func TestResignFederation_UnknownFederation_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got := mgr.ResignFederation(context.Background(), "ghost", 1,
+		core.ResignActionUnconditionallyDivestAttributes)
+	if !errors.Is(got, core.ErrFederationNotFound) {
+		t.Errorf("Resign on ghost: %v, want ErrFederationNotFound", got)
+	}
+}
+
+// TestResignFederation_UnknownHandle_ReturnsNotJoined: an unknown handle in
+// a known federation returns ErrFederateNotJoined.
+func TestResignFederation_UnknownHandle_ReturnsNotJoined(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	got := mgr.ResignFederation(context.Background(), "x", 999,
+		core.ResignActionUnconditionallyDivestAttributes)
+	if !errors.Is(got, core.ErrFederateNotJoined) {
+		t.Errorf("Resign with unknown handle: %v, want ErrFederateNotJoined", got)
+	}
+}
+
+// TestResignFederation_DoubleResign_IsIdempotentlyRejected: calling resign
+// twice on the same federate returns ErrFederateNotJoined the second time.
+func TestResignFederation_DoubleResign_IsIdempotentlyRejected(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	})
+	if err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	if rerr := mgr.ResignFederation(context.Background(), "x", h,
+		core.ResignActionUnconditionallyDivestAttributes); rerr != nil {
+		t.Fatalf("first resign: %v", rerr)
+	}
+	rerr := mgr.ResignFederation(context.Background(), "x", h,
+		core.ResignActionUnconditionallyDivestAttributes)
+	if !errors.Is(rerr, core.ErrFederateNotJoined) {
+		t.Errorf("second resign: %v, want ErrFederateNotJoined", rerr)
+	}
+}
+
+// TestResignFederation_FreesNameForRejoin: after a resign, the name can be
+// joined again — the name<->handle slot is fully released.
+func TestResignFederation_FreesNameForRejoin(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	})
+	if err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	if rerr := mgr.ResignFederation(context.Background(), "x", h,
+		core.ResignActionUnconditionallyDivestAttributes); rerr != nil {
+		t.Fatalf("resign: %v", rerr)
+	}
+	if _, jerr := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	}); jerr != nil {
+		t.Errorf("re-join after resign: %v", jerr)
+	}
+}
+
+// TestResignFederation_AppendsEventBeforeReturn: the FederateResigned event
+// is written to the EventLog before Resign returns.
+func TestResignFederation_AppendsEventBeforeReturn(t *testing.T) {
+	t.Parallel()
+	rec := &recordingEventLog{}
+	opts := validOptions()
+	opts.EventLog = rec
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if cerr := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{
+		Name:       "x",
+		FOMModules: []core.FOMModule{{XML: []byte("<x/>")}},
+		Mode:       core.ModeVerbose,
+	}); cerr != nil {
+		t.Fatalf("Create: %v", cerr)
+	}
+	h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	})
+	if err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	before := len(rec.Calls())
+	if rerr := mgr.ResignFederation(context.Background(), "x", h,
+		core.ResignActionUnconditionallyDivestAttributes); rerr != nil {
+		t.Fatalf("Resign: %v", rerr)
+	}
+	after := len(rec.Calls())
+	if after-before != 1 {
+		t.Errorf("Resign appended %d events, want 1", after-before)
+	}
+}
+
+// TestResignFederation_UnsupportedAction_ReturnsError: cut 1 only supports
+// UnconditionallyDivestAttributes; other actions are rejected with a
+// non-nil error.
+func TestResignFederation_UnsupportedAction_ReturnsError(t *testing.T) {
+	t.Parallel()
+	mgr := mustNewWithFederation(t, "x")
+	h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+		Federation: "x", FederateName: "alice",
+	})
+	if err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	if rerr := mgr.ResignFederation(context.Background(), "x", h,
+		core.ResignActionUnspecified); rerr == nil {
+		t.Error("Resign with unspecified action: want error, got nil")
+	}
+}
+
 // mustNewWithFederation builds a Manager + creates the named federation,
 // failing the test on any error. Reduces boilerplate in Join/Resign tests.
 func mustNewWithFederation(t *testing.T, name core.FederationName) *federation.Manager {
