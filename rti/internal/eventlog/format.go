@@ -3,7 +3,6 @@ package eventlog
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
@@ -114,6 +113,3 @@ func DecodeHeader(buf []byte) (core.EventLogHeader, error) {
 	return hdr, nil
 }
 
-// errShortRead wraps io.ErrUnexpectedEOF for cases where we read fewer
-// bytes than expected from the underlying reader.
-var errShortRead = errors.New("eventlog: short read")
