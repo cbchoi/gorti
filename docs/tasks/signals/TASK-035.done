@@ -1,0 +1,33 @@
+# TASK-035 — gRPC DeclarationService handlers; sub-branch agent/a/m2-w3b-grpc-declaration
+
+Wave: M2 W3B.
+
+Owned files added on this branch:
+
+- `rti/internal/transport/grpc/declaration.go`     (new — declarationService + 8 handlers)
+- `rti/internal/transport/grpc/declaration_test.go` (new — handler-level tests)
+- `rti/internal/transport/grpc/errs.go`             (new — shared sentinel-to-status helper)
+- `docs/tasks/signals/TASK-035.done`                (this sentinel)
+
+Expected merge conflicts at orchestrator integration time:
+
+- `server.go` (W3A territory): W3A's seed defines a stub
+  `newDeclarationService(*declaration.Manager) *declarationService` with a
+  `TODO(W3B)` marker. **Orchestrator should keep THIS branch's
+  declaration.go (real impl)**; the stub in server.go is dropped (the
+  symbol resolves to declaration.go after merge). If W3A's stub is in
+  server.go itself, no conflict — both sides compile because
+  declarationService is defined exactly once in declaration.go.
+- `errs.go`: W3A and/or W3C may also define `errs.go`. Orchestrator
+  picks one canonical version — they should have the same shape (sentinel
+  -> status mapping per docs/idd.md §1.1.4). If they diverge, the union
+  of all sentinel cases is the safe choice.
+- `object.go` / `stream.go` (W3C territory): no overlap with this
+  branch's owned files.
+
+Acceptance evidence:
+
+- `go test -race ./rti/internal/transport/grpc/...` GREEN.
+- `go test ./rti/...` GREEN (no regression in M2 spec tests).
+- Coverage: declaration.go functions 83%+; package total 82.1% (>= 80%).
+- `golangci-lint run ./rti/internal/transport/grpc/...` exit 0.
