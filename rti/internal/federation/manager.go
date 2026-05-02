@@ -169,10 +169,21 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 //
 // Rejects with core.ErrFederationHasFederatesJoined if any federate is
 // currently joined. Rejects unknown name with core.ErrFederationNotFound.
-func (m *Manager) DestroyFederation(ctx context.Context, name core.FederationName) error {
-	_ = ctx
-	_ = name
-	return ErrNotImplemented
+func (m *Manager) DestroyFederation(_ context.Context, name core.FederationName) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fs, ok := m.federations[name]
+	if !ok {
+		return core.ErrFederationNotFound
+	}
+	fs.mu.RLock()
+	joinedCount := len(fs.handleToName)
+	fs.mu.RUnlock()
+	if joinedCount > 0 {
+		return core.ErrFederationHasFederatesJoined
+	}
+	delete(m.federations, name)
+	return nil
 }
 
 // JoinFederation implements core.FederationStore. See SRS §FR-FM-2.
@@ -336,9 +347,33 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 
 // List implements core.FederationStore. Returns federations in
 // name-sorted order (deterministic).
-func (m *Manager) List(ctx context.Context) ([]core.FederationSummary, error) {
-	_ = ctx
-	return nil, ErrNotImplemented
+func (m *Manager) List(_ context.Context) ([]core.FederationSummary, error) {
+	m.mu.RLock()
+	names := make([]string, 0, len(m.federations))
+	for n := range m.federations {
+		names = append(names, string(n))
+	}
+	m.mu.RUnlock()
+	sort.Strings(names)
+
+	out := make([]core.FederationSummary, 0, len(names))
+	for _, n := range names {
+		m.mu.RLock()
+		fs, ok := m.federations[core.FederationName(n)]
+		m.mu.RUnlock()
+		if !ok {
+			// Concurrent destroy raced with List: skip silently.
+			continue
+		}
+		fs.mu.RLock()
+		out = append(out, core.FederationSummary{
+			Name:            fs.name,
+			Mode:            fs.mode,
+			FederatesJoined: uint32(len(fs.handleToName)),
+		})
+		fs.mu.RUnlock()
+	}
+	return out, nil
 }
 
 // Compile-time assertion that Manager implements core.FederationStore.
