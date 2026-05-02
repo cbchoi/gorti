@@ -252,3 +252,97 @@ func TestReader_NilSrc(t *testing.T) {
 		t.Errorf("NewReader(nil) returned nil error")
 	}
 }
+
+// closableReader is a bytes.Reader wrapper exposing Close().
+type closableReader struct {
+	*bytes.Reader
+	closeCount int
+	closeErr   error
+}
+
+func (c *closableReader) Close() error {
+	c.closeCount++
+	return c.closeErr
+}
+
+// TestReader_Close_DelegatesToCloser: when src implements io.Closer,
+// Reader.Close calls src.Close().
+func TestReader_Close_DelegatesToCloser(t *testing.T) {
+	var buf bytes.Buffer
+	w := newWriterForTest(t, "demo", &buf)
+	_ = w.Close()
+
+	src := &closableReader{Reader: bytes.NewReader(buf.Bytes())}
+	r, err := NewReader(src)
+	if err != nil {
+		t.Fatalf("NewReader: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Errorf("Close: %v", err)
+	}
+	if src.closeCount != 1 {
+		t.Errorf("src.Close() called %d times, want 1", src.closeCount)
+	}
+}
+
+// TestReader_ProtoEvent: the eventRecord type returned by Next exposes
+// the underlying *rtiv1.Event via ProtoEvent() so the replayer can
+// access body fields.
+func TestReader_ProtoEvent(t *testing.T) {
+	var buf bytes.Buffer
+	w := newWriterForTest(t, "pe", &buf)
+	_ = w.Append(context.Background(), "pe", &unexportedSeqRecord{})
+	_ = w.Close()
+
+	r, err := NewReader(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("NewReader: %v", err)
+	}
+	defer r.Close()
+
+	rec, err := r.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	er, ok := rec.(*eventRecord)
+	if !ok {
+		t.Fatalf("Next returned %T, want *eventRecord", rec)
+	}
+	if er.ProtoEvent() == nil {
+		t.Errorf("ProtoEvent() = nil")
+	}
+	if er.ProtoEvent().GetSeq() != 1 {
+		t.Errorf("ProtoEvent().Seq = %d, want 1", er.ProtoEvent().GetSeq())
+	}
+}
+
+// TestReader_RejectsCorruptBody: a length prefix that promises N bytes
+// of body but the actual bytes don't decode as a valid Event are
+// surfaced as core.ErrWireMalformedMessage.
+func TestReader_RejectsCorruptBody(t *testing.T) {
+	var buf bytes.Buffer
+	headerBuf := make([]byte, HeaderSize)
+	if err := EncodeHeader(headerBuf, core.EventLogHeader{
+		Magic: Magic, Version: Version, Federation: "x", Mode: core.ModeVerbose,
+	}); err != nil {
+		t.Fatalf("EncodeHeader: %v", err)
+	}
+	buf.Write(headerBuf)
+	// Length prefix says 4 bytes, body is 4 bytes that aren't a valid
+	// Event encoding (an invalid varint tag).
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], 4)
+	buf.Write(lenBuf[:])
+	buf.Write([]byte{0xFF, 0xFF, 0xFF, 0xFF})
+
+	r, err := NewReader(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("NewReader: %v", err)
+	}
+	defer r.Close()
+
+	_, err = r.Next(context.Background())
+	if !errors.Is(err, core.ErrWireMalformedMessage) {
+		t.Errorf("Next on corrupt body: err = %v, want core.ErrWireMalformedMessage", err)
+	}
+}
