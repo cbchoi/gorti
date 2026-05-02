@@ -149,11 +149,12 @@ func TestSpec_FixedRecord_Int32ThenFloat64_FourBytePadding(t *testing.T) {
 //
 // Outer boundary = max(1, inner.boundary) = max(1, 8) = 8.
 // Layout:
-//   offset 0: a (1 byte, 0x07)
-//   offset 1..7: padding to inner's boundary (8) — 7 bytes
-//   offset 8: inner.x (1 byte, 0x09)
-//   offset 9..15: padding inside inner from inner-start, to align inner.y on 8 — 7 bytes
-//   offset 16..23: inner.y as float64 (1.0 = 0x3FF0000000000000)
+//
+//	offset 0: a (1 byte, 0x07)
+//	offset 1..7: padding to inner's boundary (8) — 7 bytes
+//	offset 8: inner.x (1 byte, 0x09)
+//	offset 9..15: padding inside inner from inner-start, to align inner.y on 8 — 7 bytes
+//	offset 16..23: inner.y as float64 (1.0 = 0x3FF0000000000000)
 func TestSpec_FixedRecord_NestedRecord_NestedPaddingResetsAtRecordStart(t *testing.T) {
 	t.Parallel()
 
