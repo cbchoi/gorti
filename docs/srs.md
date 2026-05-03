@@ -8,11 +8,13 @@ License: MIT.
 
 ## 1. Purpose & Scope
 
-This SRS defines the requirements for the **Minimum Viable Product (MVP)** of an open-source IEEE 1516-2010 (HLA Evolved) Run-Time Infrastructure (RTI) implemented in Go, with a Python federate SDK that is interoperable with the [pyjevsim](https://github.com/) DEVS framework.
+This SRS defines the requirements for an open-source IEEE 1516-2010 (HLA Evolved) Run-Time Infrastructure (RTI) implemented in Go, with a Python federate SDK that is interoperable with the [pyjevsim](https://github.com/) DEVS framework.
 
-The MVP is the "walking skeleton" — the smallest end-to-end system that demonstrates a real HLA federation: federation lifecycle, publish/subscribe, object/interaction exchange, time-managed advancement, deterministic replay, and one Python federate built on a DEVS coupled model.
+**Cut 1 — Minimum Viable Product (MVP)** [DONE per tag `mvp`, M0..M5]: the "walking skeleton" — the smallest end-to-end system that demonstrates a real HLA federation. Federation lifecycle, publish/subscribe, object/interaction exchange, time-managed advancement (NER only), deterministic replay, one Python federate built on a DEVS coupled model.
 
-Out of scope for MVP (deferred): Ownership Management, Data Distribution Management (DDM), Save/Restore, full Management Object Model (MOM), optimistic time advance, DDS data plane, mTLS authentication, distributed RTI topology, interoperability with commercial RTIs (Pitch / MAK / Portico federates).
+**Cut 2 — Production-grade RTI** [in flight, M6..M11]: completes the IEEE 1516-2010 service surface so gorti is a real alternative to commercial RTIs (Pitch, MAK, Portico) for non-DDS workloads. Adds: TAR/TARA/FQR time advance primitives, federation save/restore, full Data Distribution Management (DDM) with regions and routing spaces, Ownership Management proper, synchronization points, runtime Management Object Model (MOM), TLS hardening, cross-language handle parity hardening.
+
+Out of scope (forever, or far future): DDS/RTPS data plane (gRPC remains the wire), mTLS + OIDC + federation-level access control, distributed RTI / hot standby / multi-process RTI, interoperability with commercial RTIs at the wire level (other vendors implement different non-standard wire formats), federate SDKs in C++/Java/C#/Rust (Python only through cut 2), FOM editor / GUI tooling.
 
 ## 2. References
 
@@ -101,7 +103,7 @@ Single RTI process, supports multiple federations concurrently, federates discov
 ### 5.4 Time Management (FR-TM-*)
 
 - **FR-TM-1** — `enableTimeRegulation(lookahead)` / `enableTimeConstrained()` / disable variants.
-- **FR-TM-2** — `nextMessageRequest(time)` (NER) implemented in cut 1; `timeAdvanceRequest` (TAR) added in cut 2.
+- **FR-TM-2** — `nextMessageRequest(time)` (NER) in cut 1. Cut 2 adds: `timeAdvanceRequest(time)` (TAR), `timeAdvanceRequestAvailable(time)` (TARA), `flushQueueRequest(time)` (FQR), `nextMessageRequestAvailable(time)` (NMRA). All four primitives MUST share LBTS computation + grant-emission machinery from cut 1.
 - **FR-TM-3** — RTI shall compute LBTS via deterministic all-reduce across regulating federates; tie-break on (federate handle → object handle → attribute handle).
 - **FR-TM-4** — Lookahead enforcement shall not depend on wall-clock.
 - **FR-TM-5** — `timeAdvanceGrant(time)` callback fires when LBTS allows; deterministic ordering across federates.
@@ -131,6 +133,45 @@ Single RTI process, supports multiple federations concurrently, federates discov
 - **FR-PYJ-2** — pyjevsim message ports map to FOM **interaction classes** by default; attributes reserved for state observable between messages.
 - **FR-PYJ-3** — `ta()` from the coupled model maps to `nextMessageRequest`; on grant, the bridge runs the model's internal cycle, drains output ports, sends interactions, then re-requests.
 - **FR-PYJ-4** — Simultaneous-event tie-break preserves pyjevsim's `select()` ordering exactly at the HLA boundary.
+
+### 5.9 Synchronization Management (FR-SYN-*) — cut 2
+
+- **FR-SYN-1** — `registerFederationSynchronizationPoint(label, tag, [federates])` per IEEE 1516.1-2010 §4.6. Optional federate set (nil = all joined federates).
+- **FR-SYN-2** — `synchronizationPointAchieved(label)` per §4.7; RTI tracks per-(label, federate) achievement state.
+- **FR-SYN-3** — `announceSynchronizationPoint` callback fires when registration succeeds; `federationSynchronized` callback fires when all required federates have achieved.
+- **FR-SYN-4** — Sync-point state recorded in the event log so replay reproduces the announce/achieve order byte-identically (NFR-DET-1, NFR-DET-2).
+
+### 5.10 Ownership Management (FR-OWN-*) — cut 2
+
+- **FR-OWN-1** — `unconditionalAttributeOwnershipDivestiture(obj, attrs)` per §7.2 (cut 1 already has this via resign).
+- **FR-OWN-2** — `negotiatedAttributeOwnershipDivestiture(obj, attrs, tag)` + `attributeOwnershipAcquisition(obj, attrs, tag)` per §7.3-7.4. Two-phase protocol with RTI as broker.
+- **FR-OWN-3** — `cancelNegotiatedAttributeOwnershipDivestiture` / `cancelAttributeOwnershipAcquisition` per §7.5-7.6.
+- **FR-OWN-4** — `attributeOwnershipDivestitureIfWanted(obj, attrs)` per §7.7.
+- **FR-OWN-5** — `queryAttributeOwnership(obj, attr)` + `isAttributeOwnedByFederate(obj, attr)` query services per §7.8-7.9.
+- **FR-OWN-6** — Ownership transitions recorded in the event log; deterministic replay of multi-phase protocols (NFR-DET-1).
+
+### 5.11 Management Object Model — Runtime (FR-MOM-*) — cut 2
+
+- **FR-MOM-1** — Standard MIM defines `HLAmanager.HLAfederate` and `HLAmanager.HLAfederation` object classes; cut 2 wires these as runtime-registered MOM objects whose attributes the RTI populates and updates per §10 of 1516.1-2010.
+- **FR-MOM-2** — Federates may subscribe to MOM attributes via the standard pub/sub APIs (no special calls); RTI emits attribute updates on lifecycle events (federate join/resign, attribute publish/subscribe, sync-point register/achieve).
+- **FR-MOM-3** — Cut 2 implements the read-only MOM. MOM-driven control services (`HLAsetSwitches`, `HLArequestFederationSave`, etc. invoked AS interactions) deferred to cut 3.
+
+### 5.12 Federation Save/Restore (FR-SR-*) — cut 2
+
+- **FR-SR-1** — `requestFederationSave(label[, time])` per §4.8. Save coordinator broadcasts `initiateFederateSave` to all joined federates at a synchronized point.
+- **FR-SR-2** — `federateSaveComplete()` / `federateSaveNotComplete()` per §4.9. RTI aggregates federate responses and emits `federationSaved` / `federationNotSaved`.
+- **FR-SR-3** — `requestFederationRestore(label)` + `initiateFederateRestore` + `federateRestoreComplete` per §4.10-4.12. RTI replays the saved event log to bring federation state back.
+- **FR-SR-4** — Save artifact format: a sealed bundle (tar.gz) of (a) FOM modules, (b) federation manifest (federates, declarations, registered objects, attribute ownerships, sync-point state), (c) the event log up to the save point. Format is documented in `docs/sdd.md` §X.
+- **FR-SR-5** — Restore is byte-deterministic with the original run (NFR-DET-2 extends to the save/restore cycle).
+
+### 5.13 Data Distribution Management (FR-DDM-*) — cut 2
+
+- **FR-DDM-1** — Routing space declarations parsed from FOM XML (1516.2-2010 Annex A `<dimensions>` + `<dimension>` elements) and made queryable via `getDimensionHandle`/`getDimensionName`.
+- **FR-DDM-2** — `createRegion(routingSpace, dimensions[])` returns a `RegionHandle`; per §6.5. Per-region range bounds settable via `commitRegionModifications(regions[])`.
+- **FR-DDM-3** — `subscribeObjectClassAttributesWithRegions(class, attrs, regions)` + `subscribeInteractionClassWithRegions(class, regions)` per §6.6. Subscriptions are scoped to the subscribed regions.
+- **FR-DDM-4** — `registerObjectInstanceWithRegions(class, attrToRegion[])` + `updateAttributeValuesWithRegions(...)` per §6.7. Attribute updates fan out only to subscribers whose regions overlap the publisher's.
+- **FR-DDM-5** — Region overlap detection: deterministic interval-tree check across all dimensions of the routing space; tie-break on `RegionHandle` ascending.
+- **FR-DDM-6** — Performance: DDM filtering MUST NOT make non-DDM workloads slower (zero-cost when no regions are in play). DDM workload baseline at federation size 25 with 100 regions in `docs/reports/M10/agent-a.md`.
 
 ---
 
@@ -206,19 +247,16 @@ Single RTI process, supports multiple federations concurrently, federates discov
 
 ## 9. Out of Scope (Explicit)
 
-These are intentionally excluded from MVP and shall not be implemented in cuts 1–2:
+These are intentionally excluded from cuts 1–2 (post-cut-2 backlog or forever-out):
 
-- Ownership Management (full set of divest/acquire services).
-- Data Distribution Management (regions, routing spaces).
-- Save/Restore (federation save, federate save, restore protocol).
-- Full Management Object Model (only read-only federate list in MVP).
-- Optimistic time advance (`flushQueueRequest`, `timeAdvanceRequestAvailable`).
-- DDS/RTPS data plane.
-- mTLS, OIDC, federation-level access control.
+- DDS/RTPS data plane (gRPC remains the wire through cut 2).
+- mTLS, OIDC, federation-level access control (TLS server-side only via `--tls-cert/--tls-key` per NFR-SEC-1).
 - Distributed RTI / hot standby / multi-process RTI.
-- Interoperability with commercial RTIs (Pitch, MAK) or other HLA stacks.
-- Federate SDKs in C++, Java, C#, Rust (Python only in MVP).
+- Interoperability with other HLA stacks at the wire level (Pitch, MAK, Portico use proprietary wire formats; only FOM XML interop is in scope).
+- Federate SDKs in C++, Java, C#, Rust (Python only through cut 2).
 - FOM editor / GUI tooling.
+- MOM-driven control services (cut 3 — see FR-MOM-3).
+- Optimistic time advance variants beyond TARA (cut 3).
 
 ---
 
@@ -234,7 +272,7 @@ These are intentionally excluded from MVP and shall not be implemented in cuts 1
 
 **Methodology**: all production code is developed test-first per `docs/TDD.md`. For each milestone M1..M5, the orchestrator pre-writes specification tests under `tests/spec/M<x>/` that encode the milestone's exit criteria (§10.2). Agents may not weaken these tests; their passing is necessary for milestone advancement.
 
-### 10.2 Milestones (cut 1 = walking skeleton)
+### 10.2 Milestones — Cut 1 (walking skeleton; DONE per tag `mvp`)
 
 | ID | Owner | Deliverable | Exit Criteria |
 |---|---|---|---|
@@ -247,6 +285,24 @@ These are intentionally excluded from MVP and shall not be implemented in cuts 1
 
 Verification activities at each gate are detailed in the per-agent briefs (`agent-a-rti-core.md`, `agent-b-fom-encoding.md`, `agent-c-pysdk.md`).
 
-### 10.3 Cut 2 (post-MVP, same architecture, additive)
+### 10.3 Milestones — Cut 2 (production-grade RTI)
 
-- TAR (in addition to NER), sync points, explicit object delete lifecycle, multi-module FOM merge, save/restore, basic MOM, DDS data plane adapter (replaces gRPC streams for attribute updates), C++/Java federate SDKs.
+| ID | Owner | Deliverable | Exit Criteria |
+|---|---|---|---|
+| **M6** | Orchestrator + all | Hardening + cross-language handle alignment + TLS + real-pyjevsim adapter + Python `grpcs://` + replay path + production in-process driver | Last skipped spec test flips to PASS; race-clean concurrency; TLS handshake works server-side + client-side; bidirectional Python+Go cross-language smoke functional |
+| **M7** | Agent A | TAR + TARA + FQR + NMRA (complete time-advance primitives) | All four primitives invokable; share LBTS computation with NER; spec tests cover scenario matrix (single-regulator-grants, peer-blocked, FQR-cancels-pending); deterministic across 20 randomized scenarios |
+| **M8** | Agent A | Synchronization Management + Ownership Management proper | `registerFederationSynchronizationPoint` + `synchronizationPointAchieved` + `announceSynchronizationPoint`/`federationSynchronized` callbacks. Negotiated divest/acquire two-phase protocol. All transitions in event log; replay byte-identical |
+| **M11** | Agent A | MOM runtime (HLAfederate/HLAfederation reflection) | Federates can subscribe to `HLAmanager.HLAfederate` attributes via standard pub/sub; RTI emits attribute updates on lifecycle events |
+| **M10** | Agent A + B | DDM (regions + routing spaces) | Routing space declarations parsed from FOM; region creation + commit; `subscribeWithRegions` + `updateAttributeValuesWithRegions` filtering; performance baseline at size 25 with 100 regions; zero-cost when no regions are in play |
+| **M9** | Agent A | Federation save/restore | `requestFederationSave` + `initiateFederateSave` aggregation + `federationSaved`. Restore replays the saved event log to byte-identical state. Save artifact format documented in `docs/sdd.md` |
+
+Cut 2 dispatch order rationale: M7 first (smallest, completes the time-management surface that's most user-visible). M8 next (foundational for federations that coordinate startup or hand off attributes). M11 third (small, gives observability — quick win). M10 fourth (biggest single absence for "real RTI" claim; do before save/restore because users feel its absence directly). M9 last (most expensive; touches every existing service group).
+
+### 10.4 Cut 3 (deferred backlog, post-cut-2)
+
+- MOM-driven control services (`HLAsetSwitches`, `HLArequestFederationSave` invoked AS interactions).
+- Optimistic time advance variants beyond TARA.
+- mTLS + OIDC client auth.
+- Distributed RTI / hot standby.
+- C++ / Java / C# federate SDKs.
+- DDS/RTPS data plane adapter.

@@ -355,11 +355,103 @@ check_m5() {
   else set_status M5 NOT_STARTED; printf "${DIM}M5: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M6 (cut 2: hardening) ----------
+check_m6() {
+  section "M6 — Hardening + handle alignment + TLS + replay path (Owner: orchestrator + all)"
+  echo "Exit: cross-language Python+Go bidi smoke; race-clean concurrency; TLS handshake server+client; M4 replay path"
+  local pass=0 total=4
+
+  [ -f docs/reports/M6/agent-c-handle-alignment.md ] && { present "handle alignment report"; pass=$((pass+1)); } \
+                                                      || pending "handle alignment pending"
+  [ -f docs/reports/M6/agent-a-hardening.md ] && { present "concurrency + TLS report"; pass=$((pass+1)); } \
+                                               || pending "concurrency + TLS pending"
+  [ -f docs/reports/M6/agent-a-rememberfor.md ] && { present "RememberFor wiring"; pass=$((pass+1)); } \
+                                                  || pending "RememberFor wiring pending"
+  if [ -f pysdk/tests/spec/m4/test_spec_m4_replay.py ] && ! grep -q "pytest.skip" pysdk/tests/spec/m4/test_spec_m4_replay.py 2>/dev/null; then
+    present "M4 replay path no longer skipped"; pass=$((pass+1))
+  else
+    pending "M4 replay path still skipped"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M6 DONE; printf "${GRN}M6: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M6 IN_PROGRESS; printf "${YLW}M6: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M6 NOT_STARTED; printf "${DIM}M6: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
+# ---------- M7 (cut 2: complete time-advance primitives) ----------
+check_m7() {
+  section "M7 — TAR + TARA + FQR + NMRA (Owner: agent-a)"
+  echo "Exit: all four primitives invokable; share LBTS with NER; deterministic across 20 randomized scenarios"
+  local pass=0 total=2
+  [ -d rti/spec/M7 ] && { present "rti/spec/M7/ committed"; pass=$((pass+1)); } \
+                      || pending "rti/spec/M7/ pending orchestrator pre-work"
+  [ -f rti/internal/time/tar.go ] && { present "TAR/TARA/FQR/NMRA implemented"; pass=$((pass+1)); } \
+                                   || pending "time-advance primitives pending"
+
+  if [ "$pass" -eq "$total" ]; then set_status M7 DONE; printf "${GRN}M7: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M7 IN_PROGRESS; printf "${YLW}M7: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M7 NOT_STARTED; printf "${DIM}M7: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
+# ---------- M8 (cut 2: sync + ownership) ----------
+check_m8() {
+  section "M8 — Synchronization Management + Ownership Management (Owner: agent-a)"
+  echo "Exit: sync-point register/announce/achieve/synchronized; negotiated divest/acquire two-phase; replay byte-identical"
+  local pass=0 total=3
+  [ -d rti/spec/M8 ] && { present "rti/spec/M8/ committed"; pass=$((pass+1)); } || pending "rti/spec/M8/ pending"
+  [ -d rti/internal/sync ] && { present "sync package exists"; pass=$((pass+1)); } || pending "sync package pending"
+  [ -d rti/internal/ownership ] && { present "ownership package exists"; pass=$((pass+1)); } || pending "ownership package pending"
+
+  if [ "$pass" -eq "$total" ]; then set_status M8 DONE; printf "${GRN}M8: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M8 IN_PROGRESS; printf "${YLW}M8: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M8 NOT_STARTED; printf "${DIM}M8: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
+# ---------- M9 (cut 2: federation save/restore) ----------
+check_m9() {
+  section "M9 — Federation save/restore (Owner: agent-a)"
+  echo "Exit: requestFederationSave + initiateFederateSave + federationSaved + restore replay byte-identical"
+  local pass=0 total=2
+  [ -d rti/spec/M9 ] && { present "rti/spec/M9/ committed"; pass=$((pass+1)); } || pending "rti/spec/M9/ pending"
+  [ -d rti/internal/savepoint ] && { present "savepoint package exists"; pass=$((pass+1)); } || pending "savepoint package pending"
+
+  if [ "$pass" -eq "$total" ]; then set_status M9 DONE; printf "${GRN}M9: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M9 IN_PROGRESS; printf "${YLW}M9: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M9 NOT_STARTED; printf "${DIM}M9: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
+# ---------- M10 (cut 2: DDM) ----------
+check_m10() {
+  section "M10 — Data Distribution Management (Owner: agent-a + agent-b)"
+  echo "Exit: routing spaces parsed; createRegion + commitRegionModifications; subscribeWithRegions filtering; perf baseline at size 25 / 100 regions"
+  local pass=0 total=3
+  [ -d rti/spec/M10 ] && { present "rti/spec/M10/ committed"; pass=$((pass+1)); } || pending "rti/spec/M10/ pending"
+  [ -d rti/internal/ddm ] && { present "ddm package exists"; pass=$((pass+1)); } || pending "ddm package pending"
+  [ -f docs/reports/M10/agent-a.md ] && { present "DDM perf baseline"; pass=$((pass+1)); } || pending "DDM perf baseline pending"
+
+  if [ "$pass" -eq "$total" ]; then set_status M10 DONE; printf "${GRN}M10: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M10 IN_PROGRESS; printf "${YLW}M10: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M10 NOT_STARTED; printf "${DIM}M10: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
+# ---------- M11 (cut 2: MOM runtime) ----------
+check_m11() {
+  section "M11 — MOM runtime (Owner: agent-a)"
+  echo "Exit: federates can subscribe to HLAmanager.HLAfederate attributes via standard pub/sub; lifecycle events drive updates"
+  local pass=0 total=2
+  [ -d rti/spec/M11 ] && { present "rti/spec/M11/ committed"; pass=$((pass+1)); } || pending "rti/spec/M11/ pending"
+  [ -d rti/internal/mom ] && { present "mom package exists"; pass=$((pass+1)); } || pending "mom package pending"
+
+  if [ "$pass" -eq "$total" ]; then set_status M11 DONE; printf "${GRN}M11: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M11 IN_PROGRESS; printf "${YLW}M11: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M11 NOT_STARTED; printf "${DIM}M11: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -387,6 +479,12 @@ check_m2
 check_m3
 check_m4
 check_m5
+check_m6
+check_m7
+check_m8
+check_m9
+check_m10
+check_m11
 print_summary
 
 exit "$REGRESSED"
