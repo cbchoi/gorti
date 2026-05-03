@@ -1,0 +1,11 @@
+# Agent C's iterable copy of the canonical `py-codegen` target in the
+# repo-root Makefile. Use this when iterating on codegen wiring without
+# touching the orchestrator-frozen root Makefile.
+#
+# Usage (from pysdk/):
+#     make -f Makefile.codegen codegen
+
+.PHONY: codegen
+
+codegen:
+	cd .. && python3 -m pysdk.rti1516e._proto
