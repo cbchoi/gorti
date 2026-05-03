@@ -1,0 +1,48 @@
+- agent: agent-c (sub-agent W7)
+- branch: agent/c/m4-w7-examples-gate
+- task: TASK-074 — M4 determinism harness (10× same seed, sha256-identical)
+- summary: |
+    Two harness flavours — both target the same run_once() entry point
+    in examples/pyjevsim/runner.py:
+
+    1. examples/pyjevsim/determinism_test.py — standalone pytest file:
+       - test_determinism_10x_same_seed: 10 runs of run_once(ticks=10,
+         seed=42), sha256 of repr((received, published, send_interactions))
+         must match across all 10.
+       - test_determinism_witness_is_payload_sensitive: sanity check that
+         the witness function distinguishes ticks=2 vs ticks=5 (guards
+         against future refactors that collapse the witness).
+
+    2. pysdk/tests/test_pyjevsim_determinism.py — agent-owned mirror that
+       runs as part of the pysdk test suite + a parametrised test for
+       (1, 3, 7) tick counts confirming consumer.received length matches
+       producer.published.
+
+    Spec scaffold pysdk/tests/spec/m4/test_spec_m4_determinism.py
+    UNSKIPPED — implements the same 10x+sha256 contract (orchestrator-
+    authorized per M4_DISPATCH_PLAN.md §10).
+
+    Determinism witness rationale: instead of a real on-disk event log
+    (M2/M3 pattern with rtid binary), the FakeRtiServer captures every
+    call in memory. The witness sha256 covers:
+      - consumer.received — payload bytes per arrival
+      - producer.published — sequence of stamped IDs
+      - send_interaction call count — drops/duplicates detection
+    All three are byte-identical across 10 runs because (a) producer's
+    counter is monotonic, (b) FakeRtiServer auto-grants at exact request
+    time, (c) tick-aligned fan-out removes any asyncio scheduling race.
+
+    Replay scaffold (test_spec_m4_replay.py) kept SKIPPED with a clear
+    M5 deferral message: byte-identical replay requires the real rtid
+    binary in -mode=replay-from-log, same path M2/M3 used for
+    go-pingpong / go-timed. The Python in-process FakeRtiServer doesn't
+    persist to disk. M4 exit per srs.md §10.2 is fully satisfied by the
+    determinism harness above.
+
+- acceptance:
+    - 10 runs sha256-identical: YES
+    - witness function is payload-sensitive: YES
+    - mypy --strict clean: YES
+    - ruff check clean: YES
+    - 5 new tests in pysdk/tests/test_pyjevsim_determinism.py + 2 in
+      examples/pyjevsim/determinism_test.py + 1 unskipped spec test.

@@ -1,0 +1,51 @@
+- agent: agent-c (sub-agent W7)
+- branch: agent/c/m4-w7-examples-gate
+- task: TASK-075 — M4 lint/coverage gate (M4 milestone gate)
+- summary: |
+    Created pysdk/tests/test_lint_strict.py — pytest CI gate that shells
+    out to mypy --strict and ruff check across pysdk/. Both tests are
+    marked @pytest.mark.slow so `pytest -m 'not slow'` skips them for
+    fast local iteration; `pytest pysdk/tests/` runs them as part of the
+    full suite.
+
+    No additional coverage-fill unit tests were needed — the existing
+    test inventory already drives coverage well above the 80% threshold:
+
+      Package                 Coverage
+      pyjevsim_bridge          93%
+        __init__.py           100%
+        _protocol.py          100%
+        port_mapping.py       100%
+        select_preserve.py    100%
+        time_advance.py        90%
+      rti1516e                 92%
+        encoding/              ≥89% per module (most 100%)
+        connection.py          92%
+        events.py             100%
+        errors.py              98%
+        fom/parser.py          91%
+        standard.py            93%
+        TOTAL                  93%
+
+    The 0% lines (rti1516e/_proto.py, declaration.py, interaction.py,
+    object.py) are stub modules that re-export proto-generated names
+    when those land — they have no logic to test today.
+
+    M4 GATE STATUS: scripts/check-milestones.sh shows M4: DONE (5/5).
+      ✓ pysdk/tests/spec/m4/ committed
+      ✓ pysdk package bootstrapped
+      ✓ examples/pyjevsim/ exists
+      ✓ Python encoding conformance: 100% of vectors
+      ✓ mypy --strict pysdk/ clean
+
+- acceptance:
+    - mypy --strict pysdk/: clean (68 source files, no errors)
+    - ruff check pysdk/: clean (all checks passed)
+    - pytest pysdk/ coverage on owned packages: 93% (≥80%)
+    - SDK importable from fresh venv: YES (only deps are grpcio +
+      protobuf, both wired in pyproject.toml [project.dependencies])
+    - check-milestones.sh M4: DONE (5/5)
+    - Total pysdk test suite: 467 passed, 1 skipped (replay scaffold;
+      deferred to M5 per docs in test_spec_m4_replay.py)
+    - Total spec/m4: 131 passed, 1 skipped (was 130 passed, 2 skipped
+      pre-W7; net delta = determinism scaffold unskipped + 1 new pass)
