@@ -1,0 +1,30 @@
+- agent: agent-c
+- branch: agent/c/m4-w6-bridge-core
+- task: TASK-071
+- summary: |
+    Implemented order_simultaneous_events in
+    pysdk/pyjevsim_bridge/select_preserve.py.
+
+    Cut-1 design: sort by port name lexicographically. sorted() is
+    stable, so events on the same port retain insertion order. The
+    coupled_model parameter is reserved for the W7 adapter (TASK-073)
+    that will surface real pyjevsim select() priority — keeping it in
+    the signature now avoids an API break later.
+
+    Rationale for not consulting the coupled model in cut-1: the
+    orchestrator-frozen CoupledModelProtocol shim does not expose
+    select() because real pyjevsim 1.3.x exposes it on a per-coupled-
+    model basis that's intentionally outside W6's contract (see
+    pyjevsim_bridge/_protocol.py and docs/agent-c-pysdk.md §4.4).
+    Alphabetical port-name ordering satisfies FR-PYJ-4's "no Python
+    list ordering, no dict iteration nondeterminism" requirement
+    deterministically.
+
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_select_preserve.py -q: 1/1 GREEN
+    - pytest pysdk/tests/ -q: 459 passed, 2 skipped. No regressions.
+    - mypy --strict pysdk: clean.
+    - ruff check pysdk: clean.
+    - 5 agent-owned tests in pysdk/tests/test_select_preserve.py
+      covering alphabetical ordering, stability for ties, empty input,
+      no-drops/no-duplicates, and that a fresh list is returned.

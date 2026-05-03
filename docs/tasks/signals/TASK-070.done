@@ -1,0 +1,48 @@
+- agent: agent-c
+- branch: agent/c/m4-w6-bridge-core
+- task: TASK-070
+- summary: |
+    Implemented HLAFederate.run/step_once/deliver_external in
+    pysdk/pyjevsim_bridge/time_advance.py per docs/agent-c-pysdk.md §4.4.
+
+    Design notes:
+      - step_once() drains a pending-external queue first; if non-empty,
+        it dispatches each (FOM class -> in-port) via external_transition
+        and skips the internal cycle (per §4.4 "external arrived
+        earlier than ta").
+      - Otherwise: read ta, NER for now+ta, drain fed.events() until
+        TimeAdvanceGrant. ReceiveInteractions arriving in flight buffer
+        into the same queue. Grant arriving with externals in queue
+        (or grant.time < t_request) skips the internal phase.
+      - Internal cycle: output_handler() -> for each port mapped to a
+        FOM class, send_interaction(class_name, parameters={"_payload": p})
+        -> internal_transition. Payload pass-through is cut-1; full
+        FOM-driven encoding is W7's territory.
+      - _now is updated to grant.time at the end of every cycle.
+      - run(ticks=N) opens connection (or uses caller-supplied), joins,
+        runs N step_once calls, resigns on exit (deterministic via
+        try/finally + nested async with).
+      - step_once also lazy-initialises the federate so spec tests can
+        call it without going through run(). aclose() releases the
+        lazy resources; idempotent.
+      - deliver_external() is the test/integration seam; production
+        traffic from fed.events() converges on the same drain path.
+
+    Auxiliary change to pysdk/tests/spec/m4/_fakes/fake_rti_server.py:
+    extended record() to auto-synthesise a TimeAdvanceGrant(time) into
+    events_for(federate_handle) on next_message_request — the fake has
+    no scheduler. Existing tests remain back-compat (the explicit grant
+    push and auto-grant carry the same time; iterators read first event
+    only).
+
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_time_advance.py -q: 3/3 GREEN
+    - pytest pysdk/tests/spec/m4/ -q: 130 passed, 2 skipped (scaffolded
+      determinism + replay placeholders; W7 territory). Zero failures.
+    - pytest pysdk/tests/ -q: 459 passed, 2 skipped. No regressions.
+    - mypy --strict pysdk: clean (66 source files).
+    - ruff check pysdk: clean.
+    - 10 agent-owned tests in pysdk/tests/test_time_advance.py covering
+      external queueing order, unmapped class/port skip, _now advance,
+      federate reuse, in-flight buffering, run() lifecycle, aclose
+      idempotency, and the external-then-internal sequence.
