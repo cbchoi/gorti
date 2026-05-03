@@ -301,7 +301,13 @@ class Federate:
         timestamp: float | None = None,
     ) -> None:
         """Send an interaction with the given parameters."""
-        raise NotImplementedError("TASK-066")
+        self._transport.record(
+            "send_interaction",
+            federate_handle=self.handle,
+            class_name=class_name,
+            parameters=dict(parameters),
+            timestamp=timestamp,
+        )
 
     # --- Time management (TASK-067) ---
 
