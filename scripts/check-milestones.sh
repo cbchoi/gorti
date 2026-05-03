@@ -367,10 +367,13 @@ check_m6() {
                                                || pending "concurrency + TLS pending"
   [ -f docs/reports/M6/agent-a-rememberfor.md ] && { present "RememberFor wiring"; pass=$((pass+1)); } \
                                                   || pending "RememberFor wiring pending"
-  if [ -f pysdk/tests/spec/m4/test_spec_m4_replay.py ] && ! grep -q "pytest.skip" pysdk/tests/spec/m4/test_spec_m4_replay.py 2>/dev/null; then
-    present "M4 replay path no longer skipped"; pass=$((pass+1))
+  # Check for "scaffolded" in the skip message (our scaffold pattern); env-
+  # conditional skips (e.g. "go toolchain not on PATH") don't count as a
+  # scaffold-skip and are acceptable.
+  if [ -f pysdk/tests/spec/m4/test_spec_m4_replay.py ] && ! grep -q "scaffolded" pysdk/tests/spec/m4/test_spec_m4_replay.py 2>/dev/null; then
+    present "M4 replay path no longer scaffold-skipped"; pass=$((pass+1))
   else
-    pending "M4 replay path still skipped"
+    pending "M4 replay path still scaffold-skipped"
   fi
 
   if [ "$pass" -eq "$total" ]; then set_status M6 DONE; printf "${GRN}M6: DONE${OFF} (%d/%d)\n" "$pass" "$total"
