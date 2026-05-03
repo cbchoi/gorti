@@ -50,4 +50,11 @@ var (
 	ErrOwnershipDivestPending     = errors.New("attribute already has a pending negotiated divest")
 	ErrOwnershipAcquirePending    = errors.New("attribute already has a pending acquire")
 	ErrOwnershipNotInTransfer     = errors.New("ownership transfer is not in progress for this attribute")
+
+	// DDM (M10 — FR-DDM-*)
+	ErrRoutingSpaceNotFound       = errors.New("routing space not declared in FOM")
+	ErrDimensionNotFound          = errors.New("dimension not part of routing space")
+	ErrRegionNotFound             = errors.New("region not found in federation")
+	ErrRegionNotOwnedByFederate   = errors.New("region is not owned by this federate")
+	ErrRegionInUse                = errors.New("region is in use by an active subscription or instance")
 )
