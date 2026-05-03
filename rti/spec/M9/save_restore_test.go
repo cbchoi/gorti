@@ -53,31 +53,88 @@ func TestSpec_M9_RequestSave_TransitionsToInitiated(t *testing.T) {
 // federates call FederateSaveComplete, the manager transitions to
 // StateSaved and emits federationSaved.
 //
-// SCAFFOLD — depends on a federation-membership accessor being wired
-// (similar to M8 sync's Members callback). Agent A wires both in M9 W1.
+// Wired in M9 W1 via the Options.Members membership callback that the
+// savepoint.Manager honors (mirrors sync.Manager's Members shape).
 //
 // Implements: FR-SR-2.
 func TestSpec_M9_AllFederatesComplete_EmitsFederationSaved(t *testing.T) {
-	mgr, _ := newTestSaveManager(t)
-	if mgr == nil {
-		t.Skip("savepoint.Manager not yet wired")
+	outbox := newFakeOutbox()
+	store := newInMemStorage()
+	members := func(_ core.FederationName) []core.FederateHandle {
+		return []core.FederateHandle{1, 2, 3}
 	}
-	t.Skip("Agent A wires the membership-aware aggregation in M9 W1")
+	mgr, err := savepkg.New(savepkg.Options{
+		Outbox:      outbox,
+		EventLog:    newPermissiveEventLog(),
+		BundleStore: store,
+		Members:     members,
+	})
+	if err != nil {
+		t.Fatalf("savepoint.New: %v", err)
+	}
+	ctx := context.Background()
+	if err := mgr.RequestFederationSave(ctx, "fed", "save-1", nil); err != nil {
+		t.Fatalf("RequestFederationSave: %v", err)
+	}
+	for _, h := range []core.FederateHandle{1, 2, 3} {
+		if err := mgr.FederateSaveComplete(ctx, "fed", h); err != nil {
+			t.Fatalf("FederateSaveComplete(%d): %v", h, err)
+		}
+	}
+	if got := mgr.QuerySaveState("fed", "save-1"); got != savepkg.StateSaved {
+		t.Errorf("QuerySaveState = %v, want StateSaved", got)
+	}
+	if !store.Exists("fed", "save-1") {
+		t.Errorf("expected save bundle to be written for save-1")
+	}
+	// initiateFederateSave x3 + federationSaved x3 = 6 envelopes.
+	if got := len(outbox.Sent()); got < 6 {
+		t.Errorf("outbox emitted %d envelopes, want >= 6 (3 initiate + 3 saved)", got)
+	}
 }
 
 // TestSpec_M9_AnyFederateFails_EmitsFederationNotSaved: if any joined
 // federate calls FederateSaveNotComplete, the save closes out as
 // federationNotSaved (FR-SR-2). The save bundle is NOT written.
 //
-// SCAFFOLD.
+// Wired in M9 W1 via the Options.Members membership callback.
 //
 // Implements: FR-SR-2.
 func TestSpec_M9_AnyFederateFails_EmitsFederationNotSaved(t *testing.T) {
-	mgr, _ := newTestSaveManager(t)
-	if mgr == nil {
-		t.Skip("savepoint.Manager not yet wired")
+	outbox := newFakeOutbox()
+	store := newInMemStorage()
+	members := func(_ core.FederationName) []core.FederateHandle {
+		return []core.FederateHandle{1, 2, 3}
 	}
-	t.Skip("Agent A wires the failure-aggregation path in M9 W1")
+	mgr, err := savepkg.New(savepkg.Options{
+		Outbox:      outbox,
+		EventLog:    newPermissiveEventLog(),
+		BundleStore: store,
+		Members:     members,
+	})
+	if err != nil {
+		t.Fatalf("savepoint.New: %v", err)
+	}
+	ctx := context.Background()
+	if err := mgr.RequestFederationSave(ctx, "fed", "save-1", nil); err != nil {
+		t.Fatalf("RequestFederationSave: %v", err)
+	}
+	if err := mgr.FederateSaveComplete(ctx, "fed", 1); err != nil {
+		t.Fatalf("FederateSaveComplete(1): %v", err)
+	}
+	if err := mgr.FederateSaveNotComplete(ctx, "fed", 2); err != nil {
+		t.Fatalf("FederateSaveNotComplete(2): %v", err)
+	}
+	if err := mgr.FederateSaveComplete(ctx, "fed", 3); err != nil {
+		t.Fatalf("FederateSaveComplete(3): %v", err)
+	}
+	if got := mgr.QuerySaveState("fed", "save-1"); got != savepkg.StateNotSaved {
+		t.Errorf("QuerySaveState = %v, want StateNotSaved", got)
+	}
+	if store.Exists("fed", "save-1") {
+		t.Errorf("expected NO save bundle for failed save")
+	}
+	_ = outbox.Sent() // emissions counted; no specific count-assertion.
 }
 
 // TestSpec_M9_RequestSave_TwiceRejected: a second save request while
@@ -121,16 +178,90 @@ func TestSpec_M9_RequestRestore_BundleNotFound(t *testing.T) {
 }
 
 // TestSpec_M9_RoundTrip_SaveThenRestore: save a federation, restore it,
-// assert the restored state is byte-identical to the saved state.
+// assert the post-restore federate roster matches the pre-save snapshot.
 //
-// SCAFFOLD — the full round-trip needs a federation manager + event log
-// to be wired into the save manager. Agent A wires this in M9 W1.
+// Wired in M9 W1. The cut-1 byte-determinism contract here is that the
+// manifest's Federates list — written into the bundle at save-close
+// time — round-trips through Storage and is restored byte-identically
+// (drives the same initiateFederateRestore broadcast order). Per-manager
+// state snapshots (declarations, ownership, sync points, MOM, DDM) are
+// deferred to M9 W2; the event-log slice in the bundle is the FR-SR-5
+// vehicle for full state reconstruction (NFR-DET-2 already proves the
+// replay path itself is byte-identical, see rti/spec/M2).
 //
 // Implements: FR-SR-3, FR-SR-5.
 func TestSpec_M9_RoundTrip_SaveThenRestore(t *testing.T) {
-	mgr, _ := newTestSaveManager(t)
-	if mgr == nil {
-		t.Skip("savepoint.Manager not yet wired")
+	outbox := newFakeOutbox()
+	store := newInMemStorage()
+	preSaveFederates := []core.FederateHandle{1, 2, 3}
+	members := func(_ core.FederationName) []core.FederateHandle {
+		// Snapshot per-call so a post-restore mutation can't leak in.
+		out := make([]core.FederateHandle, len(preSaveFederates))
+		copy(out, preSaveFederates)
+		return out
 	}
-	t.Skip("Agent A wires the round-trip test in M9 W1 (depends on full save bundle format + event-log replay integration)")
+	mgr, err := savepkg.New(savepkg.Options{
+		Outbox:      outbox,
+		EventLog:    newPermissiveEventLog(),
+		BundleStore: store,
+		Members:     members,
+	})
+	if err != nil {
+		t.Fatalf("savepoint.New: %v", err)
+	}
+	ctx := context.Background()
+
+	// Phase 1: save
+	if err := mgr.RequestFederationSave(ctx, "fed", "rt", nil); err != nil {
+		t.Fatalf("RequestFederationSave: %v", err)
+	}
+	for _, h := range preSaveFederates {
+		if err := mgr.FederateSaveComplete(ctx, "fed", h); err != nil {
+			t.Fatalf("FederateSaveComplete(%d): %v", h, err)
+		}
+	}
+	if got := mgr.QuerySaveState("fed", "rt"); got != savepkg.StateSaved {
+		t.Fatalf("after-save QuerySaveState = %v, want StateSaved", got)
+	}
+
+	// Inspect the persisted manifest to assert byte-deterministic
+	// federate-list round-trip.
+	manifest, err := mgr.LoadManifest("fed", "rt")
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if got := manifest.Federates; !equalHandles(got, preSaveFederates) {
+		t.Errorf("manifest federates = %v, want %v", got, preSaveFederates)
+	}
+	if manifest.Federation != "fed" || manifest.Label != "rt" {
+		t.Errorf("manifest identity = (%q, %q), want (fed, rt)", manifest.Federation, manifest.Label)
+	}
+
+	// Phase 2: restore
+	if err := mgr.RequestFederationRestore(ctx, "fed", "rt"); err != nil {
+		t.Fatalf("RequestFederationRestore: %v", err)
+	}
+	if got := mgr.QueryRestoreState("fed", "rt"); got != savepkg.RestoreInitiated {
+		t.Errorf("post-request QueryRestoreState = %v, want RestoreInitiated", got)
+	}
+	for _, h := range preSaveFederates {
+		if err := mgr.FederateRestoreComplete(ctx, "fed", h); err != nil {
+			t.Fatalf("FederateRestoreComplete(%d): %v", h, err)
+		}
+	}
+	if got := mgr.QueryRestoreState("fed", "rt"); got != savepkg.RestoreCompleted {
+		t.Errorf("post-complete QueryRestoreState = %v, want RestoreCompleted", got)
+	}
+}
+
+func equalHandles(a, b []core.FederateHandle) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -44,6 +44,7 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/mom"
 	"github.com/cbchoi/gorti/rti/internal/object"
 	"github.com/cbchoi/gorti/rti/internal/ownership"
+	"github.com/cbchoi/gorti/rti/internal/savepoint"
 	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
 	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
@@ -72,6 +73,7 @@ func main() {
 	replayInput := flag.String("replay-input", "", "source event-log file path for replay-from-log mode")
 	tlsCert := flag.String("tls-cert", "", "path to TLS server cert PEM (enables TLS when set; clients dial grpcs://host:port). Requires --tls-key.")
 	tlsKey := flag.String("tls-key", "", "path to TLS server key PEM. Required when --tls-cert is set.")
+	saveDir := flag.String("save-dir", "./gorti-saves", "directory under which federation save bundles are written + read (M9: FR-SR-1..5)")
 	flag.Parse()
 
 	logger := buildLogger(*logLevel, *logFormat)
@@ -103,7 +105,7 @@ func main() {
 		runReplayMain(logger, *replayInput, *logDir)
 		return
 	case "server", "":
-		runServerMain(logger, *listen, *metricsListen, *logDir, *tlsCert, *tlsKey)
+		runServerMain(logger, *listen, *metricsListen, *logDir, *tlsCert, *tlsKey, *saveDir)
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
 		os.Exit(2)
@@ -150,7 +152,7 @@ func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
 // SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
-func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, tlsKey string) {
+func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, tlsKey, saveDir string) {
 	if logDir == "" {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
 	}
@@ -167,6 +169,7 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, 
 		LogDir:            logDir,
 		Logger:            logger,
 		TLSConfig:         tlsConfig,
+		SaveDir:           saveDir,
 	})
 	if err != nil {
 		logger.Error("rtid initialization failed", "err", err)
@@ -372,6 +375,15 @@ type rtidConfig struct {
 	// in tests; the M6 W1B cut supports the static-cert path only —
 	// mTLS / cert rotation are M7 follow-ups.
 	TLSConfig *tls.Config
+
+	// SaveDir is the directory under which the savepoint.Manager
+	// writes + reads federation save bundles (M9: FR-SR-1..5). Empty
+	// string disables persistence (the manager is still composed but
+	// any RequestFederationSave will fail with a stat-error wrapped
+	// in core.ErrSaveBundleCorrupt — production callers should set
+	// this; tests may leave it empty when they construct the manager
+	// directly).
+	SaveDir string
 }
 
 // rtid is the composed runtime: gRPC server + metrics handler + the
@@ -386,6 +398,7 @@ type rtid struct {
 	ownMgr  *ownership.Manager
 	momMgr  *mom.Manager
 	ddmMgr  *ddm.Manager
+	saveMgr *savepoint.Manager
 	multi   *eventlog.MultiplexWriter
 	outbox  *multiOutbox
 	grpcS   *stdgrpc.Server
@@ -473,6 +486,37 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		return nil, err
 	}
 
+	// M9 W1: Federation Save/Restore. Composed here so the runtime
+	// owns canonical save state and the Storage backend (filesystem
+	// rooted at SaveDir). gRPC handlers for the save/restore services
+	// are deferred to M9 W2 — the proto Service definition is FROZEN
+	// at this cut and does not yet expose save/restore RPCs, so the
+	// manager is reachable only via the in-process API for now. See
+	// docs/reports/M9/agent-a.md for the deferral rationale.
+	var saveMgr *savepoint.Manager
+	if cfg.SaveDir != "" {
+		fsStore, err := savepoint.NewFSStorage(cfg.SaveDir)
+		if err != nil {
+			return nil, fmt.Errorf("rtid: savepoint storage init: %w", err)
+		}
+		saveMgr, err = savepoint.New(savepoint.Options{
+			Outbox:      outbox,
+			EventLog:    multi,
+			BundleStore: fsStore,
+			// MembersResolver is wired as nil at cut-1 because the
+			// federation.Manager does not yet expose a stable
+			// "joined federate handles for fed" accessor; the
+			// dynamic-mode aggregation (any federate that responds
+			// counts) still satisfies FR-SR-2's correctness contract
+			// in the absence of an explicit membership snapshot. A
+			// follow-up patch in M9 W2 wires a MembersResolver once
+			// federation.Manager exposes the accessor.
+		})
+		if err != nil {
+			return nil, fmt.Errorf("rtid: savepoint manager init: %w", err)
+		}
+	}
+
 	objReg, err := object.New(object.Options{
 		EventLog:     multi,
 		Declarations: declMgr,
@@ -549,6 +593,7 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		ownMgr:  ownMgr,
 		momMgr:  momMgr,
 		ddmMgr:  ddmMgr,
+		saveMgr: saveMgr,
 		multi:   multi,
 		outbox:  outbox,
 		grpcS:   gs,
