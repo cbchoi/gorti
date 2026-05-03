@@ -12,14 +12,17 @@ Exit code is 0 on success, 1 on any uncaught exception.
 
 Notes on the in-process RTI
 ---------------------------
-For cut-1 simplicity, the runner imports ``FakeRtiServer`` from the
-spec-test fakes (``pysdk/tests/spec/m4/_fakes/``). This is a documented
-contract violation — examples should not depend on test infrastructure —
-and is tracked as a M5 follow-up to extract a production "in-process
-driver" that the example can consume cleanly. For M4 the focus is on
-demonstrating deterministic behaviour, and the FakeRtiServer already
-captures every call deterministically without needing a real ``rtid``
-binary on the path.
+The runner uses ``InProcessTransport`` from
+``pysdk/rti1516e/_inprocess.py`` — the production-suitable in-process
+driver extracted at M6 close. Earlier cuts (M4/M5) imported
+``FakeRtiServer`` from ``pysdk/tests/spec/m4/_fakes/``; that path was a
+documented contract violation (examples must not depend on test
+infrastructure) and was the M6-W2 follow-up that resolved it.
+
+``InProcessTransport`` records every call deterministically, exposes
+per-federate event queues that the runner's fan-out task drains, and
+auto-registers under ``memory://fake-rti`` so existing call sites
+keep working without re-plumbing.
 
 The runner stages a cooperative fan-out:
 
@@ -53,17 +56,12 @@ _PYSDK = _HERE.parents[1] / "pysdk"
 if str(_PYSDK) not in sys.path:
     sys.path.insert(0, str(_PYSDK))
 
-# Same rationale for the spec-test fakes (documented as a follow-up above).
-_TESTS = _PYSDK / "tests"
-if str(_TESTS) not in sys.path:
-    sys.path.insert(0, str(_TESTS))
-
 # ruff: noqa: E402  (sys.path tweaks above must precede project imports)
 from consumer import Consumer
 from producer import Producer
-from spec.m4._fakes import FakeRtiServer  # type: ignore[import-not-found]
 
 from pyjevsim_bridge import HLAFederate, PortMapping
+from rti1516e._inprocess import InProcessTransport
 from rti1516e.connection import FederationSpec
 from rti1516e.events import ReceiveInteraction
 
@@ -90,7 +88,7 @@ async def run_once(*, ticks: int = 5, seed: int = 0) -> dict[str, Any]:
     implementation can wire it to the FederationSpec.
     """
 
-    server = FakeRtiServer()
+    server = InProcessTransport()
     federation = FederationSpec(
         name="pyjevsim-bridge-example",
         fom_modules=[str(FOM_PATH)],
