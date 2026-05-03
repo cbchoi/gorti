@@ -26,7 +26,8 @@ const DefaultStallTimeout = 60 * stdtime.Second
 // Manager is goroutine-safe. Per-federation state is guarded by a single
 // mutex; a future M5 perf task may shard if benchmarks demand it.
 type Manager struct {
-	opts Options
+	opts   Options
+	states *stateStore
 }
 
 // Options bundles Manager dependencies.
@@ -58,8 +59,26 @@ type Options struct {
 
 // New constructs a Manager. Returns an error if any required Options
 // field is nil. The returned Manager is ready for concurrent use.
+//
+// EventLog is optional in cut 1: when nil, time-management events are
+// silently dropped (production wires the real log via cmd/rtid; tests
+// pass a permissive in-memory log).
+//
+// StallTimeout defaults to DefaultStallTimeout (60s) when zero.
 func New(opts Options) (*Manager, error) {
-	return &Manager{opts: opts}, ErrNotImplemented
+	if opts.Clock == nil {
+		return nil, errors.New("time.New: Options.Clock is required")
+	}
+	if opts.Outbox == nil {
+		return nil, errors.New("time.New: Options.Outbox is required")
+	}
+	if opts.StallTimeout == 0 {
+		opts.StallTimeout = DefaultStallTimeout
+	}
+	return &Manager{
+		opts:   opts,
+		states: newStateStore(),
+	}, nil
 }
 
 // EnableRegulation implements core.TimeManager. See SRS §FR-TM-1.
@@ -72,10 +91,7 @@ func New(opts Options) (*Manager, error) {
 //   - core.ErrTimeInvalidLookahead if lookahead < 0 or NaN
 func (m *Manager) EnableRegulation(ctx context.Context, fed core.FederationName, h core.FederateHandle, lookahead core.LogicalTime) error {
 	_ = ctx
-	_ = fed
-	_ = h
-	_ = lookahead
-	return ErrNotImplemented
+	return m.states.enableRegulation(fed, h, lookahead)
 }
 
 // DisableRegulation implements core.TimeManager. See SRS §FR-TM-1.
@@ -87,9 +103,7 @@ func (m *Manager) EnableRegulation(ctx context.Context, fed core.FederationName,
 //   - core.ErrTimeNotRegulating if not currently regulating
 func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
 	_ = ctx
-	_ = fed
-	_ = h
-	return ErrNotImplemented
+	return m.states.disableRegulation(fed, h)
 }
 
 // EnableConstrained implements core.TimeManager. Constrained federates
@@ -99,9 +113,7 @@ func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName
 //   - core.ErrTimeAlreadyConstrained if already constrained
 func (m *Manager) EnableConstrained(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
 	_ = ctx
-	_ = fed
-	_ = h
-	return ErrNotImplemented
+	return m.states.enableConstrained(fed, h)
 }
 
 // DisableConstrained implements core.TimeManager.
@@ -110,9 +122,7 @@ func (m *Manager) EnableConstrained(ctx context.Context, fed core.FederationName
 //   - core.ErrTimeNotConstrained if not currently constrained
 func (m *Manager) DisableConstrained(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
 	_ = ctx
-	_ = fed
-	_ = h
-	return ErrNotImplemented
+	return m.states.disableConstrained(fed, h)
 }
 
 // NextMessageRequest implements core.TimeManager. See SRS §FR-TM-2.
