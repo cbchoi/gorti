@@ -1,0 +1,47 @@
+- agent: agent-a (sub-agent W2A)
+- branch: agent/a/m5-w2a-hardening-perf
+- task: TASK-078 — gRPC handler hardening + soak harness
+- summary: |
+    Built a long-soak harness for the gRPC handler stack, gated by the
+    `soak` build tag (so the default `go test ./...` run skips it).
+    The harness lives in
+    rti/internal/transport/grpc/load_test.go::TestSoak_GRPCHandlersUnderLoad
+    and spins up a real *grpc.Server on a dynamic 127.0.0.1 port via
+    net.Listen, then launches 5 federate goroutines that each dial via
+    grpc.NewClient and loop over a random mix of CreateFederation /
+    JoinFederation / PublishObjectClassAttributes / UpdateAttributeValues
+    / SendInteraction / ResignFederation+ReJoin RPCs.
+
+    Assertions per the TASK-078 contract:
+      * No panics: per-federate recover() promotes any panic to a
+        t.Errorf and a panic counter; non-zero count fails the test.
+      * No goroutine leaks: runtime.NumGoroutine() snapshotted before
+        and after; tolerance band of 5 absorbs runtime housekeeping.
+        On exceedance, the live goroutine profile is dumped to a temp
+        file and the path logged.
+      * All RPC errors carry proto-defined codes: status.Code(err)
+        checked for codes.Unknown; non-zero count fails the test.
+        codes.Canceled / codes.DeadlineExceeded are tolerated as the
+        soak-loop exit path.
+
+    Cut-1 default duration is 30s (set via soakDefaultDuration); the
+    production-grade 10-minute run is opt-in via SOAK_DURATION=10m
+    env var, parsed by parseSoakDuration() (Go duration syntax).
+    The build-tag + env-var combination matches the orchestrator's
+    "smoke now, full later" intent.
+
+    Spec-side smoke: rti/spec/M5/soak_test.go was unskipped (the
+    t.Fatalf scaffold was replaced with a real test) and now drives
+    a sustained mix of object.Registry.SendInteraction calls from 4
+    workers for 5s (or SOAK_DURATION). Same panic/leak invariants.
+
+- acceptance:
+    - SOAK_DURATION=5s go test -tags=soak ./rti/internal/transport/grpc/...
+      -run TestSoak -timeout 60s — PASS (245,828 calls, 0 unknowns,
+      0 panics, goroutine delta 0).
+    - SOAK_DURATION=2s go test -tags=soak ./rti/spec/M5/... -run
+      TestSpec_M5_Soak — PASS (2.1M calls, 0 panics, delta 0).
+    - SOAK_DURATION=3s go test -tags=soak -race ./rti/internal/transport/grpc/
+      -run TestSoak — PASS race-clean.
+    - go vet ./rti/internal/... — clean.
+    - All M0-M4 + Wave 1 tests still GREEN.

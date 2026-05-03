@@ -1,0 +1,38 @@
+[
+  {
+    "schema_version": 1,
+    "federation_size": 2,
+    "duration_seconds": 10.100221558,
+    "interactions_sent": 30657535,
+    "throughput_per_second": 3035332.9205652266,
+    "latency_p50_ms": 0.043563,
+    "latency_p99_ms": 0.124552
+  },
+  {
+    "schema_version": 1,
+    "federation_size": 5,
+    "duration_seconds": 10.315241623,
+    "interactions_sent": 12931607,
+    "throughput_per_second": 1253640.726278894,
+    "latency_p50_ms": 10.160387,
+    "latency_p99_ms": 15.039346
+  },
+  {
+    "schema_version": 1,
+    "federation_size": 25,
+    "duration_seconds": 10.464901543,
+    "interactions_sent": 1927545,
+    "throughput_per_second": 184191.4127982733,
+    "latency_p50_ms": 2.895088,
+    "latency_p99_ms": 23.221428
+  },
+  {
+    "schema_version": 1,
+    "federation_size": 100,
+    "duration_seconds": 10.490168123,
+    "interactions_sent": 512584,
+    "throughput_per_second": 48863.277879802954,
+    "latency_p50_ms": 3.21776,
+    "latency_p99_ms": 33.809004
+  }
+]
