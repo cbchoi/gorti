@@ -1,0 +1,1 @@
+TASK-044 done — lookahead enforcement (checkLookahead helper) gates NER on currentTime+lookahead floor; rejects with core.ErrTimeRequestInPast.
