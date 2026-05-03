@@ -1,0 +1,43 @@
+- agent: agent-c (sub-agent W7)
+- branch: agent/c/m4-w7-examples-gate
+- task: TASK-073 — examples/pyjevsim/ + 2 coupled models + RTI runner
+- summary: |
+    Created examples/pyjevsim/{__init__.py, producer.py, consumer.py, runner.py}.
+
+    Producer + Consumer are plain Python classes that satisfy
+    pyjevsim_bridge._protocol.CoupledModelProtocol via duck typing
+    (option (a) in the W7 brief). Real pyjevsim StructuralModel adapter
+    deferred to M5 — the determinism harness benefits from not having
+    pyjevsim's scheduler in the loop, and the spec tests are happier
+    against the Protocol shim.
+
+    The runner stages a tick-aligned exchange:
+      1. producer_federate.step_once()  -> producer emits + records
+                                           send_interaction on FakeRtiServer
+      2. _fanout_now() — synchronous fan-out of new send_interaction
+         calls into ReceiveInteraction events on each subscriber's queue
+      3. consumer_federate.step_once() -> consumer drains pending
+                                          externals via external_transition
+
+    The fan-out runs synchronously between the two step_once calls (not
+    as a concurrent task) because the FakeRtiServer auto-grants
+    next_message_request immediately, so the consumer would otherwise
+    return from its NER loop before the producer's send_interaction
+    landed. Tick-alignment also makes the determinism witness stable.
+
+    Cut-1 contract violation (documented in runner.py docstring):
+    examples/pyjevsim/runner.py imports FakeRtiServer from
+    pysdk/tests/spec/m4/_fakes/. Tracked as a M5 follow-up to extract
+    a production "in-process driver" for the example.
+
+    FOM is referenced from tests/conformance/foms/good/pyjevsim-bridge.xml
+    via FOM_PATH constant — file is NOT copied (per TASK-073 brief).
+
+- acceptance:
+    - python3 examples/pyjevsim/runner.py exits 0 with 5/5 producer-to-
+      consumer interactions delivered (10 published, 10 received with
+      --ticks 10).
+    - mypy --strict pysdk/: clean
+    - ruff check pysdk/: clean
+    - All 467 pysdk tests + 1 skipped (replay scaffold; M5 deferred).
+    - check-milestones.sh shows M4: DONE (5/5).
