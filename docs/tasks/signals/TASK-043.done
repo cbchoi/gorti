@@ -1,0 +1,1 @@
+TASK-043 done — Manager.NextMessageRequest implemented: 6/6 M3 W2 NER spec tests green; handle-sorted deterministic grant emission with batched LBTS recompute loop.
