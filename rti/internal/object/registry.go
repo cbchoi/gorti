@@ -140,7 +140,60 @@ type Options struct {
 	// ReceiveInteraction envelope is dispatched. M11 wires this to
 	// MOM.IncrementInteractionsReceived.
 	OnInteractionDelivered func(fed core.FederationName, recipient core.FederateHandle)
+
+	// DDM is the OPTIONAL Data Distribution Management filter
+	// (M10 / FR-DDM-3..6). When non-nil, the registry consults
+	// the DDM manager on every update / interaction send to:
+	//   1. Look up the publisher's region set for the (object,
+	//      attribute) being updated (DDM.PublisherRegionsFor).
+	//   2. If a region set exists, replace the cut-1
+	//      declaration.SubscribersFor result with
+	//      DDM.SubscribersForUpdate (which performs the overlap
+	//      test against subscribers' own regions).
+	//   3. If no region set exists for the object (the producer
+	//      did not call AssociateRegionsWithObjectInstance),
+	//      the registry falls through to the cut-1 path
+	//      unchanged. This is the FR-DDM-6 zero-cost contract:
+	//      non-DDM workloads pay only the nil-check + map miss.
+	//
+	// MUST satisfy DDMFilter (defined below).
+	DDM DDMFilter
 }
+
+// DDMFilter is the contract object.Registry consumes from the DDM
+// manager. ddm.Manager satisfies this interface directly. Defined
+// here (rather than depending on the ddm package) to keep the
+// object → ddm direction the same as object → declaration: object
+// owns the consumer interface, the implementation lives elsewhere.
+type DDMFilter interface {
+	// HasObjectAssociations returns true iff the producer has
+	// associated any DDM regions with the given object (via
+	// RegisterObjectInstanceWithRegions / Associate...). The hot
+	// path uses this to fast-path the no-DDM case.
+	HasObjectAssociations(fed core.FederationName, obj core.ObjectHandle) bool
+
+	// PublisherRegionsFor returns the publisher's region set for
+	// (obj, attr), or nil when no association exists for that
+	// attribute.
+	PublisherRegionsFor(fed core.FederationName, obj core.ObjectHandle, attr core.AttributeHandle) []DDMRegionHandle
+
+	// SubscribersForUpdate returns the federates whose
+	// region-scoped subscriptions overlap publisherRegions for
+	// (cls, attr), in sorted handle order. nil publisherRegions
+	// returns nil (zero-cost path).
+	SubscribersForUpdate(
+		fed core.FederationName,
+		cls core.ObjectClassHandle,
+		attr core.AttributeHandle,
+		publisherRegions []DDMRegionHandle,
+	) []core.FederateHandle
+}
+
+// DDMRegionHandle is the typed handle the DDMFilter API uses. uint64
+// rather than ddm.RegionHandle keeps this package free of a
+// dependency on ddm; the ddm.Manager exposes a thin adapter (see
+// cmd/rtid) that converts ddm.RegionHandle → uint64 at the boundary.
+type DDMRegionHandle uint64
 
 // New constructs a Registry. Returns an error if any required field is nil.
 //
@@ -168,6 +221,9 @@ func New(opts Options) (*Registry, error) {
 	}
 	if isNilInterface(opts.Orders) {
 		opts.Orders = nil
+	}
+	if isNilInterface(opts.DDM) {
+		opts.DDM = nil
 	}
 	return &Registry{
 		opts:        opts,

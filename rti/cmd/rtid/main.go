@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/ddm"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
 	"github.com/cbchoi/gorti/rti/internal/eventlog"
 	"github.com/cbchoi/gorti/rti/internal/federation"
@@ -384,6 +385,7 @@ type rtid struct {
 	syncMgr *syncpkg.Manager
 	ownMgr  *ownership.Manager
 	momMgr  *mom.Manager
+	ddmMgr  *ddm.Manager
 	multi   *eventlog.MultiplexWriter
 	outbox  *multiOutbox
 	grpcS   *stdgrpc.Server
@@ -457,6 +459,20 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		return nil, err
 	}
 
+	// M10 W1: Data Distribution Management. The Manager is composed
+	// here so the object.Registry can consult it on every update;
+	// gRPC handlers for the DDMService are deferred to M10 W2 (the
+	// proto definition is FROZEN at this cut, so DDM operations are
+	// reachable only via the in-process API for now).
+	ddmMgr, err := ddm.New(ddm.Options{
+		Outbox:   outbox,
+		EventLog: multi,
+		FOMs:     foms,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	objReg, err := object.New(object.Options{
 		EventLog:     multi,
 		Declarations: declMgr,
@@ -484,6 +500,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		OnInteractionSent:      momMgr.IncrementInteractionsSent,
 		OnReflectDelivered:     momMgr.IncrementReflectionsReceived,
 		OnInteractionDelivered: momMgr.IncrementInteractionsReceived,
+		// M10: DDM-aware fan-out filter. The adapter wraps
+		// ddm.Manager into the object.DDMFilter shape (see
+		// ddmFilterAdapter below for the handle-conversion glue).
+		DDM: ddmFilterAdapter{m: ddmMgr},
 	})
 	if err != nil {
 		return nil, err
@@ -528,12 +548,55 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		syncMgr: syncMgr,
 		ownMgr:  ownMgr,
 		momMgr:  momMgr,
+		ddmMgr:  ddmMgr,
 		multi:   multi,
 		outbox:  outbox,
 		grpcS:   gs,
 		metrics: metrics,
 		foms:    foms,
 	}, nil
+}
+
+// ddmFilterAdapter bridges the ddm.Manager API into the
+// object.DDMFilter contract. The two packages use distinct typed
+// handles (ddm.RegionHandle vs object.DDMRegionHandle, both uint64)
+// so the adapter performs the trivial conversion at the boundary.
+// Defined here (cmd/rtid composition) rather than inside ddm so the
+// ddm package stays free of an object-package import.
+type ddmFilterAdapter struct {
+	m *ddm.Manager
+}
+
+func (a ddmFilterAdapter) HasObjectAssociations(fed core.FederationName, obj core.ObjectHandle) bool {
+	return a.m.HasObjectAssociations(fed, obj)
+}
+
+func (a ddmFilterAdapter) PublisherRegionsFor(fed core.FederationName, obj core.ObjectHandle, attr core.AttributeHandle) []object.DDMRegionHandle {
+	rs := a.m.PublisherRegionsFor(fed, obj, attr)
+	if len(rs) == 0 {
+		return nil
+	}
+	out := make([]object.DDMRegionHandle, len(rs))
+	for i, r := range rs {
+		out[i] = object.DDMRegionHandle(r)
+	}
+	return out
+}
+
+func (a ddmFilterAdapter) SubscribersForUpdate(
+	fed core.FederationName,
+	cls core.ObjectClassHandle,
+	attr core.AttributeHandle,
+	publisherRegions []object.DDMRegionHandle,
+) []core.FederateHandle {
+	if len(publisherRegions) == 0 {
+		return nil
+	}
+	rs := make([]ddm.RegionHandle, len(publisherRegions))
+	for i, r := range publisherRegions {
+		rs[i] = ddm.RegionHandle(r)
+	}
+	return a.m.SubscribersForUpdate(fed, cls, attr, rs)
 }
 
 // Serve runs the gRPC + metrics listeners until ctx is canceled. Returns
