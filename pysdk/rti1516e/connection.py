@@ -63,34 +63,67 @@ class FederationSpec:
 class RtiConnection:
     """Async connection to a single rtid instance."""
 
-    def __init__(self, url: str, *, options: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        options: dict[str, Any] | None = None,
+        ca_cert: bytes | None = None,
+    ) -> None:
         self._url = url
         self._options: dict[str, Any] = dict(options) if options else {}
+        # PEM-encoded trusted CA bundle for ``grpcs://`` URLs. ``None``
+        # means "use system roots" (handed straight through to
+        # ``grpc.ssl_channel_credentials(root_certificates=None)``).
+        self._ca_cert = ca_cert
         self._transport: Any | None = None
         self._closed = False
 
     @classmethod
-    def connect(cls, url: str, *, options: dict[str, Any] | None = None) -> Self:
-        """Build a connection wrapper bound to ``url`` (``grpc://`` or ``memory://``).
+    def connect(
+        cls,
+        url: str,
+        *,
+        options: dict[str, Any] | None = None,
+        ca_cert: bytes | None = None,
+    ) -> Self:
+        """Build a connection wrapper bound to ``url``.
+
+        Supported URL schemes:
+
+          - ``memory://<name>``   — in-process driver registered via
+            ``InProcessTransport`` (or the legacy ``FakeRtiServer`` alias).
+          - ``grpc://host:port``  — real gRPC over plaintext TCP.
+          - ``grpcs://host:port`` — real gRPC over TLS. ``ca_cert``
+            (PEM bytes) populates the trust store for verifying the
+            rtid server cert; pass ``None`` to rely on system roots
+            (typical when the rtid cert chains to a publicly trusted CA).
 
         ``connect()`` is intentionally synchronous so it can be used as the
         head of an ``async with`` statement::
 
-            async with RtiConnection.connect("grpc://localhost:8442") as rti:
+            async with RtiConnection.connect(
+                "grpcs://rtid.example.com:8442",
+                ca_cert=Path("ca.pem").read_bytes(),
+            ) as rti:
                 ...
 
         The actual transport setup happens inside ``__aenter__``.
         """
-        return cls(url, options=options)
+        return cls(url, options=options, ca_cert=ca_cert)
 
     async def __aenter__(self) -> Self:
         """Open the transport.
 
-        For ``memory://`` URLs, look up the registered in-process fake (the
-        spec-test ``FakeRtiServer`` auto-registers under ``memory://fake-rti``).
-        For ``grpc://`` URLs, real-channel construction is a TASK-063
-        follow-up — the M4 wave-4 deliverable is an injectable seam, not a
-        production gRPC client.
+        Dispatch by URL scheme:
+
+          - ``memory://``  — look up the registered in-process driver.
+          - ``grpc://``    — open a plaintext ``grpc.aio.insecure_channel``.
+          - ``grpcs://``   — open a TLS ``grpc.aio.secure_channel`` using
+            ``self._ca_cert`` as the root CA bundle (or system roots if
+            ``ca_cert`` was not supplied).
+
+        Anything else raises ``ValueError`` at connect time.
         """
         scheme, _, _ = self._url.partition("://")
         if scheme == "memory":
@@ -98,17 +131,23 @@ class RtiConnection:
             if transport is None:
                 raise RuntimeError(
                     f"no in-process transport registered for {self._url!r} — "
-                    "construct a FakeRtiServer first (auto-registers under "
-                    "memory://fake-rti) or call register_fake() explicitly"
+                    "construct an InProcessTransport (or the legacy "
+                    "FakeRtiServer alias) first; it auto-registers under "
+                    "memory://fake-rti"
                 )
             self._transport = transport
-        elif scheme == "grpc":
-            # Real gRPC transport (TASK-081 cut-1). Wraps a grpc.aio
-            # channel and delegates RPC dispatch to GrpcTransport.record.
-            self._transport = await _build_grpc_transport(self._url)
+        elif scheme in ("grpc", "grpcs"):
+            # Real gRPC transport. Plaintext for ``grpc://``;
+            # TLS-secured (server auth, no mTLS) for ``grpcs://``.
+            # ``ca_cert`` is forwarded to ``ssl_channel_credentials``;
+            # ``grpc://`` ignores it.
+            self._transport = await _build_grpc_transport(
+                self._url, ca_cert=self._ca_cert
+            )
         else:
             raise ValueError(
-                f"unsupported URL scheme {scheme!r} (expected 'memory' or 'grpc')"
+                f"unsupported URL scheme {scheme!r} "
+                "(expected 'memory', 'grpc', or 'grpcs')"
             )
         return self
 

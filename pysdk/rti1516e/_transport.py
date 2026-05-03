@@ -1,13 +1,22 @@
 """Transport registry — pluggable in-process doubles + real gRPC for the RTI client.
 
-The Layer 1 SDK (rti1516e.connection.RtiConnection) has two backing transports:
+The Layer 1 SDK (rti1516e.connection.RtiConnection) has three backing transports:
 
-  - ``memory://<name>``  — in-process pure-Python ``FakeRtiServer`` used by
-                           spec tests; see ``register_fake`` / ``lookup``.
-  - ``grpc://host:port`` — real gRPC channel to an rtid binary, wrapped in
-                           :class:`GrpcTransport`. Built on demand by
-                           ``RtiConnection.__aenter__`` for cross-language
-                           tests (TASK-081).
+  - ``memory://<name>``   — in-process pure-Python ``InProcessTransport``
+                            (production-suitable; historically called
+                            ``FakeRtiServer`` and re-exported under that
+                            name for back-compat).
+  - ``grpc://host:port``  — real gRPC channel to an rtid binary, wrapped
+                            in :class:`GrpcTransport`. Built on demand
+                            by ``RtiConnection.__aenter__`` for cross-
+                            language tests (TASK-081).
+  - ``grpcs://host:port`` — TLS-secured variant of ``grpc://``. Server-
+                            side TLS is provided by rtid's
+                            ``--tls-cert/--tls-key`` flag pair (M6 W1B);
+                            the client supplies a CA bundle via
+                            ``RtiConnection.connect(url, ca_cert=...)``
+                            or relies on the system trust store when
+                            ``ca_cert`` is omitted.
 
 Both transports satisfy the same duck-typed surface that ``RtiConnection``
 + ``Federate`` reach for:
@@ -593,13 +602,39 @@ def _is_already_exists(exc: BaseException) -> bool:
     return "ALREADY_EXISTS" in name
 
 
-async def build_grpc_transport(url: str) -> GrpcTransport:
+async def build_grpc_transport(
+    url: str, *, ca_cert: bytes | None = None
+) -> GrpcTransport:
     """Open a real ``grpc.aio`` channel for ``url`` and wrap it.
 
-    ``url`` is ``grpc://host:port`` (insecure for cut-1; TLS is post-MVP).
+    Two URL schemes are supported:
+
+      - ``grpc://host:port``  — plaintext ``grpc.aio.insecure_channel``.
+        Used by the M5 cross-language smoke and any deployment where
+        TLS is not configured on the rtid side.
+      - ``grpcs://host:port`` — TLS-secured ``grpc.aio.secure_channel``.
+        ``ca_cert`` (PEM bytes) populates ``root_certificates``; pass
+        ``None`` to rely on the system trust store (e.g. when the rtid
+        cert chains to a publicly trusted root). Server-side TLS is
+        provided by rtid's ``--tls-cert/--tls-key`` (see
+        ``rti/cmd/rtid/main.go``).
+
+    Errors:
+      - Unknown URL scheme raises ``ValueError`` so a typo surfaces at
+        connect-time rather than as a misleading ``UNAVAILABLE`` later.
     """
     import grpc
 
-    target = url.removeprefix("grpc://")
-    channel = grpc.aio.insecure_channel(target)
-    return GrpcTransport(channel, url=url)
+    if url.startswith("grpcs://"):
+        target = url.removeprefix("grpcs://")
+        creds = grpc.ssl_channel_credentials(root_certificates=ca_cert)
+        channel = grpc.aio.secure_channel(target, creds)
+        return GrpcTransport(channel, url=url)
+    if url.startswith("grpc://"):
+        target = url.removeprefix("grpc://")
+        channel = grpc.aio.insecure_channel(target)
+        return GrpcTransport(channel, url=url)
+    raise ValueError(
+        f"build_grpc_transport: unsupported URL scheme in {url!r} "
+        "(expected 'grpc://' or 'grpcs://')"
+    )
