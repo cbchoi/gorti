@@ -4,10 +4,26 @@
 // event log multiplexer, and gRPC service handlers into a runnable
 // server, plus a Prometheus metrics endpoint on a separate listener.
 // See docs/agent-a-rti-core.md §4 for the M2 deliverable definition.
+//
+// # Connect URL convention (M6 W1B)
+//
+// rtid speaks one wire protocol — gRPC over HTTP/2 — and accepts two
+// transport modes selected at startup:
+//
+//   - Insecure (default): no --tls-cert / --tls-key flags. Clients
+//     dial with the URL form ``grpc://host:port`` (Python SDK
+//     transport strips the scheme and uses
+//     ``grpc.aio.insecure_channel``).
+//   - Server-side TLS: --tls-cert + --tls-key both set. Clients dial
+//     with the URL form ``grpcs://host:port`` and supply a CA bundle
+//     (or trust the system roots when the cert chains to one). mTLS
+//     and cert rotation are explicitly out of scope for this cut and
+//     are tracked as M7 follow-ups.
 package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -29,6 +45,7 @@ import (
 	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 
 	stdgrpc "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -49,6 +66,8 @@ func main() {
 	timedStallTimeoutMs := flag.Int("timed-stall-timeout-ms", 5000, "stall timeout in milliseconds for timed-demo mode (only effective when -timed-stall-skip is set)")
 	timedStallAdvanceMs := flag.Int("timed-stall-advance-ms", 0, "fake-clock advance in milliseconds AFTER the demo loop, before CheckStalls (0 = skip stall check)")
 	replayInput := flag.String("replay-input", "", "source event-log file path for replay-from-log mode")
+	tlsCert := flag.String("tls-cert", "", "path to TLS server cert PEM (enables TLS when set; clients dial grpcs://host:port). Requires --tls-key.")
+	tlsKey := flag.String("tls-key", "", "path to TLS server key PEM. Required when --tls-cert is set.")
 	flag.Parse()
 
 	logger := buildLogger(*logLevel, *logFormat)
@@ -80,7 +99,7 @@ func main() {
 		runReplayMain(logger, *replayInput, *logDir)
 		return
 	case "server", "":
-		runServerMain(logger, *listen, *metricsListen, *logDir)
+		runServerMain(logger, *listen, *metricsListen, *logDir, *tlsCert, *tlsKey)
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
 		os.Exit(2)
@@ -127,9 +146,15 @@ func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
 // SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
-func runServerMain(logger *slog.Logger, listen, metricsListen, logDir string) {
+func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, tlsKey string) {
 	if logDir == "" {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
+	}
+
+	tlsConfig, err := buildServerTLS(tlsCert, tlsKey)
+	if err != nil {
+		logger.Error("rtid TLS configuration failed", "err", err)
+		os.Exit(2)
 	}
 
 	srv, err := newRTID(rtidConfig{
@@ -137,10 +162,14 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir string) {
 		MetricsListenAddr: metricsListen,
 		LogDir:            logDir,
 		Logger:            logger,
+		TLSConfig:         tlsConfig,
 	})
 	if err != nil {
 		logger.Error("rtid initialization failed", "err", err)
 		os.Exit(1)
+	}
+	if tlsConfig != nil {
+		logger.Info("rtid: TLS enabled (clients should dial grpcs://...)", "cert", tlsCert)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -332,6 +361,13 @@ type rtidConfig struct {
 	MetricsListenAddr string
 	LogDir            string
 	Logger            *slog.Logger
+
+	// TLSConfig, when non-nil, enables server-side TLS on the gRPC
+	// listener. nil keeps the listener insecure (the default for
+	// local/dev workloads). Construct via buildServerTLS or by hand
+	// in tests; the M6 W1B cut supports the static-cert path only —
+	// mTLS / cert rotation are M7 follow-ups.
+	TLSConfig *tls.Config
 }
 
 // rtid is the composed runtime: gRPC server + metrics handler + the
@@ -408,7 +444,15 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	if err != nil {
 		return nil, err
 	}
-	gs := stdgrpc.NewServer()
+	var serverOpts []stdgrpc.ServerOption
+	if cfg.TLSConfig != nil {
+		// credentials.NewTLS clones the *tls.Config internally, so the
+		// caller is free to keep mutating its copy without affecting
+		// the live server. Static-cert only at this cut: cfg.TLSConfig
+		// is built from --tls-cert/--tls-key and not reloaded.
+		serverOpts = append(serverOpts, stdgrpc.Creds(credentials.NewTLS(cfg.TLSConfig)))
+	}
+	gs := stdgrpc.NewServer(serverOpts...)
 	if err := grpcSrv.Register(gs); err != nil {
 		return nil, err
 	}
@@ -513,6 +557,33 @@ func discardWriterFactory(clock core.Clock) eventlog.WriterFactory {
 type discardSink struct{}
 
 func (discardSink) Write(p []byte) (int, error) { return len(p), nil }
+
+// buildServerTLS loads a server-side *tls.Config from the
+// --tls-cert/--tls-key flag pair. Returns (nil, nil) when both are empty
+// (insecure mode). Returns an error when one is set without the other,
+// or when the keypair fails to load. M6 W1B cut: server-side TLS only,
+// no mTLS, no rotation; clients dial grpcs://host:port and rely on a
+// trusted CA bundle (or system roots when the cert chains to one).
+func buildServerTLS(certPath, keyPath string) (*tls.Config, error) {
+	if certPath == "" && keyPath == "" {
+		return nil, nil
+	}
+	if certPath == "" || keyPath == "" {
+		return nil, fmt.Errorf("rtid: --tls-cert and --tls-key must both be set (got cert=%q key=%q)", certPath, keyPath)
+	}
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: load TLS keypair: %w", err)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		// MinVersion: TLS 1.2 floor matches Go's secure-by-default
+		// recommendation and avoids the gosec G402 lint. Clients
+		// dialing with the Python SDK's default ssl.create_default_context
+		// negotiate TLS 1.2 or higher.
+		MinVersion: tls.VersionTLS12,
+	}, nil
+}
 
 // buildLogger constructs the slog Logger from the level / format flags.
 func buildLogger(levelStr, formatStr string) *slog.Logger {
