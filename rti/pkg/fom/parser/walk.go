@@ -2,6 +2,8 @@ package parser
 
 import (
 	"encoding/xml"
+	"strconv"
+	"strings"
 
 	"github.com/cbchoi/gorti/rti/pkg/fom/model"
 )
@@ -14,6 +16,21 @@ type xmlObjectModel struct {
 	Objects      *xmlObjects      `xml:"objects"`
 	Interactions *xmlInteractions `xml:"interactions"`
 	DataTypes    *xmlDataTypes    `xml:"dataTypes"`
+	Dimensions   *xmlDimensions   `xml:"dimensions"`
+}
+
+// xmlDimensions mirrors the <dimensions> block (1516.2-2010 Annex A).
+// M10 / FR-DDM-1. In 1516-2010 dimensions are flat (no routing-space
+// grouping element); each <dimension> is its own one-axis routing
+// space.
+type xmlDimensions struct {
+	Dimension []xmlDimension `xml:"dimension"`
+}
+
+type xmlDimension struct {
+	Name          string `xml:"name"`
+	UpperBound    string `xml:"upperBound"`
+	Normalization string `xml:"normalization"`
 }
 
 type xmlObjects struct {
@@ -322,6 +339,58 @@ func convertFixedRecordData(in *xmlFixedRecTypes) []model.DataType {
 		})
 	}
 	return out
+}
+
+// convertDimensions flattens the <dimensions> XML section into a slice
+// of model.Dimension. Returns nil if no dimensions are declared. M10 /
+// FR-DDM-1.
+//
+// upperBound parsing (cut-2 minimal):
+//   - Empty / whitespace-only → 0 (treated as "unbounded" by the
+//     caller; the DDM manager defaults the initial region range to
+//     [0, dim.UpperBound)).
+//   - Numeric prefix; trailing non-digits are ignored (the FOM may
+//     spell the bound as "1000" or "1000 (meters)" — we keep cut-2
+//     forgiving).
+//   - Negative or unparseable → 0 (no diagnostic; FOM-009 already
+//     guards element-name correctness).
+func convertDimensions(in *xmlDimensions) []model.Dimension {
+	if in == nil || len(in.Dimension) == 0 {
+		return nil
+	}
+	out := make([]model.Dimension, 0, len(in.Dimension))
+	for _, d := range in.Dimension {
+		out = append(out, model.Dimension{
+			Name:             d.Name,
+			UpperBound:       parseUpperBound(d.UpperBound),
+			NormalizationKey: strings.TrimSpace(d.Normalization),
+		})
+	}
+	return out
+}
+
+// parseUpperBound extracts a uint64 from the FOM <upperBound> text. The
+// 1516.2-2010 schema declares upperBound as xs:positiveInteger; we
+// accept the leading numeric prefix and silently drop trailing chars
+// (some FOMs spell units inline).
+func parseUpperBound(s string) uint64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	// Find the longest leading run of digits.
+	end := 0
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0
+	}
+	v, err := strconv.ParseUint(s[:end], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 func convertVariantRecordData(in *xmlVariantRecTypes) []model.DataType {

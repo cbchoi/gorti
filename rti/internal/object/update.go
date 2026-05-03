@@ -189,8 +189,15 @@ func sortedAttrHandles(attrs map[core.AttributeHandle][]byte) []core.AttributeHa
 // fanoutReflect sends ReflectAttributeValues to every federate subscribed
 // to any attribute in updateAttrs, excluding the producer. Per-subscriber
 // outbound seq is stamped here.
+//
+// DDM hook (M10 / FR-DDM-3..6): when the registry was constructed with
+// a DDM filter AND the producer has associated regions with `inst`,
+// the cut-1 declaration.SubscribersFor result is replaced by the
+// union (over updateAttrs) of DDM.SubscribersForUpdate. When no
+// associations exist for inst the registry takes the cut-1 path
+// unchanged — the FR-DDM-6 zero-cost contract.
 func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, inst *objectInstance, attrs map[core.AttributeHandle][]byte, updateAttrs []core.AttributeHandle, ts *core.LogicalTime) {
-	subs := r.opts.Declarations.SubscribersFor(ctx, fed, inst.cls, updateAttrs)
+	subs := r.subscribersForReflect(ctx, fed, inst, updateAttrs)
 	for _, sub := range subs {
 		if sub == producer {
 			continue
@@ -201,6 +208,39 @@ func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, s
 			r.opts.OnReflectDelivered(fed, sub)
 		}
 	}
+}
+
+// subscribersForReflect resolves the set of subscriber federates for
+// a given (object, attribute set) update. Splits the cut-1 path from
+// the M10 DDM-aware path so the hot path stays one direct call when
+// no DDM filter is wired or no associations exist.
+func (r *Registry) subscribersForReflect(ctx context.Context, fed core.FederationName, inst *objectInstance, updateAttrs []core.AttributeHandle) []core.FederateHandle {
+	if r.opts.DDM == nil || !r.opts.DDM.HasObjectAssociations(fed, inst.handle) {
+		return r.opts.Declarations.SubscribersFor(ctx, fed, inst.cls, updateAttrs)
+	}
+	// DDM-aware union across the updated attribute set. For each
+	// attribute, fall back to the cut-1 subscribers when the
+	// publisher did not associate any region for that attr (the
+	// per-attr nil branch).
+	union := map[core.FederateHandle]struct{}{}
+	for _, attr := range updateAttrs {
+		pubRegions := r.opts.DDM.PublisherRegionsFor(fed, inst.handle, attr)
+		var subs []core.FederateHandle
+		if len(pubRegions) == 0 {
+			subs = r.opts.Declarations.SubscribersFor(ctx, fed, inst.cls, []core.AttributeHandle{attr})
+		} else {
+			subs = r.opts.DDM.SubscribersForUpdate(fed, inst.cls, attr, pubRegions)
+		}
+		for _, h := range subs {
+			union[h] = struct{}{}
+		}
+	}
+	out := make([]core.FederateHandle, 0, len(union))
+	for h := range union {
+		out = append(out, h)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func (r *Registry) buildReflectEvent(st *federationState, inst *objectInstance, attrs map[core.AttributeHandle][]byte, ts *core.LogicalTime) *outboundEvent {

@@ -78,21 +78,83 @@ func TestSpec_M10_RegionLifecycle_CreateCommitDelete(t *testing.T) {
 // publisher region A and subscriber region B overlap, B is in the
 // subscriber set; when they don't, B is excluded.
 //
-// SCAFFOLD — full overlap-driven fan-out requires DDM + object.Registry
-// integration. M10 W1 unskips after wiring.
-//
 // Implements: FR-DDM-4, FR-DDM-5.
 func TestSpec_M10_RegionOverlap_DeterminesSubscriberFan_out(t *testing.T) {
 	mgr := newTestDDMManager(t)
 	if mgr == nil {
 		t.Skip("ddm.Manager not yet wired")
 	}
-	t.Skip("Agent A wires the SubscribersForUpdate end-to-end test in M10 W1 once region store + overlap test land")
+	ctx := context.Background()
+	const fed core.FederationName = "ddm-overlap"
+	const publisher core.FederateHandle = 1
+	const subInside core.FederateHandle = 2
+	const subOutside core.FederateHandle = 3
+	const cls core.ObjectClassHandle = 1
+	const attr core.AttributeHandle = 1
+
+	space, ok := mgr.LookupRoutingSpace(fed, "GeoSpace")
+	if !ok {
+		t.Skip("LookupRoutingSpace not yet wired")
+	}
+	dim, ok := mgr.LookupDimension(fed, space, "X")
+	if !ok {
+		t.Skip("LookupDimension not yet wired")
+	}
+
+	// Publisher region: [10, 20).
+	pubR, err := mgr.CreateRegion(ctx, fed, publisher, space, []ddmpkg.DimensionHandle{dim})
+	if err != nil {
+		t.Fatalf("CreateRegion publisher: %v", err)
+	}
+	if err := mgr.SetRangeBounds(fed, publisher, pubR, dim, ddmpkg.Range{Lower: 10, Upper: 20}); err != nil {
+		t.Fatalf("SetRangeBounds publisher: %v", err)
+	}
+	if err := mgr.CommitRegionModifications(ctx, fed, publisher, []ddmpkg.RegionHandle{pubR}); err != nil {
+		t.Fatalf("CommitRegionModifications publisher: %v", err)
+	}
+
+	// Subscriber inside: [15, 25) — overlaps publisher.
+	insideR, err := mgr.CreateRegion(ctx, fed, subInside, space, []ddmpkg.DimensionHandle{dim})
+	if err != nil {
+		t.Fatalf("CreateRegion subInside: %v", err)
+	}
+	if err := mgr.SetRangeBounds(fed, subInside, insideR, dim, ddmpkg.Range{Lower: 15, Upper: 25}); err != nil {
+		t.Fatalf("SetRangeBounds subInside: %v", err)
+	}
+	if err := mgr.CommitRegionModifications(ctx, fed, subInside, []ddmpkg.RegionHandle{insideR}); err != nil {
+		t.Fatalf("CommitRegionModifications subInside: %v", err)
+	}
+
+	// Subscriber outside: [100, 200) — no overlap.
+	outsideR, err := mgr.CreateRegion(ctx, fed, subOutside, space, []ddmpkg.DimensionHandle{dim})
+	if err != nil {
+		t.Fatalf("CreateRegion subOutside: %v", err)
+	}
+	if err := mgr.SetRangeBounds(fed, subOutside, outsideR, dim, ddmpkg.Range{Lower: 100, Upper: 200}); err != nil {
+		t.Fatalf("SetRangeBounds subOutside: %v", err)
+	}
+	if err := mgr.CommitRegionModifications(ctx, fed, subOutside, []ddmpkg.RegionHandle{outsideR}); err != nil {
+		t.Fatalf("CommitRegionModifications subOutside: %v", err)
+	}
+
+	if err := mgr.SubscribeObjectClassAttributesWithRegions(ctx, fed, subInside, cls,
+		[]core.AttributeHandle{attr}, []ddmpkg.RegionHandle{insideR}); err != nil {
+		t.Fatalf("Subscribe inside: %v", err)
+	}
+	if err := mgr.SubscribeObjectClassAttributesWithRegions(ctx, fed, subOutside, cls,
+		[]core.AttributeHandle{attr}, []ddmpkg.RegionHandle{outsideR}); err != nil {
+		t.Fatalf("Subscribe outside: %v", err)
+	}
+
+	got := mgr.SubscribersForUpdate(fed, cls, attr, []ddmpkg.RegionHandle{pubR})
+	if len(got) != 1 || got[0] != subInside {
+		t.Errorf("SubscribersForUpdate = %v, want [%d]", got, subInside)
+	}
 }
 
 // TestSpec_M10_NoOverlap_DropsUpdate: when a publisher's regions don't
-// overlap any subscribed region, the subscriber receives nothing.
-// SCAFFOLD.
+// overlap any subscribed region, the subscriber set is empty (the
+// update is dropped).
 //
 // Implements: FR-DDM-3, FR-DDM-4.
 func TestSpec_M10_NoOverlap_DropsUpdate(t *testing.T) {
@@ -100,7 +162,53 @@ func TestSpec_M10_NoOverlap_DropsUpdate(t *testing.T) {
 	if mgr == nil {
 		t.Skip("ddm.Manager not yet wired")
 	}
-	t.Skip("Agent A wires the no-overlap test in M10 W1")
+	ctx := context.Background()
+	const fed core.FederationName = "ddm-no-overlap"
+	const publisher core.FederateHandle = 1
+	const subscriber core.FederateHandle = 2
+	const cls core.ObjectClassHandle = 1
+	const attr core.AttributeHandle = 1
+
+	space, ok := mgr.LookupRoutingSpace(fed, "GeoSpace")
+	if !ok {
+		t.Skip("LookupRoutingSpace not yet wired")
+	}
+	dim, ok := mgr.LookupDimension(fed, space, "X")
+	if !ok {
+		t.Skip("LookupDimension not yet wired")
+	}
+
+	pubR, err := mgr.CreateRegion(ctx, fed, publisher, space, []ddmpkg.DimensionHandle{dim})
+	if err != nil {
+		t.Fatalf("CreateRegion publisher: %v", err)
+	}
+	if err := mgr.SetRangeBounds(fed, publisher, pubR, dim, ddmpkg.Range{Lower: 0, Upper: 10}); err != nil {
+		t.Fatalf("SetRangeBounds publisher: %v", err)
+	}
+	if err := mgr.CommitRegionModifications(ctx, fed, publisher, []ddmpkg.RegionHandle{pubR}); err != nil {
+		t.Fatalf("CommitRegionModifications publisher: %v", err)
+	}
+
+	subR, err := mgr.CreateRegion(ctx, fed, subscriber, space, []ddmpkg.DimensionHandle{dim})
+	if err != nil {
+		t.Fatalf("CreateRegion subscriber: %v", err)
+	}
+	// Closed-open: [10, 20) does NOT touch [0, 10).
+	if err := mgr.SetRangeBounds(fed, subscriber, subR, dim, ddmpkg.Range{Lower: 10, Upper: 20}); err != nil {
+		t.Fatalf("SetRangeBounds subscriber: %v", err)
+	}
+	if err := mgr.CommitRegionModifications(ctx, fed, subscriber, []ddmpkg.RegionHandle{subR}); err != nil {
+		t.Fatalf("CommitRegionModifications subscriber: %v", err)
+	}
+	if err := mgr.SubscribeObjectClassAttributesWithRegions(ctx, fed, subscriber, cls,
+		[]core.AttributeHandle{attr}, []ddmpkg.RegionHandle{subR}); err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	got := mgr.SubscribersForUpdate(fed, cls, attr, []ddmpkg.RegionHandle{pubR})
+	if len(got) != 0 {
+		t.Errorf("SubscribersForUpdate = %v, want empty (no overlap)", got)
+	}
 }
 
 // TestSpec_M10_RangeOverlap_ClosedOpen: the Range.Overlap helper
@@ -135,13 +243,53 @@ func TestSpec_M10_RangeOverlap_ClosedOpen(t *testing.T) {
 // TestSpec_M10_DeterministicSubscriberOrder: SubscribersForUpdate
 // returns federate handles in sorted order (NFR-DET-1).
 //
-// SCAFFOLD.
-//
 // Implements: FR-DDM-5.
 func TestSpec_M10_DeterministicSubscriberOrder(t *testing.T) {
 	mgr := newTestDDMManager(t)
 	if mgr == nil {
 		t.Skip("ddm.Manager not yet wired")
 	}
-	t.Skip("Agent A wires sort-order assertion in M10 W1")
+	ctx := context.Background()
+	const fed core.FederationName = "ddm-determinism"
+	const publisher core.FederateHandle = 1
+	const cls core.ObjectClassHandle = 1
+	const attr core.AttributeHandle = 1
+
+	space, ok := mgr.LookupRoutingSpace(fed, "GeoSpace")
+	if !ok {
+		t.Skip("LookupRoutingSpace not yet wired")
+	}
+	dim, ok := mgr.LookupDimension(fed, space, "X")
+	if !ok {
+		t.Skip("LookupDimension not yet wired")
+	}
+
+	pubR, err := mgr.CreateRegion(ctx, fed, publisher, space, []ddmpkg.DimensionHandle{dim})
+	if err != nil {
+		t.Fatalf("CreateRegion publisher: %v", err)
+	}
+	// Subscribers 7, 3, 9, 5 — out of insertion order to prove the
+	// returned slice is sorted by handle, not insertion.
+	subscribers := []core.FederateHandle{7, 3, 9, 5}
+	for _, sub := range subscribers {
+		rh, err := mgr.CreateRegion(ctx, fed, sub, space, []ddmpkg.DimensionHandle{dim})
+		if err != nil {
+			t.Fatalf("CreateRegion subscriber %d: %v", sub, err)
+		}
+		// All overlap the publisher's full-range default region.
+		if err := mgr.SubscribeObjectClassAttributesWithRegions(ctx, fed, sub, cls,
+			[]core.AttributeHandle{attr}, []ddmpkg.RegionHandle{rh}); err != nil {
+			t.Fatalf("Subscribe %d: %v", sub, err)
+		}
+	}
+	got := mgr.SubscribersForUpdate(fed, cls, attr, []ddmpkg.RegionHandle{pubR})
+	want := []core.FederateHandle{3, 5, 7, 9}
+	if len(got) != len(want) {
+		t.Fatalf("SubscribersForUpdate len = %d (%v), want %d (%v)", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("SubscribersForUpdate[%d] = %d, want %d (full = %v)", i, got[i], want[i], got)
+		}
+	}
 }

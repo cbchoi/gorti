@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/ddm"
 	"github.com/cbchoi/gorti/rti/internal/object"
 	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 	"github.com/cbchoi/gorti/rti/pkg/fom/mim"
@@ -214,6 +215,17 @@ func (h *fomHandle) OrderForInteraction(cls core.InteractionClassHandle) (object
 	return orderFromString(classes[idx].Order), true
 }
 
+// Dimensions implements ddm.DimensionEnumerator. The DDM manager
+// consults this method (via type-assertion on the FOMHandle) to seed
+// per-federation routing-space + dimension tables from the parsed FOM
+// (M10 / FR-DDM-1).
+func (h *fomHandle) Dimensions() []model.Dimension {
+	if !h.IsValid() {
+		return nil
+	}
+	return h.fom.Dimensions()
+}
+
 // orderFromString maps the FOM's declared order string to object.Order.
 // "Receive" → OrderReceive; everything else (including "TimeStamp" and
 // the empty string) → OrderTimeStamp. The TimeStamp default matches
@@ -242,3 +254,8 @@ var _ core.FOMRepository = (*fomRepository)(nil)
 // (e.g. a method signature changes), the build breaks here instead of
 // silently falling back to the TSO default at runtime.
 var _ grpcsvc.FOMOrderResolver = (*fomHandle)(nil)
+
+// Compile-time assertion that *fomHandle satisfies ddm.DimensionEnumerator
+// so the DDM manager can read routing-space declarations directly from
+// the production FOM handle (M10 / FR-DDM-1).
+var _ ddm.DimensionEnumerator = (*fomHandle)(nil)
