@@ -87,10 +87,15 @@ func New(opts Options) (*Manager, error) {
 // event yet (TimeAdvanceRequested fires on the first NER call).
 //
 // Errors:
+//   - core.ErrFederationHalted if the federation is in the halted
+//     terminal state (set by CheckStalls)
 //   - core.ErrTimeAlreadyRegulating if already regulating
 //   - core.ErrTimeInvalidLookahead if lookahead < 0 or NaN
 func (m *Manager) EnableRegulation(ctx context.Context, fed core.FederationName, h core.FederateHandle, lookahead core.LogicalTime) error {
 	_ = ctx
+	if extOf(m).isHalted(fed) {
+		return core.ErrFederationHalted
+	}
 	return m.states.enableRegulation(fed, h, lookahead)
 }
 
@@ -100,9 +105,14 @@ func (m *Manager) EnableRegulation(ctx context.Context, fed core.FederationName,
 // calculations exclude its contribution.
 //
 // Errors:
+//   - core.ErrFederationHalted if the federation is in the halted
+//     terminal state
 //   - core.ErrTimeNotRegulating if not currently regulating
 func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
 	_ = ctx
+	if extOf(m).isHalted(fed) {
+		return core.ErrFederationHalted
+	}
 	return m.states.disableRegulation(fed, h)
 }
 
@@ -110,18 +120,28 @@ func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName
 // receive TimeAdvanceGrant only when LBTS reaches their requested time.
 //
 // Errors:
+//   - core.ErrFederationHalted if the federation is in the halted
+//     terminal state
 //   - core.ErrTimeAlreadyConstrained if already constrained
 func (m *Manager) EnableConstrained(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
 	_ = ctx
+	if extOf(m).isHalted(fed) {
+		return core.ErrFederationHalted
+	}
 	return m.states.enableConstrained(fed, h)
 }
 
 // DisableConstrained implements core.TimeManager.
 //
 // Errors:
+//   - core.ErrFederationHalted if the federation is in the halted
+//     terminal state
 //   - core.ErrTimeNotConstrained if not currently constrained
 func (m *Manager) DisableConstrained(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
 	_ = ctx
+	if extOf(m).isHalted(fed) {
+		return core.ErrFederationHalted
+	}
 	return m.states.disableConstrained(fed, h)
 }
 
@@ -153,10 +173,9 @@ func (m *Manager) NextMessageRequest(ctx context.Context, fed core.FederationNam
 // Production wires a goroutine that calls this every second; tests call
 // it after Clock.Advance.
 //
-// Returns the count of federates halted in this poll (0 = no stalls).
+// Returns the count of federations halted in this poll (0 = no stalls).
 func (m *Manager) CheckStalls(ctx context.Context) int {
-	_ = ctx
-	return 0
+	return m.checkStalls(ctx)
 }
 
 // Compile-time assertion that Manager implements core.TimeManager.

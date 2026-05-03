@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sort"
 	"sync"
+	stdtime "time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
@@ -29,10 +30,15 @@ var ErrDuplicateNER = errors.New("time: federate has an outstanding NER request"
 //     not yet granted). Cleared when the grant is emitted.
 //   - requestedTime: the t parameter of the outstanding NER. Meaningful
 //     only when pendingNER is true.
+//   - pendingSince: wall-clock time (via Manager.opts.Clock) at which
+//     pendingNER transitioned to true. Used by W3 stall detection
+//     (CheckStalls) to compare against the federation's StallTimeout.
+//     Meaningful only when pendingNER is true; reset on full grant.
 type nerState struct {
 	currentTime   core.LogicalTime
 	pendingNER    bool
 	requestedTime core.LogicalTime
+	pendingSince  stdtime.Time
 }
 
 // nerStore is the goroutine-safe table from federateKey to nerState.
@@ -233,9 +239,14 @@ func (m *Manager) nextMessageRequest(ctx context.Context, fed core.FederationNam
 		return ErrDuplicateNER
 	}
 
-	// Record the new request.
+	// Record the new request. pendingSince captures the wall time at
+	// which the request first became outstanding so W3's CheckStalls
+	// can age it against the federation's StallTimeout. The clock is
+	// read INSIDE the critical section to keep the wall-time decision
+	// happens-before any peer's CheckStalls observation of the flag.
 	ns.pendingNER = true
 	ns.requestedTime = t
+	ns.pendingSince = m.opts.Clock.Now()
 	ext.mu.Unlock()
 
 	// Compute LBTS and emit grants for every now-satisfied pending NER
@@ -361,6 +372,7 @@ func (m *Manager) emitGrant(ctx context.Context, fed core.FederationName, h core
 	if clearPending {
 		ns.pendingNER = false
 		ns.requestedTime = 0
+		ns.pendingSince = stdtime.Time{}
 	}
 	ext.mu.Unlock()
 	return nil
