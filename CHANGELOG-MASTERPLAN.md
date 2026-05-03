@@ -6,6 +6,31 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-03 (M5 pre-work — orchestrator-frozen spec tests + perf stub + 3-wave multi-agent dispatch plan)
+
+M5 (Hardening + modes + perf + cross-language end-to-end — Agents A/B/C concurrent) infrastructure landed. **First multi-agent milestone**: Wave 1 dispatches 3 sub-agents across all three coding agents in parallel.
+
+**Delivered**:
+- **`rti/spec/M5/`** Go-side spec tests (orchestrator-frozen): `doc.go`, `fixtures.go` (permissive FOM repo + event log + recording outbox + minimal FOM XML helper), `mode_flag_test.go` (TASK-076 contract: default=Verbose, BestEffort persists), `best_effort_test.go` (TASK-077 contract; skip-scaffold), `perf_test.go` (TASK-079 contract: asserts perf.Manager.RunBaseline schema + JSON serialization), `soak_test.go` (TASK-078 contract; build tag `soak`), `cross_lang_test.go` (TASK-081 Go-side orchestration scaffold).
+- **`pysdk/tests/spec/m5/`** Python-side spec tests: `__init__.py`, `test_spec_m5_modes.py` (TASK-082 contract; skip-scaffold), `test_spec_m5_cross_language.py` (TASK-081 contract; skip-scaffold).
+- **`rti/internal/perf/`** stubs: `doc.go` (JSON schema documented), `baseline.go` (Manager + Options + Result struct frozen at SchemaVersion=1; constructor returns ErrNotImplemented). FROZEN-shape: schema is the M5 contract, downstream agents (TASK-084) read the JSON output.
+- **`docs/reports/M5/.gitkeep`** — per-agent status report directory landed (orchestrator-owned per `docs/ORTHOGONALITY.md` §2 last row).
+- **`docs/M5_DISPATCH_PLAN.md`** — 3-wave model: W1 (3 parallel: Agent A mode + best-effort, Agent B determinism audit, Agent C cross-language smoke) → W2 (2 parallel: Agent A hardening + perf, Agent C modes verification) → W3 (orchestrator close + MVP gate). Critical-path estimate 45–60 min sub-agent compute. **First milestone with cross-agent parallelism.**
+- **`scripts/check-milestones.sh`** M5 probe re-pointed at `rti/spec/M5/` + `pysdk/tests/spec/m5/`.
+
+**Verification** (next commit will run): `go test ./rti/spec/M5/...` shows mode_flag tests skip-or-passing (federation.New is real), perf_test skips on stub, scaffolds skip explicitly. `pytest pysdk/tests/spec/m5/` shows skip-scaffolds skipping. M0/M1/M2/M3/M4 stay green.
+
+**Notable design decisions**:
+- **Cross-agent parallel dispatch** is the structural innovation. Prior milestones (M2/M3 single-agent waves; M4 single-agent multi-wave) had one agent owning each wave. M5 fans across A/B/C in W1 because path ownership is fully disjoint per `docs/ORTHOGONALITY.md` §2 — Agent A writes only `rti/internal/`, Agent B writes only `docs/reports/M5/agent-b.md`, Agent C writes only `pysdk/` + `examples/pyjevsim/`. Zero collision risk.
+- **TASK-081 bundles M4 follow-ups**: real-gRPC transport in Python SDK + real-pyjevsim adapter both deferred from M4 land here, because cross-language smoke fundamentally requires both. Brief documents this expansion explicitly so the W1C sub-agent isn't surprised.
+- **`mode` plumbing already partial from M2**: proto + core.Mode + gRPC handler all wired. TASK-076 just needs CLI flag at `rtid`. TASK-077 is the substantive RO-vs-TSO delivery work.
+- **Perf JSON schema is FROZEN before any work**: `SchemaVersion=1` in `rti/internal/perf/baseline.go` pins the contract before TASK-079 implements anything. TASK-084's conditional decision rule reads this exact schema; locking it now prevents drift.
+- **Spec tests in `rti/spec/M5/` (Go) + `pysdk/tests/spec/m5/` (Python)** — same convention as M3 + M4. `tests/spec/M5/` deliberately not used because Go's internal-package rule blocks `tests/...` from importing `rti/internal/...` (M2/M3 pattern).
+
+**Next**: dispatch Wave 1 (W1A Agent A mode+best-effort, W1B Agent B audit, W1C Agent C cross-lang — 3 parallel sub-agents). Then W2 (Agent A hardening+perf parallel with Agent C modes verification). Then W3 (orchestrator close + MVP gate).
+
+---
+
 ## 2026-05-03 (M4 — DONE; 7 waves, 13 sub-agents)
 
 M4 closed in one session. **`scripts/check-milestones.sh` reports `M4: DONE (5/5)`** — pysdk package bootstrapped, examples/pyjevsim runs end-to-end, Python encoder passes 100% of conformance vectors, mypy --strict clean, ruff clean. Total spec/m4 test count: 131 passed, 1 skipped (replay path deferred to M5 alongside cross-language smoke; covered by determinism witness).

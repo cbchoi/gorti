@@ -341,8 +341,8 @@ check_m5() {
   echo "Exit: cross-language federation works; verbose+best-effort modes functional; baseline at sizes 2/5/25/100"
   local pass=0 total=4
 
-  [ -d tests/spec/M5 ] && { present "tests/spec/M5/ committed"; pass=$((pass+1)); } \
-                       || pending "tests/spec/M5/ pending orchestrator pre-work"
+  [ -d rti/spec/M5 ] && [ -d pysdk/tests/spec/m5 ] && { present "rti/spec/M5/ + pysdk/tests/spec/m5/ committed"; pass=$((pass+1)); } \
+                                                    || pending "M5 spec test dirs pending orchestrator pre-work"
   [ -f examples/pyjevsim/cross_lang_test.py ] && { present "cross-language smoke test"; pass=$((pass+1)); } \
                                                 || pending "cross-language smoke pending"
   [ -f pysdk/tests/test_modes.py ] && { present "mode verification test"; pass=$((pass+1)); } \

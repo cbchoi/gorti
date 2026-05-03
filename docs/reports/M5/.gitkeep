@@ -1,0 +1,6 @@
+# Per-agent M5 status reports land here:
+#   docs/reports/M5/agent-a.md  (TASK-080 perf baseline numbers; orchestrator-frozen path per ORTHOGONALITY.md §2)
+#   docs/reports/M5/agent-b.md  (TASK-083 determinism audit findings)
+#   docs/reports/M5/agent-c.md  (TASK-081/082 cross-language + modes results)
+#
+# This file exists so git tracks the directory before the first report lands.
