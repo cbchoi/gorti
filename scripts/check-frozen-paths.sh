@@ -35,6 +35,8 @@ FROZEN_PATTERNS=(
   '^docs/templates/'
   '^docs/tasks/'
   '^tests/spec/'
+  '^rti/spec/'
+  '^pysdk/tests/spec/'
   '^scripts/'
   '^Makefile$'
   '^buf\.(yaml|gen\.yaml)$'

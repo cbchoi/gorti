@@ -6,6 +6,35 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-03 (M4 pre-work — orchestrator-frozen pysdk skeleton + spec tests + 7-wave dispatch plan)
+
+M4 (Python SDK + pyjevsim bridge — Agent C territory) infrastructure landed. Sub-agents can now be dispatched against frozen-shape stubs and RED spec tests. Largest pre-work delivery to date by file count (~50 files); largest milestone by task count (26 tasks).
+
+**Delivered**:
+- **`pysdk/`** package skeleton (orchestrator-frozen): `pyproject.toml` (deps + ruff/mypy/pytest config; `mypy --strict` enabled, `asyncio_mode = "auto"`), `README.md`, `.gitignore`.
+- **`pysdk/rti1516e/`** frozen-shape stubs: `__init__.py` (public API exports), `errors.py` (one typed exception per ErrorCode in proto/rti/v1/errors.proto, with lookup table), `connection.py` (RtiConnection + Federate signatures with full Layer 1 surface), `events.py` (5 typed event dataclasses), `standard.py` (Layer 2 Rti1516eAmbassador with all 1516-2010 method names), `declaration.py` + `object.py` + `interaction.py` (extension points). All public bodies raise `NotImplementedError("TASK-NNN")`.
+- **`pysdk/rti1516e/encoding/`** stubs (10 codec modules): `_base.py` (`Codec` ABC + `pad_to_boundary` / `aligned_offset` helpers), `integer.py` + `float_codec.py` + `byte_codec.py` + `string_codec.py` (16 primitive codec classes), `fixed_array.py` + `variable_array.py` + `fixed_record.py` + `variant_record.py` + `opaque.py` (5 composite codec classes), `dispatch.py` (`codec_for(spec)` entry point).
+- **`pysdk/rti1516e/fom/`** stubs: `model.py` (FOM dataclass mirror of Go: ObjectClass, Attribute, InteractionClass, Parameter, DataType sum), `parser.py` (`parse(modules)` returning `ParseResult` with FOM-NNN diagnostics).
+- **`pysdk/pyjevsim_bridge/`** stubs: `_protocol.py` (`CoupledModelProtocol` typing.Protocol shim — avoids pyjevsim hard dep in spec tests), `port_mapping.py` (PortMapping dataclass + lookup helpers), `time_advance.py` (HLAFederate.run / step_once / deliver_external), `select_preserve.py` (order_simultaneous_events helper).
+- **`pysdk/tests/spec/m4/`** orchestrator-frozen pytest spec tests (13 files): encoding conformance (parametrized over all 94 vectors in encoding_vectors.json), FOM diagnostics (10 bad fixtures + good fixtures), connection lifecycle, declaration, object, interaction, events stream + typed-exception mapping check, Layer 2 ambassador surface check, port mapping, time advance, select preserve, pyjevsim API drift smoke (skips if pyjevsim absent), determinism gate (skip-scaffold), replay gate (skip-scaffold).
+- **`pysdk/tests/spec/m4/_fakes/`** test doubles: `FakeRtiServer` (pure-Python in-process double of RTI gRPC surface; records calls, accepts canned events, mints handles), `StubCoupledModel` (pyjevsim coupled-model substitute with controllable ta/output schedules, recorded transitions), `vector_loader` (encoding_vectors.json normalizer with primitive/composite/all filters).
+- **`pysdk/tests/spec/m4/conftest.py`** — pytest fixtures + repo-root constants for off-tree fixture access (encoding vectors, FOM fixtures).
+- **`docs/M4_DISPATCH_PLAN.md`** — 7-wave dispatch model: W1 (5 parallel: int/float/byte/opaque codecs + FOM model+codegen) → W2 (4 parallel: strings + array composites + record composites + FOM parser) → W3 (1: codec_for dispatcher = encoding gate) → W4 (1 bundled: full SDK Layer 1+2) → W5 (2 parallel: bridge port mapping + pyjevsim smoke/version pin) → W6 (1: bridge time-advance + select-preserve) → W7 (1: examples + determinism + lint/coverage gate). Critical-path estimate 50–80 min wall-time.
+- **Infrastructure**: `Makefile` extended with `py-codegen`, `py-test`, `py-lint`, `py-typecheck` targets. `scripts/check-frozen-paths.sh` extended to block agent writes to `pysdk/tests/spec/` AND retroactively `rti/spec/` (M2/M3 oversight fix). `scripts/check-milestones.sh` M4 probe re-pointed at `pysdk/tests/spec/m4/test_spec_m4_encoding_conformance.py`.
+
+**Verification** (next commit will run): pytest collects all spec tests, fails RED with `NotImplementedError`/`AttributeError` for the right reason; mypy --strict on stubs is clean; Go-side M0/M1/M2/M3 tests stay green; M4 milestone probe shows partial credit (spec dir + pysdk skeleton present; conformance + mypy not yet GREEN until Agent C's waves land).
+
+**Notable design decisions**:
+- Spec tests live in `pysdk/tests/spec/m4/` (lowercase, Python convention) — diverges from M2/M3's `rti/spec/M<x>/` only because Python doesn't have Go's internal-package import rule. Frozen-paths protection equivalent.
+- Layer 2 ambassador (`Rti1516eAmbassador`) preserves IEEE 1516-2010 camelCase method names (`createFederationExecution`, `joinFederationExecution`, etc.) instead of converting to snake_case. The N802 lint warnings are intentional — these names exist for users porting from Java/C++ RTIs.
+- `FakeRtiServer` is pure Python (no real gRPC server) so spec tests stay fast and dependency-light. The SDK's transport layer must be injectable; spec tests fail with AttributeError when it's not, signaling a design issue early.
+- `StubCoupledModel` keeps spec bridge tests pyjevsim-free. ONE spec test (`test_spec_m4_pyjevsim_smoke.py`) imports real pyjevsim and skips if not installed — making API drift detection explicit and isolated.
+- `errors.py` provides a complete `ERROR_CODE_TO_EXCEPTION` lookup table (27 typed exceptions, one per proto ErrorCode) so Agent C's TASK-067 wires gRPC trailers via a single `dict.get(code, RtiError)` lookup. Test asserts the table is complete against the proto file.
+
+**Next**: dispatch Wave 1 (W1A integer + W1B float + W1C byte + W1D opaque + W1E FOM model + codegen — 5 sub-agents in parallel). Then W2..W7 per the plan.
+
+---
+
 ## 2026-05-03 (M3 — DONE; 4 waves, 5 sub-agents)
 
 M3 closed in one session. **`scripts/check-milestones.sh` reports `M3: DONE (4/4)`** — examples/go-timed runs deterministically across 20 randomized scenarios + 10 same-seed iterations and replays byte-identical (NFR-DET-1, NFR-DET-2). Stall detection fires within configured window and halts the federation cleanly with FederationHalted recorded in the event log.

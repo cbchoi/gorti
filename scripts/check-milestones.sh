@@ -303,21 +303,21 @@ check_m4() {
   echo "Exit: examples/pyjevsim/ deterministic 10× same hash; Python encoder 100% of vectors; mypy --strict clean"
   local pass=0 total=5
 
-  [ -d tests/spec/M4 ] && { present "tests/spec/M4/ committed"; pass=$((pass+1)); } \
-                       || pending "tests/spec/M4/ pending orchestrator pre-work"
+  [ -d pysdk/tests/spec/m4 ] && { present "pysdk/tests/spec/m4/ committed"; pass=$((pass+1)); } \
+                              || pending "pysdk/tests/spec/m4/ pending orchestrator pre-work"
   [ -f pysdk/pyproject.toml ] && { present "pysdk package bootstrapped"; pass=$((pass+1)); } \
                                || pending "pysdk/ not yet bootstrapped"
   [ -f examples/pyjevsim/runner.py ] && { present "examples/pyjevsim/ exists"; pass=$((pass+1)); } \
                                       || pending "examples/pyjevsim/ pending"
 
-  if command -v pytest >/dev/null 2>&1 && [ -f pysdk/tests/test_encoding_conformance.py ]; then
-    if (cd pysdk && pytest tests/test_encoding_conformance.py -q >/dev/null 2>&1); then
+  if command -v pytest >/dev/null 2>&1 && [ -f pysdk/tests/spec/m4/test_spec_m4_encoding_conformance.py ]; then
+    if (cd pysdk && pytest tests/spec/m4/test_spec_m4_encoding_conformance.py -q >/dev/null 2>&1); then
       present "Python encoding conformance: 100% of vectors"; pass=$((pass+1))
     else
       pending "Python encoding conformance has failures"
     fi
   else
-    pending "pytest or test_encoding_conformance.py not yet in place"
+    pending "pytest or test_spec_m4_encoding_conformance.py not yet in place"
   fi
 
   if command -v mypy >/dev/null 2>&1 && [ -f pysdk/pyproject.toml ]; then
