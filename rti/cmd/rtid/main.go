@@ -41,6 +41,8 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/eventlog"
 	"github.com/cbchoi/gorti/rti/internal/federation"
 	"github.com/cbchoi/gorti/rti/internal/object"
+	"github.com/cbchoi/gorti/rti/internal/ownership"
+	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
 	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 
@@ -378,6 +380,8 @@ type rtid struct {
 	fedMgr  *federation.Manager
 	declMgr *declaration.Manager
 	objReg  *object.Registry
+	syncMgr *syncpkg.Manager
+	ownMgr  *ownership.Manager
 	multi   *eventlog.MultiplexWriter
 	outbox  *multiOutbox
 	grpcS   *stdgrpc.Server
@@ -415,6 +419,28 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	declMgr := declaration.New()
 	outbox := newMultiOutbox(1024)
 
+	// M8 W1: ownership + sync managers. Sync uses Outbox for
+	// announceSynchronizationPoint / federationSynchronized; ownership
+	// uses Outbox for the §7 transfer notifications. Neither manager
+	// is exposed via gRPC in cut-1 (proto Service definitions for
+	// sync/ownership are not yet defined — M8 W2 follow-up); they are
+	// composed here so the runtime owns canonical state and so the
+	// object.Registry's OnRegister hook can populate initial ownership.
+	ownMgr, err := ownership.New(ownership.Options{
+		Outbox:   outbox,
+		EventLog: multi,
+	})
+	if err != nil {
+		return nil, err
+	}
+	syncMgr, err := syncpkg.New(syncpkg.Options{
+		Outbox:   outbox,
+		EventLog: multi,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	objReg, err := object.New(object.Options{
 		EventLog:     multi,
 		Declarations: declMgr,
@@ -430,6 +456,13 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// the TSO path until a future cut upgrades the handle.
 		Federations: fedMgr,
 		Orders:      grpcsvc.FOMRepoOrderLookup{Repo: foms},
+		// M8 W1: notify ownership.Manager of every successful object
+		// registration so QueryOwnership / IsOwnedBy reflect the
+		// producing federate as the initial owner of all class
+		// attributes (FR-OWN-5).
+		OnRegister: func(fed core.FederationName, owner core.FederateHandle, obj core.ObjectHandle, _ core.ObjectClassHandle, attrs []core.AttributeHandle) {
+			ownMgr.RegisterInitialOwnership(fed, owner, obj, attrs)
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -494,6 +527,8 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		fedMgr:  fedMgr,
 		declMgr: declMgr,
 		objReg:  objReg,
+		syncMgr: syncMgr,
+		ownMgr:  ownMgr,
 		multi:   multi,
 		outbox:  outbox,
 		grpcS:   gs,

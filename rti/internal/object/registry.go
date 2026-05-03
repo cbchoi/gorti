@@ -102,6 +102,22 @@ type Options struct {
 	// Both Federations AND Orders must be supplied for best-effort
 	// RO delivery to engage; missing either means TSO-only behavior.
 	Orders AttributeOrderLookup
+
+	// OnRegister is an OPTIONAL post-Register hook invoked after
+	// a successful object registration AND after the Discover
+	// fan-out completes. The cut-1 ownership.Manager wiring uses
+	// this to record the producing federate as the initial owner
+	// of all class attributes (M8 W1, FR-OWN-5).
+	//
+	// The hook receives the assigned object handle, the producing
+	// federate, and the object class. The attribute set is fixed
+	// to the cut-1 fanoutAttrProbe range — the same range the
+	// registry already uses for Discover fan-out — pending the
+	// FOM-driven enumeration follow-up tracked at fanoutAttrProbe.
+	//
+	// MUST NOT block; the registry calls it synchronously before
+	// returning to the caller of Register.
+	OnRegister func(fed core.FederationName, owner core.FederateHandle, obj core.ObjectHandle, cls core.ObjectClassHandle, attrs []core.AttributeHandle)
 }
 
 // New constructs a Registry. Returns an error if any required field is nil.
@@ -227,6 +243,14 @@ func (r *Registry) Register(
 	st.mu.Unlock()
 
 	r.fanoutDiscover(ctx, fed, st, producer, inst)
+	if r.opts.OnRegister != nil {
+		// Cut-1: the same fixed attribute range used by Discover
+		// fan-out is forwarded to the OnRegister hook. FOM-driven
+		// enumeration is the follow-up tracked at fanoutAttrProbe.
+		attrs := make([]core.AttributeHandle, len(fanoutAttrProbe))
+		copy(attrs, fanoutAttrProbe)
+		r.opts.OnRegister(fed, producer, assigned, cls, attrs)
+	}
 	return assigned, canonical, nil
 }
 
