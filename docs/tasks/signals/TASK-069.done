@@ -1,0 +1,30 @@
+- agent: agent-c
+- branch: agent/c/m4-w5a-port-mapping
+- task: TASK-069
+- summary: |
+    Implemented PortMapping.from_dict() + lookup helpers in
+    pysdk/pyjevsim_bridge/port_mapping.py.
+
+    Cut-1 direction inference uses the port-name prefix:
+      - "out_*" -> goes into out_ports as {port_name: fom_class}
+      - "in_*"  -> goes into in_ports  as {fom_class: port_name}
+                   (reverse direction so subscribers can resolve the
+                    inbound port from a received FOM interaction class)
+      - any other prefix -> ValueError with a clear diagnostic.
+        Forces explicit direction. Future revisions may consult
+        coupled_model.get_ports() (see _protocol.CoupledModelProtocol).
+
+    Lookup helpers are plain dict.get() returning None on miss; no
+    KeyError surfaces to callers.
+
+    The dataclass remains @dataclass(frozen=True) per the seeded stub
+    contract; signature is unchanged. Public surface
+    (pyjevsim_bridge.PortMapping) re-exports through __init__.py as
+    before.
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_port_mapping.py -q: 2/2 GREEN
+    - pytest pysdk/tests/test_port_mapping.py -q: 5/5 GREEN (agent-owned)
+    - pytest pysdk/tests/ -q: 439 passed, 5 pre-existing FAIL (TASK-070/071/072
+      future-wave NotImplementedError stubs), 2 SKIPPED. No regressions.
+    - mypy --strict pysdk: clean (64 source files)
+    - ruff check pysdk: clean
