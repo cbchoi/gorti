@@ -162,6 +162,66 @@ func (m *Manager) NextMessageRequest(ctx context.Context, fed core.FederationNam
 	return m.nextMessageRequest(ctx, fed, h, t)
 }
 
+// NextMessageRequestAvailable implements core.TimeManager. See SRS §FR-TM-2 (M7).
+//
+// IEEE 1516.1-2010 §8.12: same as NER but the grant time may EQUAL LBTS
+// (not strictly less). This allows the federate to receive messages
+// time-stamped exactly at LBTS.
+//
+// FROZEN-shape: Agent A implements per the M7 wave model. Until then,
+// returns ErrNotImplemented so spec tests in rti/spec/M7/ fail RED for
+// the right reason.
+func (m *Manager) NextMessageRequestAvailable(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
+	_ = ctx
+	_ = fed
+	_ = h
+	_ = t
+	return ErrNotImplemented
+}
+
+// TimeAdvanceRequest implements core.TimeManager. See SRS §FR-TM-2 (M7).
+//
+// IEEE 1516.1-2010 §8.10: federate requests advance to t. Grant fires at
+// min(t, LBTS) — strictly less than LBTS. Federate must process all
+// TSO messages whose timestamp is ≤ grant time before the next request.
+//
+// FROZEN-shape: Agent A implements per the M7 wave model.
+func (m *Manager) TimeAdvanceRequest(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
+	_ = ctx
+	_ = fed
+	_ = h
+	_ = t
+	return ErrNotImplemented
+}
+
+// TimeAdvanceRequestAvailable implements core.TimeManager. See SRS §FR-TM-2 (M7).
+//
+// IEEE 1516.1-2010 §8.11: same as TAR but the grant time may EQUAL LBTS.
+//
+// FROZEN-shape: Agent A implements per the M7 wave model.
+func (m *Manager) TimeAdvanceRequestAvailable(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
+	_ = ctx
+	_ = fed
+	_ = h
+	_ = t
+	return ErrNotImplemented
+}
+
+// FlushQueueRequest implements core.TimeManager. See SRS §FR-TM-2 (M7).
+//
+// IEEE 1516.1-2010 §8.13: federate requests the RTI to flush its TSO
+// queue up to t. The grant fires when the queue is drained. Useful for
+// federates that need to "catch up" without advancing.
+//
+// FROZEN-shape: Agent A implements per the M7 wave model.
+func (m *Manager) FlushQueueRequest(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
+	_ = ctx
+	_ = fed
+	_ = h
+	_ = t
+	return ErrNotImplemented
+}
+
 // CheckStalls is called by the rtid main loop (or directly by tests with
 // FakeClock) to detect federates whose last NER timestamp is older than
 // the federation's StallTimeout. On detection, emits FederationHalted to
