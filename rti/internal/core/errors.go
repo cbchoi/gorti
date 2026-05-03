@@ -40,4 +40,14 @@ var (
 	// Wire
 	ErrWireVersionMismatch  = errors.New("wire protocol version mismatch")
 	ErrWireMalformedMessage = errors.New("malformed wire message")
+
+	// Synchronization (M8 — FR-SYN-*)
+	ErrSyncPointAlreadyRegistered = errors.New("synchronization point already registered in federation")
+	ErrSyncPointNotRegistered     = errors.New("synchronization point not registered in federation")
+	ErrSyncPointAlreadyAchieved   = errors.New("federate has already achieved this synchronization point")
+
+	// Ownership (M8 — FR-OWN-*)
+	ErrOwnershipDivestPending     = errors.New("attribute already has a pending negotiated divest")
+	ErrOwnershipAcquirePending    = errors.New("attribute already has a pending acquire")
+	ErrOwnershipNotInTransfer     = errors.New("ownership transfer is not in progress for this attribute")
 )
