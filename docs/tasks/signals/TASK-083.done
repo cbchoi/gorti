@@ -1,0 +1,2 @@
+TASK-083 done: determinism audit complete. Report at docs/reports/M5/agent-b.md.
+Issues filed: #2, #3. No source code changes (audit-only task).
