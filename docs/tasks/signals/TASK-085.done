@@ -1,0 +1,11 @@
+TASK-085 done — M5 closed; MVP achieved.
+
+scripts/check-milestones.sh reports M0..M5: DONE (4/4 each).
+
+All M5 exit criteria recorded in CHANGELOG-MASTERPLAN.md.
+All three M5 status reports merged: docs/reports/M5/agent-{a,b,c}.md.
+Perf baseline JSON at docs/reports/M5/perf-baseline.json.
+M5 spec tests: 0 RED across rti/spec/M5/ + pysdk/tests/spec/m5/.
+1 documented skip (Python+Go best-effort RO; deferred to M6 alongside cross-language handle alignment).
+
+Project MVP gate passed.
