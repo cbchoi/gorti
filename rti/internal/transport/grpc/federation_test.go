@@ -473,3 +473,81 @@ type errWrap struct {
 
 func (e errWrap) Error() string { return e.msg }
 func (e errWrap) Unwrap() error { return e.cause }
+
+// ===========================================================================
+// onCreateFederationSuccess hook (M6 W1C — drives FOMRepoOrderLookup wiring)
+// ===========================================================================
+
+// TestCreateFederation_PostSuccessHook_FiresOnce confirms the hook is
+// invoked exactly once per successful CreateFederation, with the
+// translated core.FederationName and the same FOM modules the manager
+// just consumed. This is the wiring rtid main relies on to populate
+// fomRepository.RememberFor — without it, FOMRepoOrderLookup falls back
+// to TSO and the M5 best-effort RO test stays red.
+func TestCreateFederation_PostSuccessHook_FiresOnce(t *testing.T) {
+	svc := newFedSvc(&fakeFedStore{})
+	type call struct {
+		name    core.FederationName
+		modules []core.FOMModule
+	}
+	var calls []call
+	svc.onCreateFederationSuccess = func(_ context.Context, name core.FederationName, modules []core.FOMModule) {
+		calls = append(calls, call{name: name, modules: modules})
+	}
+	_, err := svc.CreateFederation(context.Background(), &rtiv1.CreateFederationRequest{
+		WireVersion:    wireV1(),
+		FederationName: fedAlphaName,
+		FomModules: []*rtiv1.FOMModule{
+			{Path: "f.xml", Xml: []byte("<a/>")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateFederation: %v", err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("hook called %d times; want exactly 1", len(calls))
+	}
+	if calls[0].name != fedAlpha {
+		t.Errorf("hook name=%q, want %q", calls[0].name, fedAlpha)
+	}
+	if len(calls[0].modules) != 1 || calls[0].modules[0].Path != "f.xml" {
+		t.Errorf("hook modules=%v, want one module {Path:f.xml}", calls[0].modules)
+	}
+}
+
+// TestCreateFederation_PostSuccessHook_NotFiredOnError confirms the
+// hook stays silent when the manager rejects the create — the
+// FOM repo's per-federation map must NOT be populated for a
+// federation that doesn't exist.
+func TestCreateFederation_PostSuccessHook_NotFiredOnError(t *testing.T) {
+	svc := newFedSvc(&fakeFedStore{createErr: core.ErrFederationAlreadyExists})
+	hookCalls := 0
+	svc.onCreateFederationSuccess = func(_ context.Context, _ core.FederationName, _ []core.FOMModule) {
+		hookCalls++
+	}
+	_, err := svc.CreateFederation(context.Background(), &rtiv1.CreateFederationRequest{
+		WireVersion:    wireV1(),
+		FederationName: fedAlphaName,
+	})
+	if status.Code(err) != codes.AlreadyExists {
+		t.Fatalf("CreateFederation: got %v, want AlreadyExists", err)
+	}
+	if hookCalls != 0 {
+		t.Errorf("hook fired %d times on error path; want 0", hookCalls)
+	}
+}
+
+// TestCreateFederation_PostSuccessHook_NilIsNoop confirms a nil hook
+// (the contract for tests that don't care about post-success wiring)
+// does not panic and does not change the success behavior.
+func TestCreateFederation_PostSuccessHook_NilIsNoop(t *testing.T) {
+	svc := newFedSvc(&fakeFedStore{})
+	svc.onCreateFederationSuccess = nil
+	_, err := svc.CreateFederation(context.Background(), &rtiv1.CreateFederationRequest{
+		WireVersion:    wireV1(),
+		FederationName: fedAlphaName,
+	})
+	if err != nil {
+		t.Fatalf("CreateFederation with nil hook: %v", err)
+	}
+}

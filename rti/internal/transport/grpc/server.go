@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -60,6 +61,15 @@ type Options struct {
 	// Outbox is referenced by the StreamService to register per-federate
 	// outbound channels.
 	Outbox core.Outbox
+
+	// OnCreateFederationSuccess, when non-nil, is invoked after every
+	// successful CreateFederation gRPC call with the federation name
+	// and the FOM modules supplied by the client. The composition root
+	// (rtid main) wires this to populate the FOM repository's
+	// per-federation handle map (foms.RememberFor) so that
+	// FOMRepoOrderLookup can resolve per-class declared order at
+	// best-effort interaction-send time. Tests may leave this nil.
+	OnCreateFederationSuccess func(ctx context.Context, name core.FederationName, modules []core.FOMModule)
 }
 
 // NewServer constructs a Server. Validates that all required Options
@@ -77,8 +87,10 @@ func NewServer(opts Options) (*Server, error) {
 	if opts.Outbox == nil {
 		return nil, ErrOutboxRequired
 	}
+	fedSvc := newFederationService(opts.Federations)
+	fedSvc.onCreateFederationSuccess = opts.OnCreateFederationSuccess
 	return &Server{
-		fedService:    newFederationService(opts.Federations),
+		fedService:    fedSvc,
 		declService:   newDeclarationService(opts.Declarations),
 		objService:    newObjectService(opts.Objects),
 		streamService: newStreamService(opts.Outbox),

@@ -440,6 +440,31 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		Declarations: declMgr,
 		Objects:      objReg,
 		Outbox:       outbox,
+		// Post-CreateFederation hook: re-Load the FOM modules through
+		// the same repo the manager used internally and remember the
+		// resulting handle against the federation name. This populates
+		// the per-federation map consumed by
+		// grpcsvc.FOMRepoOrderLookup.{InteractionOrder,AttributeOrder}
+		// — without it, Repo.Get(fed) returns ErrFederationNotFound and
+		// best-effort delivery falls back to TSO regardless of the
+		// per-class <order>Receive</order> declaration. The double
+		// parse is acceptable: FOM XML parsing is microseconds and
+		// CreateFederation is once-per-federation. Errors are logged
+		// but do not propagate — a Load failure here is a programmer
+		// error (the manager already validated the same modules a
+		// moment earlier and accepted them) and the federation has
+		// already been created; surfacing the error to the caller
+		// would lie about the federation's existence.
+		OnCreateFederationSuccess: func(ctx context.Context, name core.FederationName, modules []core.FOMModule) {
+			h, err := foms.Load(ctx, modules)
+			if err != nil {
+				cfg.Logger.Warn("rtid: post-CreateFederation FOM Load failed; "+
+					"FOMRepoOrderLookup will default to TSO for this federation",
+					"federation", name, "err", err)
+				return
+			}
+			foms.RememberFor(name, h)
+		},
 	})
 	if err != nil {
 		return nil, err

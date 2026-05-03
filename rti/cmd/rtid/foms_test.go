@@ -3,11 +3,19 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	stdgrpc "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 	"github.com/cbchoi/gorti/rti/internal/object"
 )
 
@@ -390,6 +398,82 @@ func TestFomHandle_OrderForAttribute_ReadsFOMOrder(t *testing.T) {
 	}
 }
 
+// TestRTID_CreateFederationViaGRPC_PopulatesFOMRepoMap is the
+// composition-level regression for M6 W1C: after a successful
+// CreateFederation gRPC call against the rtid-composed gRPC server,
+// the per-federation FOM map MUST be populated so
+// FOMRepoOrderLookup.{InteractionOrder,AttributeOrder} can resolve
+// per-class declared order. Without the OnCreateFederationSuccess hook
+// wired in newRTID, foms.Get(name) would return ErrFederationNotFound
+// here and best-effort RO delivery would silently fall back to TSO —
+// the exact gap the M5
+// test_spec_m5_best_effort_attribute_delivers_ro spec test was
+// previously skipping on.
+func TestRTID_CreateFederationViaGRPC_PopulatesFOMRepoMap(t *testing.T) {
+	srv, err := newRTID(rtidConfig{
+		ListenAddr:        "127.0.0.1:0",
+		MetricsListenAddr: "127.0.0.1:0",
+		LogDir:            "",
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatalf("newRTID: %v", err)
+	}
+
+	// Pre-bind the listener so the test learns the ephemeral port; same
+	// pattern used by TestNewRTID_TLSEnabled in tls_test.go.
+	gln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	defer func() { _ = gln.Close() }()
+
+	go func() { _ = srv.grpcS.Serve(gln) }()
+	t.Cleanup(srv.grpcS.GracefulStop)
+	t.Cleanup(func() { _ = srv.multi.Close() })
+
+	dialCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := stdgrpc.NewClient(gln.Addr().String(),
+		stdgrpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	client := rtiv1.NewFederationServiceClient(conn)
+	const fedName = "rememberfor-smoke"
+	_, err = client.CreateFederation(dialCtx, &rtiv1.CreateFederationRequest{
+		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName: fedName,
+		FomModules: []*rtiv1.FOMModule{
+			{Path: fedName, Xml: minimalFOMXML(t)},
+		},
+		Mode: rtiv1.Mode_MODE_BEST_EFFORT,
+	})
+	if err != nil {
+		t.Fatalf("CreateFederation: %v", err)
+	}
+
+	// The hook should have populated foms.byFedKey.
+	h, err := srv.foms.Get(context.Background(), core.FederationName(fedName))
+	if err != nil {
+		t.Fatalf("foms.Get(%q) after CreateFederation: %v "+
+			"(post-success hook did not fire — FOMRepoOrderLookup will "+
+			"default to TSO, breaking M5 best-effort RO delivery)",
+			fedName, err)
+	}
+	if !h.IsValid() {
+		t.Fatalf("remembered FOM handle is not valid")
+	}
+	// Sanity: the handle resolves the FOM's Vehicle class — proves the
+	// hook re-Loaded the same modules the manager consumed.
+	if _, ok := h.LookupObjectClass("Vehicle"); !ok {
+		t.Errorf("remembered handle does not resolve Vehicle; FOM was lost in re-Load")
+	}
+}
+
 // TestFOMRepository_RememberAndGet: after RememberFor records a federation's
 // handle, Get returns the same handle.
 func TestFOMRepository_RememberAndGet(t *testing.T) {
@@ -409,3 +493,4 @@ func TestFOMRepository_RememberAndGet(t *testing.T) {
 		t.Errorf("Get(alpha): got different handle; remembered handle wasn't returned")
 	}
 }
+
