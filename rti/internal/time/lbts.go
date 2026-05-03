@@ -1,6 +1,10 @@
 package time
 
-import "github.com/cbchoi/gorti/rti/internal/core"
+import (
+	"math"
+
+	"github.com/cbchoi/gorti/rti/internal/core"
+)
 
 // RegulatingFederate is one entry in the LBTS computation snapshot.
 // Pure value type — no pointers — so callers can pass slice-of-value
@@ -15,13 +19,24 @@ type RegulatingFederate struct {
 // Returns core.PositiveInfinity when set is empty (no regulating
 // federates → no advance constraint).
 //
-// Determinism: tie-break by FederateHandle ascending. Callers iterate
-// the set in handle-sorted order to ensure reproducible behavior across
-// runs (NFR-DET-1).
+// Determinism: the result depends only on the multiset of contributions
+// (Time + Lookahead), not on slice ordering. min over IEEE-754 doubles
+// is associative and commutative for non-NaN values, and a federate
+// with +Inf lookahead contributes +Inf, which loses to any finite
+// peer (NFR-DET-1).
 //
-// FROZEN-SHAPE: Agent A implements per the algorithm; tests in
-// rti/spec/M3/lbts_test.go drive it as a property over random sets.
+// FROZEN-SHAPE: signature and RegulatingFederate struct are M3 contract
+// (rti/spec/M3/lbts_test.go).
 func LBTS(set []RegulatingFederate) core.LogicalTime {
-	_ = set
-	return core.PositiveInfinity
+	if len(set) == 0 {
+		return core.PositiveInfinity
+	}
+	min := math.Inf(1)
+	for _, rf := range set {
+		c := float64(rf.Time) + float64(rf.Lookahead)
+		if c < min {
+			min = c
+		}
+	}
+	return core.LogicalTime(min)
 }
