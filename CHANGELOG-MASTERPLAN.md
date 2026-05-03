@@ -6,6 +6,37 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-03 (M3 — DONE; 4 waves, 5 sub-agents)
+
+M3 closed in one session. **`scripts/check-milestones.sh` reports `M3: DONE (4/4)`** — examples/go-timed runs deterministically across 20 randomized scenarios + 10 same-seed iterations and replays byte-identical (NFR-DET-1, NFR-DET-2). Stall detection fires within configured window and halts the federation cleanly with FederationHalted recorded in the event log.
+
+**Wave summary** (all merged to `main` in dispatch order):
+
+| Wave | Sub-agent | Tasks | Branch | Outcome |
+|---|---|---|---|---|
+| W1A | regulation state machine | TASK-041 | `agent/a/m3-w1a-regulation` | 9 spec tests green; per-federation isolation verified |
+| W1B | LBTS pure function | TASK-042 | `agent/a/m3-w1b-lbts` | 6 property tests green; order-independent confirmed |
+| W2 | NER + lookahead | TASK-043, TASK-044 | `agent/a/m3-w2-ner` | 6 NER spec tests green; deterministic grant order verified; key insight: side-table approach via `extOf(*Manager)` to honor "do-not-reshape Manager struct" rule |
+| W3 | stall detection | TASK-045 | `agent/a/m3-w3-stall` | 5 stall spec tests green; halted-state enforcement at top of every method |
+| W4 | examples/go-timed + harnesses + gate | TASK-046, 047, 048, 049 | `agent/a/m3-w4-go-timed` | M3 gate: replay byte-identical, 20 randomized determinism scenarios green |
+
+**Critical-path wall time**: ~40 min sub-agent compute. W1A+W1B in parallel (~6 min); W2 (~16 min); W3 (~7 min); W4 (~18 min). Plus orchestrator merge/verify cycles.
+
+**Notable mechanical findings**:
+- Sub-agents in fresh worktrees can't see `rti/internal/genproto/rti/v1/` (gitignored). Each sub-agent flagged this as "pre-existing infra hiccup" and scoped tests to packages outside the genproto-dependent path. Their work was unaffected. Future M4/M5 dispatch: keep this constraint in mind when bundling tasks.
+- The W2 sub-agent independently chose a `sync.Map`-based extension table to add per-Manager state without modifying the frozen `Manager` struct. This honored the "don't reshape" rule cleanly — orchestrator should adopt this as the pattern for future stub-extension work.
+- W4 unskipped the orchestrator-frozen replay/determinism scaffolds in `rti/spec/M3/` and added `buildTimedExampleLog` + `replayLog` helpers in the same file. The shape is reusable for M4/M5 cross-language replay tests.
+- Replayer extension was NOT needed — the existing `eventlog.Replayer.dispatchProtoEvent` already handles `TimeAdvanceGranted`/`FederationHalted` via the empty-body `*rtiv1.Event{Seq: N}` passthrough path. The time package's records serialize as synthetic empty bodies on the wire and round-trip identically.
+
+**Stats since M2 close**:
+- 9 TASK-NNN sentinels added (TASK-041..049)
+- ~3,300 lines added (mostly under `rti/internal/time/`, `rti/cmd/rtid/`, `examples/go-timed/`)
+- All M0/M1/M2/M3 tests green; race-clean under `-race`; lint debt unchanged
+
+**Next**: M4 (Python SDK + pyjevsim bridge — Agent C territory). Pre-work: orchestrator must write `tests/spec/M4/` + bootstrap `pysdk/` skeleton expectations + add `pysdk/` build target to Makefile. M4 has 26 tasks (TASK-050..075) plus 2 conditional perf tasks; orchestrator drafts the M4 dispatch plan mirroring M2/M3 wave pattern, scoped by SDK layer (encoding → FOM → connection → declaration/object/interaction → bridge → integration).
+
+---
+
 ## 2026-05-03 (M3 pre-work — orchestrator-frozen stubs + spec tests + wave-based dispatch plan)
 
 M3 (Time Management — NER + LBTS + stall timeout) infrastructure landed. Sub-agents can now be dispatched against frozen-shape stubs and RED spec tests.
