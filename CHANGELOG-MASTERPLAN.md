@@ -6,6 +6,21 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-03 (M3 pre-work — orchestrator-frozen stubs + spec tests + wave-based dispatch plan)
+
+M3 (Time Management — NER + LBTS + stall timeout) infrastructure landed. Sub-agents can now be dispatched against frozen-shape stubs and RED spec tests.
+
+**Delivered**:
+- **`rti/internal/time/`** stubs (frozen, orchestrator-only): `doc.go`, `manager.go` (Manager + Options + 5 `core.TimeManager` methods + `CheckStalls`), `lbts.go` (RegulatingFederate + pure `LBTS(set)` function). Constructor `New(opts)` returns `ErrNotImplemented`; all method bodies stubbed; `var _ core.TimeManager = (*Manager)(nil)` asserts the contract.
+- **`rti/spec/M3/`** spec tests (frozen, orchestrator-only): `doc.go`, `fixtures.go` (fakeOutbox + permissiveEventLog mirroring M2), `regulation_test.go` (10 tests — Enable/Disable Regulation/Constrained, twice errors, invalid lookahead negative+NaN, per-federation isolation), `lbts_test.go` (6 property tests — empty set→+Inf, single, min-across, order-independent, zero lookahead, +Inf lookahead), `ner_test.go` (6 tests — not-regulating reject, request-in-past, sole-regulator immediate grant, two-regulator wait, duplicate request, simultaneous-ready deterministic order), `stall_test.go` (6 tests — empty no-halt, before-timeout no-halt, past-timeout halts, halted-rejects-further, per-federation isolation, default-60s), `replay_test.go` (2 scaffold-skips for M3 gate), `determinism_test.go` (2 scaffold-skips). All RED with `ErrNotImplemented` for the right reason.
+- **`docs/M3_DISPATCH_PLAN.md`** — 4-wave dispatch model mirroring M2's proven shape: Wave 1 (W1A regulation + W1B LBTS, parallel), Wave 2 (NER + lookahead, single sub-agent), Wave 3 (stall detection, single sub-agent), Wave 4 (examples/go-timed integration + harnesses, single sub-agent). 9 tasks across 4 waves; critical path estimate 25–35 min wall-time.
+
+**Verification**: `go build ./... && go test ./...` — M0/M1/M2 all green; M3 spec tests RED with `ErrNotImplemented` from time-package stubs (the expected pre-dispatch state per `docs/TDD.md` §5).
+
+**Next action**: orchestrator updates `scripts/check-milestones.sh` M3 probe to look at `rti/spec/M3/`, then dispatches Wave 1 (W1A + W1B in one parallel call).
+
+---
+
 ## 2026-05-02 (M2 — DONE; 4 waves, 9 sub-agents)
 
 M2 closed in one session. **`scripts/check-milestones.sh` reports `M2: DONE (4/4)`** — examples/go-pingpong runs deterministically across 10 runs and replays byte-identical (NFR-DET-1, NFR-DET-2). Pingpong runtime: 268ms for 1000 round-trips (M2 budget was 5s).
