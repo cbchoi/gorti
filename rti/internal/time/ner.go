@@ -18,18 +18,32 @@ import (
 // federate-side code can branch on it.
 var ErrDuplicateNER = errors.New("time: federate has an outstanding NER request")
 
-// nerState is the per-federate NER bookkeeping side-table. It lives
-// alongside (and not inside) federateState because federateState is
-// owned by Wave 1A's regulation.go and the W2 ownership rules forbid
+// nerState is the per-federate time-advance bookkeeping side-table. It
+// lives alongside (and not inside) federateState because federateState
+// is owned by Wave 1A's regulation.go and the W2 ownership rules forbid
 // modifying that file.
+//
+// The struct name retains the historical "ner" prefix from M3 W2 — when
+// only NextMessageRequest existed — to avoid renaming the side-table
+// across every consumer (regulatingSnapshot, stall.go, federationMembers).
+// Conceptually it now holds state for ANY of the five time-advance
+// primitives (NER, NMRA, TAR, TARA, FQR); the active mode is recorded
+// in the `mode` field and consulted by tryGrantPending to dispatch the
+// per-mode grant condition.
 //
 // Fields:
 //   - currentTime: the federate's last granted (or initial) logical
 //     time. Initialised to 0 on first interaction.
-//   - pendingNER: true while a NER request is outstanding (queued but
-//     not yet granted). Cleared when the grant is emitted.
-//   - requestedTime: the t parameter of the outstanding NER. Meaningful
-//     only when pendingNER is true.
+//   - pendingNER: true while ANY mode's request is outstanding (queued
+//     but not yet granted). Name retained for binary-compat with M3
+//     consumers; treat as "pendingRequest". Cleared on full grant
+//     (NER full / NMRA full / every TAR/TARA/FQR grant); kept on NER /
+//     NMRA forced grant.
+//   - requestedTime: the t parameter of the outstanding request.
+//     Meaningful only when pendingNER is true.
+//   - mode: which AdvanceMode produced the outstanding request. Drives
+//     the per-mode grant predicate in decideGrant. Zero (ModeNone) when
+//     not pending.
 //   - pendingSince: wall-clock time (via Manager.opts.Clock) at which
 //     pendingNER transitioned to true. Used by W3 stall detection
 //     (CheckStalls) to compare against the federation's StallTimeout.
@@ -38,6 +52,7 @@ type nerState struct {
 	currentTime   core.LogicalTime
 	pendingNER    bool
 	requestedTime core.LogicalTime
+	mode          AdvanceMode
 	pendingSince  stdtime.Time
 }
 
@@ -180,6 +195,13 @@ func (m *Manager) regulatingSnapshot(fed core.FederationName) []RegulatingFedera
 // Extracted so the exported method's body remains a one-liner and the
 // orchestrator-frozen signature in manager.go is preserved verbatim.
 //
+// Cut-2 (M7) note: the four sibling primitives (NMRA, TAR, TARA, FQR)
+// share this exact pre-flight + recording shape via dispatchAdvance in
+// advance.go; nextMessageRequest is the M3-original entry point and
+// stays here both for git-history hygiene and because the M3 spec test
+// suite specifically exercises it. Both call sites converge on
+// tryGrantPending.
+//
 // Pre-flight ordering (matters for the ner_test.go assertions):
 //  1. Halted-federation check (rejects with ErrFederationHalted).
 //  2. Eligibility check: federate must be regulating OR constrained.
@@ -187,118 +209,55 @@ func (m *Manager) regulatingSnapshot(fed core.FederationName) []RegulatingFedera
 //  4. Duplicate-request check.
 //
 // Grant logic:
-//   - Record the request, mark pendingNER.
+//   - Record the request, mark pendingNER + mode=ModeNER.
 //   - Compute LBTS over the regulating set.
 //   - For every (handle-sorted) federate whose pending request is
-//     satisfied by LBTS, emit TimeAdvanceGrant via Outbox in handle
-//     order — ascending — to honour the determinism contract
-//     (NFR-DET-1; TestSpec_M3_NER_SimultaneousReady_DeterministicGrantOrder).
+//     satisfied by LBTS per its per-mode predicate, emit TimeAdvanceGrant
+//     via Outbox in handle order — ascending — to honour the
+//     determinism contract (NFR-DET-1;
+//     TestSpec_M3_NER_SimultaneousReady_DeterministicGrantOrder).
 //   - Write-ahead through EventLog when non-nil.
 func (m *Manager) nextMessageRequest(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
-	ext := extOf(m)
-
-	// (1) Halted check. The halted set is owned by W3 (stall detection);
-	// W2 reads it through ext.halted, which W3 will populate. Until
-	// then this check is a clean no-op for live federations.
-	if ext.isHalted(fed) {
-		return core.ErrFederationHalted
-	}
-
-	// (2) Eligibility: the federate must be in time management. Read
-	// regulation/constrained state under stateStore.mu and copy out.
-	m.states.mu.Lock()
-	regSt := m.states.getLocked(fed, h)
-	var regulating, constrained bool
-	var lookahead core.LogicalTime
-	if regSt != nil {
-		regulating = regSt.regulating
-		constrained = regSt.constrained
-		lookahead = regSt.lookahead
-	}
-	m.states.mu.Unlock()
-	if !regulating && !constrained {
-		return core.ErrTimeNotRegulating
-	}
-
-	// (3) Lookahead: only regulating federates have a lookahead floor.
-	// For a constrained-only federate the request is bounded by LBTS,
-	// not by lookahead.
-	ext.mu.Lock()
-	ns := ext.getOrCreateLocked(fed, h)
-	currentTime := ns.currentTime
-	if regulating {
-		if err := checkLookahead(currentTime, lookahead, t); err != nil {
-			ext.mu.Unlock()
-			return err
-		}
-	}
-
-	// (4) Duplicate-request check.
-	if ns.pendingNER {
-		ext.mu.Unlock()
-		return ErrDuplicateNER
-	}
-
-	// Record the new request. pendingSince captures the wall time at
-	// which the request first became outstanding so W3's CheckStalls
-	// can age it against the federation's StallTimeout. The clock is
-	// read INSIDE the critical section to keep the wall-time decision
-	// happens-before any peer's CheckStalls observation of the flag.
-	ns.pendingNER = true
-	ns.requestedTime = t
-	ns.pendingSince = m.opts.Clock.Now()
-	ext.mu.Unlock()
-
-	// Compute LBTS and emit grants for every now-satisfied pending NER
-	// in this federation, in handle-sorted order.
-	return m.tryGrantPending(ctx, fed)
+	return m.dispatchAdvance(ctx, fed, h, t, ModeNER)
 }
 
-// tryGrantPending evaluates every pending NER in fed against the
-// current LBTS and emits grants — in ascending FederateHandle order —
-// for each one whose requested time is reachable. This loop runs to
-// fixed point: granting one federate's NER advances its currentTime,
-// which may raise LBTS and unblock another NER.
+// tryGrantPending evaluates every pending time-advance request in fed
+// against the current LBTS and emits grants — in ascending
+// FederateHandle order — for each one whose per-mode predicate is
+// satisfied. This loop runs to fixed point: granting one federate's
+// request advances its currentTime, which may raise LBTS and unblock
+// another peer.
 //
-// Two grant paths:
+// The per-mode dispatch is delegated to decideGrant in advance.go; this
+// function owns the iteration discipline (handle-sorted candidates,
+// fixed-point restart) and the I/O (emitGrant). Mode-specific semantics
+// — strict vs inclusive LBTS, forced-grant vs incremental-grant — live
+// in decideGrant.
 //
-//   (a) FULL grant: emitted when LBTS > F.requestedTime (strict). The
-//       federate is advanced to its requested time and pendingNER is
-//       cleared. The strict inequality (rather than >=) is what lets
-//       SimultaneousReady defer the first NER until all peers also
-//       NER and collectively raise LBTS above the requested floor.
+// Cross-mode interaction: when several federates are pending under
+// different modes (e.g. fed1 NER, fed2 TAR), each is evaluated against
+// the same LBTS but with its own predicate. The TAR family's
+// "incremental grant at LBTS" path can fire even when peers are pending,
+// so a TAR call may unblock other federates' NERs in a single fixed-
+// point round. The "sole-pending" gate for NER/NMRA forced grants
+// counts ALL pending requests in fed regardless of mode — the gate's
+// purpose is "no peer will ever raise LBTS for me", which is true iff
+// nobody else has an outstanding request.
 //
-//   (b) FORCED grant: emitted when EXACTLY ONE federate F is pending
-//       in fed AND LBTS < F.requestedTime — i.e. peers are not in a
-//       state to ever satisfy F without themselves NER'ing. The
-//       forced grant lands at LBTS (not requestedTime); pendingNER
-//       remains set so that (i) a duplicate NER is rejected and
-//       (ii) the grant completes when peers eventually advance.
-//       This is the TwoRegulators_GrantWaits behaviour.
-//
-// Returns the first error encountered while emitting through Outbox
-// or EventLog; partial progress is preserved (a federate granted
-// before the failure has its state advanced). In cut-1 the
-// fakeOutbox + permissiveEventLog never fail, so the nominal path
-// returns nil.
+// Returns the first error encountered while emitting through Outbox or
+// EventLog; partial progress is preserved (a federate granted before
+// the failure has its state advanced). In cut-1 the fakeOutbox +
+// permissiveEventLog never fail, so the nominal path returns nil.
 func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) error {
 	ext := extOf(m)
 	for {
 		snap := m.regulatingSnapshot(fed)
 		lbts := LBTS(snap)
 
-		// Collect pending federates in fed whose requestedTime is
-		// strictly below LBTS — the FULL-grant set. Iteration is over
-		// a Go map so we materialise the candidate keys first and sort
-		// (D-2: never iterate a map without sorting downstream output).
+		// Materialise candidates under ext.mu, then release before any
+		// I/O. D-2: never iterate a map without sorting downstream.
 		ext.mu.Lock()
-		type cand struct {
-			h core.FederateHandle
-			t core.LogicalTime
-		}
-		var fullGrants []cand
-		var pendingCount int
-		var solePending cand
+		var cands []candidateGrant
 		for k, ns := range ext.states {
 			if k.fed != fed {
 				continue
@@ -306,37 +265,42 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 			if !ns.pendingNER {
 				continue
 			}
-			pendingCount++
-			solePending = cand{h: k.h, t: ns.requestedTime}
-			if float64(lbts) > float64(ns.requestedTime) {
-				fullGrants = append(fullGrants, cand{h: k.h, t: ns.requestedTime})
-			}
+			cands = append(cands, candidateGrant{
+				h:       k.h,
+				mode:    ns.mode,
+				current: ns.currentTime,
+				req:     ns.requestedTime,
+			})
 		}
 		ext.mu.Unlock()
 
-		// (a) FULL grants: emit for every fed whose requested < LBTS
-		// in handle order; restart the outer loop so a just-granted
-		// federate's currentTime advance can unblock further peers.
-		if len(fullGrants) > 0 {
-			sort.Slice(fullGrants, func(i, j int) bool { return fullGrants[i].h < fullGrants[j].h })
-			for _, c := range fullGrants {
-				if err := m.emitGrant(ctx, fed, c.h, c.t, true /*clearPending*/); err != nil {
-					return err
-				}
-			}
-			continue
+		if len(cands) == 0 {
+			return nil
 		}
+		sortCandidates(cands)
+		solePending := len(cands) == 1
 
-		// (b) FORCED grant: only when the federation has exactly one
-		// pending NER AND LBTS is below its requested. The forced
-		// grant lands at LBTS; the federate stays pending so the
-		// duplicate-NER check still fires.
-		if pendingCount == 1 && float64(lbts) < float64(solePending.t) {
-			if err := m.emitGrant(ctx, fed, solePending.h, lbts, false /*keepPending*/); err != nil {
+		// First pass: collect every candidate that decideGrant says to
+		// fire under the current LBTS. Emit them in handle order, then
+		// restart the outer loop so a just-granted federate's
+		// currentTime advance can unblock further peers.
+		fired := false
+		for _, c := range cands {
+			d := decideGrant(c.mode, c.current, c.req, lbts, solePending)
+			if !d.fire {
+				continue
+			}
+			if err := m.emitGrant(ctx, fed, c.h, d.time, d.clearPending); err != nil {
 				return err
 			}
+			fired = true
+			// One emission can change LBTS (via currentTime advance) and
+			// invalidate the rest of this pass; restart the outer loop.
+			break
 		}
-		return nil
+		if !fired {
+			return nil
+		}
 	}
 }
 
@@ -372,6 +336,7 @@ func (m *Manager) emitGrant(ctx context.Context, fed core.FederationName, h core
 	if clearPending {
 		ns.pendingNER = false
 		ns.requestedTime = 0
+		ns.mode = ModeNone
 		ns.pendingSince = stdtime.Time{}
 	}
 	ext.mu.Unlock()

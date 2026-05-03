@@ -168,58 +168,55 @@ func (m *Manager) NextMessageRequest(ctx context.Context, fed core.FederationNam
 // (not strictly less). This allows the federate to receive messages
 // time-stamped exactly at LBTS.
 //
-// FROZEN-shape: Agent A implements per the M7 wave model. Until then,
-// returns ErrNotImplemented so spec tests in rti/spec/M7/ fail RED for
-// the right reason.
+// Implementation delegates to dispatchAdvance with ModeNMRA; per-mode
+// semantics live in advance.go::decideGrant. Returns ErrNotImplemented
+// only via legacy code paths the dispatcher does not exercise.
 func (m *Manager) NextMessageRequestAvailable(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
-	_ = ctx
-	_ = fed
-	_ = h
-	_ = t
-	return ErrNotImplemented
+	return m.dispatchAdvance(ctx, fed, h, t, ModeNMRA)
 }
 
 // TimeAdvanceRequest implements core.TimeManager. See SRS §FR-TM-2 (M7).
 //
 // IEEE 1516.1-2010 §8.10: federate requests advance to t. Grant fires at
-// min(t, LBTS) — strictly less than LBTS. Federate must process all
-// TSO messages whose timestamp is ≤ grant time before the next request.
+// min(t, LBTS) whenever LBTS produces forward progress: a full grant at
+// t when LBTS > t (strict), an incremental grant at LBTS when LBTS < t
+// and LBTS > currentTime. Pending always clears on grant — TAR is a
+// "one request → one grant" primitive (the federate re-requests if it
+// has not yet reached t).
 //
-// FROZEN-shape: Agent A implements per the M7 wave model.
+// Implementation delegates to dispatchAdvance with ModeTAR.
 func (m *Manager) TimeAdvanceRequest(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
-	_ = ctx
-	_ = fed
-	_ = h
-	_ = t
-	return ErrNotImplemented
+	return m.dispatchAdvance(ctx, fed, h, t, ModeTAR)
 }
 
 // TimeAdvanceRequestAvailable implements core.TimeManager. See SRS §FR-TM-2 (M7).
 //
-// IEEE 1516.1-2010 §8.11: same as TAR but the grant time may EQUAL LBTS.
+// IEEE 1516.1-2010 §8.11: same as TAR but the grant time may EQUAL LBTS
+// (not strictly less). The full-grant predicate is LBTS >= t; the
+// incremental-grant path is identical.
 //
-// FROZEN-shape: Agent A implements per the M7 wave model.
+// Implementation delegates to dispatchAdvance with ModeTARA.
 func (m *Manager) TimeAdvanceRequestAvailable(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
-	_ = ctx
-	_ = fed
-	_ = h
-	_ = t
-	return ErrNotImplemented
+	return m.dispatchAdvance(ctx, fed, h, t, ModeTARA)
 }
 
 // FlushQueueRequest implements core.TimeManager. See SRS §FR-TM-2 (M7).
 //
 // IEEE 1516.1-2010 §8.13: federate requests the RTI to flush its TSO
-// queue up to t. The grant fires when the queue is drained. Useful for
-// federates that need to "catch up" without advancing.
+// queue up to t. The grant fires when the queue is drained.
 //
-// FROZEN-shape: Agent A implements per the M7 wave model.
+// CUT-2 SIMPLIFICATION: the cut-1/cut-2 codebase has no real TSO queue
+// (TSO message buffering is a cut-3 deliverable, see SRS §10.x for the
+// roadmap). FQR therefore behaves like TAR with the inclusive-LBTS
+// predicate (the queue is always trivially "empty" so the grant fires
+// at min(t, LBTS) immediately). Federates that depend on FQR for
+// reliable queue draining will get a degraded but correct grant in
+// cut-2; cut-3 introduces the real drain semantics. The mode is recorded
+// distinctly (ModeFQR) so cut-3 can extend without API churn.
+//
+// Implementation delegates to dispatchAdvance with ModeFQR.
 func (m *Manager) FlushQueueRequest(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
-	_ = ctx
-	_ = fed
-	_ = h
-	_ = t
-	return ErrNotImplemented
+	return m.dispatchAdvance(ctx, fed, h, t, ModeFQR)
 }
 
 // CheckStalls is called by the rtid main loop (or directly by tests with
