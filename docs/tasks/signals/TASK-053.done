@@ -1,0 +1,1 @@
+TASK-053 done — HLAASCIIstring + HLAunicodeString implemented in pysdk/rti1516e/encoding/string_codec.py; 23 unit tests green; mypy --strict + ruff clean.
