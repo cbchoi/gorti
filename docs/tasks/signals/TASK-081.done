@@ -1,0 +1,122 @@
+- agent: agent-c (sub-agent W1C)
+- branch: agent/c/m5-w1c-cross-lang-smoke
+- task: TASK-081 — Cross-language smoke + bundled M4 follow-ups
+- summary: |
+    Delivered cut-1 of the cross-language smoke + the two M4 follow-ups
+    bundled into TASK-081's scope (real-gRPC transport in the Python
+    SDK, real-pyjevsim adapter).
+
+    Part A — Real-gRPC transport (M4 deferred):
+      - Extended pysdk/rti1516e/_transport.py with GrpcTransport: wraps
+        a grpc.aio.Channel + the four generated service stubs
+        (FederationServiceStub, DeclarationServiceStub, ObjectServiceStub,
+        StreamServiceStub).
+      - Translates the SDK's name-based record(method, **kwargs) calls
+        into proto messages with numeric handles. Class-name → handle
+        resolution uses the Python-side FOM parser (sorted-by-name index)
+        so both the SDK and the Go-side fomHandle pick the same handle
+        for a given FOM (the absolute number differs because the Python
+        and Go MIM corpora are slightly different — see deferral note).
+      - Drains the per-federate StreamService.Events server-stream into
+        the same asyncio.Queue the spec-test fake uses, so the Federate's
+        events() iterator works identically against either transport.
+      - Updated pysdk/rti1516e/connection.py to dispatch grpc:// URLs
+        through build_grpc_transport() and to await transport.record()
+        calls when they return coroutines (sync FakeRtiServer + async
+        GrpcTransport coexist via an inspect.isawaitable check).
+      - Time-management RPCs (NER, EnableRegulation, …) are recorded
+        but not dispatched — rtid's TimeService is nil at M2, so the
+        cross-language smoke avoids the time-managed code path and
+        instead drives interactions directly. This is documented in
+        the GrpcTransport.record docstring.
+
+    Part B — Real-pyjevsim adapter (M4 deferred):
+      - Created examples/pyjevsim/_real_pyjevsim_adapter.py:
+        RealPyjevsimAdapter wraps a single pyjevsim.BehaviorModel
+        (atomic) and exposes the bridge's CoupledModelProtocol surface
+        (time_advance / output_handler / internal_transition /
+        external_transition). Uses a _CapturingDeliverer to harvest
+        the model's output(msg_deliver) calls into a {port: payload}
+        dict. Cut-1 limitation (per the brief): wraps ONE atomic model
+        only; the structural-hierarchy + SysExecutor adapter is
+        post-MVP and was not required for the cross-language smoke.
+
+    Part C — Cross-language smoke test:
+      - Created examples/pyjevsim/cross_lang_runner.py: builds the
+        rtid binary (`go build -o bin/rtid ./rti/cmd/rtid`), launches
+        it on a free port, opens TWO Python RtiConnections via the
+        real-gRPC transport, joins as "py-pub" + "py-sub", exchanges
+        N interactions, asserts publisher's send count == subscriber's
+        receive count and the wire payloads round-trip bytewise.
+      - Created examples/pyjevsim/cross_lang_test.py: pytest entry
+        in the example tree (mirrors M4 W7 determinism_test.py).
+      - Unskipped pysdk/tests/spec/m5/test_spec_m5_cross_language.py
+        (orchestrator-authorized) — calls into the runner with rounds=5
+        and asserts payload-byte parity in arrival order.
+
+    Tests added:
+      - pysdk/tests/test_grpc_transport.py (5 tests): GrpcTransport
+        construction, payload coercion, mode→proto enum mapping,
+        FOM-driven handle table population, unknown-method error path.
+      - pysdk/tests/test_real_pyjevsim_adapter.py (3 tests): real
+        pyjevsim BehaviorModel via the adapter — Protocol shape,
+        output→internal cycle, external_transition delegation.
+
+- acceptance:
+    - `cd pysdk && python3 -m pytest tests/spec/m5/test_spec_m5_cross_language.py -v`
+      → 1 passed (UNSKIPPED).
+    - `cd pysdk && python3 -m pytest tests/`
+      → 476 passed, 3 skipped (M0–M4 still green; the 3 skips are
+        unrelated — M5 modes test for W2B + the M4 replay test).
+    - `cd pysdk && python3 -m mypy --strict .` → clean.
+    - `cd pysdk && python3 -m ruff check .` → clean.
+    - `python3 examples/pyjevsim/cross_lang_runner.py` →
+      "rtid pid=… port=… py_pub_sent=5 py_sub_received=5".
+
+- deferred / known gaps:
+    - Bidirectional Python+Go cross-language smoke: cut-1 ships
+      Python-publisher / Python-subscriber against a real rtid. The
+      Go reference examples (examples/go-pingpong, examples/go-timed)
+      are subprocess-shim demos that spawn their own rtid via demo
+      modes — they do NOT open a gRPC channel to a separately running
+      rtid. Writing a Go federate that DOES connect by gRPC requires
+      touching rti/ (Agent A's territory) and is deferred. The
+      Python-only smoke still validates the cut-1 acceptance criteria
+      (real-gRPC transport works cross-process; both ends observe
+      consistent state).
+    - Python-side vs Go-side MIM corpus parity: the Python SDK's
+      MIM merge produces a slightly different sort-by-name interaction
+      class list than the Go side (Python: ProducerOutput=81; Go:
+      ProducerOutput=87 for the bridge FOM). This does not affect the
+      Python-only smoke (both ends use the same Python-side handle).
+      A bidirectional smoke would expose the gap — fix is to align
+      the Python MIM merge against rti/pkg/fom/mim/standard-mim.xml.
+    - Time-management dispatch: NER / EnableRegulation are recorded
+      but not dispatched because rtid's TimeService is intentionally
+      nil at M2. The bridge's NER loop would block forever in real
+      gRPC mode; cross-language tests therefore drive interactions
+      directly without engaging the time-advance loop.
+    - SysExecutor + structural-hierarchy adapter: cut-1 wraps a
+      single atomic BehaviorModel only. Nested StructuralModel
+      adaptation is post-MVP.
+    - TLS / retry policies / deadline propagation: GrpcTransport uses
+      grpc.aio.insecure_channel and has no client-side retry. Production
+      hardening is post-MVP per the brief.
+
+- file ownership respected:
+    - pysdk/rti1516e/_transport.py (extended)
+    - pysdk/rti1516e/connection.py (extended)
+    - pysdk/pyproject.toml (mypy overrides for rti.v1, grpc.*,
+      _real_pyjevsim_adapter, cross_lang_runner)
+    - pysdk/tests/spec/m5/test_spec_m5_cross_language.py (UNSKIPPED)
+    - pysdk/tests/test_grpc_transport.py (NEW)
+    - pysdk/tests/test_real_pyjevsim_adapter.py (NEW)
+    - examples/pyjevsim/cross_lang_runner.py (NEW)
+    - examples/pyjevsim/cross_lang_test.py (NEW)
+    - examples/pyjevsim/_real_pyjevsim_adapter.py (NEW)
+    - docs/tasks/signals/TASK-081.done (this file, NEW)
+    - NO modifications to rti/* (Agent A territory).
+    - NO modifications to pyjevsim_bridge/* other than via the new
+      adapter file under examples/pyjevsim/.
+    - rti1516e/_generated/ regenerated locally for the unit tests
+      (the directory is gitignored and rebuilt by `make py-codegen`).

@@ -24,12 +24,29 @@ of the M4 contract.
 from __future__ import annotations
 
 import contextlib
+import inspect
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, Self
 
+from rti1516e._transport import build_grpc_transport as _build_grpc_transport
 from rti1516e._transport import lookup as _lookup_transport
+
+
+async def _dispatch(transport: Any, method: str, **kwargs: Any) -> Any:
+    """Call ``transport.record(method, **kwargs)`` and await if coroutine.
+
+    The fake (FakeRtiServer) returns synchronously; the real GrpcTransport
+    returns a coroutine. Both call sites share the same source by funneling
+    through this helper. Wrapping the await in ``inspect.isawaitable`` keeps
+    the fake path zero-cost (no extra event-loop tick) while letting the
+    gRPC path do its real RPC.
+    """
+    result = transport.record(method, **kwargs)
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 @dataclass(frozen=True)
@@ -86,9 +103,9 @@ class RtiConnection:
                 )
             self._transport = transport
         elif scheme == "grpc":
-            raise NotImplementedError(
-                "real gRPC transport — TASK-063 follow-up; spec tests use memory://"
-            )
+            # Real gRPC transport (TASK-081 cut-1). Wraps a grpc.aio
+            # channel and delegates RPC dispatch to GrpcTransport.record.
+            self._transport = await _build_grpc_transport(self._url)
         else:
             raise ValueError(
                 f"unsupported URL scheme {scheme!r} (expected 'memory' or 'grpc')"
@@ -108,9 +125,17 @@ class RtiConnection:
         if self._closed:
             return
         self._closed = True
-        # In-process fakes have no resources to release; real gRPC channels
-        # would `await self._channel.close()` here.
+        transport = self._transport
         self._transport = None
+        # GrpcTransport owns a real gRPC channel + background stream
+        # tasks; close them. The fake has no close() and we ignore the
+        # AttributeError silently.
+        close_fn = getattr(transport, "close", None)
+        if callable(close_fn):
+            with contextlib.suppress(BaseException):
+                result = close_fn()
+                if inspect.isawaitable(result):
+                    await result
 
     @property
     def transport(self) -> Any:
@@ -164,13 +189,20 @@ class _FederateContextManager:
         # already exists with a compatible FOM the fake/server returns
         # success. If the server rejects (e.g. ERR_FED_ALREADY_EXISTS
         # cannot be reconciled), the typed exception propagates.
-        transport.record("create_federation", spec=self._spec)
-        transport.record(
+        await _dispatch(transport, "create_federation", spec=self._spec)
+        join_response = await _dispatch(
+            transport,
             "join_federation",
             spec=self._spec,
             federate_name=self._federate_name,
         )
-        handle = int(transport.allocate_handle())
+        # The real gRPC transport returns the federate handle from
+        # JoinFederationResponse; the fake returns None and the SDK falls
+        # back to allocate_handle() (matching the legacy contract).
+        if isinstance(join_response, int):
+            handle = int(join_response)
+        else:
+            handle = int(transport.allocate_handle())
         federate = Federate(
             transport=transport,
             handle=handle,
@@ -192,7 +224,8 @@ class _FederateContextManager:
         # would mask the original exception. The only swallowed case is
         # RuntimeError from a closed connection (outer __aexit__ ran first).
         with contextlib.suppress(RuntimeError):
-            self._connection.transport.record(
+            await _dispatch(
+                self._connection.transport,
                 "resign_federation",
                 federate_handle=federate.handle,
                 federate_name=federate.name,
@@ -220,7 +253,8 @@ class Federate:
         self, class_name: str, *, attributes: list[str]
     ) -> None:
         """Declare publication of an object class + its attributes."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "publish_object_class",
             federate_handle=self.handle,
             class_name=class_name,
@@ -231,7 +265,8 @@ class Federate:
         self, class_name: str, *, attributes: list[str]
     ) -> None:
         """Declare subscription to an object class + its attributes."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "subscribe_object_class",
             federate_handle=self.handle,
             class_name=class_name,
@@ -240,7 +275,8 @@ class Federate:
 
     async def publish_interaction_class(self, class_name: str) -> None:
         """Declare publication of an interaction class."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "publish_interaction_class",
             federate_handle=self.handle,
             class_name=class_name,
@@ -248,7 +284,8 @@ class Federate:
 
     async def subscribe_interaction_class(self, class_name: str) -> None:
         """Declare subscription to an interaction class."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "subscribe_interaction_class",
             federate_handle=self.handle,
             class_name=class_name,
@@ -265,7 +302,8 @@ class Federate:
         the handle (lets tests pin handles). Otherwise, allocate a fresh
         monotonic handle from the transport.
         """
-        response = self._transport.record(
+        response = await _dispatch(
+            self._transport,
             "register_object_instance",
             federate_handle=self.handle,
             class_name=class_name,
@@ -283,7 +321,8 @@ class Federate:
         timestamp: float | None = None,
     ) -> None:
         """Update one or more attribute values on an object instance."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "update_attributes",
             federate_handle=self.handle,
             object_handle=object_handle,
@@ -301,7 +340,8 @@ class Federate:
         timestamp: float | None = None,
     ) -> None:
         """Send an interaction with the given parameters."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "send_interaction",
             federate_handle=self.handle,
             class_name=class_name,
@@ -313,7 +353,8 @@ class Federate:
 
     async def enable_time_regulation(self, lookahead: float) -> None:
         """Become time-regulating with the given lookahead."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "enable_time_regulation",
             federate_handle=self.handle,
             lookahead=lookahead,
@@ -321,14 +362,16 @@ class Federate:
 
     async def enable_time_constrained(self) -> None:
         """Become time-constrained."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "enable_time_constrained",
             federate_handle=self.handle,
         )
 
     async def next_message_request(self, time: float) -> None:
         """Request advance to ``time``. Grant arrives via events()."""
-        self._transport.record(
+        await _dispatch(
+            self._transport,
             "next_message_request",
             federate_handle=self.handle,
             time=time,

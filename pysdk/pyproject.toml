@@ -89,8 +89,37 @@ module = "rti1516e._generated.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
+# The gRPC stubs in _generated/ are namespaced as "rti.v1.*"; mypy can't
+# find them because they live under rti1516e/_generated/ (the package
+# is installed via a sys.path tweak by the test scaffold + the
+# GrpcTransport's lazy imports). Treating the imports as Any keeps the
+# cross-language-smoke wiring strict-clean without weakening the rest
+# of the SDK.
+module = "rti.v1.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# grpc has incomplete public type stubs; treat as Any rather than
+# pulling types-grpcio (which lags upstream). The GrpcTransport only
+# touches grpc.aio.insecure_channel + grpc.aio.AioRpcError shapes —
+# small enough surface that runtime checking is sufficient.
+module = "grpc"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "grpc.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # pyjevsim is an optional runtime dep; spec tests use a Protocol shim instead.
 module = "pyjevsim.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The example-tree adapters under examples/pyjevsim/ are imported by
+# pysdk-side tests via a sys.path tweak; mypy can't see them as a
+# proper package. Treat as Any rather than failing the strict check.
+module = ["_real_pyjevsim_adapter", "cross_lang_runner"]
 ignore_missing_imports = true
 
 [tool.ruff]
