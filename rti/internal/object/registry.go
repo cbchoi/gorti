@@ -86,6 +86,22 @@ type Options struct {
 	Codec        core.CodecFactory
 	FOMs         core.FOMRepository
 	Clock        core.Clock
+
+	// Federations resolves a federation name to its operating mode
+	// (TASK-077). OPTIONAL: when nil, every federation is treated as
+	// ModeVerbose and the registry preserves the existing TSO-only
+	// delivery behavior. The federation.Manager satisfies this
+	// interface directly via its ModeFor method.
+	Federations FederationModeLookup
+
+	// Orders resolves an attribute / interaction class to its declared
+	// FOM delivery order (TASK-077). OPTIONAL: when nil, every
+	// attribute / interaction is treated as OrderTimeStamp and the
+	// registry preserves TSO-only delivery.
+	//
+	// Both Federations AND Orders must be supplied for best-effort
+	// RO delivery to engage; missing either means TSO-only behavior.
+	Orders AttributeOrderLookup
 }
 
 // New constructs a Registry. Returns an error if any required field is nil.
@@ -108,6 +124,12 @@ func New(opts Options) (*Registry, error) {
 	}
 	if isNilInterface(opts.EventLog) {
 		opts.EventLog = nil
+	}
+	if isNilInterface(opts.Federations) {
+		opts.Federations = nil
+	}
+	if isNilInterface(opts.Orders) {
+		opts.Orders = nil
 	}
 	return &Registry{
 		opts:        opts,

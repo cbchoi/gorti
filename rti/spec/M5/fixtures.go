@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/object"
 )
 
 // ===========================================================================
@@ -60,6 +61,90 @@ func (*permissiveFOMHandle) LookupAttribute(core.ObjectClassHandle, string) (cor
 func (*permissiveFOMHandle) LookupParameter(core.InteractionClassHandle, string) (core.ParameterHandle, bool) {
 	return 1, true
 }
+
+// ===========================================================================
+// orderTable — TASK-077 helper. Implements object.AttributeOrderLookup
+// for spec tests that need to declare per-attribute / per-interaction
+// best-effort order. Lookups are scoped per (federation, class, attr)
+// or (federation, class). Unknown → (TimeStamp, false), which the
+// object registry treats as TimeStamp-order.
+//
+// Tests construct an orderTable, call DeclareAttributeReceive /
+// DeclareInteractionReceive for the (cls, attr) pairs they want as
+// best-effort, and pass the table as the AttributeOrderLookup in
+// object.Options.Orders. Anything not declared defaults to TimeStamp
+// (the FOM-default).
+//
+// This extension is back-compatible — existing tests that don't
+// instantiate an orderTable see no behavior change.
+// ===========================================================================
+
+type attrOrderKey struct {
+	fed  core.FederationName
+	cls  core.ObjectClassHandle
+	attr core.AttributeHandle
+}
+
+type interOrderKey struct {
+	fed core.FederationName
+	cls core.InteractionClassHandle
+}
+
+type orderTable struct {
+	mu     sync.Mutex
+	attrs  map[attrOrderKey]bool  // value true = OrderReceive (best-effort)
+	inters map[interOrderKey]bool // value true = OrderReceive (best-effort)
+}
+
+func newOrderTable() *orderTable {
+	return &orderTable{
+		attrs:  map[attrOrderKey]bool{},
+		inters: map[interOrderKey]bool{},
+	}
+}
+
+// DeclareAttributeReceive marks (fed, cls, attr) as best-effort.
+func (t *orderTable) DeclareAttributeReceive(fed core.FederationName, cls core.ObjectClassHandle, attr core.AttributeHandle) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.attrs[attrOrderKey{fed, cls, attr}] = true
+}
+
+// DeclareInteractionReceive marks (fed, cls) as best-effort.
+func (t *orderTable) DeclareInteractionReceive(fed core.FederationName, cls core.InteractionClassHandle) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.inters[interOrderKey{fed, cls}] = true
+}
+
+// AttributeOrder satisfies object.AttributeOrderLookup. Returns
+// (OrderReceive, true) when the (fed, cls, attr) triple has been
+// declared best-effort via DeclareAttributeReceive; otherwise
+// (OrderTimeStamp, true). The "known"=true branch is taken
+// unconditionally so the registry's mode-aware path always evaluates
+// the explicit declaration rather than defaulting to TimeStamp on
+// "unknown".
+func (t *orderTable) AttributeOrder(fed core.FederationName, cls core.ObjectClassHandle, attr core.AttributeHandle) (object.Order, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.attrs[attrOrderKey{fed, cls, attr}] {
+		return object.OrderReceive, true
+	}
+	return object.OrderTimeStamp, true
+}
+
+// InteractionOrder satisfies object.AttributeOrderLookup.
+func (t *orderTable) InteractionOrder(fed core.FederationName, cls core.InteractionClassHandle) (object.Order, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.inters[interOrderKey{fed, cls}] {
+		return object.OrderReceive, true
+	}
+	return object.OrderTimeStamp, true
+}
+
+// Compile-time check: orderTable satisfies object.AttributeOrderLookup.
+var _ object.AttributeOrderLookup = (*orderTable)(nil)
 
 // ===========================================================================
 // permissiveEventLog — multi-federation core.EventLog that records every

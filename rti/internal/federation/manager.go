@@ -157,6 +157,17 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		stall = time.Duration(m.opts.DefaultStallTimeout) * time.Second
 	}
 
+	// TASK-076: normalize unspecified mode to verbose. The CLI / gRPC
+	// front door MAY supply ModeUnspecified when the caller didn't pick
+	// a mode (e.g. a default-constructed proto request); we collapse
+	// that to ModeVerbose so the persisted federation always exposes
+	// a definite mode through List(). BestEffort and Verbose pass
+	// through unchanged so explicit choices are honored.
+	mode := req.Mode
+	if mode == core.ModeUnspecified {
+		mode = core.ModeVerbose
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.federations[req.Name]; exists {
@@ -164,7 +175,7 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 	}
 	m.federations[req.Name] = &federationState{
 		name:               req.Name,
-		mode:               req.Mode,
+		mode:               mode,
 		stallTimeout:       stall,
 		seed:               req.Seed,
 		fom:                fom,
@@ -173,6 +184,21 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		handleToName:       map[core.FederateHandle]string{},
 	}
 	return nil
+}
+
+// ModeFor returns the operating mode of a federation. Returns
+// (ModeUnspecified, false) if no such federation exists. Used by the
+// object registry's update path to resolve best-effort RO delivery.
+func (m *Manager) ModeFor(fed core.FederationName) (core.Mode, bool) {
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return core.ModeUnspecified, false
+	}
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	return fs.mode, true
 }
 
 // DestroyFederation implements core.FederationStore. See SRS §FR-FM-5.

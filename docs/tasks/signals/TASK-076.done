@@ -1,0 +1,41 @@
+- agent: agent-a (sub-agent W1A)
+- branch: agent/a/m5-w1a-mode-best-effort
+- task: TASK-076 — --mode CLI flag plumbed through to CreateFederationRequest
+- summary: |
+    Added a --federation-mode CLI flag to rti/cmd/rtid/main.go (the
+    existing --mode flag is taken for the rtid runtime mode; the new
+    flag controls the operating mode of created federations). The flag
+    accepts "verbose" (default) or "best-effort"; unknown values are
+    rejected with a clear error before any work is done.
+
+    The flag is propagated into pingpongConfig.FederationMode (and
+    timedRunArgs.FederationMode for symmetry; the timed demo does not
+    currently call CreateFederation directly but the field is plumbed
+    so future timed-mode additions can use it). pingpongJoin reads
+    cfg.FederationMode and passes it as core.CreateFederationRequest.Mode.
+
+    Server-side normalization landed in
+    rti/internal/federation/manager.go::CreateFederation: when the
+    incoming request's Mode is core.ModeUnspecified, the manager
+    collapses it to core.ModeVerbose BEFORE persisting. This means a
+    default-constructed proto request (or a programmatic Create with
+    Mode left zero) lands as Verbose in the federation summary.
+    Explicit Verbose / BestEffort choices pass through unchanged.
+
+    Also exposed Manager.ModeFor(fed) → (Mode, bool) so the object
+    registry's TASK-077 RO/TSO decision can ask "what mode is this
+    federation?" without a circular import.
+
+- acceptance:
+    - rti/spec/M5/mode_flag_test.go::TestSpec_M5_ModeFlag_VerboseDefault
+      GREEN (the existing t.Skip block no longer triggers because Mode
+      now lands as ModeVerbose, not ModeUnspecified; per the test
+      contract, Agent A is NOT permitted to delete the skip block —
+      it just stops being reached).
+    - rti/spec/M5/mode_flag_test.go::TestSpec_M5_ModeFlag_BestEffortPersists
+      GREEN (was already passing; verified no regression).
+    - go test ./... passes (M0–M4 + M5 spec tests).
+    - go test -race ./rti/internal/... passes (no new races).
+    - golangci-lint run ./rti/internal/... — no NEW lint issues
+      introduced by these changes; pre-existing G115 warnings in
+      federation/manager.go and eventlog/writer.go are unchanged.

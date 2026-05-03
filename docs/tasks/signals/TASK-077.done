@@ -1,0 +1,74 @@
+- agent: agent-a (sub-agent W1A)
+- branch: agent/a/m5-w1a-mode-best-effort
+- task: TASK-077 — Best-effort RO delivery in object registry
+- summary: |
+    Added two optional lookup interfaces to the object package:
+
+      - object.FederationModeLookup.ModeFor(fed) → (Mode, bool)
+      - object.AttributeOrderLookup.AttributeOrder(fed, cls, attr)
+        and InteractionOrder(fed, cls) → (Order, bool)
+
+    plus the object.Order enum (OrderTimeStamp / OrderReceive). Both
+    interfaces are wired into object.Options as new OPTIONAL fields
+    (Federations + Orders); when either is nil the registry
+    short-circuits to TSO-only delivery — the existing M0–M4 tests do
+    not supply either field and remain green without modification.
+
+    The decision logic lives in two new helpers next to the existing
+    fanout code:
+
+      - update.go::deliveryTimestampForAttributes
+      - interaction.go::deliveryTimestampForInteraction
+
+    Both follow the same contract: when the producer-supplied ts is
+    non-nil AND federation mode == ModeBestEffort AND every updated
+    attribute / the interaction is declared OrderReceive in the FOM,
+    the timestamp is replaced with nil (RO delivery). Any deviation
+    (Verbose mode, unknown order, mixed-order bundle, missing lookup)
+    keeps the timestamp (TSO delivery). This matches the wire-level
+    invariant in core/object.go: "ts *LogicalTime, // nil = RO;
+    non-nil = TSO".
+
+    Production wiring lives in
+    rti/internal/transport/grpc/best_effort.go (NEW): FOMRepoOrderLookup
+    adapts a core.FOMRepository to the object.AttributeOrderLookup
+    interface by type-asserting each FOM handle for the optional
+    FOMOrderResolver contract. The cut-1 fomHandle does not yet
+    implement FOMOrderResolver — every lookup returns
+    (OrderTimeStamp, false) and the registry stays on TSO. A future
+    cut can upgrade fomHandle to read model.Attribute.Order /
+    model.InteractionClass.Order without touching this adapter.
+
+    rti/cmd/rtid/main.go now wires the federation manager and a
+    FOMRepoOrderLookup into object.Options so the production server
+    is best-effort-ready as soon as the FOM handle gains the resolver.
+
+    Spec tests:
+      - rti/spec/M5/best_effort_test.go: replaced both t.Skip scaffolds
+        with real end-to-end scenarios (fed mgr + decl mgr + obj
+        registry + recordingOutbox). Tests inspect the OutboundEvent
+        via a federateEventCarrier interface assertion and check
+        ReflectAttributeValues.LogicalTime nil/non-nil presence.
+
+      - rti/spec/M5/fixtures.go: extended permissiveFOMHandle's
+        adjacent helpers with an orderTable type satisfying
+        object.AttributeOrderLookup. Tests call
+        DeclareAttributeReceive / DeclareInteractionReceive to mark
+        specific (fed, cls, attr) triples as best-effort. Existing
+        permissiveFOMHandle method set is preserved; the only addition
+        is the new orderTable plus an import of rti/internal/object.
+
+- acceptance:
+    - rti/spec/M5/best_effort_test.go::TestSpec_M5_BestEffort_RODelivery
+      GREEN — best-effort federation + Receive-order attribute →
+      ReflectAttributeValues.LogicalTime is nil on the subscriber's
+      outbox event.
+    - rti/spec/M5/best_effort_test.go::TestSpec_M5_BestEffort_VerboseModeStillTSO
+      GREEN — Verbose-mode federation + Receive-order attribute →
+      timestamp preserved (regression check).
+    - go test ./... passes (M0–M4 spec + M5 spec all green).
+    - go test -race ./rti/internal/... passes (no new races).
+    - golangci-lint run ./rti/internal/... — no new lint issues.
+    - core.FOMHandle interface UNCHANGED (M0-frozen; no contract
+      change request needed because the order info is consumed via the
+      new optional FOMOrderResolver assertion in the gRPC adapter).
