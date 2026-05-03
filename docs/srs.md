@@ -298,11 +298,27 @@ Verification activities at each gate are detailed in the per-agent briefs (`agen
 
 Cut 2 dispatch order rationale: M7 first (smallest, completes the time-management surface that's most user-visible). M8 next (foundational for federations that coordinate startup or hand off attributes). M11 third (small, gives observability — quick win). M10 fourth (biggest single absence for "real RTI" claim; do before save/restore because users feel its absence directly). M9 last (most expensive; touches every existing service group).
 
-### 10.4 Cut 3 (deferred backlog, post-cut-2)
+### 10.4 Milestones — Cut 3 (production hardening + reach)
 
-- MOM-driven control services (`HLAsetSwitches`, `HLArequestFederationSave` invoked AS interactions).
-- Optimistic time advance variants beyond TARA.
-- mTLS + OIDC client auth.
-- Distributed RTI / hot standby.
-- C++ / Java / C# federate SDKs.
-- DDS/RTPS data plane adapter.
+| ID | Owner | Deliverable | Exit Criteria |
+|---|---|---|---|
+| **M12** | All agents | gRPC handler + Python SDK exposure for cut-2 service groups | All cut-2 internal APIs reachable via gRPC; Python SDK exposes them via Layer 1 (idiomatic asyncio) + Layer 2 (1516-shaped ambassador); cross-language spec tests for each service group |
+| **M13** | Agent A | Per-manager state snapshots in save manifest + federation.Manager.MembersOf accessor + HLAfederateType plumbing | M9 save bundle includes structured snapshots (sync state, ownership state, MOM state, DDM regions); restore byte-identical without sole reliance on event-log replay; production rtid uses MembersOf for sync/savepoint required-set resolution |
+| **M14** | Agent A + C | mTLS + OIDC client authentication | Server requires + verifies client cert (or OIDC bearer token) before accepting any RPC; Python SDK passes credentials; spec test exercises mTLS round-trip |
+| **M15** | Agent A | Distributed RTI: multi-process federation hosting | Federation can span N rtid processes that gossip via cluster protocol; federate transparently routes to the rtid hosting its federation; failover deferred to M16 |
+| **M16** | Agent A | Hot standby + replay-driven RTI failover | Standby rtid replicates event log + can take over on primary failure within configured window; spec test simulates primary kill mid-federation |
+| **M17** | new owner (C++) | C++ federate SDK | C++ SDK passes the same conformance vectors + cross-language spec tests as Python SDK; pkg-config / CMake distribution |
+| **M18** | new owner (Java) | Java federate SDK | Same shape as M17 for Java; Maven Central distribution |
+| **M19** | Agent A | DDS/RTPS data plane adapter | Federate-side opt-in: data plane (object/interaction fan-out) goes via DDS instead of gRPC streams; control plane stays gRPC; spec test verifies wire-level DDS interop |
+| **M20** | Agent A | MOM-driven control services + optimistic time variants | HLAsetSwitches, HLArequestFederationSave etc. invokable AS interactions per IEEE 1516.1 §10. Time variants beyond cut-2's TAR/TARA/FQR/NMRA |
+
+Cut-3 dispatch order rationale: M12 first (closes the biggest user-visible gap — cut-2 service groups exist but federates can't reach them via the network). M13 next (closes cut-2's documented snapshot deferrals). M14 third (production-deployable security; needed before any real-world deployment). M15+ (distributed) and M17-M18 (non-Python SDKs) are larger but have natural follow-up shape. M19 (DDS) is the biggest architectural change. M20 closes long-tail compliance.
+
+### 10.5 Cut 4+ (open-ended backlog)
+
+- Federation save/restore across distributed rtid topology
+- Live FOM module hot-reload
+- Federate hot-restart (federate process dies + reconnects without federation halt)
+- HLA-Evolved interoperability with commercial RTIs at the wire level (Pitch HLA Evolved wire format reverse-engineering; out of scope for OSS without spec-vendor cooperation)
+- FOM editor / GUI tooling
+- Time-warped optimistic time advance (Jefferson-style rollback)

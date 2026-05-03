@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// SyncService — Synchronization Management per IEEE 1516.1-2010 §4.6-4.7.
+// Cut-3 (M12) gRPC exposure of cut-2 sync.Manager.
+service SyncService {
+  rpc RegisterFederationSynchronizationPoint(RegisterSyncPointRequest) returns (Empty);
+  rpc SynchronizationPointAchieved(AchieveSyncPointRequest) returns (Empty);
+}
+
+message RegisterSyncPointRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // who's registering
+  string label = 4;
+  bytes tag = 5;  // opaque user data echoed in announce callback
+  // Optional explicit set; nil/empty = all currently joined federates.
+  repeated uint64 required_federates = 6;
+}
+
+message AchieveSyncPointRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  string label = 4;
+}

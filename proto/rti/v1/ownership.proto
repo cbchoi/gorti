@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// OwnershipService — IEEE 1516.1-2010 §7. Cut-3 (M12) gRPC exposure
+// of cut-2 ownership.Manager (the negotiated divest+acquire two-phase
+// protocol + queries).
+service OwnershipService {
+  rpc UnconditionalAttributeOwnershipDivestiture(UnconditionalDivestRequest) returns (Empty);
+  rpc NegotiatedAttributeOwnershipDivestiture(NegotiatedDivestRequest) returns (Empty);
+  rpc AttributeOwnershipAcquisition(AcquireRequest) returns (Empty);
+  rpc CancelNegotiatedAttributeOwnershipDivestiture(CancelDivestRequest) returns (Empty);
+  rpc CancelAttributeOwnershipAcquisition(CancelAcquireRequest) returns (Empty);
+  rpc AttributeOwnershipDivestitureIfWanted(DivestIfWantedRequest) returns (Empty);
+  rpc QueryAttributeOwnership(QueryOwnershipRequest) returns (QueryOwnershipResponse);
+  rpc IsAttributeOwnedByFederate(IsOwnedRequest) returns (IsOwnedResponse);
+}
+
+message UnconditionalDivestRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // current owner
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message NegotiatedDivestRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  bytes tag = 6;
+}
+
+message AcquireRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // acquirer
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  bytes tag = 6;
+}
+
+message CancelDivestRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner withdrawing
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message CancelAcquireRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // acquirer withdrawing
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message DivestIfWantedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message QueryOwnershipRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 object_handle = 3;
+  uint64 attribute_handle = 4;
+}
+
+message QueryOwnershipResponse {
+  uint64 owner_federate_handle = 1;  // 0 if attribute is mid-transfer / unowned
+  bool owned = 2;
+}
+
+message IsOwnedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  uint64 attribute_handle = 5;
+}
+
+message IsOwnedResponse {
+  bool owned = 1;
+}

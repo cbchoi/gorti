@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// DDMService — Data Distribution Management per IEEE 1516.1-2010 §6.
+// Cut-3 (M12) gRPC exposure of cut-2 ddm.Manager.
+//
+// Routing-space + dimension queries return handles federates use in
+// subsequent RPCs. Region-scoped pub/sub APIs extend the cut-1
+// declaration + object services.
+service DDMService {
+  rpc LookupRoutingSpace(LookupRoutingSpaceRequest) returns (LookupRoutingSpaceResponse);
+  rpc LookupDimension(LookupDimensionRequest) returns (LookupDimensionResponse);
+  rpc CreateRegion(CreateRegionRequest) returns (CreateRegionResponse);
+  rpc SetRangeBounds(SetRangeBoundsRequest) returns (Empty);
+  rpc CommitRegionModifications(CommitRegionRequest) returns (Empty);
+  rpc DeleteRegion(DeleteRegionRequest) returns (Empty);
+  rpc QueryBounds(QueryBoundsRequest) returns (QueryBoundsResponse);
+  rpc SubscribeObjectClassAttributesWithRegions(SubscribeOCAWithRegionsRequest) returns (Empty);
+  rpc SubscribeInteractionClassWithRegions(SubscribeICWithRegionsRequest) returns (Empty);
+  rpc RegisterObjectInstanceWithRegions(RegisterObjectWithRegionsRequest) returns (RegisterObjectWithRegionsResponse);
+}
+
+message LookupRoutingSpaceRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string name = 3;
+}
+
+message LookupRoutingSpaceResponse {
+  uint64 routing_space_handle = 1;  // 0 if not found
+  bool found = 2;
+}
+
+message LookupDimensionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 routing_space_handle = 3;
+  string name = 4;
+}
+
+message LookupDimensionResponse {
+  uint64 dimension_handle = 1;
+  bool found = 2;
+}
+
+message CreateRegionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 routing_space_handle = 4;
+  repeated uint64 dimension_handles = 5;
+}
+
+message CreateRegionResponse {
+  uint64 region_handle = 1;
+}
+
+message Range {
+  uint64 lower = 1;
+  uint64 upper = 2;
+}
+
+message SetRangeBoundsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 region_handle = 4;
+  uint64 dimension_handle = 5;
+  Range bounds = 6;
+}
+
+message CommitRegionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  repeated uint64 region_handles = 4;
+}
+
+message DeleteRegionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 region_handle = 4;
+}
+
+message QueryBoundsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 region_handle = 3;
+  uint64 dimension_handle = 4;
+}
+
+message QueryBoundsResponse {
+  Range bounds = 1;
+  bool found = 2;
+}
+
+message SubscribeOCAWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // subscriber
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  repeated uint64 region_handles = 6;
+}
+
+message SubscribeICWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // subscriber
+  uint64 interaction_class_handle = 4;
+  repeated uint64 region_handles = 5;
+}
+
+// AttributeRegions associates an attribute handle with the publisher's
+// region(s) for that attribute on a single object instance.
+message AttributeRegions {
+  uint64 attribute_handle = 1;
+  repeated uint64 region_handles = 2;
+}
+
+message RegisterObjectWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 object_class_handle = 4;
+  string object_name = 5;  // optional
+  repeated AttributeRegions attribute_regions = 6;
+}
+
+message RegisterObjectWithRegionsResponse {
+  uint64 object_handle = 1;
+  string object_name = 2;
+}
