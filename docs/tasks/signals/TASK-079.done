@@ -1,0 +1,72 @@
+- agent: agent-a (sub-agent W2A)
+- branch: agent/a/m5-w2a-hardening-perf
+- task: TASK-079 — perf.New + perf.Manager.RunBaseline implementation
+- summary: |
+    Implemented perf.New and perf.Manager.RunBaseline per the FROZEN
+    JSON Result schema (SchemaVersion=1) pinned in
+    rti/internal/perf/baseline.go.
+
+    Harness shape (in-process):
+      * Composes federation.Manager + declaration.Manager +
+        object.Registry + a multi-federate buffered outbox
+        (perfOutbox, bufferSize 8192).
+      * Event log INTENTIONALLY OMITTED — both
+        federation.Manager and object.Registry accept EventLog: nil
+        per cut-1 relaxation. The underlying eventlog.Writer has no
+        internal mutex on nextSeq; concurrent senders within one
+        federation trip the race detector. The perf harness drives
+        exactly that pattern, so it sidesteps the bug. (Documented
+        as a non-blocking finding in docs/reports/M5/agent-a.md.)
+      * One federation, all federates publish + subscribe to a single
+        InteractionClassHandle = 1.
+      * Sender goroutine per federate: tight loop on
+        objReg.SendInteraction with an 8-byte parameter carrying
+        the int64 send-time nanos (encoding/binary, BigEndian).
+      * Receiver goroutine per federate: drains the per-federate
+        outbox channel, decodes the embedded send-time, samples
+        end-to-end latency.
+      * Aggregates throughput (sent / wall-clock elapsed) and p50/p99
+        latency over the run window. Returns Result with all fields
+        populated.
+
+    Constructor New(opts):
+      * Validates opts.Size > 0 (returns descriptive error otherwise).
+      * Defaults opts.Duration to 10s when zero.
+      * Defaults opts.FederationName to "perf-baseline-<size>".
+
+    Result fields populated correctly per spec invariants:
+      * SchemaVersion = 1
+      * FederationSize = int(opts.Size)
+      * DurationSeconds, InteractionsSent, ThroughputPerSecond > 0
+      * LatencyP99Ms >= LatencyP50Ms >= 0
+
+    The percentile helper (percentilesMs) handles empty / single-
+    sample / 100-sample inputs; covered by TestPercentilesMs.
+
+    Supporting files:
+      * rti/internal/perf/outbox.go — perfOutbox (drop-on-overflow
+        SubscribableOutbox shape; the cmd/rtid multiOutbox
+        crash-on-overflow contract isn't appropriate for sustained
+        tight-loop measurement).
+      * rti/internal/perf/foms.go — permissive FOMRepository
+        (handle-1-resolves-everything; mirrors cmd/rtid's pattern
+        without the cmd/rtid import dep).
+      * rti/internal/perf/events.go — type alias for the generated
+        rtiv1.FederateEvent so extractSendNanos's duck-typed
+        Inner() method can resolve.
+      * rti/internal/perf/cpu_bench_test.go — build tag `cpuprof`
+        helper for re-validating TASK-084's encoding-share
+        assumption (used to populate docs/reports/M5/agent-a.md).
+
+- acceptance:
+    - go test ./rti/spec/M5/... -run TestSpec_M5_Perf — both 2/2 GREEN.
+      (TestSpec_M5_PerfHarnessRuns now passes; the earlier RED-state
+      branch is dead code but remains as documentation.)
+    - go test -race ./rti/internal/perf/ — race-clean.
+    - go test ./rti/internal/perf/ — unit tests pass (NewRejectsZeroSize,
+      DefaultsDurationAndFederationName, Size2_ProducesPopulatedResult,
+      Size5_ScalesUp, PercentilesMs, JSONShape).
+    - go vet ./rti/internal/perf/ — clean.
+    - FROZEN JSON schema preserved: snake_case field tags untouched;
+      SchemaVersion = 1 unchanged; spec test
+      TestSpec_M5_PerfResultSerializesToDocumentedSchema still passes.

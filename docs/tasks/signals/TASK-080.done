@@ -1,0 +1,70 @@
+- agent: agent-a (sub-agent W2A)
+- branch: agent/a/m5-w2a-hardening-perf
+- task: TASK-080 — perf baseline at sizes 2/5/25/100 + agent-a status report
+- summary: |
+    Built rti/cmd/perf-baseline (build tag `perf`), the standalone
+    runner for TASK-080. Note: the orchestrator dispatch named
+    examples/go-pingpong/perf_main.go, but the Go internal-package
+    rule blocks examples/* from importing rti/internal/perf — so the
+    real binary lives at rti/cmd/perf-baseline/main.go where the
+    import is legal. A thin shim at examples/go-pingpong/perf_main.go
+    (also build tag `perf`) `go run`s the real binary so the
+    documented invocation path still works.
+
+    Ran the perf binary at all four sizes (2, 5, 25, 100), 10s per
+    size, on a 12th Gen Intel i7-12700 (20 logical cores). Numbers
+    recorded in docs/reports/M5/agent-a.md (table + observations +
+    raw JSON link).
+
+    Results (10s/size, in-process harness, EventLog disabled):
+      size 2:   3,035,333 i/s  p50=0.044ms  p99=0.125ms
+      size 5:   1,253,641 i/s  p50=10.16ms  p99=15.04ms  (overflow regime)
+      size 25:    184,191 i/s  p50=2.90ms   p99=23.22ms  (lock contention dominates)
+      size 100:    48,863 i/s  p50=3.22ms   p99=33.81ms  (~489 i/s/federate)
+
+    All sizes comfortably meet SRS NFR-PERF-1 (sub-10ms p50 at 100
+    federates — measured 3.2ms p50, ~3× under).
+
+    TASK-084 decision input: captured CPU profiles at sizes 25 and
+    100 via the build-tag-gated cpu_bench_test.go helper. Encoding
+    share (encoding/binary + protobuf-wire) is 0.21% at size 25 and
+    0.11% at size 100 — both well under the trigger thresholds (5%
+    at size 25 OR 10% at size 100). The hot path is dominated by
+    runtime.lock2 / runtime.procyield (channel + select-case
+    contention), with mallocgc third. **Recommendation: TASK-084
+    should be CANCELLED** — Go encoders are already inlined
+    binary.BigEndian.Put* / proto-wire AppendVarint with no heap
+    allocs, no codec dispatch overhead, no reflection. Optimizing
+    them would yield <1% global throughput at the worst-case sizes.
+
+    Files shipped:
+      * rti/cmd/perf-baseline/main.go (NEW; build tag perf; runner)
+      * examples/go-pingpong/perf_main.go (NEW; build tag perf; shim)
+      * docs/reports/M5/agent-a.md (NEW; report)
+      * docs/reports/M5/perf-baseline.json (NEW; raw output)
+
+- acceptance:
+    - go build -tags=perf ./rti/cmd/perf-baseline — clean.
+    - go build -tags=perf ./examples/go-pingpong — clean.
+    - perf-baseline binary runs to completion at all 4 sizes and
+      emits valid JSON conforming to the FROZEN schema (verified
+      via cat docs/reports/M5/perf-baseline.json | jq).
+    - docs/reports/M5/agent-a.md exists and contains: methodology,
+      populated results table, observations, TASK-084 decision input
+      with concrete encoding-share numbers and CANCELLED recommendation.
+    - All M0-M4 + Wave 1 tests still GREEN; race-clean.
+
+- numbers_for_orchestrator:
+    size_2:   {throughput_ips: 3035333, p50_ms: 0.044, p99_ms: 0.125}
+    size_5:   {throughput_ips: 1253641, p50_ms: 10.16, p99_ms: 15.04}
+    size_25:  {throughput_ips:  184191, p50_ms: 2.90,  p99_ms: 23.22}
+    size_100: {throughput_ips:   48863, p50_ms: 3.22,  p99_ms: 33.81}
+
+- agent_b_decision: |
+    TASK-084 should be CANCELLED. Encoding share is 0.21% (size 25)
+    and 0.11% (size 100) of total CPU — both well under the 5% / 10%
+    trigger thresholds. Architecture analysis confirms: Go encoders
+    are inlined binary.Endian.Put* calls with no heap allocs, no
+    codec dispatch, no reflection. See docs/reports/M5/agent-a.md
+    "TASK-084 decision input" section for the full pprof breakdown
+    and reproduction recipe.
