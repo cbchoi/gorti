@@ -8,8 +8,12 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/ddm"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	"github.com/cbchoi/gorti/rti/internal/ownership"
+	"github.com/cbchoi/gorti/rti/internal/savepoint"
+	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
 )
 
 // ErrNotImplemented is returned by stub methods until the real handler
@@ -28,16 +32,21 @@ var (
 	ErrOutboxRequired       = errors.New("transport/grpc: Options.Outbox is required")
 )
 
-// Server bundles the four core services into one gRPC server. Service
-// handlers (federation.go, declaration.go, object.go, stream.go) hold
-// references via this struct; tests construct a Server with stub
-// implementations of each interface.
+// Server bundles the core services into one gRPC server. Service
+// handlers (federation.go, declaration.go, object.go, stream.go,
+// sync.go, ownership.go, ddm.go, savepoint.go) hold references via
+// this struct; tests construct a Server with stub implementations of
+// each interface.
 type Server struct {
-	fedService    *federationService
-	declService   *declarationService
-	objService    *objectService
-	streamService *streamService
-	timeService   rtiv1.TimeServiceServer
+	fedService       *federationService
+	declService      *declarationService
+	objService       *objectService
+	streamService    *streamService
+	timeService      rtiv1.TimeServiceServer
+	syncService      *syncService
+	ownershipService *ownershipService
+	ddmService       *ddmService
+	savepointService *savepointService
 }
 
 // Options bundles Server dependencies. All MUST be non-nil except Time
@@ -76,6 +85,22 @@ type Options struct {
 	// MOM.FederationDestroyed so the HLAfederation MOM instance is
 	// retired. Tests may leave this nil.
 	OnDestroyFederationSuccess func(ctx context.Context, name core.FederationName)
+
+	// Sync handles SyncService RPCs (M12 W1: cut-3 gRPC exposure of
+	// the cut-2 sync.Manager). May be nil at construction time — when
+	// nil, the SyncService is NOT registered on the gRPC server (the
+	// service is simply absent from GetServiceInfo). Production wiring
+	// in cmd/rtid passes a real *syncpkg.Manager.
+	Sync *syncpkg.Manager
+
+	// Ownership handles OwnershipService RPCs (M12 W1).
+	Ownership *ownership.Manager
+
+	// DDM handles DDMService RPCs (M12 W1).
+	DDM *ddm.Manager
+
+	// Savepoint handles SavepointService RPCs (M12 W1).
+	Savepoint *savepoint.Manager
 }
 
 // NewServer constructs a Server. Validates that all required Options
@@ -96,13 +121,30 @@ func NewServer(opts Options) (*Server, error) {
 	fedSvc := newFederationService(opts.Federations)
 	fedSvc.onCreateFederationSuccess = opts.OnCreateFederationSuccess
 	fedSvc.onDestroyFederationSuccess = opts.OnDestroyFederationSuccess
-	return &Server{
+	srv := &Server{
 		fedService:    fedSvc,
 		declService:   newDeclarationService(opts.Declarations),
 		objService:    newObjectService(opts.Objects),
 		streamService: newStreamService(opts.Outbox),
 		timeService:   nil, // M3 — Time RPCs return Unimplemented when nil.
-	}, nil
+	}
+	// M12 W1: cut-3 gRPC services. Each is optional at construction
+	// time so existing callers (older test harnesses, M3 / M4 cmd/rtid
+	// snapshots) continue to compile + run; when nil the service is
+	// simply not registered on the gRPC server.
+	if opts.Sync != nil {
+		srv.syncService = newSyncService(opts.Sync)
+	}
+	if opts.Ownership != nil {
+		srv.ownershipService = newOwnershipService(opts.Ownership)
+	}
+	if opts.DDM != nil {
+		srv.ddmService = newDDMService(opts.DDM)
+	}
+	if opts.Savepoint != nil {
+		srv.savepointService = newSavepointService(opts.Savepoint)
+	}
+	return srv, nil
 }
 
 // Register attaches the service handlers to the given gRPC server. The
@@ -138,6 +180,19 @@ func (s *Server) Register(grpcServer any) error {
 	}
 	if s.timeService != nil {
 		rtiv1.RegisterTimeServiceServer(gs, s.timeService)
+	}
+	// M12 W1: cut-3 services — register only if composed.
+	if s.syncService != nil {
+		rtiv1.RegisterSyncServiceServer(gs, s.syncService)
+	}
+	if s.ownershipService != nil {
+		rtiv1.RegisterOwnershipServiceServer(gs, s.ownershipService)
+	}
+	if s.ddmService != nil {
+		rtiv1.RegisterDDMServiceServer(gs, s.ddmService)
+	}
+	if s.savepointService != nil {
+		rtiv1.RegisterSavepointServiceServer(gs, s.savepointService)
 	}
 	return nil
 }
