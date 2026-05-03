@@ -1,0 +1,1 @@
+TASK-046 done — examples/go-timed/ reference example: thin shim spawns rtid -mode=timed-demo; rtid runs runTimedDemo (3 regulating federates, lookaheads {1.0, 2.0, 0.5}, 100-tick NER loop) wired to time.Manager + recordingOutbox + multiplex eventlog; -timed-deterministic uses FakeClock for byte-stable runs.

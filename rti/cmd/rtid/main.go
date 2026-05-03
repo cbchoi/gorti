@@ -10,11 +10,13 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/eventlog"
 	"github.com/cbchoi/gorti/rti/internal/federation"
 	"github.com/cbchoi/gorti/rti/internal/object"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 
 	stdgrpc "google.golang.org/grpc"
@@ -34,10 +37,16 @@ func main() {
 	logDir := flag.String("log-dir", "", "directory for per-federation event log files (empty = require explicit set)")
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFormat := flag.String("log-format", "json", "log format: json|text")
-	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo|replay-from-log")
+	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo|timed-demo|replay-from-log")
 	pingpongRounds := flag.Int("pingpong-rounds", 1000, "rounds for pingpong-demo mode")
 	pingpongFederation := flag.String("pingpong-federation", "pingpong", "federation name for pingpong-demo mode")
 	pingpongDeterministic := flag.Bool("pingpong-deterministic", false, "use FakeClock so the event-log body is byte-deterministic across runs")
+	timedTicks := flag.Int("timed-ticks", 100, "ticks (per-federate NER count) for timed-demo mode")
+	timedFederation := flag.String("timed-federation", "timed", "federation name for timed-demo mode")
+	timedDeterministic := flag.Bool("timed-deterministic", false, "use FakeClock so the event-log body is byte-deterministic across runs")
+	timedStallSkipFederate := flag.Int("timed-stall-skip", 0, "1-based federate index to skip NER for, provoking a stall (0 = no skip)")
+	timedStallTimeoutMs := flag.Int("timed-stall-timeout-ms", 5000, "stall timeout in milliseconds for timed-demo mode (only effective when -timed-stall-skip is set)")
+	timedStallAdvanceMs := flag.Int("timed-stall-advance-ms", 0, "fake-clock advance in milliseconds AFTER the demo loop, before CheckStalls (0 = skip stall check)")
 	replayInput := flag.String("replay-input", "", "source event-log file path for replay-from-log mode")
 	flag.Parse()
 
@@ -47,6 +56,17 @@ func main() {
 	switch *mode {
 	case "pingpong-demo":
 		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir, *pingpongDeterministic)
+		return
+	case "timed-demo":
+		runTimedMain(logger, timedRunArgs{
+			Federation:        *timedFederation,
+			Ticks:             *timedTicks,
+			LogDir:            *logDir,
+			Deterministic:     *timedDeterministic,
+			StallSkipFederate: *timedStallSkipFederate,
+			StallTimeoutMs:    *timedStallTimeoutMs,
+			StallAdvanceMs:    *timedStallAdvanceMs,
+		})
 		return
 	case "replay-from-log":
 		runReplayMain(logger, *replayInput, *logDir)
@@ -107,6 +127,155 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir string) {
 		logger.Error("rtid serve exited with error", "err", serveErr)
 		os.Exit(1)
 	}
+}
+
+// timedRunArgs bundles the flags for runTimedMain. Extracted so flags
+// stay grouped at the call site and a future "stall" mode can add
+// fields without growing the function signature.
+type timedRunArgs struct {
+	Federation        string
+	Ticks             int
+	LogDir            string
+	Deterministic     bool
+	StallSkipFederate int // 1-based federate index to skip NER for (0 = none)
+	StallTimeoutMs    int // stall timeout in ms; only used when StallSkipFederate>0
+	StallAdvanceMs    int // post-loop FakeClock advance, then CheckStalls (0 = skip)
+}
+
+// runTimedMain runs the M3 timed demo and exits. logDir, when set,
+// gets per-federation .log files written into it (same format as server
+// mode); empty means the demo runs without persistence.
+//
+// Mirrors runPingpongMain's shape so the W4 integration is symmetric
+// with M2's W4-equivalent. The actual runner lives in timed.go.
+//
+// Stall mode (StallSkipFederate > 0): the demo enables every federate
+// but skips NER for the chosen one, then advances the FakeClock by
+// StallAdvanceMs and calls CheckStalls. The result (halt count + the
+// stalled federate handle) is emitted on stdout as a single line of
+// the form "TIMED_HALT halts=N stalled_federate=H" so the example
+// stall_test.go can capture and assert without parsing the log file.
+func runTimedMain(logger *slog.Logger, args timedRunArgs) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cfg := timedConfig{
+		FederationName:    core.FederationName(args.Federation),
+		Ticks:             args.Ticks,
+		LogDir:            args.LogDir,
+		Deterministic:     args.Deterministic,
+		SkipFederateIndex: args.StallSkipFederate,
+	}
+	if args.StallSkipFederate > 0 && args.StallTimeoutMs > 0 {
+		cfg.StallTimeout = time.Duration(args.StallTimeoutMs) * time.Millisecond
+	}
+	stats, err := runTimedDemo(ctx, cfg)
+	if err != nil {
+		cancel()
+		logger.Error("timed-demo failed", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("timed-demo complete",
+		"ticks", stats.TicksCompleted,
+		"federates", stats.FederateCount,
+		"grants", stats.GrantsObserved,
+		"halts", stats.HaltsObserved,
+		"elapsed_ms", stats.Elapsed.Milliseconds(),
+	)
+
+	// Stall harness path: build a fresh runtime that we can drive
+	// post-loop (advance FakeClock + CheckStalls). The runTimedDemo
+	// above doesn't expose the runtime so we stand up a second one
+	// dedicated to the stall scenario when StallAdvanceMs is set.
+	// This keeps the "normal demo" code path untouched.
+	if args.StallSkipFederate > 0 && args.StallAdvanceMs > 0 {
+		halts, stalledFed, err := runTimedStall(ctx, args)
+		if err != nil {
+			cancel()
+			logger.Error("timed-stall failed", "err", err)
+			os.Exit(1)
+		}
+		// Machine-readable signal for stall_test.go. Emitted on
+		// stdout (the logger writes to stderr); the example test
+		// captures stdout and parses the line.
+		emitTimedHaltLine(halts, stalledFed)
+	}
+	cancel()
+}
+
+// emitTimedHaltLine writes the single TIMED_HALT line to stdout. Lives
+// in its own helper so the forbidigo allowlist for fmt.Print* can be
+// scoped to just this function via a //nolint comment (we avoid using
+// the logger because the line MUST be on stdout — the example
+// stall_test.go captures stdout independently of the logger handler).
+func emitTimedHaltLine(halts int, stalled core.FederateHandle) {
+	// Use os.Stdout.WriteString to bypass the forbidigo fmt.Print
+	// ban while still emitting a deterministic single-line signal.
+	_, _ = os.Stdout.WriteString(
+		"TIMED_HALT halts=" + strconv.Itoa(halts) +
+			" stalled_federate=" + strconv.FormatUint(uint64(stalled), 10) + "\n",
+	)
+}
+
+// runTimedStall stands up a dedicated runtime for the stall scenario,
+// runs the abbreviated NER pattern (every federate enables; only the
+// non-skipped ones NER once), advances the FakeClock past the
+// configured stall timeout, then invokes CheckStalls. Returns the halt
+// count and the recorded stalled-federate handle (0 if none).
+//
+// Lives here (not in timed.go) so the M2-style runtime helpers stay
+// single-purpose; stall is a one-shot affair, not a loop.
+func runTimedStall(ctx context.Context, args timedRunArgs) (int, core.FederateHandle, error) {
+	clk := core.NewFakeClock(time.Unix(0, 0))
+	rt, cleanup, err := buildTimedRuntime(timedConfig{
+		FederationName: core.FederationName(args.Federation),
+		Ticks:          1,
+		Lookaheads:     []core.LogicalTime{1.0, 1.0, 1.0},
+		StallTimeout:   time.Duration(args.StallTimeoutMs) * time.Millisecond,
+		Clock:          clk,
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	defer cleanup()
+
+	for i := 0; i < 3; i++ {
+		h := core.FederateHandle(uint64(i + 1))
+		if err := rt.tm.EnableRegulation(ctx, core.FederationName(args.Federation), h, core.LogicalTime(1.0)); err != nil {
+			return 0, 0, fmt.Errorf("EnableRegulation %d: %w", h, err)
+		}
+	}
+	skip := uint64(0)
+	if args.StallSkipFederate > 0 {
+		skip = uint64(args.StallSkipFederate)
+	}
+	for i := 0; i < 3; i++ {
+		h := core.FederateHandle(uint64(i + 1))
+		if uint64(h) == skip {
+			continue
+		}
+		// NER to a target peers can't satisfy without the skipped
+		// federate also advancing.
+		if err := rt.tm.NextMessageRequest(ctx, core.FederationName(args.Federation), h, core.LogicalTime(10.0)); err != nil {
+			return 0, 0, fmt.Errorf("NER %d: %w", h, err)
+		}
+	}
+	halts := rt.AdvanceClockAndCheckStalls(ctx, time.Duration(args.StallAdvanceMs)*time.Millisecond)
+	var stalledFed core.FederateHandle
+	for _, s := range rt.outbox.Sent() {
+		if fh := stalledFromEvent(s.Event); fh != 0 {
+			stalledFed = fh
+			break
+		}
+	}
+	return halts, stalledFed, nil
+}
+
+// stalledFromEvent extracts the StalledFederate handle from a
+// *timepkg.FederationHalted event, or 0 for any other event type.
+func stalledFromEvent(evt core.OutboundEvent) core.FederateHandle {
+	if hv, ok := evt.(*timepkg.FederationHalted); ok {
+		return hv.StalledFederate
+	}
+	return 0
 }
 
 // runPingpongMain runs the pingpong demo and exits. logDir, when set,

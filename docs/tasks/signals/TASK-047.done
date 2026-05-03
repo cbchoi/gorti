@@ -1,0 +1,1 @@
+TASK-047 done — Determinism harness: examples/go-timed/determinism_test.go (//go:build integration) generates 20 randomized scenarios from a fixed seed (varying tick budgets), runs each 3× via the rtid subprocess with FakeClock, and asserts sha256(log_body) is identical across all 3 runs (NFR-DET-1). A 10-run sibling test pins the default {1.0, 2.0, 0.5} triple.
