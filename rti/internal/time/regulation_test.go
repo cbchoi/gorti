@@ -159,6 +159,7 @@ func TestStateStore_ConcurrentAccess(t *testing.T) {
 	// The state store must tolerate parallel enable/disable on
 	// distinct federates from many goroutines without data races
 	// (run with `go test -race`).
+	t.Parallel()
 	s := newStateStore()
 	const n = 64
 	var wg sync.WaitGroup
@@ -173,6 +174,14 @@ func TestStateStore_ConcurrentAccess(t *testing.T) {
 		}(core.FederateHandle(i + 1))
 	}
 	wg.Wait()
+	// Final state of every federate should be neither regulating
+	// nor constrained.
+	for i := 1; i <= n; i++ {
+		got := s.snapshot("fed", core.FederateHandle(i))
+		if got.regulating || got.constrained {
+			t.Errorf("handle %d: end state = %+v, want zero", i, got)
+		}
+	}
 }
 
 func TestNew_RejectsNilClock(t *testing.T) {
