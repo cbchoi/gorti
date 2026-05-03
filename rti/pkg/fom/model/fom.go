@@ -14,24 +14,43 @@ type FOM struct {
 	objectClasses      []ObjectClass
 	interactionClasses []InteractionClass
 	dataTypes          []DataType
+	dimensions         []Dimension
 }
 
 // NewFOM returns a FOM whose internal slices are independent copies of the
 // caller's inputs, sorted by name (stable). Passing nil for any argument is
 // equivalent to passing an empty slice.
+//
+// Dimensions are appended via NewFOMWithDimensions; use this constructor
+// when no <dimensions> block was present in the source XML.
 func NewFOM(objectClasses []ObjectClass, interactionClasses []InteractionClass, dataTypes []DataType) *FOM {
+	return NewFOMWithDimensions(objectClasses, interactionClasses, dataTypes, nil)
+}
+
+// NewFOMWithDimensions is NewFOM extended with the <dimensions> block
+// (M10 / FR-DDM-1). Dimensions are sorted by name (stable) for
+// deterministic iteration.
+func NewFOMWithDimensions(
+	objectClasses []ObjectClass,
+	interactionClasses []InteractionClass,
+	dataTypes []DataType,
+	dimensions []Dimension,
+) *FOM {
 	oc := append([]ObjectClass(nil), objectClasses...)
 	ic := append([]InteractionClass(nil), interactionClasses...)
 	dt := append([]DataType(nil), dataTypes...)
+	dm := append([]Dimension(nil), dimensions...)
 
 	sort.SliceStable(oc, func(i, j int) bool { return oc[i].Name < oc[j].Name })
 	sort.SliceStable(ic, func(i, j int) bool { return ic[i].Name < ic[j].Name })
 	sort.SliceStable(dt, func(i, j int) bool { return dt[i].Name() < dt[j].Name() })
+	sort.SliceStable(dm, func(i, j int) bool { return dm[i].Name < dm[j].Name })
 
 	return &FOM{
 		objectClasses:      oc,
 		interactionClasses: ic,
 		dataTypes:          dt,
+		dimensions:         dm,
 	}
 }
 
@@ -52,6 +71,26 @@ func (f *FOM) InteractionClasses() []InteractionClass {
 // DataType implementations are expected to be immutable after construction.
 func (f *FOM) DataTypes() []DataType {
 	return append([]DataType(nil), f.dataTypes...)
+}
+
+// Dimensions returns a defensive copy of the FOM's dimensions in
+// name-sorted order. M10 / FR-DDM-1: routing-space declarations.
+func (f *FOM) Dimensions() []Dimension {
+	return append([]Dimension(nil), f.dimensions...)
+}
+
+// Dimension is one routing-space dimension declared in the FOM
+// (1516.2-2010 Annex A <dimension>). M10 / FR-DDM-1.
+//
+// In 1516-2010 dimensions are global (no enclosing routing-space
+// element); each dimension is its own one-axis routing space. The
+// optional NormalizationKey field carries the FOM's <normalization>
+// hint when present (informational; the RTI does not perform
+// normalization itself in cut-2).
+type Dimension struct {
+	Name             string
+	UpperBound       uint64
+	NormalizationKey string
 }
 
 // ObjectClass is one node in the FOM object class tree. ParentName is empty

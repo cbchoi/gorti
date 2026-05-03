@@ -57,6 +57,8 @@ func Parse(modules []Module) (Result, error) {
 		diagnostics        []Diagnostic
 	)
 
+	var dimensions []model.Dimension
+
 	for _, m := range modules {
 		om, err := decodeModule(m)
 		if err != nil {
@@ -73,8 +75,9 @@ func Parse(modules []Module) (Result, error) {
 			flattenInteractionClasses(om.Interactions.InteractionClass, "", &modInteractions)
 		}
 		modDataTypes := convertDataTypes(om.DataTypes)
+		modDimensions := convertDimensions(om.Dimensions)
 
-		modFOM := model.NewFOM(modObjects, modInteractions, modDataTypes)
+		modFOM := model.NewFOMWithDimensions(modObjects, modInteractions, modDataTypes, modDimensions)
 		modDiags := runDiagnosers(diagnosticInput{
 			modulePath: m.Path,
 			xml:        m.XML,
@@ -89,12 +92,13 @@ func Parse(modules []Module) (Result, error) {
 		objectClasses = append(objectClasses, modObjects...)
 		interactionClasses = append(interactionClasses, modInteractions...)
 		dataTypes = append(dataTypes, modDataTypes...)
+		dimensions = append(dimensions, modDimensions...)
 	}
 
 	if len(diagnostics) > 0 {
 		return Result{Diagnostics: diagnostics}, nil
 	}
-	fom := model.NewFOM(objectClasses, interactionClasses, dataTypes)
+	fom := model.NewFOMWithDimensions(objectClasses, interactionClasses, dataTypes, dimensions)
 	return Result{FOM: fom}, nil
 }
 
