@@ -1,0 +1,70 @@
+- agent: agent-c (sub-agent W5B)
+- branch: agent/c/m4-w5b-pyjevsim-pin
+- task: TASK-072 — pyjevsim version pin + smoke test runs
+- pinned-version: pyjevsim==1.3.1
+- install-method: PyPI (`pip install pyjevsim==1.3.1`)
+- smoke-test-status: FAILED (not SKIPPED, not PASSED)
+- mypy: clean
+- ruff: clean
+- summary: |
+    Pinned pyjevsim==1.3.1 in pysdk/pyproject.toml's [project.optional-dependencies]
+    pyjevsim extra. Discovered via `pip index versions pyjevsim`; available
+    PyPI versions are 1.0.0, 1.3.0, 1.3.1. Upstream is github.com/cbchoi/pyjevsim
+    (branches: main, develop; tags: v1.0.0).
+
+    BLOCKING ISSUE: The orchestrator-frozen smoke test
+    (pysdk/tests/spec/m4/test_spec_m4_pyjevsim_smoke.py) asserts that pyjevsim
+    exports `CoupledModel` and `AtomicModel`. NO published pyjevsim version
+    (1.0.0, 1.3.0, 1.3.1) and NO upstream branch (main, develop) exports
+    those names. The actual API is:
+        CoupledModel  ->  pyjevsim.StructuralModel
+        AtomicModel   ->  pyjevsim.BehaviorModel
+
+    Verified by:
+      - `python3 -c "import pyjevsim; print(dir(pyjevsim))"` on each version
+      - `gh api repos/cbchoi/pyjevsim/contents/pyjevsim/__init__.py?ref=main`
+      - `gh api repos/cbchoi/pyjevsim/contents/pyjevsim/__init__.py?ref=develop`
+      - `gh api search/code "CoupledModel repo:cbchoi/pyjevsim"` -> 0 hits
+      - `gh api search/code "AtomicModel repo:cbchoi/pyjevsim"` -> 0 hits
+
+    The test FAILS with the diagnostic exactly as designed by its author:
+        AssertionError: pyjevsim ? is missing required symbols:
+        ['CoupledModel', 'AtomicModel']. Either pin to an older version in
+        pyproject.toml or update the bridge in pysdk/pyjevsim_bridge/.
+
+    Per the W5B brief: I attempted all three remediation paths and stopped:
+      1. Pin an older version with the expected names — none exists.
+      2. Update _protocol.py — does not help; the spec test imports `pyjevsim`
+         directly via importlib.import_module and uses hasattr() on the real
+         module, not on _protocol.
+      3. Modify the spec test — file is orchestrator-frozen; not done.
+
+    Per W5B brief failure-mode guidance ("If you can't get the smoke test to
+    PASS in a reasonable time (~10 min of poking), STOP and report"), I
+    pinned 1.3.1 (latest stable) and surfaced the situation rather than
+    silently mutating the spec test or monkey-patching pyjevsim (forbidden
+    per docs/agent-c-pysdk.md §7).
+
+    RECOMMENDED ORCHESTRATOR ACTIONS (pick one):
+      (a) Authorize me (or another sub-agent) to update the smoke test's
+          required-symbols list to ["StructuralModel", "BehaviorModel"]
+          (and update docs/agent-c-pysdk.md §1 + §6 + §7 mapping table to
+          match the real pyjevsim 1.3.x API names). Bridge code in
+          pyjevsim_bridge/ already uses the Protocol-based names so no
+          functional change is required.
+      (b) Patch upstream pyjevsim 1.3.x to add backward-compatible aliases
+          (`CoupledModel = StructuralModel`, `AtomicModel = BehaviorModel`)
+          and release 1.3.2. The cbchoi/pyjevsim maintainer is the same as
+          gorti's (you), so this is feasible.
+      (c) Drop the smoke test's stricter assertion to a soft "imports OK"
+          check and let the bridge's Protocol shims be the only contract.
+
+- acceptance:
+    - pyjevsim pinned in pyproject.toml: YES (1.3.1)
+    - smoke test PASSES: NO — see blocking issue above; FAILS due to upstream
+      API rename that predates the spec test's authoring assumption
+    - mypy strict clean: YES
+    - ruff clean: YES
+    - other Wave 1/2/3/4 tests still green: YES (other M4 spec failures
+      are pre-existing TASK-069/070/071 NotImplementedError stubs owned by
+      W5A and W6, not regressions caused by W5B)

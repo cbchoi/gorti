@@ -34,7 +34,21 @@ dev = [
 # avoid importing real pyjevsim — they consume the typing.Protocol shim in
 # pysdk/pyjevsim_bridge/_protocol.py via the StubCoupledModel fake.
 pyjevsim = [
-    # Pin set by TASK-072 (Agent C) — leave a marker comment, not an entry.
+    # TASK-072 (Agent C / W5B): pinned to 1.3.1 (latest on PyPI as of 2026-05).
+    # Discovered via `pip index versions pyjevsim` — published versions on PyPI
+    # are 1.0.0, 1.3.0, 1.3.1. Upstream: https://github.com/cbchoi/pyjevsim
+    #
+    # WARNING: pyjevsim 1.3.1 does NOT export `CoupledModel` / `AtomicModel`
+    # (the symbols `pysdk/tests/spec/m4/test_spec_m4_pyjevsim_smoke.py`
+    # asserts on). The actual pyjevsim API uses `StructuralModel` (coupled)
+    # and `BehaviorModel` (atomic). No published pyjevsim version (1.0.0,
+    # 1.3.0, 1.3.1) or upstream branch (main, develop) exports the legacy
+    # `CoupledModel` / `AtomicModel` names. The smoke test consequently
+    # FAILS instead of PASSING — see docs/tasks/signals/TASK-072.done for
+    # the full investigation. Orchestrator must either (a) update the
+    # spec test's required-symbols list to ["StructuralModel", "BehaviorModel"],
+    # or (b) request upstream to add backward-compatible aliases.
+    "pyjevsim==1.3.1",
 ]
 
 [tool.setuptools.packages.find]
