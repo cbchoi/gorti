@@ -51,10 +51,13 @@ type MultiplexOptions struct {
 // own monotonic seq), which matches the on-disk file-per-federation
 // layout: one .log file per federation, each starting at seq 1.
 //
-// Concurrency: a single mutex serializes Append/Sync/Close to keep the
-// per-federation writer table consistent. Inside, each Writer is itself
-// goroutine-unsafe (per W1B's contract), so the multiplexer's lock also
-// guards Writer state.
+// Concurrency: a single mutex serializes table mutations (lazy writer
+// creation in writerFor and the close walk in Close) so the
+// per-federation writer table stays consistent. Append itself releases
+// the multiplexer mutex before delegating to the per-federation
+// Writer, which has its own internal mutex (added in M6 W1B) covering
+// nextSeq + sink writes. Sync also delegates without holding the
+// multiplexer lock for the same reason.
 type MultiplexWriter struct {
 	mu      sync.Mutex
 	opts    MultiplexOptions
