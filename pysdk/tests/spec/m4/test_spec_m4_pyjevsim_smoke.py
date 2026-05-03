@@ -28,8 +28,12 @@ def test_spec_m4_pyjevsim_required_symbols_present() -> None:
 
     # The bridge consumes these symbols. If a future pyjevsim release
     # renames or removes any of them, this test fails with a diagnostic
-    # naming the missing one.
-    required = ["CoupledModel", "AtomicModel"]
+    # naming the missing one. Names match the real pyjevsim 1.x API:
+    # StructuralModel == coupled DEVS model; BehaviorModel == atomic DEVS
+    # model. (The DEVS-canonical names "CoupledModel" / "AtomicModel" are
+    # used in the docs/agent-c-pysdk.md mapping table for clarity but are
+    # not the package's actual export names.)
+    required = ["StructuralModel", "BehaviorModel"]
     missing = [name for name in required if not hasattr(pyjevsim, name)]
     assert not missing, (
         f"pyjevsim {getattr(pyjevsim, '__version__', '?')} is missing required symbols: "
