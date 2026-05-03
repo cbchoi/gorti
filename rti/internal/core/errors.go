@@ -57,4 +57,11 @@ var (
 	ErrRegionNotFound             = errors.New("region not found in federation")
 	ErrRegionNotOwnedByFederate   = errors.New("region is not owned by this federate")
 	ErrRegionInUse                = errors.New("region is in use by an active subscription or instance")
+
+	// Save/Restore (M9 — FR-SR-*)
+	ErrSaveAlreadyInProgress    = errors.New("federation save is already in progress")
+	ErrRestoreAlreadyInProgress = errors.New("federation restore is already in progress")
+	ErrSaveBundleCorrupt        = errors.New("save bundle is corrupt or unreadable")
+	ErrFederateNotInSave        = errors.New("federate is not part of the active save protocol")
+	ErrFederateNotInRestore     = errors.New("federate is not part of the active restore protocol")
 )
