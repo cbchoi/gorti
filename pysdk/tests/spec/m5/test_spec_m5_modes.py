@@ -27,25 +27,36 @@ Cut-1 scope (per ``docs/M5_DISPATCH_PLAN.md`` §3 W2B "pragmatic cut-1"):
     ("attribute") while the body verifies the equivalent interaction
     path.
 
-  - Test 1 (best-effort + Receive-order interaction → RO event) requires
-    the production rtid's ``fomHandle`` to implement
-    ``FOMOrderResolver`` so the per-interaction order declared in the
-    FOM XML reaches the registry's
-    ``deliveryTimestampForInteraction`` decision. Today (post-W1A
-    landing) the production handle in ``rti/cmd/rtid/foms.go`` does NOT
-    yet implement that interface; ``FOMRepoOrderLookup.InteractionOrder``
-    therefore returns ``(OrderTimeStamp, false)``, the registry treats
-    the lookup as "unknown", and the timestamp survives — the SDK
-    receives a non-None float instead of None. The test detects this
-    blocker and ``pytest.skip``s with a clear reason rather than failing
-    silently. A follow-up task can upgrade the production fomHandle
-    (the model already carries the per-class ``Order`` string the
-    parser populated) and this test will turn green automatically.
+  - Test 1 (best-effort + Receive-order interaction → RO event) post
+    M6 W1A: the Python-side handle alignment has landed
+    (``pysdk/rti1516e/fom/parser.py::_load_mim`` no longer dedupes
+    IEEE 1516.1-2010 standard MIM duplicate-name interaction classes
+    such as ``HLAadjust``, ``HLArequest``, ``HLAreport``,
+    ``HLAreportFOMmoduleData``, ``HLArequestFOMmoduleData``,
+    ``HLAsetSwitches`` — each appears once under
+    ``HLAmanager.HLAfederate`` and again under
+    ``HLAmanager.HLAfederation``). The agent-owned
+    ``pysdk/tests/test_handle_alignment.py`` regression proves Python
+    and Go now agree pairwise on every (kind, handle) tuple. However
+    a SECOND blocker surfaced during W1A end-to-end testing: the
+    production rtid wiring in ``rti/cmd/rtid/main.go`` never calls
+    ``fomRepository.RememberFor`` after a successful
+    ``CreateFederation``, so ``FOMRepoOrderLookup.InteractionOrder``
+    in ``rti/internal/transport/grpc/best_effort.go`` resolves
+    ``Repo.Get(fed)`` to ``(nil, ErrFederationNotFound)`` and falls
+    back to TSO regardless of the now-aligned handle. The Go-side
+    spec test ``rti/spec/M5/best_effort_test.go`` PASSES because it
+    bypasses ``FOMRepoOrderLookup`` entirely (uses the ``orderTable``
+    fixture directly), so the wiring gap was previously invisible.
+    Until that second blocker is fixed (Go-side, outside the W1A
+    Python scope), test 1 still skips with the updated reason below.
 
   - Test 2 (verbose + any order → TSO) does not depend on the
-    ``FOMOrderResolver`` upgrade: in verbose mode the registry never
-    considers the FOM order, so the publisher's timestamp passes
-    through verbatim. This test runs end-to-end today and PASSES.
+    ``FOMOrderResolver`` upgrade nor the handle-alignment fix: in
+    verbose mode the registry never considers the FOM order, so the
+    publisher's timestamp passes through verbatim regardless of which
+    handle the wire carries. This test was already PASSING before
+    handle alignment.
 """
 
 from __future__ import annotations
@@ -81,9 +92,19 @@ def test_spec_m5_best_effort_attribute_delivers_ro() -> None:
          ``ReceiveInteraction``.
       7. Assert ``event.timestamp is None`` (RO semantics).
 
-    Skips with a clear blocker reason if the production rtid's fomHandle
-    has not yet been upgraded to expose per-class FOM order to the
-    delivery-decision path (see module docstring).
+    Status (M6 W1A, 2026-05-03): cross-language handle alignment IS
+    fixed (see module docstring + ``pysdk/tests/test_handle_alignment.py``
+    regression — the alignment regression PASSES, proving Python and Go
+    agree on the wire-side handle for ModesProbe and every other class
+    in the merged FOM). However a second blocker — Go-side production
+    wiring not calling ``fomRepository.RememberFor`` — keeps the
+    end-to-end RO delivery from working. W1A scope (per the M6
+    dispatch) is Python-only (``rti/*`` is read-only); the second
+    blocker requires a ~3-line addition to ``rti/cmd/rtid/main.go``
+    and is out-of-scope here. The skip reason below documents the
+    secondary blocker so the next agent dispatch can target it
+    precisely; the alignment work itself is locked in by
+    ``pysdk/tests/test_handle_alignment.py``.
     """
     if shutil.which("go") is None:
         pytest.skip("go toolchain not on PATH; cannot build rtid for the smoke test")
@@ -103,43 +124,45 @@ def test_spec_m5_best_effort_attribute_delivers_ro() -> None:
 
     received_ts = result["received_timestamp"]
     if received_ts is not None:
-        # CROSS-LANGUAGE HANDLE ALIGNMENT BLOCKER (M5 follow-up).
+        # SECONDARY BLOCKER (M6 W1A discovered, awaiting Go-side fix):
         #
-        # Post-W2C the production *fomHandle DOES implement
-        # FOMOrderResolver (see rti/cmd/rtid/foms.go::OrderForInteraction).
-        # The Go-side spec test
-        # rti/spec/M5/best_effort_test.go::TestSpec_M5_BestEffort_RODelivery
-        # PASSES — the registry correctly strips the timestamp when the
-        # federation is best-effort AND the FOM declares the class as
-        # Receive-order.
+        # The cross-language handle alignment that gated this test pre-W1A
+        # IS fixed — pysdk/tests/test_handle_alignment.py PASSES, proving
+        # Python's _load_mim now mirrors Go's flat list (no dedup of
+        # IEEE 1516.1-2010 standard-MIM duplicate-name interaction
+        # classes). The interaction goes out from Python with the SAME
+        # handle Go would assign for ModesProbe (verified at handle 86
+        # for the inline FOM in pysdk/tests/spec/m5/_helpers.py).
         #
-        # The remaining blocker is handle disagreement between the
-        # Python SDK and the Go RTI: Python's FOM parser merges the
-        # MIM differently from rti/pkg/fom/mim/standard-mim.xml, so the
-        # same class name lands at different numeric handles on each
-        # side. The interaction goes out as Python's handle K; the Go
-        # side resolves OrderForInteraction(K) against ITS handle table
-        # and finds a different (or missing) class — defaults to TSO,
-        # so the timestamp survives.
+        # The remaining blocker is on the Go side: rti/cmd/rtid/main.go
+        # constructs fomRepository but never calls RememberFor after a
+        # successful CreateFederation. Therefore
+        # FOMRepoOrderLookup.InteractionOrder (in
+        # rti/internal/transport/grpc/best_effort.go) resolves
+        # Repo.Get(fed) to (nil, ErrFederationNotFound), falls into the
+        # `if h == nil` branch, and returns (OrderTimeStamp, false) —
+        # the registry's deliveryTimestampForInteraction then preserves
+        # the timestamp regardless of the FOM's <order>Receive</order>.
         #
-        # This is the deferral W1C documented under TASK-081 ("Python
-        # vs Go MIM corpus parity"); fixing it requires aligning the
-        # Python FOM parser's MIM merge against the canonical XML used
-        # by the Go side. Estimated as M5 follow-up alongside the
-        # bidirectional Python+Go cross-language smoke.
+        # The Go-side spec test rti/spec/M5/best_effort_test.go does NOT
+        # exercise this path (it injects an `orderTable` fixture
+        # directly as object.Options.Orders, bypassing
+        # FOMRepoOrderLookup entirely), which is why the wiring gap was
+        # previously invisible. The fix is ~3 lines in
+        # rti/cmd/rtid/main.go: after the federationService's
+        # CreateFederation succeeds, call foms.RememberFor(name, handle)
+        # so the per-federation handle map is populated.
         #
-        # The mode contract IS verified end-to-end via two
-        # complementary paths:
-        #   - Go-side: rti/spec/M5/best_effort_test.go (PASS)
-        #   - Python-side TSO (this file's test 2) (PASS)
-        # The combination — Python publisher of a Receive-order class
-        # against a best-effort Go federation — needs handle alignment.
+        # Out-of-scope for W1A (Python-only, rti/* read-only). Next
+        # dispatch should target rti/cmd/rtid/main.go's CreateFederation
+        # post-hook + a fresh Go-side spec test exercising the
+        # FOMRepoOrderLookup path end-to-end.
         pytest.skip(
-            "deferred: cross-language handle alignment (Python vs Go MIM "
-            "merge disagreement). Go-side best-effort RO is verified by "
-            "rti/spec/M5/best_effort_test.go; Python-side verbose TSO is "
-            "verified by test 2 below. The combined Python-publishes-to-"
-            "Go-RTI path needs handle alignment (W1C deferral); "
+            "deferred: Go-side production wiring (rti/cmd/rtid/main.go "
+            "never calls fomRepository.RememberFor post-CreateFederation, "
+            "so FOMRepoOrderLookup.InteractionOrder falls back to TSO). "
+            "Python-side handle alignment is FIXED — see "
+            "pysdk/tests/test_handle_alignment.py PASSING. "
             f"got timestamp={received_ts!r}, expected None."
         )
 

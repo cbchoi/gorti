@@ -819,6 +819,32 @@ def _load_mim() -> _ParsedModule | None:
     treat that as an empty MIM (FOM-001 then catches every MIM-only name as
     an undefined reference, surfacing the build-config issue loudly via the
     existing diagnostic channel rather than masking it with a silent error).
+
+    Cross-language handle alignment (M6 follow-up): the IEEE 1516.1-2010
+    standard MIM declares several interaction class names twice under
+    different parents (for example ``HLAadjust`` appears once under
+    ``HLAmanager.HLAfederate`` and again under ``HLAmanager.HLAfederation``;
+    same for ``HLArequest``, ``HLAreport``, ``HLAreportFOMmoduleData``,
+    ``HLArequestFOMmoduleData`` and ``HLAsetSwitches``). It also declares a
+    few classes that, when flattened, end up sharing the SAME (name,
+    parent_name_string) key because their parents themselves share a name
+    (e.g. two distinct ``HLAreport`` containers — one nested under
+    ``HLAfederate``, one under ``HLAfederation`` — each carry a child
+    ``HLAreportFOMmoduleData``, and after flattening both children list
+    parent="HLAreport"). Go's ``model.NewFOM`` keeps every one of these
+    flat entries verbatim (no dedup, just a stable name sort) and the
+    production ``*fomHandle.LookupInteractionClass`` resolves a leaf name
+    by 1-based position in that slice. If the Python side dedupes the MIM
+    by name (or even by (name, parent_name)), the user FOM's class lands
+    at a SMALLER handle than the Go side assigns, and Go's
+    ``OrderForInteraction`` lookup against its own table either returns a
+    different class or hits an out-of-range slot — both fall back to TSO,
+    defeating the per-class FOM order contract. So we mirror Go: append
+    every MIM interaction/object class verbatim. Data types ARE name-unique
+    by IEEE schema and stay deduped across MIM files (Go's MIM corpus is
+    a single XML in cut-1 so the cross-file dedup is a no-op for it; we
+    keep it on the Python side as defense-in-depth for the second wrapper
+    XML the Python loader still consumes for forward compatibility).
     """
     global _MIM_CACHE, _MIM_LOAD_FAILED
     if _MIM_CACHE is not None:
@@ -827,8 +853,6 @@ def _load_mim() -> _ParsedModule | None:
         return None
     merged = _ParsedModule()
     seen_dt: set[str] = set()
-    seen_oc: set[str] = set()
-    seen_ic: set[str] = set()
     for path in _MIM_PATHS:
         try:
             xml_bytes = path.read_bytes()
@@ -836,16 +860,11 @@ def _load_mim() -> _ParsedModule | None:
         except (OSError, ET.ParseError):
             _MIM_LOAD_FAILED = True
             return None
-        for oc in pm.object_classes:
-            if oc.name in seen_oc:
-                continue
-            seen_oc.add(oc.name)
-            merged.object_classes.append(oc)
-        for ic in pm.interaction_classes:
-            if ic.name in seen_ic:
-                continue
-            seen_ic.add(ic.name)
-            merged.interaction_classes.append(ic)
+        # Append all MIM object / interaction classes verbatim — no name
+        # or (name, parent) dedup. Mirrors Go's flat-list semantics; see
+        # the docstring above for the cross-language alignment rationale.
+        merged.object_classes.extend(pm.object_classes)
+        merged.interaction_classes.extend(pm.interaction_classes)
         for dt in pm.data_types:
             if dt.name in seen_dt:
                 continue
@@ -916,26 +935,37 @@ def _merge_user_onto_mim(
     user: _ParsedModule, mim: _ParsedModule
 ) -> _ParsedModule:
     """Union MIM + user, MIM names winning on collision (callers reject those
-    via FOM-101 before reaching this step)."""
+    via FOM-101 before reaching this step).
+
+    The MIM side is appended verbatim — including duplicate (name, parent)
+    pairs from the standard MIM (see ``_load_mim`` docstring on cross-language
+    handle alignment). The user side is filtered by NAME against the MIM
+    name set, mirroring Go's ``mim.mergeNoCollision``: a user re-mention of
+    an MIM root (HLAobjectRoot / HLAinteractionRoot) is the canonical
+    pass-through pattern and must be skipped. Beyond that, user-vs-user
+    dedup is also by NAME — matching Go's ``mergeNoCollision`` which uses
+    the same name-keyed map (so a user FOM with two ``Foo`` siblings would
+    keep both on Go's side because Go's map check is against the MIM-only
+    set, but Go's ``model.NewFOM`` would still flatten and append both).
+    To preserve cross-language handle parity even for that edge case we
+    mirror Go's appending behavior for user classes whose name is unique
+    relative to the MIM but may repeat among user siblings.
+    """
     out = _ParsedModule()
-    seen_oc: set[str] = set()
-    seen_ic: set[str] = set()
+    mim_oc_names: set[str] = {oc.name for oc in mim.object_classes}
+    mim_ic_names: set[str] = {ic.name for ic in mim.interaction_classes}
     seen_dt: set[str] = set()
     for oc in mim.object_classes:
-        seen_oc.add(oc.name)
         out.object_classes.append(oc)
     for oc in user.object_classes:
-        if oc.name in seen_oc:
+        if oc.name in mim_oc_names:
             continue
-        seen_oc.add(oc.name)
         out.object_classes.append(oc)
     for ic in mim.interaction_classes:
-        seen_ic.add(ic.name)
         out.interaction_classes.append(ic)
     for ic in user.interaction_classes:
-        if ic.name in seen_ic:
+        if ic.name in mim_ic_names:
             continue
-        seen_ic.add(ic.name)
         out.interaction_classes.append(ic)
     for dt in mim.data_types:
         seen_dt.add(dt.name)
