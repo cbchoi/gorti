@@ -388,8 +388,11 @@ check_m7() {
   local pass=0 total=2
   [ -d rti/spec/M7 ] && { present "rti/spec/M7/ committed"; pass=$((pass+1)); } \
                       || pending "rti/spec/M7/ pending orchestrator pre-work"
-  [ -f rti/internal/time/tar.go ] && { present "TAR/TARA/FQR/NMRA implemented"; pass=$((pass+1)); } \
-                                   || pending "time-advance primitives pending"
+  if [ -f rti/internal/time/advance.go ] || [ -f rti/internal/time/tar.go ]; then
+    present "TAR/TARA/FQR/NMRA implemented"; pass=$((pass+1))
+  else
+    pending "time-advance primitives pending"
+  fi
 
   if [ "$pass" -eq "$total" ]; then set_status M7 DONE; printf "${GRN}M7: DONE${OFF} (%d/%d)\n" "$pass" "$total"
   elif [ "$pass" -gt 0 ]; then set_status M7 IN_PROGRESS; printf "${YLW}M7: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
