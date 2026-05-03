@@ -431,3 +431,95 @@ This SDD does NOT design:
 - Distributed RTI / hot standby
 
 Each of these will get its own SDD addendum when its cut is scheduled.
+
+---
+
+## 9. Save/Restore Bundle Format (M9 W1 — FR-SR-4)
+
+This addendum documents the on-disk format of the federation save bundle
+written by `rti/internal/savepoint.Manager`. The format is intentionally
+trivial at cut-1 to maximize debuggability; a future cut may wrap the
+concatenation in tar.gz per FR-SR-4's "sealed bundle" wording.
+
+### 9.1 Layout
+
+A single bundle file is the concatenation of:
+
+```
+[ 8 bytes ] uint64 manifestLen   (little-endian)
+[ N bytes ] JSON manifest        (length = manifestLen)
+[ 8 bytes ] uint64 eventLogLen   (little-endian; matches manifest.event_log_bytes)
+[ M bytes ] raw event-log slice  (length = eventLogLen; may be 0)
+```
+
+The two 8-byte length prefixes frame the regions so `ReadBundle` can
+stream them without seeking. `eventLogLen` MUST match the manifest's
+recorded `event_log_bytes` field; mismatch is treated as
+`core.ErrSaveBundleCorrupt`.
+
+### 9.2 Manifest schema (cut-1, version = 1)
+
+```json
+{
+  "version":         1,
+  "federation":      "fed-name",
+  "label":           "save-label",
+  "save_time":       42.5,                 // optional, omitted when nil
+  "federates":       [1, 2, 3],            // sorted; deterministic restore order
+  "event_log_bytes": 0
+}
+```
+
+- `version` — bundle format version; bumped when the layout changes
+  incompatibly. `ReadBundle` rejects non-matching versions with
+  `core.ErrSaveBundleCorrupt`.
+- `federation` / `label` — identity tuple; matches the
+  `(fed, label)` key the bundle was filed under in `Storage`.
+- `save_time` — optional logical time the save was pinned at (FR-SR-1).
+  `nil` means "save at current synchronization point".
+- `federates` — the federate-handle list captured at save-request time,
+  sorted ascending. Drives the deterministic
+  `initiateFederateRestore` broadcast order on restore.
+- `event_log_bytes` — byte length of the slice that follows. Cut-1
+  default is 0 (see deferral below).
+
+### 9.3 Cut-1 manifest scope
+
+At cut-1 the manifest carries only the federation identity + federate
+list. Per-manager state snapshots (declarations, ownership, sync
+points, MOM, DDM) are **deferred to M9 W2**. The deferral is safe
+because FR-SR-5 byte-determinism is delivered through the event-log
+slice: replaying the slice through a fresh RTI reconstructs every
+manager's state via the same write-ahead path the original federation
+took (the same machinery as M2/M3 NFR-DET-2 replay).
+
+### 9.4 Cut-1 event-log slice
+
+The cut-1 manager records `event_log_bytes = 0` because the
+record-oriented `core.EventLogReader` interface does not expose raw
+file bytes. The on-disk per-federation `.log` file remains the source
+of truth for replay; the restore path consults the same
+`MultiplexWriter` and can `OpenReader` the live log to drive replay.
+A follow-up patch in M9 W2 fills the slice in-bundle so saves are
+self-contained (relevant for off-machine archive transport); the
+framing is already in place so the layout will not change.
+
+### 9.5 Filesystem layout
+
+The default `FSStorage` writes one file per `(fed, label)` under
+`--save-dir` (default `./gorti-saves`):
+
+```
+<save-dir>/<fed>__<label>.bundle
+```
+
+Federation/label characters that would break filenames on Windows
+(`/\:*?"<>|` and ASCII control chars) are percent-escaped at the
+filename layer. The escaping is one-way (the manifest carries the
+canonical strings) and trivially preserves uniqueness for any printable
+ASCII input.
+
+No locking; `FSStorage` assumes a single-writer rtid process per
+`--save-dir`. Multi-writer coordination (e.g. via `flock` or atomic
+rename) is a follow-up if/when the production deployment story
+includes hot-standby rtid replicas.
