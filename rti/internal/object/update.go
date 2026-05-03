@@ -102,6 +102,9 @@ func (r *Registry) updateAttributes(
 
 	deliveryTs := r.deliveryTimestampForAttributes(fed, inst.cls, updateAttrs, ts)
 	r.fanoutReflect(ctx, fed, st, producer, inst, attrs, updateAttrs, deliveryTs)
+	if r.opts.OnUpdateSent != nil {
+		r.opts.OnUpdateSent(fed, producer)
+	}
 	return nil
 }
 
@@ -194,6 +197,9 @@ func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, s
 		}
 		evt := r.buildReflectEvent(st, inst, attrs, ts)
 		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		if r.opts.OnReflectDelivered != nil {
+			r.opts.OnReflectDelivered(fed, sub)
+		}
 	}
 }
 

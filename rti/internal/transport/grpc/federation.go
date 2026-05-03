@@ -27,8 +27,9 @@ import (
 // without a hook.
 type federationService struct {
 	rtiv1.UnimplementedFederationServiceServer
-	fed                       core.FederationStore
-	onCreateFederationSuccess func(ctx context.Context, name core.FederationName, modules []core.FOMModule)
+	fed                        core.FederationStore
+	onCreateFederationSuccess  func(ctx context.Context, name core.FederationName, modules []core.FOMModule)
+	onDestroyFederationSuccess func(ctx context.Context, name core.FederationName)
 }
 
 func newFederationService(fed core.FederationStore) *federationService {
@@ -69,8 +70,12 @@ func (s *federationService) DestroyFederation(ctx context.Context, req *rtiv1.De
 	if err := requireWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
-	if err := s.fed.DestroyFederation(ctx, core.FederationName(req.GetFederationName())); err != nil {
+	name := core.FederationName(req.GetFederationName())
+	if err := s.fed.DestroyFederation(ctx, name); err != nil {
 		return nil, errToStatus(err)
+	}
+	if s.onDestroyFederationSuccess != nil {
+		s.onDestroyFederationSuccess(ctx, name)
 	}
 	return &rtiv1.Empty{}, nil
 }

@@ -86,6 +86,19 @@ type Options struct {
 	// DefaultStallTimeout is applied when a CreateFederationRequest
 	// supplies StallTimeout == 0. Zero here means 60s (per srs §10.2 M3).
 	DefaultStallTimeout int // seconds; 0 → 60
+
+	// OnFederateJoined is an OPTIONAL post-success hook fired after a
+	// successful JoinFederation (after the eventlog append). M11 wires
+	// this to MOM.FederateJoined so HLAfederate / HLAfederation
+	// snapshots reflect the new federate. The hook receives the
+	// resolved federation name + the assigned handle + the federate
+	// name. MUST NOT block.
+	OnFederateJoined func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string)
+
+	// OnFederateResigned is the resign-side analogue. M11 wires this
+	// to MOM.FederateResigned. Fires after the eventlog append + roster
+	// mutation. MUST NOT block.
+	OnFederateResigned func(ctx context.Context, fed core.FederationName, h core.FederateHandle)
 }
 
 // New constructs a Manager. Returns an error if any required dependency in
@@ -289,6 +302,9 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 				req.Federation, req.FederateName, err)
 		}
 	}
+	if m.opts.OnFederateJoined != nil {
+		m.opts.OnFederateJoined(ctx, req.Federation, assigned, req.FederateName)
+	}
 	return assigned, nil
 }
 
@@ -366,6 +382,9 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 	// exactly the same handle-to-name binding even after the resign.
 	delete(fs.nameToHandle, name)
 	delete(fs.handleToName, h)
+	if m.opts.OnFederateResigned != nil {
+		m.opts.OnFederateResigned(ctx, fed, h)
+	}
 	return nil
 }
 

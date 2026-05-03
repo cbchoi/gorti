@@ -55,6 +55,30 @@ type Options struct {
 	// through CreateFederationRequest.StallTimeout via the federation
 	// manager's wiring.
 	StallTimeout stdtime.Duration
+
+	// OnTimeStateChanged is an OPTIONAL post-success hook invoked
+	// whenever a federate's time-management state changes
+	// (Enable/DisableRegulation, Enable/DisableConstrained). M11 wires
+	// this to MOM.TimeStateChanged so HLAtimeRegulating /
+	// HLAtimeConstrained / HLAlookahead reflect the live state.
+	//
+	// Cut-1: the lookahead snapshot is read from the manager's stateStore
+	// AFTER the transition; logical time is reported as 0 because the
+	// time.Manager does not yet track per-federate logical time
+	// independently of grants (TASK roadmap: M7 NER landing carries the
+	// per-federate currentTime field that this hook will eventually
+	// surface).
+	//
+	// MUST NOT block; called synchronously after the state mutation.
+	OnTimeStateChanged func(
+		ctx context.Context,
+		fed core.FederationName,
+		h core.FederateHandle,
+		regulating bool,
+		constrained bool,
+		lookahead core.LogicalTime,
+		logicalTime core.LogicalTime,
+	)
 }
 
 // New constructs a Manager. Returns an error if any required Options
@@ -92,11 +116,14 @@ func New(opts Options) (*Manager, error) {
 //   - core.ErrTimeAlreadyRegulating if already regulating
 //   - core.ErrTimeInvalidLookahead if lookahead < 0 or NaN
 func (m *Manager) EnableRegulation(ctx context.Context, fed core.FederationName, h core.FederateHandle, lookahead core.LogicalTime) error {
-	_ = ctx
 	if extOf(m).isHalted(fed) {
 		return core.ErrFederationHalted
 	}
-	return m.states.enableRegulation(fed, h, lookahead)
+	if err := m.states.enableRegulation(fed, h, lookahead); err != nil {
+		return err
+	}
+	m.fireTimeStateChanged(ctx, fed, h)
+	return nil
 }
 
 // DisableRegulation implements core.TimeManager. See SRS §FR-TM-1.
@@ -109,11 +136,14 @@ func (m *Manager) EnableRegulation(ctx context.Context, fed core.FederationName,
 //     terminal state
 //   - core.ErrTimeNotRegulating if not currently regulating
 func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
-	_ = ctx
 	if extOf(m).isHalted(fed) {
 		return core.ErrFederationHalted
 	}
-	return m.states.disableRegulation(fed, h)
+	if err := m.states.disableRegulation(fed, h); err != nil {
+		return err
+	}
+	m.fireTimeStateChanged(ctx, fed, h)
+	return nil
 }
 
 // EnableConstrained implements core.TimeManager. Constrained federates
@@ -124,11 +154,14 @@ func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName
 //     terminal state
 //   - core.ErrTimeAlreadyConstrained if already constrained
 func (m *Manager) EnableConstrained(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
-	_ = ctx
 	if extOf(m).isHalted(fed) {
 		return core.ErrFederationHalted
 	}
-	return m.states.enableConstrained(fed, h)
+	if err := m.states.enableConstrained(fed, h); err != nil {
+		return err
+	}
+	m.fireTimeStateChanged(ctx, fed, h)
+	return nil
 }
 
 // DisableConstrained implements core.TimeManager.
@@ -138,11 +171,14 @@ func (m *Manager) EnableConstrained(ctx context.Context, fed core.FederationName
 //     terminal state
 //   - core.ErrTimeNotConstrained if not currently constrained
 func (m *Manager) DisableConstrained(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
-	_ = ctx
 	if extOf(m).isHalted(fed) {
 		return core.ErrFederationHalted
 	}
-	return m.states.disableConstrained(fed, h)
+	if err := m.states.disableConstrained(fed, h); err != nil {
+		return err
+	}
+	m.fireTimeStateChanged(ctx, fed, h)
+	return nil
 }
 
 // NextMessageRequest implements core.TimeManager. See SRS §FR-TM-2.
@@ -233,6 +269,20 @@ func (m *Manager) FlushQueueRequest(ctx context.Context, fed core.FederationName
 // Returns the count of federations halted in this poll (0 = no stalls).
 func (m *Manager) CheckStalls(ctx context.Context) int {
 	return m.checkStalls(ctx)
+}
+
+// fireTimeStateChanged invokes the OnTimeStateChanged hook (when wired)
+// with the federate's current regulating / constrained / lookahead
+// snapshot. Logical time is reported as 0 in cut-1 because the
+// time.Manager does not track per-federate currentTime independently of
+// the grant pipeline; M11 cut-1 simplification documented in the agent
+// report.
+func (m *Manager) fireTimeStateChanged(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+	if m.opts.OnTimeStateChanged == nil {
+		return
+	}
+	snap := m.states.snapshot(fed, h)
+	m.opts.OnTimeStateChanged(ctx, fed, h, snap.regulating, snap.constrained, snap.lookahead, 0)
 }
 
 // Compile-time assertion that Manager implements core.TimeManager.

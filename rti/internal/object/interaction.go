@@ -47,6 +47,9 @@ func (r *Registry) sendInteraction(
 
 	deliveryTs := r.deliveryTimestampForInteraction(fed, cls, ts)
 	r.fanoutReceive(ctx, fed, st, producer, cls, params, deliveryTs)
+	if r.opts.OnInteractionSent != nil {
+		r.opts.OnInteractionSent(fed, producer)
+	}
 	return nil
 }
 
@@ -92,6 +95,9 @@ func (r *Registry) fanoutReceive(ctx context.Context, fed core.FederationName, s
 		}
 		evt := r.buildReceiveEvent(st, cls, params, ts)
 		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		if r.opts.OnInteractionDelivered != nil {
+			r.opts.OnInteractionDelivered(fed, sub)
+		}
 	}
 }
 

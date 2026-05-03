@@ -70,6 +70,12 @@ type Options struct {
 	// FOMRepoOrderLookup can resolve per-class declared order at
 	// best-effort interaction-send time. Tests may leave this nil.
 	OnCreateFederationSuccess func(ctx context.Context, name core.FederationName, modules []core.FOMModule)
+
+	// OnDestroyFederationSuccess, when non-nil, is invoked after every
+	// successful DestroyFederation gRPC call. M11 wires this to
+	// MOM.FederationDestroyed so the HLAfederation MOM instance is
+	// retired. Tests may leave this nil.
+	OnDestroyFederationSuccess func(ctx context.Context, name core.FederationName)
 }
 
 // NewServer constructs a Server. Validates that all required Options
@@ -89,6 +95,7 @@ func NewServer(opts Options) (*Server, error) {
 	}
 	fedSvc := newFederationService(opts.Federations)
 	fedSvc.onCreateFederationSuccess = opts.OnCreateFederationSuccess
+	fedSvc.onDestroyFederationSuccess = opts.OnDestroyFederationSuccess
 	return &Server{
 		fedService:    fedSvc,
 		declService:   newDeclarationService(opts.Declarations),
