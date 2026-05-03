@@ -220,21 +220,39 @@ class Federate:
         self, class_name: str, *, attributes: list[str]
     ) -> None:
         """Declare publication of an object class + its attributes."""
-        raise NotImplementedError("TASK-064")
+        self._transport.record(
+            "publish_object_class",
+            federate_handle=self.handle,
+            class_name=class_name,
+            attributes=list(attributes),
+        )
 
     async def subscribe_object_class(
         self, class_name: str, *, attributes: list[str]
     ) -> None:
         """Declare subscription to an object class + its attributes."""
-        raise NotImplementedError("TASK-064")
+        self._transport.record(
+            "subscribe_object_class",
+            federate_handle=self.handle,
+            class_name=class_name,
+            attributes=list(attributes),
+        )
 
     async def publish_interaction_class(self, class_name: str) -> None:
         """Declare publication of an interaction class."""
-        raise NotImplementedError("TASK-064")
+        self._transport.record(
+            "publish_interaction_class",
+            federate_handle=self.handle,
+            class_name=class_name,
+        )
 
     async def subscribe_interaction_class(self, class_name: str) -> None:
         """Declare subscription to an interaction class."""
-        raise NotImplementedError("TASK-064")
+        self._transport.record(
+            "subscribe_interaction_class",
+            federate_handle=self.handle,
+            class_name=class_name,
+        )
 
     # --- Object management (TASK-065) ---
 
