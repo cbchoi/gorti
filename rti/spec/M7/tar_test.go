@@ -9,9 +9,14 @@ import (
 	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 )
 
-// TestSpec_M7_TAR_NotImplementedYet: pre-dispatch sentinel — ensures
-// TAR is wired into the Manager's method table but currently returns
-// ErrNotImplemented. Agent A's M7 work flips this to a real test.
+// TestSpec_M7_TAR_NotImplementedYet: pre-dispatch sentinel that the
+// orchestrator's intent comment marks as "Agent A's M7 work flips this
+// to a real test". Now that TAR is implemented (M7 W1), the assertion
+// inverts: TAR on a non-regulating, non-constrained federate must
+// return ErrTimeNotRegulating (the dispatcher's eligibility check),
+// NOT ErrNotImplemented. The test name is preserved for git-history
+// hygiene; the function still serves as the per-method-table sentinel
+// (TAR is wired all the way through dispatchAdvance).
 //
 // Implements: FR-TM-2 (M7 scope).
 func TestSpec_M7_TAR_NotImplementedYet(t *testing.T) {
@@ -20,8 +25,11 @@ func TestSpec_M7_TAR_NotImplementedYet(t *testing.T) {
 		t.Skip("time.Manager not yet wired")
 	}
 	err := mgr.TimeAdvanceRequest(context.Background(), "fed", 1, core.LogicalTime(5.0))
-	if !errors.Is(err, timepkg.ErrNotImplemented) {
-		t.Errorf("TAR before M7: err = %v, want ErrNotImplemented (Agent A unskip in M7)", err)
+	if errors.Is(err, timepkg.ErrNotImplemented) {
+		t.Errorf("TAR after M7: still ErrNotImplemented; expected real implementation")
+	}
+	if !errors.Is(err, core.ErrTimeNotRegulating) {
+		t.Errorf("TAR on non-regulating: err = %v, want ErrTimeNotRegulating", err)
 	}
 }
 

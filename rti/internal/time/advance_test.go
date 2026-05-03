@@ -1,0 +1,324 @@
+package time
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/cbchoi/gorti/rti/internal/core"
+)
+
+// TestAdvanceMode_String_Stable: the stringification is part of the
+// log/replay surface (cut-3 may parse it). Pin it explicitly so a
+// future enum reorder is caught.
+func TestAdvanceMode_String_Stable(t *testing.T) {
+	cases := []struct {
+		mode AdvanceMode
+		want string
+	}{
+		{ModeNone, "none"},
+		{ModeNER, "NER"},
+		{ModeNMRA, "NMRA"},
+		{ModeTAR, "TAR"},
+		{ModeTARA, "TARA"},
+		{ModeFQR, "FQR"},
+	}
+	for _, c := range cases {
+		if got := c.mode.String(); got != c.want {
+			t.Errorf("mode %d: String() = %q, want %q", c.mode, got, c.want)
+		}
+	}
+}
+
+// TestDecideGrant_NER_FullGrant_StrictGT: the M3 NER predicate fires
+// when LBTS > requested (strict). Equality does not fire (forced-grant
+// path is solo-only and gated separately).
+func TestDecideGrant_NER_FullGrant_StrictGT(t *testing.T) {
+	d := decideGrant(ModeNER, 0, 5, 6, false)
+	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
+		t.Errorf("NER LBTS>req: %+v, want fire@5 clear", d)
+	}
+	d = decideGrant(ModeNER, 0, 5, 5, false)
+	if d.fire {
+		t.Errorf("NER LBTS==req (not solo): fired %+v, want hold (strict >)", d)
+	}
+}
+
+// TestDecideGrant_NMRA_FullGrant_InclusiveGE: NMRA predicate fires at
+// equality — the M7 distinguishing semantic.
+func TestDecideGrant_NMRA_FullGrant_InclusiveGE(t *testing.T) {
+	d := decideGrant(ModeNMRA, 0, 5, 5, false)
+	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
+		t.Errorf("NMRA LBTS==req: %+v, want fire@5 clear", d)
+	}
+	d = decideGrant(ModeNMRA, 0, 5, 4, false)
+	if d.fire {
+		t.Errorf("NMRA LBTS<req (not solo): fired %+v, want hold", d)
+	}
+}
+
+// TestDecideGrant_TAR_IncrementalAtLBTS_ClearsPending: TAR grants
+// incrementally when LBTS < req but > currentTime, advancing the
+// federate to LBTS and clearing pending. Distinguishes from NER which
+// would only do this for the sole-pending case AND keep pending.
+func TestDecideGrant_TAR_IncrementalAtLBTS_ClearsPending(t *testing.T) {
+	// LBTS < req, multiple peers — TAR still grants at LBTS.
+	d := decideGrant(ModeTAR, 0, 5, 2, false)
+	if !d.fire || d.time != core.LogicalTime(2) || !d.clearPending {
+		t.Errorf("TAR LBTS<req: %+v, want fire@2 clear", d)
+	}
+	// LBTS == req: TAR is strict (>), so the full-grant predicate fails;
+	// the incremental path requires LBTS > currentTime which is true (5>0)
+	// but at that point the grant time would be LBTS = 5, satisfying the
+	// federate's request. We honour this — TAR's overall promise is
+	// "advance to min(t, LBTS) = 5".
+	d = decideGrant(ModeTAR, 0, 5, 5, false)
+	if !d.fire || d.time != core.LogicalTime(5) {
+		t.Errorf("TAR LBTS==req: %+v, want fire@5 (incremental path)", d)
+	}
+}
+
+// TestDecideGrant_TARA_FullGrantAtEqualLBTS: TARA's full-grant predicate
+// IS inclusive, so LBTS == req fires the full path (clearPending=true).
+func TestDecideGrant_TARA_FullGrantAtEqualLBTS(t *testing.T) {
+	d := decideGrant(ModeTARA, 0, 5, 5, false)
+	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
+		t.Errorf("TARA LBTS==req: %+v, want fire@5 clear", d)
+	}
+}
+
+// TestDecideGrant_FQR_BehavesLikeTAR: cut-2 simplification. FQR uses
+// the inclusive predicate (like TARA) and the incremental path (like
+// TAR). Document this here so a cut-3 follow-up that diverges has an
+// explicit baseline.
+func TestDecideGrant_FQR_BehavesLikeTAR(t *testing.T) {
+	d := decideGrant(ModeFQR, 0, 5, 5, false)
+	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
+		t.Errorf("FQR LBTS==req: %+v, want fire@5 clear (cut-2 inclusive)", d)
+	}
+	d = decideGrant(ModeFQR, 0, 5, 2, false)
+	if !d.fire || d.time != core.LogicalTime(2) || !d.clearPending {
+		t.Errorf("FQR LBTS<req: %+v, want fire@2 clear (cut-2 incremental)", d)
+	}
+}
+
+// TestDecideGrant_NER_SolePending_ForcedGrant_KeepsPending: the M3 W2
+// escape hatch — sole-pending NER with LBTS<req emits a forced grant
+// at LBTS and KEEPS pending so the duplicate-NER check still fires.
+func TestDecideGrant_NER_SolePending_ForcedGrant_KeepsPending(t *testing.T) {
+	d := decideGrant(ModeNER, 0, 5, 2, true)
+	if !d.fire || d.time != core.LogicalTime(2) || d.clearPending {
+		t.Errorf("NER solo LBTS<req: %+v, want fire@2 keep-pending", d)
+	}
+}
+
+// TestDecideGrant_NMRA_SolePending_ForcedGrant_KeepsPending: NMRA
+// inherits the forced-grant escape hatch. Only NER and NMRA do.
+func TestDecideGrant_NMRA_SolePending_ForcedGrant_KeepsPending(t *testing.T) {
+	d := decideGrant(ModeNMRA, 0, 5, 2, true)
+	if !d.fire || d.time != core.LogicalTime(2) || d.clearPending {
+		t.Errorf("NMRA solo LBTS<req: %+v, want fire@2 keep-pending", d)
+	}
+}
+
+// TestDecideGrant_TAR_NoForcedGrant_PathClearsPending: when TAR is
+// sole-pending with LBTS<req, the grant fires (incremental path) but
+// CLEARS pending — diverges from NER. This pins the documented
+// per-mode divergence.
+func TestDecideGrant_TAR_NoForcedGrant_PathClearsPending(t *testing.T) {
+	d := decideGrant(ModeTAR, 0, 5, 2, true)
+	if !d.fire || d.time != core.LogicalTime(2) || !d.clearPending {
+		t.Errorf("TAR solo LBTS<req: %+v, want fire@2 CLEAR (no escape hatch)", d)
+	}
+}
+
+// TestDecideGrant_NER_NoProgress_Holds: when LBTS == currentTime, any
+// grant would produce zero progress. Hold (no emission).
+func TestDecideGrant_NER_NoProgress_Holds(t *testing.T) {
+	d := decideGrant(ModeNER, 5, 7, 5, true)
+	if d.fire {
+		t.Errorf("NER LBTS==current: fired %+v, want hold (no progress)", d)
+	}
+}
+
+// TestDecideGrant_TAR_NoProgress_Holds: same no-progress invariant for
+// the TAR family.
+func TestDecideGrant_TAR_NoProgress_Holds(t *testing.T) {
+	d := decideGrant(ModeTAR, 5, 7, 5, false)
+	if d.fire {
+		t.Errorf("TAR LBTS==current: fired %+v, want hold (no progress)", d)
+	}
+}
+
+// TestDispatchAdvance_HaltedFederation_RejectsAllModes: every mode must
+// reject on a halted federation, mirroring NER's behaviour.
+func TestDispatchAdvance_HaltedFederation_RejectsAllModes(t *testing.T) {
+	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: nopOutbox{}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ext := extOf(mgr)
+	ext.markHalted("fed")
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		fn   func() error
+	}{
+		{"NMRA", func() error { return mgr.NextMessageRequestAvailable(ctx, "fed", 1, 1) }},
+		{"TAR", func() error { return mgr.TimeAdvanceRequest(ctx, "fed", 1, 1) }},
+		{"TARA", func() error { return mgr.TimeAdvanceRequestAvailable(ctx, "fed", 1, 1) }},
+		{"FQR", func() error { return mgr.FlushQueueRequest(ctx, "fed", 1, 1) }},
+	}
+	for _, c := range cases {
+		if e := c.fn(); !errors.Is(e, core.ErrFederationHalted) {
+			t.Errorf("%s halted: err = %v, want ErrFederationHalted", c.name, e)
+		}
+	}
+}
+
+// TestDispatchAdvance_DuplicatePending_BlocksAcrossModes: a federate
+// with an outstanding NER cannot start a TAR (or any sibling) without
+// first being granted. The duplicate-pending check is mode-agnostic.
+func TestDispatchAdvance_DuplicatePending_BlocksAcrossModes(t *testing.T) {
+	out := &recordingOutbox{}
+	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: out})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(1))
+	_ = mgr.EnableRegulation(ctx, "fed", 2, core.LogicalTime(1))
+	// fed1 NER — pending; LBTS=min(5+1, 0+1)=1 < 5, sole NER not solo
+	// (fed2 is regulating but not pending, so pending count=1 → forced
+	// grant at LBTS=1, KEEP pending).
+	if e := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
+		t.Fatalf("first NER: %v", e)
+	}
+	// Now fed1 is mid-NER; a TAR call must be rejected as duplicate.
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(7)); !errors.Is(e, ErrDuplicateNER) {
+		t.Errorf("TAR while NER pending: err = %v, want ErrDuplicateNER", e)
+	}
+	if e := mgr.NextMessageRequestAvailable(ctx, "fed", 1, core.LogicalTime(7)); !errors.Is(e, ErrDuplicateNER) {
+		t.Errorf("NMRA while NER pending: err = %v, want ErrDuplicateNER", e)
+	}
+}
+
+// TestTAR_SoleRegulator_GrantsAtRequest: with only one regulating
+// federate, LBTS = req+lookahead > req for any positive lookahead, so
+// the full-grant path fires.
+func TestTAR_SoleRegulator_GrantsAtRequest(t *testing.T) {
+	out := &recordingOutbox{}
+	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: out})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(1))
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
+		t.Fatalf("TAR: %v", e)
+	}
+	got := out.snapshot()
+	if len(got) != 1 || got[0].t != core.LogicalTime(5) {
+		t.Errorf("TAR sole reg: grants = %+v, want one @5", got)
+	}
+}
+
+// TestTARA_GrantAtLBTSEqualsT_BothLookaheadZero: the canonical TARA
+// scenario from the M7 spec. LBTS = 0 with two lookahead-0 regulators;
+// TARA(0) grants at 0 (TAR(0) would not — strict).
+func TestTARA_GrantAtLBTSEqualsT_BothLookaheadZero(t *testing.T) {
+	out := &recordingOutbox{}
+	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: out})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(0))
+	_ = mgr.EnableRegulation(ctx, "fed", 2, core.LogicalTime(0))
+	if e := mgr.TimeAdvanceRequestAvailable(ctx, "fed", 1, core.LogicalTime(0)); e != nil {
+		t.Fatalf("TARA: %v", e)
+	}
+	got := out.snapshot()
+	if len(got) != 1 || got[0].t != core.LogicalTime(0) {
+		t.Errorf("TARA inclusive: grants = %+v, want one @0", got)
+	}
+}
+
+// TestNMRA_GrantAtLBTSEqualsT_BothLookaheadZero: NMRA mirror of the
+// TARA test — same shape, different primitive.
+func TestNMRA_GrantAtLBTSEqualsT_BothLookaheadZero(t *testing.T) {
+	out := &recordingOutbox{}
+	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: out})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(0))
+	_ = mgr.EnableRegulation(ctx, "fed", 2, core.LogicalTime(0))
+	if e := mgr.NextMessageRequestAvailable(ctx, "fed", 1, core.LogicalTime(0)); e != nil {
+		t.Fatalf("NMRA: %v", e)
+	}
+	got := out.snapshot()
+	if len(got) != 1 || got[0].t != core.LogicalTime(0) {
+		t.Errorf("NMRA inclusive: grants = %+v, want one @0", got)
+	}
+}
+
+// TestTAR_TwoRegulators_GrantsAtLBTS: with peer regulator at 0+2=2,
+// fed1 TAR(5) gets the LBTS=2 incremental grant (clear pending). The
+// federate then re-requests if it wants to reach 5.
+func TestTAR_TwoRegulators_GrantsAtLBTS(t *testing.T) {
+	out := &recordingOutbox{}
+	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: out})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(1))
+	_ = mgr.EnableRegulation(ctx, "fed", 2, core.LogicalTime(2))
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
+		t.Fatalf("TAR: %v", e)
+	}
+	got := out.snapshot()
+	if len(got) != 1 || got[0].t != core.LogicalTime(2) {
+		t.Errorf("TAR LBTS-bounded: grants = %+v, want one @2", got)
+	}
+	// The federate should have cleared pending — a subsequent TAR call
+	// must succeed (no ErrDuplicateNER).
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
+		t.Errorf("TAR after grant: err = %v, want nil (TAR clears pending)", e)
+	}
+}
+
+// TestNER_AfterTAR_NoStaleMode: a federate that completed a TAR (mode
+// cleared to None) can issue a fresh NER without inheriting TAR
+// semantics. Ensures emitGrant resets ns.mode when clearing pending.
+func TestNER_AfterTAR_NoStaleMode(t *testing.T) {
+	out := &recordingOutbox{}
+	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: out})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(1))
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(2)); e != nil {
+		t.Fatalf("TAR: %v", e)
+	}
+	// mode should be ModeNone now.
+	ext := extOf(mgr)
+	ext.mu.Lock()
+	ns := ext.getOrCreateLocked("fed", 1)
+	mode := ns.mode
+	pending := ns.pendingNER
+	ext.mu.Unlock()
+	if pending {
+		t.Errorf("after TAR full-grant: pending=true, want false")
+	}
+	if mode != ModeNone {
+		t.Errorf("after TAR full-grant: mode=%s, want none", mode)
+	}
+	// Fresh NER must be accepted.
+	if e := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
+		t.Errorf("NER after TAR: err = %v, want nil", e)
+	}
+}

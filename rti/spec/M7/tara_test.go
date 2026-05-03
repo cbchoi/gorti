@@ -9,7 +9,10 @@ import (
 	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 )
 
-// TestSpec_M7_TARA_NotImplementedYet: pre-dispatch sentinel.
+// TestSpec_M7_TARA_NotImplementedYet: pre-dispatch sentinel, flipped on
+// M7 W1 landing per the same pattern as TestSpec_M7_TAR_NotImplementedYet.
+// TARA on a non-regulating, non-constrained federate must now return
+// ErrTimeNotRegulating, not ErrNotImplemented.
 //
 // Implements: FR-TM-2 (M7 scope).
 func TestSpec_M7_TARA_NotImplementedYet(t *testing.T) {
@@ -18,8 +21,11 @@ func TestSpec_M7_TARA_NotImplementedYet(t *testing.T) {
 		t.Skip("time.Manager not yet wired")
 	}
 	err := mgr.TimeAdvanceRequestAvailable(context.Background(), "fed", 1, core.LogicalTime(5.0))
-	if !errors.Is(err, timepkg.ErrNotImplemented) {
-		t.Errorf("TARA before M7: err = %v, want ErrNotImplemented", err)
+	if errors.Is(err, timepkg.ErrNotImplemented) {
+		t.Errorf("TARA after M7: still ErrNotImplemented; expected real implementation")
+	}
+	if !errors.Is(err, core.ErrTimeNotRegulating) {
+		t.Errorf("TARA on non-regulating: err = %v, want ErrTimeNotRegulating", err)
 	}
 }
 

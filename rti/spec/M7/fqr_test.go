@@ -9,7 +9,10 @@ import (
 	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 )
 
-// TestSpec_M7_FQR_NotImplementedYet: pre-dispatch sentinel.
+// TestSpec_M7_FQR_NotImplementedYet: pre-dispatch sentinel, flipped on
+// M7 W1 landing per the same pattern as TestSpec_M7_TAR_NotImplementedYet.
+// FQR on a non-regulating, non-constrained federate must now return
+// ErrTimeNotRegulating, not ErrNotImplemented.
 //
 // Implements: FR-TM-2 (M7 scope).
 func TestSpec_M7_FQR_NotImplementedYet(t *testing.T) {
@@ -18,8 +21,11 @@ func TestSpec_M7_FQR_NotImplementedYet(t *testing.T) {
 		t.Skip("time.Manager not yet wired")
 	}
 	err := mgr.FlushQueueRequest(context.Background(), "fed", 1, core.LogicalTime(5.0))
-	if !errors.Is(err, timepkg.ErrNotImplemented) {
-		t.Errorf("FQR before M7: err = %v, want ErrNotImplemented", err)
+	if errors.Is(err, timepkg.ErrNotImplemented) {
+		t.Errorf("FQR after M7: still ErrNotImplemented; expected real implementation")
+	}
+	if !errors.Is(err, core.ErrTimeNotRegulating) {
+		t.Errorf("FQR on non-regulating: err = %v, want ErrTimeNotRegulating", err)
 	}
 }
 
