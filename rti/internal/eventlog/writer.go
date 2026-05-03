@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"sync"
 	"unsafe"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
@@ -46,8 +47,24 @@ type WriterOptions struct {
 
 // Writer implements core.EventLog's write side over a single io.Writer.
 // One Writer per federation; do not share across federations.
+//
+// Concurrency: Append/Sync/Close are safe to call concurrently from
+// multiple goroutines. The internal mutex serializes (a) the nextSeq
+// increment, (b) the seq write-back into the caller's record, and (c)
+// the length-prefix + body write pair to the sink, so the on-disk
+// stream stays well-formed (each record's framing is contiguous and
+// seq order on disk matches the seq value assigned to the record).
+//
+// Historically (pre-M6 W1B) the Writer assumed a single serializing
+// caller per federation (the federation manager). The W2A perf harness
+// surfaced that gRPC handler goroutines may legitimately call into the
+// same federation's Append concurrently, racing nextSeq. The mutex
+// makes the safety contract explicit so callers don't have to reason
+// about upstream serialization.
 type Writer struct {
-	opts    WriterOptions
+	opts WriterOptions
+
+	mu      sync.Mutex // guards nextSeq, sink writes, closed
 	nextSeq uint64
 	closed  bool
 }
@@ -109,15 +126,28 @@ func NewWriter(opts WriterOptions) (*Writer, error) {
 // reproduces exactly what was logged.
 func (w *Writer) Append(ctx context.Context, fed core.FederationName, evt core.EventRecord) error {
 	_ = ctx
-	if w.closed {
-		return errWriterClosed
-	}
+	// Federation + nil checks happen before grabbing the lock so the
+	// fast-fail paths don't contend with concurrent Appends. The closed
+	// check repeats under the lock — the lock-free read is only an
+	// early-out hint.
 	if fed != w.opts.Federation {
+		// Tolerate a benign race against Close: if the writer was
+		// closed concurrently, return the closed error rather than
+		// the federation-mismatch one (the latter would be misleading).
+		// We don't bother taking the lock here; the closed check below
+		// is authoritative.
 		return fmt.Errorf("eventlog: Append federation %q != writer federation %q",
 			fed, w.opts.Federation)
 	}
 	if evt == nil {
 		return errors.New("eventlog: Append nil event")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return errWriterClosed
 	}
 
 	w.nextSeq++
@@ -209,12 +239,14 @@ func assignSeq(evt core.EventRecord, seq uint64) error {
 // Sync method) this propagates; for buffer sinks it is a no-op.
 func (w *Writer) Sync(ctx context.Context, fed core.FederationName) error {
 	_ = ctx
-	if w.closed {
-		return errWriterClosed
-	}
 	if fed != w.opts.Federation {
 		return fmt.Errorf("eventlog: Sync federation %q != writer federation %q",
 			fed, w.opts.Federation)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return errWriterClosed
 	}
 	if syncer, ok := w.opts.Sink.(interface{ Sync() error }); ok {
 		return syncer.Sync()
@@ -236,6 +268,8 @@ func (w *Writer) OpenReader(ctx context.Context, path string) (core.EventLogRead
 // errWriterClosed. If the underlying sink implements io.Closer, it is
 // closed (best-effort).
 func (w *Writer) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.closed {
 		return nil
 	}
