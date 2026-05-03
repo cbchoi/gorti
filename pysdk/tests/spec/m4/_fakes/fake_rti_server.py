@@ -69,6 +69,13 @@ class FakeRtiServer:
         self.federations: dict[str, dict[str, Any]] = {}
         # Monotonic handle allocator.
         self._next_handle = 1
+        # Auto-register under the canonical in-process URL so spec tests
+        # that do `await RtiConnection.connect("memory://fake-rti")` find
+        # this fake without extra fixture wiring. Last-writer-wins; tests
+        # construct one fake per test, so no contention in practice.
+        from rti1516e._transport import register_fake
+
+        register_fake("memory://fake-rti", self)
 
     # --- Recording surface called by the SDK transport layer ----------------
 

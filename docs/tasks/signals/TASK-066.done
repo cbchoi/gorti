@@ -1,0 +1,14 @@
+- agent: agent-c
+- branch: agent/c/m4-w4-sdk
+- task: TASK-066
+- summary: |
+    Wired Federate.send_interaction. Records federate handle, class
+    name, defensive copy of the parameter dict, and the optional
+    timestamp. ReceiveInteraction event delivery rides on
+    Federate.events() which lands in TASK-067.
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_interaction.py: 2/2 GREEN
+      (after TASK-067 — at this commit 1/2 green; the receive_interaction
+      test depends on Federate.events())
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean
