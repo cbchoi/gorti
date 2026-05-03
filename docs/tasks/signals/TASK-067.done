@@ -1,0 +1,28 @@
+- agent: agent-c
+- branch: agent/c/m4-w4-sdk
+- task: TASK-067
+- summary: |
+    Wired the time-management trio (enable_time_regulation,
+    enable_time_constrained, next_message_request) — each records into
+    the transport with the federate handle and call args.
+
+    Wired Federate.events() as an async generator that drains
+    transport.events_for(handle) — an asyncio.Queue exposed by
+    FakeRtiServer (and, in production, fed by the server-streaming
+    RPC). The public method signature stays a non-async function
+    returning AsyncIterator[Any] so the FROZEN-shape contract holds;
+    the actual generator body is _iter_events().
+
+    Typed-exception mapping: rti1516e/errors.py is unchanged; the
+    existing ERROR_CODE_TO_EXCEPTION lookup covers all 27 ErrorCodes
+    in proto/rti/v1/errors.proto. FakeRtiServer.canned_responses
+    raises typed exceptions directly, so the SDK lets them bubble.
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_events_stream.py: 3/3 GREEN
+      (sanity proto-error-code check + time_advance_grant_yielded)
+    - pytest pysdk/tests/spec/m4/test_spec_m4_object.py: 3/3 GREEN
+      (discover_object_event_yielded now passes via events())
+    - pytest pysdk/tests/spec/m4/test_spec_m4_interaction.py: 2/2 GREEN
+      (receive_interaction_yielded now passes via events())
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean

@@ -1,0 +1,16 @@
+- agent: agent-c
+- branch: agent/c/m4-w4-sdk
+- task: TASK-064
+- summary: |
+    Wired Federate.publish_object_class / subscribe_object_class /
+    publish_interaction_class / subscribe_interaction_class. Each
+    method records into the transport with the federate handle, class
+    name, and (for object classes) a defensive copy of the attribute
+    list. Helpers stay inline on Federate; rti1516e/declaration.py
+    remains the documented extension point but holds no implementation
+    today (the spec doesn't require helper extraction and inlining is
+    cleaner at this surface size).
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_declaration.py: 3/3 GREEN
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean

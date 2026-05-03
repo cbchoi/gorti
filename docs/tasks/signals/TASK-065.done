@@ -1,0 +1,18 @@
+- agent: agent-c
+- branch: agent/c/m4-w4-sdk
+- task: TASK-065
+- summary: |
+    Wired Federate.register_object_instance and Federate.update_attributes.
+    register_object_instance records the call and returns the canned
+    response when present (lets tests pin handles), otherwise allocates
+    a fresh monotonic handle from the transport. update_attributes
+    records federate handle, object handle, a defensive copy of the
+    value dict, and the optional timestamp (None = receive-order,
+    non-None = TSO). DiscoverObjectInstance event delivery rides on
+    Federate.events() which lands in TASK-067.
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_object.py: 3/3 GREEN
+      (after TASK-067 — at this commit 2/3 green; the discover_object
+      test depends on Federate.events())
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean

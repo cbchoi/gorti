@@ -1,0 +1,34 @@
+- agent: agent-c
+- branch: agent/c/m4-w4-sdk
+- task: TASK-068
+- summary: |
+    Wired Layer 2 Rti1516eAmbassador (IEEE 1516-2010 / HLA Evolved
+    standard-shaped sync callback API). Internally owns a private
+    asyncio event loop running on a daemon thread; sync calls schedule
+    their async equivalents via asyncio.run_coroutine_threadsafe and
+    block on the resulting concurrent.futures.Future.
+
+    Method mapping (Layer 2 -> Layer 1):
+      - connect / disconnect           -> RtiConnection.__aenter__/__aexit__
+      - createFederationExecution      -> stash spec for next join
+      - joinFederationExecution        -> RtiConnection.join_federation(...)
+                                          + start _pump_events() task
+      - resignFederationExecution      -> federate __aexit__, cancel pump
+      - publish/subscribe/register/    -> Federate.{publish,subscribe,
+        update/send/time methods           register,update,send,enable,
+                                          next_message_request}
+      - _pump_events()                 -> drains Federate.events() and
+                                          dispatches each event dataclass
+                                          to the matching callback on
+                                          the registered target
+
+    Spec test surface check passes; agent-owned
+    pysdk/tests/test_standard_ambassador.py adds two end-to-end tests:
+    full lifecycle delegation (every call recorded against the fake)
+    and callback dispatch (push events through the fake, observe
+    overridden callbacks fire on the subclass).
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_standard_ambassador.py: 2/2 GREEN
+    - pytest pysdk/tests/test_standard_ambassador.py: 2/2 GREEN
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean

@@ -1,0 +1,29 @@
+- agent: agent-c
+- branch: agent/c/m4-w4-sdk
+- task: TASK-063
+- summary: |
+    Wired RtiConnection lifecycle (connect / __aenter__ / __aexit__ / close /
+    join_federation) and the injectable transport seam. Added new module
+    pysdk/rti1516e/_transport.py with a URL -> server registry
+    (register_fake / lookup / unregister / clear) so spec tests can route
+    memory:// URLs to an in-process FakeRtiServer instead of a real gRPC
+    channel. grpc:// URLs raise NotImplementedError pending real-channel
+    wiring (TASK-063 follow-up).
+
+    _FederateContextManager.__aenter__ records create_federation +
+    join_federation through the transport, allocates a federate handle
+    via transport.allocate_handle(), and constructs a Federate with
+    (transport, handle, name). __aexit__ records resign_federation
+    (suppressing RuntimeError from a closed connection so it can't mask
+    an outer exception). Typed exceptions injected via
+    canned_responses propagate naturally — the fake's record() raises
+    them, the SDK lets them bubble up.
+
+    Extended pysdk/tests/spec/m4/_fakes/fake_rti_server.py to auto-
+    register the fake under memory://fake-rti from __init__ so spec
+    tests can construct a fake and immediately call
+    RtiConnection.connect("memory://fake-rti") with no extra wiring.
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_connection_lifecycle.py: 3/3 GREEN
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean
