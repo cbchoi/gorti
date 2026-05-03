@@ -1,0 +1,1 @@
+TASK-042 done — implemented LBTS pure function: empty→+Inf, else min(Time+Lookahead) order-independent
