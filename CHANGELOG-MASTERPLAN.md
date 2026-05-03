@@ -6,6 +6,41 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-03 (M4 — DONE; 7 waves, 13 sub-agents)
+
+M4 closed in one session. **`scripts/check-milestones.sh` reports `M4: DONE (5/5)`** — pysdk package bootstrapped, examples/pyjevsim runs end-to-end, Python encoder passes 100% of conformance vectors, mypy --strict clean, ruff clean. Total spec/m4 test count: 131 passed, 1 skipped (replay path deferred to M5 alongside cross-language smoke; covered by determinism witness).
+
+**Wave summary** (all merged to `main` in dispatch order):
+
+| Wave | Sub-agents | Tasks | Outcome |
+|---|---|---|---|
+| W1 | 5 parallel (W1A int, W1B float, W1C byte, W1D opaque, W1E FOM model + codegen) | TASK-050, 051, 052, 058, 060, 062 | All primitive codecs implemented + FOM dataclass model + Python codegen wrapper |
+| W2 | 4 parallel (W2A strings, W2B array composites, W2C record composites, W2D FOM parser) | TASK-053, 054, 055, 056, 057, 061 | All composite codecs + FOM parser with same 10 FOM-NNN diagnostics as Go side |
+| W3 | 1 (W3 dispatcher) | TASK-059 | **Encoding gate closed** — codec_for(spec) wired; 95/95 conformance vectors GREEN cross-language |
+| W4 | 1 (W4 SDK bundled) | TASK-063, 064, 065, 066, 067, 068 | Full SDK Layer 1 (RtiConnection + Federate + 4 sub-services + events stream + typed exceptions) + Layer 2 ambassador (sync 1516-2010 callback API). Transport injection via `memory://fake-rti` scheme |
+| W5 | 2 parallel (W5A port mapping, W5B pyjevsim pin) | TASK-069, 072 | PortMapping with prefix-based direction inference; pyjevsim==1.3.1 pinned. **Orchestrator-side fix**: spec smoke test originally checked for `CoupledModel`/`AtomicModel` (DEVS-canonical names) but real pyjevsim 1.3.x exports `StructuralModel`/`BehaviorModel` — updated spec test + Protocol docs to clarify conceptual-vs-real-API distinction |
+| W6 | 1 (W6 bridge core) | TASK-070, 071 | HLAFederate.run/step_once/deliver_external + select_preserve. Auto-grant on `next_message_request` added to FakeRtiServer (test-only) |
+| W7 | 1 (W7 examples + gate) | TASK-073, 074, 075 | examples/pyjevsim/ (Producer + Consumer + Runner; in-process FakeRtiServer); 10× determinism harness; mypy/ruff CI gate; coverage 93% (rti1516e + pyjevsim_bridge). M4 milestone gate closed |
+
+**Critical-path wall time**: ~1h sub-agent compute. Each wave: W1 ~4 min (5 parallel), W2 ~6 min (4 parallel), W3 ~7 min, W4 ~13 min (bundled), W5 ~3 min (2 parallel), W6 ~8 min, W7 ~11 min. Plus orchestrator merge + verify cycles.
+
+**Notable mechanical findings**:
+- **Real pyjevsim API gap**: M4 brief (`docs/agent-c-pysdk.md`) used DEVS-canonical method names (`CoupledModel`, `time_advance`, `output_handler`) which don't match real pyjevsim 1.3.x's actual exports (`StructuralModel`, `output()`, `int_trans()`, `ext_trans()`). Resolved by keeping the bridge's `CoupledModelProtocol` shim with canonical names (Protocol contract is the bridge's needs, not pyjevsim's API surface) and deferring the real-pyjevsim adapter to M5. Cut-1 example uses duck-typed pure-Python coupled models.
+- **W7 example uses test fixture**: `examples/pyjevsim/runner.py` imports `FakeRtiServer` from `pysdk/tests/spec/m4/_fakes/` — documented contract violation. M5 follow-up: extract a production in-process driver. Spec tests don't depend on this.
+- **Replay test deferred**: `test_spec_m4_python_example_replays_byte_identical` requires real `rtid` binary integration. M4 determinism is fully covered by the in-memory call log sha256 witness; byte-identical replay through rtid is M5 (alongside TASK-081 cross-language smoke).
+- **W4 design pattern — transport registry**: `pysdk/rti1516e/_transport.py` module-level dict maps `memory://...` URLs to FakeRtiServer instances. SDK's `RtiConnection.connect(url)` checks the registry; non-memory URLs raise NotImplementedError until real gRPC wiring lands (M5 follow-up).
+- **W6 design pattern — auto-grant in fake**: FakeRtiServer.record() auto-pushes `TimeAdvanceGrant(time)` on `next_message_request` calls. Production goes through real RTI; this is a test-only convenience. Documented in code.
+
+**Stats since M3 close**:
+- 26 TASK-NNN sentinels added (TASK-050..075)
+- ~6,800 lines added (Python source + tests + docs)
+- All M0/M1/M2/M3/M4 gates GREEN; coverage 92-93% on pysdk owned packages
+- mypy --strict + ruff clean across 68 source files
+
+**Next**: M5 (Hardening + modes + perf + cross-language — Agents A/B/C). 11 tasks (TASK-076..085 + conditional TASK-084 perf benchmark) plus 1 deferred from M4 (TASK-081 cross-language smoke includes the Python replay path).
+
+---
+
 ## 2026-05-03 (M4 pre-work — orchestrator-frozen pysdk skeleton + spec tests + 7-wave dispatch plan)
 
 M4 (Python SDK + pyjevsim bridge — Agent C territory) infrastructure landed. Sub-agents can now be dispatched against frozen-shape stubs and RED spec tests. Largest pre-work delivery to date by file count (~50 files); largest milestone by task count (26 tasks).
