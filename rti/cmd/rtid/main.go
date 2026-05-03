@@ -38,6 +38,7 @@ func main() {
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFormat := flag.String("log-format", "json", "log format: json|text")
 	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo|timed-demo|replay-from-log")
+	federationMode := flag.String("federation-mode", "verbose", "federation operating mode for created federations: verbose|best-effort (TASK-076)")
 	pingpongRounds := flag.Int("pingpong-rounds", 1000, "rounds for pingpong-demo mode")
 	pingpongFederation := flag.String("pingpong-federation", "pingpong", "federation name for pingpong-demo mode")
 	pingpongDeterministic := flag.Bool("pingpong-deterministic", false, "use FakeClock so the event-log body is byte-deterministic across runs")
@@ -53,9 +54,15 @@ func main() {
 	logger := buildLogger(*logLevel, *logFormat)
 	slog.SetDefault(logger)
 
+	fedMode, err := parseFederationMode(*federationMode)
+	if err != nil {
+		logger.Error("invalid --federation-mode", "value", *federationMode, "err", err)
+		os.Exit(2)
+	}
+
 	switch *mode {
 	case "pingpong-demo":
-		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir, *pingpongDeterministic)
+		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir, *pingpongDeterministic, fedMode)
 		return
 	case "timed-demo":
 		runTimedMain(logger, timedRunArgs{
@@ -66,6 +73,7 @@ func main() {
 			StallSkipFederate: *timedStallSkipFederate,
 			StallTimeoutMs:    *timedStallTimeoutMs,
 			StallAdvanceMs:    *timedStallAdvanceMs,
+			FederationMode:    fedMode,
 		})
 		return
 	case "replay-from-log":
@@ -76,6 +84,21 @@ func main() {
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
 		os.Exit(2)
+	}
+}
+
+// parseFederationMode converts the --federation-mode CLI value into a
+// core.Mode. Unknown values produce an error so a typo surfaces at
+// startup rather than as a silent default. Per TASK-076: only verbose
+// and best-effort are accepted at the CLI layer.
+func parseFederationMode(s string) (core.Mode, error) {
+	switch s {
+	case "verbose", "":
+		return core.ModeVerbose, nil
+	case "best-effort":
+		return core.ModeBestEffort, nil
+	default:
+		return core.ModeUnspecified, fmt.Errorf("unknown federation mode %q (want verbose|best-effort)", s)
 	}
 }
 
@@ -137,9 +160,10 @@ type timedRunArgs struct {
 	Ticks             int
 	LogDir            string
 	Deterministic     bool
-	StallSkipFederate int // 1-based federate index to skip NER for (0 = none)
-	StallTimeoutMs    int // stall timeout in ms; only used when StallSkipFederate>0
-	StallAdvanceMs    int // post-loop FakeClock advance, then CheckStalls (0 = skip)
+	StallSkipFederate int       // 1-based federate index to skip NER for (0 = none)
+	StallTimeoutMs    int       // stall timeout in ms; only used when StallSkipFederate>0
+	StallAdvanceMs    int       // post-loop FakeClock advance, then CheckStalls (0 = skip)
+	FederationMode    core.Mode // TASK-076: federation operating mode for the created federation
 }
 
 // runTimedMain runs the M3 timed demo and exits. logDir, when set,
@@ -281,13 +305,14 @@ func stalledFromEvent(evt core.OutboundEvent) core.FederateHandle {
 // runPingpongMain runs the pingpong demo and exits. logDir, when set,
 // gets per-federation .log files written into it (same format as server
 // mode); empty means the demo runs without persistence.
-func runPingpongMain(logger *slog.Logger, federation string, rounds int, logDir string, deterministic bool) {
+func runPingpongMain(logger *slog.Logger, federation string, rounds int, logDir string, deterministic bool, fedMode core.Mode) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	stats, err := runPingpongDemo(ctx, pingpongConfig{
 		FederationName: core.FederationName(federation),
 		Rounds:         rounds,
 		LogDir:         logDir,
 		Deterministic:  deterministic,
+		FederationMode: fedMode,
 	})
 	cancel()
 	if err != nil {
@@ -360,6 +385,15 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		Outbox:       outbox,
 		FOMs:         foms,
 		Clock:        clock,
+		// TASK-077: wire mode + per-attribute order lookup so the
+		// registry can choose RO over TSO when both the federation
+		// is best-effort AND the FOM declares the attribute as
+		// Receive-order. The production fomHandle does not yet
+		// implement FOMOrderResolver, so FOMRepoOrderLookup returns
+		// "unknown" for every attribute and the registry stays on
+		// the TSO path until a future cut upgrades the handle.
+		Federations: fedMgr,
+		Orders:      grpcsvc.FOMRepoOrderLookup{Repo: foms},
 	})
 	if err != nil {
 		return nil, err

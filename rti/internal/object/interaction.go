@@ -15,7 +15,11 @@ import (
 //     declaration.Manager. Reject with ErrInteractionClassNotPublished
 //     otherwise.
 //  2. Persist InteractionSent to the EventLog (write-ahead).
-//  3. Fan ReceiveInteraction to subscribers in sorted FederateHandle
+//  3. Resolve delivery order: when the federation is best-effort AND the
+//     interaction class is declared OrderReceive in the FOM, the
+//     outbound event drops its timestamp (RO). Otherwise TSO. See
+//     TASK-077.
+//  4. Fan ReceiveInteraction to subscribers in sorted FederateHandle
 //     order, EXCEPT the producer.
 func (r *Registry) sendInteraction(
 	ctx context.Context,
@@ -41,7 +45,33 @@ func (r *Registry) sendInteraction(
 		}
 	}
 
-	r.fanoutReceive(ctx, fed, st, producer, cls, params, ts)
+	deliveryTs := r.deliveryTimestampForInteraction(fed, cls, ts)
+	r.fanoutReceive(ctx, fed, st, producer, cls, params, deliveryTs)
+	return nil
+}
+
+// deliveryTimestampForInteraction is the interaction-side analogue of
+// deliveryTimestampForAttributes. See that function's doc for the
+// best-effort-mode-plus-OrderReceive contract.
+func (r *Registry) deliveryTimestampForInteraction(
+	fed core.FederationName,
+	cls core.InteractionClassHandle,
+	ts *core.LogicalTime,
+) *core.LogicalTime {
+	if ts == nil {
+		return nil
+	}
+	if r.opts.Federations == nil || r.opts.Orders == nil {
+		return ts
+	}
+	mode, ok := r.opts.Federations.ModeFor(fed)
+	if !ok || mode != core.ModeBestEffort {
+		return ts
+	}
+	ord, known := r.opts.Orders.InteractionOrder(fed, cls)
+	if !known || ord != OrderReceive {
+		return ts
+	}
 	return nil
 }
 

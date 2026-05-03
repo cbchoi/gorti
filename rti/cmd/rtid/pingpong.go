@@ -40,6 +40,11 @@ type pingpongConfig struct {
 	// real wall clock (the wall_ns field is informational per proto/
 	// rti/v1/eventlog.proto).
 	Deterministic bool
+
+	// FederationMode is the operating mode for the created federation
+	// (TASK-076). Zero (ModeUnspecified) is normalized to ModeVerbose
+	// by the federation manager — see manager.go::CreateFederation.
+	FederationMode core.Mode
 }
 
 // pingpongStats summarizes a completed run.
@@ -163,9 +168,13 @@ func buildPingpongRuntime(cfg pingpongConfig) (*pingpongRuntime, func(), error) 
 
 // pingpongJoin creates the federation and joins both federates.
 func pingpongJoin(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime) (core.FederateHandle, core.FederateHandle, error) {
+	mode := cfg.FederationMode
+	if mode == core.ModeUnspecified {
+		mode = core.ModeVerbose
+	}
 	if err := rt.fedMgr.CreateFederation(ctx, core.CreateFederationRequest{
 		Name: cfg.FederationName,
-		Mode: core.ModeVerbose,
+		Mode: mode,
 		Seed: 1,
 	}); err != nil {
 		return 0, 0, fmt.Errorf("pingpong: CreateFederation: %w", err)
@@ -361,9 +370,11 @@ func (r *pingpongFOMRepo) Get(_ context.Context, _ core.FederationName) (core.FO
 
 type permissiveFOMHandle struct{}
 
-func (permissiveFOMHandle) IsValid() bool                                                       { return true }
-func (permissiveFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool)             { return 1, true }
-func (permissiveFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool)   { return 1, true }
+func (permissiveFOMHandle) IsValid() bool                                           { return true }
+func (permissiveFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool) { return 1, true }
+func (permissiveFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool) {
+	return 1, true
+}
 func (permissiveFOMHandle) LookupAttribute(core.ObjectClassHandle, string) (core.AttributeHandle, bool) {
 	return 1, true
 }

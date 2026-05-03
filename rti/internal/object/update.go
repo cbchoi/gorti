@@ -9,6 +9,46 @@ import (
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
+// Order is the per-attribute or per-interaction declared delivery order
+// in the FOM. TASK-077: when the federation operates in best-effort
+// mode and an attribute / interaction is declared OrderReceive, the
+// outbound event is delivered RO (timestamp stripped).
+type Order uint8
+
+const (
+	// OrderTimeStamp is the FOM-default ordering. Outbound events keep
+	// their timestamp (TSO).
+	OrderTimeStamp Order = iota
+	// OrderReceive marks the attribute / interaction as best-effort.
+	// In a best-effort federation the outbound event drops its
+	// timestamp and is delivered immediately (RO).
+	OrderReceive
+)
+
+// FederationModeLookup answers "what mode is this federation in?".
+// The federation manager satisfies this contract directly via its
+// ModeFor method; tests can supply a stub.
+//
+// Optional in object.Options: when nil, the registry treats every
+// federation as ModeVerbose (existing TSO-only behavior preserved).
+type FederationModeLookup interface {
+	ModeFor(fed core.FederationName) (core.Mode, bool)
+}
+
+// AttributeOrderLookup answers "what is this attribute / interaction
+// declared with in the FOM?". Returning (OrderTimeStamp, false)
+// signals "unknown / not declared best-effort"; the registry treats
+// unknown as TimeStamp-order to preserve TSO unless an explicit
+// best-effort declaration is present.
+//
+// Optional in object.Options: when nil, the registry assumes
+// OrderTimeStamp for every attribute (existing TSO-only behavior
+// preserved).
+type AttributeOrderLookup interface {
+	AttributeOrder(fed core.FederationName, cls core.ObjectClassHandle, attr core.AttributeHandle) (Order, bool)
+	InteractionOrder(fed core.FederationName, cls core.InteractionClassHandle) (Order, bool)
+}
+
 // updateAttributes implements core.ObjectRegistry.UpdateAttributes.
 //
 // Flow:
@@ -17,7 +57,11 @@ import (
 //     declaration.Manager. (Cut 1: any-attr ownership; full
 //     ownership-management arrives in cut 2 with explicit Acquire/Divest.)
 //  3. Persist AttributeUpdated to the EventLog (write-ahead).
-//  4. Fan ReflectAttributeValues to subscribers of any updated attribute,
+//  4. Resolve per-attribute delivery order: when the federation runs in
+//     best-effort mode AND every updated attribute is declared
+//     OrderReceive in the FOM, the outbound event drops its timestamp
+//     (RO). Otherwise the timestamp is preserved (TSO). See TASK-077.
+//  5. Fan ReflectAttributeValues to subscribers of any updated attribute,
 //     in sorted FederateHandle order, EXCEPT the producer.
 //
 // Cut-1 simplification: attribute bytes are passed through as-is. The
@@ -56,7 +100,50 @@ func (r *Registry) updateAttributes(
 		}
 	}
 
-	r.fanoutReflect(ctx, fed, st, producer, inst, attrs, updateAttrs, ts)
+	deliveryTs := r.deliveryTimestampForAttributes(fed, inst.cls, updateAttrs, ts)
+	r.fanoutReflect(ctx, fed, st, producer, inst, attrs, updateAttrs, deliveryTs)
+	return nil
+}
+
+// deliveryTimestampForAttributes resolves the timestamp the registry
+// should stamp on outbound ReflectAttributeValues envelopes. When the
+// federation is best-effort AND every updated attribute is declared
+// OrderReceive in the FOM, the timestamp is dropped (returns nil → RO
+// delivery). Otherwise the producer-supplied timestamp passes through
+// unchanged (TSO delivery, including the existing nil-when-RO-from-the-
+// producer behavior).
+//
+// Either lookup being absent (Federations or Orders nil) collapses to
+// the TSO-default path so existing tests that do not wire either
+// continue to behave as they did before TASK-077.
+func (r *Registry) deliveryTimestampForAttributes(
+	fed core.FederationName,
+	cls core.ObjectClassHandle,
+	attrs []core.AttributeHandle,
+	ts *core.LogicalTime,
+) *core.LogicalTime {
+	if ts == nil {
+		// Producer already chose RO; nothing to strip.
+		return nil
+	}
+	if r.opts.Federations == nil || r.opts.Orders == nil {
+		return ts
+	}
+	mode, ok := r.opts.Federations.ModeFor(fed)
+	if !ok || mode != core.ModeBestEffort {
+		return ts
+	}
+	// Best-effort mode: check that EVERY updated attribute is declared
+	// OrderReceive. If even one attribute is OrderTimeStamp (or unknown,
+	// which we conservatively treat as TimeStamp), keep the timestamp.
+	// Per-attribute split into separate envelopes is a future
+	// enhancement; the cut-1 contract is one-envelope-per-update.
+	for _, a := range attrs {
+		ord, known := r.opts.Orders.AttributeOrder(fed, cls, a)
+		if !known || ord != OrderReceive {
+			return ts
+		}
+	}
 	return nil
 }
 
