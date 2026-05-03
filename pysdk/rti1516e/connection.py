@@ -259,8 +259,21 @@ class Federate:
     async def register_object_instance(
         self, class_name: str, *, instance_name: str | None = None
     ) -> int:
-        """Register an instance and return its handle."""
-        raise NotImplementedError("TASK-065")
+        """Register an instance and return its handle.
+
+        If the transport returns a non-None canned response, treat it as
+        the handle (lets tests pin handles). Otherwise, allocate a fresh
+        monotonic handle from the transport.
+        """
+        response = self._transport.record(
+            "register_object_instance",
+            federate_handle=self.handle,
+            class_name=class_name,
+            instance_name=instance_name,
+        )
+        if isinstance(response, int):
+            return response
+        return int(self._transport.allocate_handle())
 
     async def update_attributes(
         self,
@@ -270,7 +283,13 @@ class Federate:
         timestamp: float | None = None,
     ) -> None:
         """Update one or more attribute values on an object instance."""
-        raise NotImplementedError("TASK-065")
+        self._transport.record(
+            "update_attributes",
+            federate_handle=self.handle,
+            object_handle=object_handle,
+            values=dict(values),
+            timestamp=timestamp,
+        )
 
     # --- Interaction management (TASK-066) ---
 
