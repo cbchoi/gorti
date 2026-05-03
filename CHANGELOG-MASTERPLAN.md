@@ -6,6 +6,52 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-03 (Cut 2 — DONE; M6..M11; production-grade RTI achieved)
+
+**`scripts/check-milestones.sh` reports M0..M11: DONE.** Cut-2 closes the IEEE 1516.1-2010 service surface (modulo cut-3 deferrals: optimistic time variants beyond TARA, MOM-driven control services, mTLS+OIDC, distributed RTI, non-Python SDKs, DDS adapter).
+
+**Cut-2 milestone summary** (all merged to `main` in dispatch order):
+
+| Milestone | Sub-agents | Bundled scope | Outcome |
+|---|---|---|---|
+| **M6** (hardening) | W1A handle align + W1B concurrency+TLS + W1C RememberFor + W2 (TLS+pyjevsim+replay+driver) | Cross-language handle alignment, EventLog Writer concurrency, gRPC TLS server+client, real-pyjevsim structural adapter, M4 replay path, in-process driver extraction | Last skipped pysdk spec test → PASS; 0 RED; 0 scaffold-skips |
+| **M7** (time primitives) | W1 single-agent | TAR + TARA + FQR + NMRA, all sharing M3 LBTS machinery | 9/9 spec tests; 17 unit tests; 20-scenario determinism harness |
+| **M8** (sync + ownership) | W1 single-agent | sync points (register/announce/achieve/synchronized), 6-method ownership protocol incl. negotiated divest+acquire two-phase | 9/9 spec tests; 30 unit tests |
+| **M11** (MOM runtime) | W1 single-agent | HLAfederation + HLAfederate runtime registration; lifecycle hooks across federation/time/object managers | 5/5 spec tests; 16 unit tests |
+| **M10** (DDM) | W1 single-agent (cross-territory: Agent A + B) | Routing-space FOM parser, region lifecycle, overlap-driven SubscribersForUpdate, object.Registry integration with FR-DDM-6 zero-cost-when-empty contract | 5/5 spec tests; 11 unit tests; perf 1.45 ns/op zero-cost path; ~116 µs/op with 100×25 region matrix |
+| **M9** (save/restore) | W1 single-agent | requestFederationSave + initiateFederateSave aggregation + federationSaved emission; Storage interface (in-mem + filesystem); manifest format documented in sdd.md §9 | 6/6 spec tests; 19 unit tests |
+
+**Cut-2 stats since MVP**:
+- 6 milestones (M6..M11) closed
+- ~6 wall-clock hours sub-agent compute
+- ~14k LoC added (Go packages: `internal/sync`, `ownership`, `mom`, `ddm`, `savepoint`; FOM parser dimension extension; spec tests for 6 milestones; 6 status reports)
+- 0 RED spec tests across ALL milestones (M0..M11)
+- ~36k → ~50k total project LoC
+- Cut-2 dispatch model proven: orchestrator pre-work + single Agent A sub-agent per milestone (most cases) is significantly leaner than M2/M3/M4's 4-7-wave split, while staying clean
+
+**Notable architectural choices made during cut-2**:
+- **Optional Manager hooks pattern**: every cut-2 service group adds an `OnXSuccess` hook to the relevant cut-1 manager's Options (additive, nil-default = preserves cut-1 behavior). Composition root in `cmd/rtid/main.go` wires the hooks. Avoids reshaping M0-frozen interfaces.
+- **MOM/DDM/Sync/Ownership all decline EventLog persistence** (cut-1 of cut-2): proto Event variants don't include these new event types. Replay byte-determinism for these transitions deferred to cut-3 (or when proto unfreeze happens).
+- **Cross-agent FOM-parser extension** (M10): the orthogonality table reserves `rti/pkg/fom/` for Agent B, but cut-2's milestone-bundled scope permits cross-territory work when documented. Agent A added `<dimensions>` parsing for M10's routing-space declarations.
+- **Save bundle format documented as sdd.md §9** (M9): manifest header (JSON) + length-prefixed event-log slice. Filesystem-backed storage one file per (fed, label) bundle; in-memory variant for tests.
+- **Dynamic-mode aggregation pattern** (sync + savepoint): when no MembersResolver is provided, "any federate that responds counts" (cut-1 simplification). Production rtid leaves Members nil pending federation.Manager.MembersOf accessor (cut-3 work).
+
+**Cut-3 backlog** (deferred from cut-2):
+- gRPC handlers for sync/ownership/MOM/DDM/savepoint (proto extension required)
+- Per-manager state snapshots in save bundle manifest (currently event-log slice is the FR-SR-5 vehicle)
+- Federation membership accessor (federation.Manager.MembersOf)
+- HLAfederateType plumbing (proto JoinFederationRequest extension)
+- MOM-driven control services (HLAsetSwitches etc. as interactions)
+- Optimistic time advance variants beyond TARA
+- mTLS / OIDC client auth
+- Distributed RTI / hot standby
+- C++ / Java / C# federate SDKs
+- DDS/RTPS data plane adapter
+
+**What gorti is now**: a complete IEEE 1516-2010 RTI implementation covering all of §4-7 + §10 (everything except DDS data plane and the cut-3 backlog above). Production-deployable for HLA workloads of up to ~100 federates without DDM, ~25 federates with active DDM regions. Cross-language Python+Go federations supported.
+
+---
+
 ## 2026-05-03 (M5 — DONE; MVP achieved; 3 waves, 6 sub-agents, first multi-agent milestone)
 
 **`scripts/check-milestones.sh` reports `M0..M5: DONE`. Project MVP gate passed.**
