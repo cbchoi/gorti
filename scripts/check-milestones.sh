@@ -345,8 +345,8 @@ check_m5() {
                                                     || pending "M5 spec test dirs pending orchestrator pre-work"
   [ -f examples/pyjevsim/cross_lang_test.py ] && { present "cross-language smoke test"; pass=$((pass+1)); } \
                                                 || pending "cross-language smoke pending"
-  [ -f pysdk/tests/test_modes.py ] && { present "mode verification test"; pass=$((pass+1)); } \
-                                    || pending "mode verification pending"
+  [ -f pysdk/tests/spec/m5/test_spec_m5_modes.py ] && { present "mode verification test"; pass=$((pass+1)); } \
+                                                    || pending "mode verification pending"
   [ -f docs/reports/M5/agent-a.md ] && { present "perf baseline report committed"; pass=$((pass+1)); } \
                                      || pending "perf baseline report pending"
 
