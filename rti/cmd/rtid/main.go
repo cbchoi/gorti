@@ -40,6 +40,7 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/declaration"
 	"github.com/cbchoi/gorti/rti/internal/eventlog"
 	"github.com/cbchoi/gorti/rti/internal/federation"
+	"github.com/cbchoi/gorti/rti/internal/mom"
 	"github.com/cbchoi/gorti/rti/internal/object"
 	"github.com/cbchoi/gorti/rti/internal/ownership"
 	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
@@ -382,6 +383,7 @@ type rtid struct {
 	objReg  *object.Registry
 	syncMgr *syncpkg.Manager
 	ownMgr  *ownership.Manager
+	momMgr  *mom.Manager
 	multi   *eventlog.MultiplexWriter
 	outbox  *multiOutbox
 	grpcS   *stdgrpc.Server
@@ -407,17 +409,31 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	}
 
 	foms := newFOMRepository()
-	fedMgr, err := federation.New(federation.Options{
-		Clock:    clock,
+	declMgr := declaration.New()
+	outbox := newMultiOutbox(1024)
+
+	// M11: MOM manager constructed BEFORE federation manager so the
+	// federation manager's OnFederateJoined / OnFederateResigned hooks
+	// can dispatch to MOM. The Outbox is shared with sync/ownership/
+	// object — MOM uses it for the (cut-2 deferred) subscriber fan-out.
+	momMgr, err := mom.New(mom.Options{
+		Outbox:   outbox,
 		EventLog: multi,
-		FOMs:     foms,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	declMgr := declaration.New()
-	outbox := newMultiOutbox(1024)
+	fedMgr, err := federation.New(federation.Options{
+		Clock:              clock,
+		EventLog:           multi,
+		FOMs:               foms,
+		OnFederateJoined:   momFederateJoinedHook(momMgr, cfg.Logger),
+		OnFederateResigned: momFederateResignedHook(momMgr, cfg.Logger),
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	// M8 W1: ownership + sync managers. Sync uses Outbox for
 	// announceSynchronizationPoint / federationSynchronized; ownership
@@ -463,41 +479,23 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		OnRegister: func(fed core.FederationName, owner core.FederateHandle, obj core.ObjectHandle, _ core.ObjectClassHandle, attrs []core.AttributeHandle) {
 			ownMgr.RegisterInitialOwnership(fed, owner, obj, attrs)
 		},
+		// M11: per-federate MOM counters (FR-MOM-1). See momCounterHooks.
+		OnUpdateSent:           momMgr.IncrementUpdatesSent,
+		OnInteractionSent:      momMgr.IncrementInteractionsSent,
+		OnReflectDelivered:     momMgr.IncrementReflectionsReceived,
+		OnInteractionDelivered: momMgr.IncrementInteractionsReceived,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	grpcSrv, err := grpcsvc.NewServer(grpcsvc.Options{
-		Federations:  fedMgr,
-		Declarations: declMgr,
-		Objects:      objReg,
-		Outbox:       outbox,
-		// Post-CreateFederation hook: re-Load the FOM modules through
-		// the same repo the manager used internally and remember the
-		// resulting handle against the federation name. This populates
-		// the per-federation map consumed by
-		// grpcsvc.FOMRepoOrderLookup.{InteractionOrder,AttributeOrder}
-		// — without it, Repo.Get(fed) returns ErrFederationNotFound and
-		// best-effort delivery falls back to TSO regardless of the
-		// per-class <order>Receive</order> declaration. The double
-		// parse is acceptable: FOM XML parsing is microseconds and
-		// CreateFederation is once-per-federation. Errors are logged
-		// but do not propagate — a Load failure here is a programmer
-		// error (the manager already validated the same modules a
-		// moment earlier and accepted them) and the federation has
-		// already been created; surfacing the error to the caller
-		// would lie about the federation's existence.
-		OnCreateFederationSuccess: func(ctx context.Context, name core.FederationName, modules []core.FOMModule) {
-			h, err := foms.Load(ctx, modules)
-			if err != nil {
-				cfg.Logger.Warn("rtid: post-CreateFederation FOM Load failed; "+
-					"FOMRepoOrderLookup will default to TSO for this federation",
-					"federation", name, "err", err)
-				return
-			}
-			foms.RememberFor(name, h)
-		},
+		Federations:                fedMgr,
+		Declarations:               declMgr,
+		Objects:                    objReg,
+		Outbox:                     outbox,
+		OnCreateFederationSuccess:  createFederationHook(foms, momMgr, cfg.Logger),
+		OnDestroyFederationSuccess: destroyFederationHook(momMgr, cfg.Logger),
 	})
 	if err != nil {
 		return nil, err
@@ -529,6 +527,7 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		objReg:  objReg,
 		syncMgr: syncMgr,
 		ownMgr:  ownMgr,
+		momMgr:  momMgr,
 		multi:   multi,
 		outbox:  outbox,
 		grpcS:   gs,
@@ -687,3 +686,62 @@ func multiplexSeqSource(_ *eventlog.MultiplexWriter) eventLogSeqSource {
 type zeroSeqSource struct{}
 
 func (zeroSeqSource) EventLogSeq(core.FederationName) uint64 { return 0 }
+
+// momFederateJoinedHook returns the federation.Manager OnFederateJoined
+// closure that forwards joins to MOM.FederateJoined. M11: the federate
+// "type" field is left empty in cut-1 because JoinFederationRequest does
+// not yet carry it (proto FROZEN). Errors are logged but not propagated
+// — MOM is a metric/introspection layer, not a federation-correctness
+// gate.
+func momFederateJoinedHook(momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle, string) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string) {
+		if err := momMgr.FederateJoined(ctx, fed, h, federateName, ""); err != nil {
+			logger.Warn("rtid: MOM FederateJoined hook failed",
+				"federation", fed, "handle", h, "err", err)
+		}
+	}
+}
+
+// momFederateResignedHook is the resign-side analogue.
+func momFederateResignedHook(momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+		if err := momMgr.FederateResigned(ctx, fed, h); err != nil {
+			logger.Warn("rtid: MOM FederateResigned hook failed",
+				"federation", fed, "handle", h, "err", err)
+		}
+	}
+}
+
+// createFederationHook returns the gRPC OnCreateFederationSuccess
+// closure that (a) populates the FOM repository's per-federation map
+// for FOMRepoOrderLookup and (b) registers the HLAfederation MOM
+// instance. The double parse on the FOM modules is intentional: the
+// federation manager already validated them, so a Load failure here
+// would be a programmer error — surfacing it would lie about the
+// federation's existence (it has already been created).
+func createFederationHook(foms *fomRepository, momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName, []core.FOMModule) {
+	return func(ctx context.Context, name core.FederationName, modules []core.FOMModule) {
+		h, err := foms.Load(ctx, modules)
+		if err != nil {
+			logger.Warn("rtid: post-CreateFederation FOM Load failed; "+
+				"FOMRepoOrderLookup will default to TSO for this federation",
+				"federation", name, "err", err)
+			return
+		}
+		foms.RememberFor(name, h)
+		if err := momMgr.FederationCreated(ctx, name, modules); err != nil {
+			logger.Warn("rtid: MOM FederationCreated hook failed",
+				"federation", name, "err", err)
+		}
+	}
+}
+
+// destroyFederationHook is the destroy-side analogue.
+func destroyFederationHook(momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName) {
+	return func(ctx context.Context, name core.FederationName) {
+		if err := momMgr.FederationDestroyed(ctx, name); err != nil {
+			logger.Warn("rtid: MOM FederationDestroyed hook failed",
+				"federation", name, "err", err)
+		}
+	}
+}

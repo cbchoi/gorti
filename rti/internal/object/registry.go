@@ -118,6 +118,28 @@ type Options struct {
 	// MUST NOT block; the registry calls it synchronously before
 	// returning to the caller of Register.
 	OnRegister func(fed core.FederationName, owner core.FederateHandle, obj core.ObjectHandle, cls core.ObjectClassHandle, attrs []core.AttributeHandle)
+
+	// OnUpdateSent is an OPTIONAL post-update hook invoked after a
+	// successful UpdateAttributes call (after eventlog append + fan-out).
+	// M11: cmd/rtid wires this to MOM.IncrementUpdatesSent so the
+	// producing federate's HLAfederate.HLAupdatesSent counter ticks.
+	// MUST NOT block.
+	OnUpdateSent func(fed core.FederationName, producer core.FederateHandle)
+
+	// OnInteractionSent is the interaction-side analogue of OnUpdateSent.
+	// M11 wires this to MOM.IncrementInteractionsSent.
+	OnInteractionSent func(fed core.FederationName, producer core.FederateHandle)
+
+	// OnReflectDelivered fires once per recipient federate when a
+	// ReflectAttributeValues envelope is dispatched. M11 wires this to
+	// MOM.IncrementReflectionsReceived. MUST NOT block (the dispatcher
+	// already iterates the subscriber list under no lock).
+	OnReflectDelivered func(fed core.FederationName, recipient core.FederateHandle)
+
+	// OnInteractionDelivered fires once per recipient federate when a
+	// ReceiveInteraction envelope is dispatched. M11 wires this to
+	// MOM.IncrementInteractionsReceived.
+	OnInteractionDelivered func(fed core.FederationName, recipient core.FederateHandle)
 }
 
 // New constructs a Registry. Returns an error if any required field is nil.
