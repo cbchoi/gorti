@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/object"
+	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 	"github.com/cbchoi/gorti/rti/pkg/fom/mim"
 	"github.com/cbchoi/gorti/rti/pkg/fom/model"
 	"github.com/cbchoi/gorti/rti/pkg/fom/parser"
@@ -170,6 +172,59 @@ func (h *fomHandle) LookupParameter(cls core.InteractionClassHandle, name string
 	return core.InvalidParameterHandle, false
 }
 
+// OrderForAttribute returns the per-attribute delivery order ("TimeStamp"
+// or "Receive") declared in the FOM. Implements
+// transport/grpc.FOMOrderResolver so FOMRepoOrderLookup can drive the
+// object registry's RO/TSO decision in best-effort mode (TASK-077).
+//
+// Lookup follows the same handle-from-1 indexing convention used by
+// LookupObjectClass / LookupAttribute. Returns (OrderTimeStamp, false)
+// for unknown classes/attributes; the FOMRepoOrderLookup adapter's
+// "false" branch defaults to TSO, preserving the pre-best-effort
+// behavior for unmapped attributes.
+func (h *fomHandle) OrderForAttribute(cls core.ObjectClassHandle, attr core.AttributeHandle) (object.Order, bool) {
+	if !h.IsValid() {
+		return object.OrderTimeStamp, false
+	}
+	classes := h.fom.ObjectClasses()
+	cidx := int(cls) - 1
+	if cidx < 0 || cidx >= len(classes) {
+		return object.OrderTimeStamp, false
+	}
+	aidx := int(attr) - 1
+	attrs := classes[cidx].Attributes
+	if aidx < 0 || aidx >= len(attrs) {
+		return object.OrderTimeStamp, false
+	}
+	return orderFromString(attrs[aidx].Order), true
+}
+
+// OrderForInteraction returns the per-interaction declared delivery
+// order. Implements transport/grpc.FOMOrderResolver. Same lookup +
+// fallback semantics as OrderForAttribute.
+func (h *fomHandle) OrderForInteraction(cls core.InteractionClassHandle) (object.Order, bool) {
+	if !h.IsValid() {
+		return object.OrderTimeStamp, false
+	}
+	classes := h.fom.InteractionClasses()
+	idx := int(cls) - 1
+	if idx < 0 || idx >= len(classes) {
+		return object.OrderTimeStamp, false
+	}
+	return orderFromString(classes[idx].Order), true
+}
+
+// orderFromString maps the FOM's declared order string to object.Order.
+// "Receive" → OrderReceive; everything else (including "TimeStamp" and
+// the empty string) → OrderTimeStamp. The TimeStamp default matches
+// IEEE 1516-2010 §10.13's "TimeStamp is the FOM default when omitted".
+func orderFromString(s string) object.Order {
+	if strings.EqualFold(s, "Receive") {
+		return object.OrderReceive
+	}
+	return object.OrderTimeStamp
+}
+
 // leafName returns the last dot-separated segment of name. "HLAobjectRoot.Vehicle"
 // -> "Vehicle"; "Vehicle" -> "Vehicle".
 func leafName(name string) string {
@@ -181,3 +236,9 @@ func leafName(name string) string {
 
 // Compile-time assertion that fomRepository implements core.FOMRepository.
 var _ core.FOMRepository = (*fomRepository)(nil)
+
+// Compile-time assertion that *fomHandle satisfies the FOMOrderResolver
+// contract consumed by transport/grpc.FOMRepoOrderLookup. If this drifts
+// (e.g. a method signature changes), the build breaks here instead of
+// silently falling back to the TSO default at runtime.
+var _ grpcsvc.FOMOrderResolver = (*fomHandle)(nil)

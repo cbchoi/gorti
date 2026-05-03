@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/object"
 )
 
 // minimalFOMXML returns a small valid FOM with one Vehicle objectClass + one
@@ -240,6 +241,152 @@ func TestFOMRepository_LoadDiagnosticsInError(t *testing.T) {
 	})
 	if err == nil {
 		t.Errorf("Load with duplicate attribute returned nil error")
+	}
+}
+
+// bestEffortFOMXML returns a small valid FOM where the Honk interaction
+// and the Vehicle.beacon attribute are declared with order=Receive, so
+// FOMOrderResolver lookups should map them to object.OrderReceive. The
+// position attribute keeps order=TimeStamp to verify the TSO branch.
+func bestEffortFOMXML(t *testing.T) []byte {
+	t.Helper()
+	xml := `<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>fom-best-effort-test</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-05-03</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Test FOM with Receive-order entries.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name>
+        <sharing>PublishSubscribe</sharing>
+        <semantics>A simulated vehicle.</semantics>
+        <attribute>
+          <name>position</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>Position scalar.</semantics>
+        </attribute>
+        <attribute>
+          <name>beacon</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAbestEffort</transportation>
+          <order>Receive</order>
+          <semantics>Best-effort beacon.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>Honk</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAbestEffort</transportation>
+        <order>Receive</order>
+        <semantics>Best-effort honk.</semantics>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+</objectModel>`
+	return []byte(xml)
+}
+
+// TestFomHandle_OrderForInteraction_ReadsFOMOrder: the production
+// fomHandle implements transport/grpc.FOMOrderResolver, so the
+// per-interaction order declared in the FOM (Receive) is reachable via
+// OrderForInteraction. This is what unblocks the
+// test_spec_m5_best_effort_attribute_delivers_ro Python spec test.
+func TestFomHandle_OrderForInteraction_ReadsFOMOrder(t *testing.T) {
+	repo := newFOMRepository()
+	h, err := repo.Load(context.Background(), []core.FOMModule{
+		{Path: "best-effort", XML: bestEffortFOMXML(t)},
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolver, ok := h.(interface {
+		OrderForInteraction(core.InteractionClassHandle) (object.Order, bool)
+	})
+	if !ok {
+		t.Fatalf("fomHandle does not implement OrderForInteraction; FOMRepoOrderLookup will default to TSO")
+	}
+	ic, ok := h.LookupInteractionClass("Honk")
+	if !ok {
+		t.Fatalf("LookupInteractionClass(Honk) not found")
+	}
+	got, known := resolver.OrderForInteraction(ic)
+	if !known {
+		t.Fatalf("OrderForInteraction(Honk): known=false, want true")
+	}
+	if got != object.OrderReceive {
+		t.Errorf("OrderForInteraction(Honk): got %v, want OrderReceive", got)
+	}
+	// Unknown class handle → (TimeStamp, false).
+	got, known = resolver.OrderForInteraction(99)
+	if known || got != object.OrderTimeStamp {
+		t.Errorf("OrderForInteraction(99): got (%v,%v), want (OrderTimeStamp,false)", got, known)
+	}
+}
+
+// TestFomHandle_OrderForAttribute_ReadsFOMOrder: per-attribute order is
+// resolved correctly for both the Receive-order beacon and the
+// TimeStamp-order position attribute on the same class.
+func TestFomHandle_OrderForAttribute_ReadsFOMOrder(t *testing.T) {
+	repo := newFOMRepository()
+	h, err := repo.Load(context.Background(), []core.FOMModule{
+		{Path: "best-effort", XML: bestEffortFOMXML(t)},
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolver, ok := h.(interface {
+		OrderForAttribute(core.ObjectClassHandle, core.AttributeHandle) (object.Order, bool)
+	})
+	if !ok {
+		t.Fatalf("fomHandle does not implement OrderForAttribute")
+	}
+	cls, ok := h.LookupObjectClass("Vehicle")
+	if !ok {
+		t.Fatalf("LookupObjectClass(Vehicle) not found")
+	}
+	beacon, ok := h.LookupAttribute(cls, "beacon")
+	if !ok {
+		t.Fatalf("LookupAttribute(Vehicle, beacon) not found")
+	}
+	if got, known := resolver.OrderForAttribute(cls, beacon); !known || got != object.OrderReceive {
+		t.Errorf("OrderForAttribute(Vehicle, beacon): got (%v,%v), want (OrderReceive,true)", got, known)
+	}
+	pos, ok := h.LookupAttribute(cls, "position")
+	if !ok {
+		t.Fatalf("LookupAttribute(Vehicle, position) not found")
+	}
+	if got, known := resolver.OrderForAttribute(cls, pos); !known || got != object.OrderTimeStamp {
+		t.Errorf("OrderForAttribute(Vehicle, position): got (%v,%v), want (OrderTimeStamp,true)", got, known)
+	}
+	// Unknown class / attribute → (TimeStamp, false).
+	if got, known := resolver.OrderForAttribute(99, 1); known || got != object.OrderTimeStamp {
+		t.Errorf("OrderForAttribute(99,1): got (%v,%v), want (OrderTimeStamp,false)", got, known)
+	}
+	if got, known := resolver.OrderForAttribute(cls, 99); known || got != object.OrderTimeStamp {
+		t.Errorf("OrderForAttribute(Vehicle,99): got (%v,%v), want (OrderTimeStamp,false)", got, known)
 	}
 }
 
