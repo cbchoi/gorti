@@ -15,9 +15,20 @@ import (
 // core.FederationStore calls. Errors map per proto/rti/v1/errors.proto
 // to gRPC status codes via errToStatus; see the table in errToStatus
 // itself for the canonical mapping.
+//
+// onCreateFederationSuccess is an optional post-success hook invoked
+// after CreateFederation returns nil; it lets the composition root
+// (rtid main) populate per-federation lookup tables that the manager
+// itself does not expose (notably the FOM repository's per-federation
+// handle map consumed by FOMRepoOrderLookup — without this hook,
+// best-effort interaction order resolution falls back to TSO because
+// Repo.Get(fed) returns ErrFederationNotFound). Nil hook is a no-op,
+// preserving the prior contract for tests that construct the service
+// without a hook.
 type federationService struct {
 	rtiv1.UnimplementedFederationServiceServer
-	fed core.FederationStore
+	fed                       core.FederationStore
+	onCreateFederationSuccess func(ctx context.Context, name core.FederationName, modules []core.FOMModule)
 }
 
 func newFederationService(fed core.FederationStore) *federationService {
@@ -41,6 +52,9 @@ func (s *federationService) CreateFederation(ctx context.Context, req *rtiv1.Cre
 	}
 	if err := s.fed.CreateFederation(ctx, coreReq); err != nil {
 		return nil, errToStatus(err)
+	}
+	if s.onCreateFederationSuccess != nil {
+		s.onCreateFederationSuccess(ctx, coreReq.Name, coreReq.FOMModules)
 	}
 	return &rtiv1.CreateFederationResponse{
 		EffectiveSeed: req.GetSeed(),

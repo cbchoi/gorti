@@ -27,29 +27,27 @@ Cut-1 scope (per ``docs/M5_DISPATCH_PLAN.md`` §3 W2B "pragmatic cut-1"):
     ("attribute") while the body verifies the equivalent interaction
     path.
 
-  - Test 1 (best-effort + Receive-order interaction → RO event) post
-    M6 W1A: the Python-side handle alignment has landed
-    (``pysdk/rti1516e/fom/parser.py::_load_mim`` no longer dedupes
+  - Test 1 (best-effort + Receive-order interaction → RO event) is now
+    LIVE post M6 W1A + W1C. W1A landed cross-language handle alignment
+    in ``pysdk/rti1516e/fom/parser.py::_load_mim`` (no longer dedupes
     IEEE 1516.1-2010 standard MIM duplicate-name interaction classes
     such as ``HLAadjust``, ``HLArequest``, ``HLAreport``,
     ``HLAreportFOMmoduleData``, ``HLArequestFOMmoduleData``,
-    ``HLAsetSwitches`` — each appears once under
-    ``HLAmanager.HLAfederate`` and again under
-    ``HLAmanager.HLAfederation``). The agent-owned
-    ``pysdk/tests/test_handle_alignment.py`` regression proves Python
-    and Go now agree pairwise on every (kind, handle) tuple. However
-    a SECOND blocker surfaced during W1A end-to-end testing: the
-    production rtid wiring in ``rti/cmd/rtid/main.go`` never calls
-    ``fomRepository.RememberFor`` after a successful
-    ``CreateFederation``, so ``FOMRepoOrderLookup.InteractionOrder``
-    in ``rti/internal/transport/grpc/best_effort.go`` resolves
-    ``Repo.Get(fed)`` to ``(nil, ErrFederationNotFound)`` and falls
-    back to TSO regardless of the now-aligned handle. The Go-side
-    spec test ``rti/spec/M5/best_effort_test.go`` PASSES because it
-    bypasses ``FOMRepoOrderLookup`` entirely (uses the ``orderTable``
-    fixture directly), so the wiring gap was previously invisible.
-    Until that second blocker is fixed (Go-side, outside the W1A
-    Python scope), test 1 still skips with the updated reason below.
+    ``HLAsetSwitches``). W1C wired
+    ``rti/cmd/rtid/main.go`` to call
+    ``fomRepository.RememberFor(name, handle)`` after every successful
+    ``CreateFederation`` (via the new
+    ``grpcsvc.Options.OnCreateFederationSuccess`` hook on the
+    federation gRPC service), so
+    ``FOMRepoOrderLookup.InteractionOrder`` in
+    ``rti/internal/transport/grpc/best_effort.go`` now resolves the
+    FOM handle and consults the FOM's per-class ``<order>`` element.
+    The pairwise handle alignment is locked in by
+    ``pysdk/tests/test_handle_alignment.py`` and the post-create
+    wiring is locked in by
+    ``rti/cmd/rtid/foms_test.go::TestRTID_CreateFederationViaGRPC_PopulatesFOMRepoMap``
+    plus
+    ``rti/internal/transport/grpc/federation_test.go::TestCreateFederation_PostSuccessHook_*``.
 
   - Test 2 (verbose + any order → TSO) does not depend on the
     ``FOMOrderResolver`` upgrade nor the handle-alignment fix: in
@@ -92,19 +90,18 @@ def test_spec_m5_best_effort_attribute_delivers_ro() -> None:
          ``ReceiveInteraction``.
       7. Assert ``event.timestamp is None`` (RO semantics).
 
-    Status (M6 W1A, 2026-05-03): cross-language handle alignment IS
-    fixed (see module docstring + ``pysdk/tests/test_handle_alignment.py``
-    regression — the alignment regression PASSES, proving Python and Go
-    agree on the wire-side handle for ModesProbe and every other class
-    in the merged FOM). However a second blocker — Go-side production
-    wiring not calling ``fomRepository.RememberFor`` — keeps the
-    end-to-end RO delivery from working. W1A scope (per the M6
-    dispatch) is Python-only (``rti/*`` is read-only); the second
-    blocker requires a ~3-line addition to ``rti/cmd/rtid/main.go``
-    and is out-of-scope here. The skip reason below documents the
-    secondary blocker so the next agent dispatch can target it
-    precisely; the alignment work itself is locked in by
-    ``pysdk/tests/test_handle_alignment.py``.
+    Status (M6 W1C, 2026-05-03): both blockers fixed and this test is
+    LIVE. W1A landed cross-language handle alignment
+    (``pysdk/tests/test_handle_alignment.py`` PASSES, proving Python
+    and Go agree on the wire-side handle for ModesProbe and every
+    other class in the merged FOM). W1C wired the rtid composition to
+    call ``fomRepository.RememberFor(name, handle)`` post-success in
+    every CreateFederation gRPC call (see
+    ``rti/cmd/rtid/main.go::OnCreateFederationSuccess`` and
+    ``rti/internal/transport/grpc/federation.go::onCreateFederationSuccess``),
+    so ``FOMRepoOrderLookup.InteractionOrder`` now resolves the FOM
+    handle for the federation and consults the per-class
+    ``<order>Receive</order>`` declaration end-to-end.
     """
     if shutil.which("go") is None:
         pytest.skip("go toolchain not on PATH; cannot build rtid for the smoke test")
@@ -123,49 +120,6 @@ def test_spec_m5_best_effort_attribute_delivers_ro() -> None:
     )
 
     received_ts = result["received_timestamp"]
-    if received_ts is not None:
-        # SECONDARY BLOCKER (M6 W1A discovered, awaiting Go-side fix):
-        #
-        # The cross-language handle alignment that gated this test pre-W1A
-        # IS fixed — pysdk/tests/test_handle_alignment.py PASSES, proving
-        # Python's _load_mim now mirrors Go's flat list (no dedup of
-        # IEEE 1516.1-2010 standard-MIM duplicate-name interaction
-        # classes). The interaction goes out from Python with the SAME
-        # handle Go would assign for ModesProbe (verified at handle 86
-        # for the inline FOM in pysdk/tests/spec/m5/_helpers.py).
-        #
-        # The remaining blocker is on the Go side: rti/cmd/rtid/main.go
-        # constructs fomRepository but never calls RememberFor after a
-        # successful CreateFederation. Therefore
-        # FOMRepoOrderLookup.InteractionOrder (in
-        # rti/internal/transport/grpc/best_effort.go) resolves
-        # Repo.Get(fed) to (nil, ErrFederationNotFound), falls into the
-        # `if h == nil` branch, and returns (OrderTimeStamp, false) —
-        # the registry's deliveryTimestampForInteraction then preserves
-        # the timestamp regardless of the FOM's <order>Receive</order>.
-        #
-        # The Go-side spec test rti/spec/M5/best_effort_test.go does NOT
-        # exercise this path (it injects an `orderTable` fixture
-        # directly as object.Options.Orders, bypassing
-        # FOMRepoOrderLookup entirely), which is why the wiring gap was
-        # previously invisible. The fix is ~3 lines in
-        # rti/cmd/rtid/main.go: after the federationService's
-        # CreateFederation succeeds, call foms.RememberFor(name, handle)
-        # so the per-federation handle map is populated.
-        #
-        # Out-of-scope for W1A (Python-only, rti/* read-only). Next
-        # dispatch should target rti/cmd/rtid/main.go's CreateFederation
-        # post-hook + a fresh Go-side spec test exercising the
-        # FOMRepoOrderLookup path end-to-end.
-        pytest.skip(
-            "deferred: Go-side production wiring (rti/cmd/rtid/main.go "
-            "never calls fomRepository.RememberFor post-CreateFederation, "
-            "so FOMRepoOrderLookup.InteractionOrder falls back to TSO). "
-            "Python-side handle alignment is FIXED — see "
-            "pysdk/tests/test_handle_alignment.py PASSING. "
-            f"got timestamp={received_ts!r}, expected None."
-        )
-
     assert received_ts is None, (
         "best-effort + Receive-order interaction must deliver RO; "
         f"got timestamp={received_ts!r}"
