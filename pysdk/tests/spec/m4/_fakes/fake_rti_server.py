@@ -84,6 +84,20 @@ class FakeRtiServer:
 
         If canned_responses[method] is an Exception, raise it. Otherwise
         return the value (or None if no canned response is set).
+
+        Test-only convenience: if ``method == "next_message_request"`` and
+        no canned response is set, synthesize a ``TimeAdvanceGrant(time)``
+        event into every known per-federate event queue. Real production
+        traffic goes through rtid which decides when to grant; the fake
+        has no scheduler, so the simplest "good enough" behavior for
+        bridge tests is to grant immediately at the requested time. The
+        existing spec test (``test_spec_m4_time_advance_grant_yielded``)
+        explicitly pushes a redundant grant after calling
+        ``next_message_request`` — both grants land in the queue, the
+        test reads the first one, the times match, so the auto-grant is
+        back-compat. Tests that need to suppress the auto-grant can
+        register an explicit canned response for ``next_message_request``
+        (any non-Exception value disables the synthesis).
         """
         self.calls.append(RecordedCall(method=method, args=dict(kwargs)))
         if method in self.canned_responses:
@@ -91,6 +105,23 @@ class FakeRtiServer:
             if isinstance(response, Exception):
                 raise response
             return response
+        if method == "next_message_request":
+            # Lazy import to avoid circular dependency between the test
+            # double and the SDK package at module import time.
+            from rti1516e.events import TimeAdvanceGrant
+
+            grant = TimeAdvanceGrant(time=float(kwargs.get("time", 0.0)))
+            target = kwargs.get("federate_handle")
+            if target is not None:
+                # ``events_for`` setdefaults a queue if one doesn't yet
+                # exist; that's the same behavior the SDK relies on
+                # when it first iterates ``fed.events()``.
+                self.events_for(int(target)).put_nowait(grant)
+            else:
+                # No federate handle in kwargs (shouldn't happen via the
+                # SDK, but defensively broadcast).
+                for queue in self.event_queues.values():
+                    queue.put_nowait(grant)
         return None
 
     # --- Test-side setup ----------------------------------------------------

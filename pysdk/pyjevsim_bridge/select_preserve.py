@@ -26,6 +26,26 @@ def order_simultaneous_events(
     Python list ordering, dict iteration order, or any other source of
     nondeterminism.
 
-    Raises NotImplementedError until TASK-071.
+    Cut-1 implementation
+    --------------------
+    The orchestrator-frozen ``CoupledModelProtocol`` shim does NOT expose
+    ``select()`` (real pyjevsim 1.3.x exposes it on a per-coupled-model
+    basis but that surface is intentionally outside W6's contract — see
+    pyjevsim_bridge/_protocol.py and docs/agent-c-pysdk.md §4.4). Until
+    W7 wires the real pyjevsim adapter we use a deterministic stand-in:
+    sort by port name (lexicographic), preserving the relative order of
+    ties in payload. ``sorted()`` is stable, so two entries with the
+    same port name retain their input order.
+
+    This satisfies FR-PYJ-4's "no Python list ordering, no dict iteration
+    nondeterminism" requirement: the output for a given input is always
+    the same regardless of insertion order. When the W7 adapter exposes
+    a real ``select()``, this function is the natural extension point.
     """
-    raise NotImplementedError("TASK-071")
+    # ``coupled_model`` is reserved for the W7 adapter that will surface
+    # the real pyjevsim select() priority. Until then we sort by port
+    # name; the parameter is kept in the signature because it IS part of
+    # the contract (callers pass the model so the future implementation
+    # can consult it without an API break).
+    del coupled_model
+    return sorted(events, key=lambda item: item[0])
