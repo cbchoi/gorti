@@ -1,0 +1,30 @@
+- agent: agent-c
+- branch: agent/c/m4-w2d-fom-parser
+- task: TASK-061
+- summary: |
+    Implemented parse(modules) in pysdk/rti1516e/fom/parser.py. Mirrors
+    Agent B's Go parser (rti/pkg/fom/parser/) — same FOM-NNN diagnostic
+    codes (FOM-001/002/003/004/005/009/011/012/013/101) and same
+    pass-through semantics for HLAobjectRoot / HLAinteractionRoot.
+
+    Implicitly loads the IEEE/SISO standard MIM (rti/pkg/fom/mim/
+    {standard-mim,hla-standard-mim}.xml) via Path(__file__).parents[3]
+    and merges it onto the user FOM. MIM data type names are pre-loaded
+    so FOM-001 resolves built-ins (HLAfloat64BE, HLAinteger32BE, ...).
+    FOM-101 fires when a user module redefines a MIM-declared
+    object class, interaction class, or data type — pass-through
+    declarations of the MIM root classes (no attributes / parameters)
+    are NOT treated as redefinition.
+
+    Added pysdk/tests/test_fom_parser.py with 16 unit tests covering
+    empty-input, success path, MIM-loaded data types, and per-fixture
+    diagnostic emission.
+- acceptance:
+    - pytest pysdk/tests/spec/m4/test_spec_m4_fom_diagnostics.py: 13 passed
+      (10 bad fixtures + 2 good fixtures + sanity)
+    - pytest pysdk/tests/test_fom_parser.py: 16 passed
+    - pytest pysdk/tests/test_fom_model.py: 8 passed (no regression)
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean
+    - Spec encoding tests stay RED (W3 territory, untouched)
+    - Go side untouched
