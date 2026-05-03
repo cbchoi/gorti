@@ -139,11 +139,7 @@ func (m *Manager) DisableConstrained(ctx context.Context, fed core.FederationNam
 //   - core.ErrTimeRequestInPast if t < currentTime + lookahead (lookahead
 //     enforcement; TASK-044).
 func (m *Manager) NextMessageRequest(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
-	_ = ctx
-	_ = fed
-	_ = h
-	_ = t
-	return ErrNotImplemented
+	return m.nextMessageRequest(ctx, fed, h, t)
 }
 
 // CheckStalls is called by the rtid main loop (or directly by tests with
