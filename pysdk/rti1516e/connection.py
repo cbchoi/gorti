@@ -313,24 +313,42 @@ class Federate:
 
     async def enable_time_regulation(self, lookahead: float) -> None:
         """Become time-regulating with the given lookahead."""
-        raise NotImplementedError("TASK-067")
+        self._transport.record(
+            "enable_time_regulation",
+            federate_handle=self.handle,
+            lookahead=lookahead,
+        )
 
     async def enable_time_constrained(self) -> None:
         """Become time-constrained."""
-        raise NotImplementedError("TASK-067")
+        self._transport.record(
+            "enable_time_constrained",
+            federate_handle=self.handle,
+        )
 
     async def next_message_request(self, time: float) -> None:
         """Request advance to ``time``. Grant arrives via events()."""
-        raise NotImplementedError("TASK-067")
+        self._transport.record(
+            "next_message_request",
+            federate_handle=self.handle,
+            time=time,
+        )
 
     # --- Event stream (TASK-067) ---
 
     def events(self) -> AsyncIterator[Any]:
         """Yield events emitted by the RTI to this federate.
 
-        Each event is one of the dataclasses in rti1516e.events. See that
-        module for the closed set.
-
-        Raises NotImplementedError until TASK-067.
+        Each event is one of the dataclasses in rti1516e.events. The stream
+        is open-ended; callers exit via ``break`` or by closing the
+        federate context. Backed by ``transport.events_for(handle)`` which
+        returns an ``asyncio.Queue`` populated by the test fixture (or, in
+        production, drained from the server-streaming RPC).
         """
-        raise NotImplementedError("TASK-067")
+        return self._iter_events()
+
+    async def _iter_events(self) -> AsyncIterator[Any]:
+        queue = self._transport.events_for(self.handle)
+        while True:
+            event = await queue.get()
+            yield event
