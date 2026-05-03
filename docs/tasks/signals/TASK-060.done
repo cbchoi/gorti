@@ -1,0 +1,12 @@
+- agent: agent-c
+- branch: agent/c/m4-w1e-fom-codegen
+- task: TASK-060
+- summary: |
+    Implemented FOM.find_object_class / find_interaction_class /
+    find_data_type lookup helpers as linear scans over the corresponding
+    name-sorted tuples in pysdk/rti1516e/fom/model.py. No dataclass
+    field changes. Added tests/test_fom_model.py with 8 unit tests.
+- acceptance:
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean
+    - pytest tests/test_fom_model.py: 8 passed

@@ -128,13 +128,22 @@ class FOM:
     data_types: tuple[DataType, ...] = ()
 
     def find_object_class(self, name: str) -> ObjectClass | None:
-        """Lookup helper. Agent C may speed this up with a dict cache."""
-        raise NotImplementedError("TASK-060")
+        """Lookup helper. Linear scan over self.object_classes."""
+        for oc in self.object_classes:
+            if oc.name == name:
+                return oc
+        return None
 
     def find_interaction_class(self, name: str) -> InteractionClass | None:
-        """Lookup helper."""
-        raise NotImplementedError("TASK-060")
+        """Lookup helper. Linear scan over self.interaction_classes."""
+        for ic in self.interaction_classes:
+            if ic.name == name:
+                return ic
+        return None
 
     def find_data_type(self, name: str) -> DataType | None:
-        """Lookup helper."""
-        raise NotImplementedError("TASK-060")
+        """Lookup helper. Linear scan over self.data_types."""
+        for dt in self.data_types:
+            if dt.name == name:
+                return dt
+        return None

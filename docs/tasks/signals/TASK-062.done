@@ -1,0 +1,13 @@
+- agent: agent-c
+- branch: agent/c/m4-w1e-fom-codegen
+- task: TASK-062
+- summary: |
+    Added Agent C's iterable copy of the gRPC codegen wrapper:
+    pysdk/rti1516e/_proto.py invokes `python -m grpc_tools.protoc`
+    with the same flags as the orchestrator-frozen root `py-codegen`
+    target, and pysdk/Makefile.codegen exposes a single `codegen`
+    target that calls it. Output lands in pysdk/rti1516e/_generated/
+    (gitignored). Logically equivalent to the root Makefile target.
+- acceptance:
+    - mypy --strict pysdk: clean
+    - ruff check pysdk: clean
