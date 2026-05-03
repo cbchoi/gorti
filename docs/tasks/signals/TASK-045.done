@@ -1,0 +1,1 @@
+TASK-045 done — Manager.CheckStalls scans pending NERs, halts federations whose oldest pending request exceeds StallTimeout (wall-clock via m.opts.Clock), fans out FederationHalted to every member in handle order, and gates further EnableRegulation/DisableRegulation/EnableConstrained/DisableConstrained/NextMessageRequest with ErrFederationHalted.
