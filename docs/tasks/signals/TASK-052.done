@@ -1,0 +1,15 @@
+- agent: agent-c (W1C)
+- branch: agent/c/m4-w1c-byte
+- summary: |
+    Implemented HLAoctet, HLAoctetPairBE/LE, HLAboolean, HLAASCIIchar,
+    HLAunicodeChar in pysdk/rti1516e/encoding/byte_codec.py — byte-identical
+    to rti/pkg/encoding/byte.go. Agent-owned tests/test_byte_codec.py
+    round-trips all byte-family vectors from
+    tests/conformance/encoding_vectors.json (39 tests pass). mypy --strict
+    and ruff clean. Spec conformance test (test_spec_m4_encoding_conformance.py)
+    remains red until W3 (TASK-059) wires codec_for; this is the
+    documented dispatch sequencing per docs/M4_DISPATCH_PLAN.md §5.
+- acceptance:
+    - byte-family round-trip on all relevant encoding_vectors.json rows
+    - mypy --strict clean
+    - ruff check clean
