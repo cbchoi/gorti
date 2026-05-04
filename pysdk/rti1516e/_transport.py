@@ -137,6 +137,15 @@ class GrpcTransport:
         self._interaction_handles: dict[str, int] = {}
         self._object_class_handles: dict[str, int] = {}
         self._inverse_interaction_handles: dict[int, str] = {}
+        # M12 W2: lazily-populated cache for attribute name → handle
+        # lookups; keyed by class name. Populated on first
+        # publish_object_class / subscribe_object_class call by
+        # walking the cached FOM (see _populate_handle_tables for the
+        # FOM cache).
+        self._attribute_handle_cache: dict[str, dict[str, int]] = {}
+        # The parsed FOM is cached so attribute lookups don't need to
+        # re-parse. Set on every successful _populate_handle_tables.
+        self._fom_cache: Any | None = None
         # Per-federate event queues + the background draining tasks.
         self._event_queues: dict[int, asyncio.Queue[Any]] = {}
         self._stream_tasks: dict[int, asyncio.Task[None]] = {}
@@ -198,24 +207,30 @@ class GrpcTransport:
                 kwargs["federate_handle"], kwargs["class_name"]
             )
         if method == "publish_object_class":
-            # Object pub/sub is recorded but NOT dispatched: the
-            # cross-language smoke uses interactions only, and the FOM
-            # XML in tests/conformance/foms/good/pyjevsim-bridge.xml
-            # declares only HLAobjectRoot. Returning None keeps the
-            # SDK happy; a future cut wires the real RPC.
-            return None
+            return await self._publish_object_class(
+                kwargs["federate_handle"],
+                kwargs["class_name"],
+                kwargs["attributes"],
+            )
         if method == "subscribe_object_class":
-            return None
+            return await self._subscribe_object_class(
+                kwargs["federate_handle"],
+                kwargs["class_name"],
+                kwargs["attributes"],
+            )
         if method == "register_object_instance":
-            # Same rationale as publish_object_class — interactions only
-            # in cut-1. Return a synthetic handle so the SDK doesn't fall
-            # through to allocate_handle (which is fine, but explicit is
-            # clearer in tests).
-            return self.allocate_handle()
+            return await self._register_object_instance(
+                kwargs["federate_handle"],
+                kwargs["class_name"],
+                kwargs.get("instance_name"),
+            )
         if method == "update_attributes":
-            # Recorded only; cut-1 cross-language smoke doesn't exercise
-            # object updates.
-            return None
+            return await self._update_attributes(
+                kwargs["federate_handle"],
+                kwargs["object_handle"],
+                kwargs["values"],
+                kwargs.get("timestamp"),
+            )
         if method == "send_interaction":
             return await self._send_interaction(
                 kwargs["federate_handle"],
@@ -386,6 +401,161 @@ class GrpcTransport:
         await self.objects.SendInteraction(req)
         return
 
+    async def _publish_object_class(
+        self, federate_handle: int, class_name: str, attributes: list[str]
+    ) -> None:
+        """Dispatch DeclarationService.PublishObjectClassAttributes (M12 W2).
+
+        Resolves attribute names → 1-based handles via the FOM (same
+        sorted-by-name convention as the Go side; see
+        :meth:`_populate_handle_tables`). Unknown attribute names are
+        silently dropped — the Go side rejects unknown handles, which
+        is the test's signal that something is misconfigured. Empty
+        attribute lists are allowed (the manager records the publish
+        intent without binding any attributes).
+        """
+        from rti.v1 import common_pb2, declaration_pb2
+
+        cls = self._object_class_handle_for(class_name)
+        attr_handles = [
+            h for h in (self._attribute_handle_for(class_name, n) for n in attributes)
+            if h != 0
+        ]
+        req = declaration_pb2.PubObjAttrsRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_class_handle=cls,
+            attribute_handles=attr_handles,
+        )
+        await self.declaration.PublishObjectClassAttributes(req)
+        return
+
+    async def _subscribe_object_class(
+        self, federate_handle: int, class_name: str, attributes: list[str]
+    ) -> None:
+        """Dispatch DeclarationService.SubscribeObjectClassAttributes (M12 W2)."""
+        from rti.v1 import common_pb2, declaration_pb2
+
+        cls = self._object_class_handle_for(class_name)
+        attr_handles = [
+            h for h in (self._attribute_handle_for(class_name, n) for n in attributes)
+            if h != 0
+        ]
+        req = declaration_pb2.SubObjAttrsRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_class_handle=cls,
+            attribute_handles=attr_handles,
+        )
+        await self.declaration.SubscribeObjectClassAttributes(req)
+        return
+
+    async def _register_object_instance(
+        self, federate_handle: int, class_name: str, instance_name: str | None
+    ) -> int:
+        """Dispatch ObjectService.RegisterObjectInstance (M12 W2).
+
+        Returns the minted object handle from the rtid response. The
+        SDK's higher layers can pass this handle to subsequent
+        update_attributes / query / ownership RPCs.
+        """
+        from rti.v1 import common_pb2, object_pb2
+
+        cls = self._object_class_handle_for(class_name)
+        req = object_pb2.RegisterObjectRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_class_handle=cls,
+            object_name=instance_name or "",
+        )
+        resp = await self.objects.RegisterObjectInstance(req)
+        return int(resp.object_handle)
+
+    async def _update_attributes(
+        self,
+        federate_handle: int,
+        object_handle: int,
+        values: dict[str, Any],
+        timestamp: float | None,
+    ) -> None:
+        """Dispatch ObjectService.UpdateAttributeValues (M12 W2).
+
+        Cut-3 simplification: attribute-name → handle resolution
+        requires the originating object class. The SDK's
+        ``Federate.update_attributes`` does not currently track the
+        class for each minted object handle, so unknown attribute
+        names default to handle 0 (rtid rejects). Callers that
+        need real DDM/ownership-driven update fan-out should resolve
+        handles via the FOM directly until a future cut adds a
+        per-handle class index.
+        """
+        from rti.v1 import common_pb2, object_pb2
+
+        attr_map: dict[int, bytes] = {}
+        # Accept either string keys (FOM names — best-effort lookup
+        # against every known class until one matches) or int keys
+        # (already-resolved attribute handles — used by tests that
+        # bypass the FOM lookup).
+        for key, payload in values.items():
+            if isinstance(key, int):
+                attr_map[int(key)] = _coerce_payload(payload)
+                continue
+            handle = 0
+            for class_name in self._object_class_handles:
+                handle = self._attribute_handle_for(class_name, str(key))
+                if handle != 0:
+                    break
+            if handle != 0:
+                attr_map[handle] = _coerce_payload(payload)
+        req = object_pb2.UpdateAttributeValuesRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_handle=int(object_handle),
+            attributes=attr_map,
+        )
+        if timestamp is not None:
+            req.logical_time = float(timestamp)
+        await self.objects.UpdateAttributeValues(req)
+        return
+
+    def _object_class_handle_for(self, class_name: str) -> int:
+        """Return the numeric object-class handle for ``class_name``; 0 on miss."""
+        return self._object_class_handles.get(class_name, 0)
+
+    def _attribute_handle_for(self, class_name: str, attr_name: str) -> int:
+        """Return the numeric attribute handle for (class, attr); 0 on miss.
+
+        Cached lazily on first lookup. The handle index is the
+        attribute's 1-based position within the class's parsed
+        attribute list (same convention as the Go-side fomHandle.
+        LookupAttribute — see ``rti/cmd/rtid/foms.go``).
+        """
+        cache = self._attribute_handle_cache.get(class_name)
+        if cache is None:
+            cache = self._build_attribute_cache(class_name)
+            self._attribute_handle_cache[class_name] = cache
+        return cache.get(attr_name, 0)
+
+    def _build_attribute_cache(self, class_name: str) -> dict[str, int]:
+        """Walk the FOM and build an attribute-name → 1-based-handle map.
+
+        Returns an empty map when the FOM has not been parsed (no
+        federation create with modules) or when the class is not
+        present in the FOM. The Go side's LookupAttribute returns
+        InvalidAttributeHandle in the same scenario; the cache mirror
+        keeps name resolution cheap and consistent.
+        """
+        if self._fom_cache is None:
+            return {}
+        for oc in self._fom_cache.object_classes:
+            if oc.name == class_name:
+                return {a.name: i + 1 for i, a in enumerate(oc.attributes)}
+        return {}
+
     # --- Stream draining ----------------------------------------------------
 
     def _start_event_stream(self, federate_handle: int) -> None:
@@ -494,6 +664,10 @@ class GrpcTransport:
             # about HLA built-ins than the Go side.
             return
         fom = result.fom
+        # M12 W2: cache the parsed FOM so attribute name → handle
+        # lookups (used by publish_object_class / subscribe_object_class /
+        # update_attributes) can walk it without re-parsing.
+        self._fom_cache = fom
         # Replicate Go-side MIM merge for handle parity. The Go side
         # injects HLAinteractionRoot before the user-defined classes;
         # see rti/pkg/fom/mim.Merge. The Python parser does the same

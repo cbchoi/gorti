@@ -276,6 +276,11 @@ class Federate:
 
     Public attributes ``name`` and ``handle`` are FROZEN-shape. The full
     pub/sub/object/interaction surface below is wired by TASK-064..067.
+
+    M12 W2 added cut-3 service-group accessors (:meth:`sync`,
+    :meth:`ownership`, :meth:`ddm`, :meth:`savepoint`) that lazily
+    construct dedicated client wrappers around the same underlying
+    gRPC channel.
     """
 
     name: str
@@ -285,6 +290,14 @@ class Federate:
         self._transport = transport
         self.handle = handle
         self.name = name
+        # Lazily-instantiated cut-3 service-group clients. Each is
+        # built on first attribute access (the transport may not have
+        # the channel attribute when running over the in-process
+        # FakeRtiServer; the accessors handle that case explicitly).
+        self._sync_client: Any | None = None
+        self._ownership_client: Any | None = None
+        self._ddm_client: Any | None = None
+        self._savepoint_client: Any | None = None
 
     # --- Declaration management (TASK-064) ---
 
@@ -415,6 +428,104 @@ class Federate:
             federate_handle=self.handle,
             time=time,
         )
+
+    # --- Cut-3 service-group accessors (M12 W2) ---
+    #
+    # Each property lazily constructs a dedicated thin client wrapper
+    # around the same gRPC channel the federate's transport already
+    # holds. The clients live in sibling modules (``rti1516e.sync``,
+    # ``.ownership``, ``.ddm``, ``.savepoint``) and follow a uniform
+    # constructor signature: ``(channel, federation_name, federate_handle)``.
+    #
+    # Memory:// transports do not own a real gRPC channel, so the
+    # accessors raise a clear RuntimeError there. The intended use is
+    # cross-process tests + production federates over real gRPC.
+
+    @property
+    def sync(self) -> Any:
+        """Cut-3 SyncService client for §4.6-4.7 sync-point primitives."""
+        if self._sync_client is None:
+            from rti1516e.sync import SyncClient
+
+            self._sync_client = SyncClient(
+                self._require_channel(),
+                federation_name=self._require_federation_name(),
+                federate_handle=self.handle,
+            )
+        return self._sync_client
+
+    @property
+    def ownership(self) -> Any:
+        """Cut-3 OwnershipService client for §7 negotiated transfer + queries."""
+        if self._ownership_client is None:
+            from rti1516e.ownership import OwnershipClient
+
+            self._ownership_client = OwnershipClient(
+                self._require_channel(),
+                federation_name=self._require_federation_name(),
+                federate_handle=self.handle,
+            )
+        return self._ownership_client
+
+    @property
+    def ddm(self) -> Any:
+        """Cut-3 DDMService client for §6 region-scoped pub/sub + filtering."""
+        if self._ddm_client is None:
+            from rti1516e.ddm import DDMClient
+
+            self._ddm_client = DDMClient(
+                self._require_channel(),
+                federation_name=self._require_federation_name(),
+                federate_handle=self.handle,
+            )
+        return self._ddm_client
+
+    @property
+    def savepoint(self) -> Any:
+        """Cut-3 SavepointService client for §4.8-4.15 federation save/restore."""
+        if self._savepoint_client is None:
+            from rti1516e.savepoint import SavepointClient
+
+            self._savepoint_client = SavepointClient(
+                self._require_channel(),
+                federation_name=self._require_federation_name(),
+                federate_handle=self.handle,
+            )
+        return self._savepoint_client
+
+    def _require_channel(self) -> Any:
+        """Return the underlying ``grpc.aio.Channel`` or raise RuntimeError.
+
+        Cut-3 service-group clients dial real gRPC stubs directly; the
+        in-process memory:// transport (FakeRtiServer) has no channel.
+        Raise a clear error rather than failing inside the stub
+        constructor, which would surface as ``AttributeError``.
+        """
+        channel = getattr(self._transport, "channel", None)
+        if channel is None:
+            raise RuntimeError(
+                "Federate.{sync,ownership,ddm,savepoint} require a real "
+                "gRPC transport (grpc:// or grpcs://); the in-process "
+                "memory:// transport does not expose a channel"
+            )
+        return channel
+
+    def _require_federation_name(self) -> str:
+        """Return the active federation name or raise RuntimeError.
+
+        Set by ``GrpcTransport`` on every successful create_federation /
+        join_federation. Should always be populated by the time the
+        federate is observable via ``join_federation()`` __aenter__,
+        but the defensive check guards against tests that skip the
+        join (none exist today; documented for future-proofing).
+        """
+        name = getattr(self._transport, "_federation_name", None)
+        if not isinstance(name, str) or not name:
+            raise RuntimeError(
+                "Federate cut-3 clients require a joined federation name; "
+                "the transport reports none — was join_federation called?"
+            )
+        return name
 
     # --- Event stream (TASK-067) ---
 
