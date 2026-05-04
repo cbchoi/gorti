@@ -31,22 +31,30 @@ func errToStatus(err error) error {
 		return nil
 	}
 	switch {
-	// NotFound — entity (federation / class / attribute) does not exist.
+	// NotFound — entity (federation / class / attribute / region / etc) does not exist.
 	case errors.Is(err, core.ErrFederationNotFound),
 		errors.Is(err, core.ErrObjectNotFound),
 		errors.Is(err, core.ErrObjectClassNotFound),
-		errors.Is(err, core.ErrAttributeNotFound):
+		errors.Is(err, core.ErrAttributeNotFound),
+		errors.Is(err, core.ErrSyncPointNotRegistered),
+		errors.Is(err, core.ErrRoutingSpaceNotFound),
+		errors.Is(err, core.ErrDimensionNotFound),
+		errors.Is(err, core.ErrRegionNotFound),
+		errors.Is(err, core.ErrFederateNotInSave),
+		errors.Is(err, core.ErrFederateNotInRestore):
 		return status.Error(codes.NotFound, err.Error())
 
 	// AlreadyExists — entity creation conflict.
 	case errors.Is(err, core.ErrFederationAlreadyExists),
-		errors.Is(err, core.ErrFederateAlreadyJoined):
+		errors.Is(err, core.ErrFederateAlreadyJoined),
+		errors.Is(err, core.ErrSyncPointAlreadyRegistered):
 		return status.Error(codes.AlreadyExists, err.Error())
 
 	// PermissionDenied — federate lacks authority for the operation.
 	// Distinct from FailedPrecondition (state-forbids) because the action
 	// itself is unauthorized regardless of state.
-	case errors.Is(err, core.ErrAttributeNotOwned):
+	case errors.Is(err, core.ErrAttributeNotOwned),
+		errors.Is(err, core.ErrRegionNotOwnedByFederate):
 		return status.Error(codes.PermissionDenied, err.Error())
 
 	// FailedPrecondition — entity exists but state forbids the action.
@@ -60,7 +68,15 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrTimeAlreadyRegulating),
 		errors.Is(err, core.ErrTimeAlreadyConstrained),
 		errors.Is(err, core.ErrTimeRequestInPast),
-		errors.Is(err, core.ErrWireVersionMismatch):
+		errors.Is(err, core.ErrWireVersionMismatch),
+		errors.Is(err, core.ErrSyncPointAlreadyAchieved),
+		errors.Is(err, core.ErrOwnershipDivestPending),
+		errors.Is(err, core.ErrOwnershipAcquirePending),
+		errors.Is(err, core.ErrOwnershipNotInTransfer),
+		errors.Is(err, core.ErrRegionInUse),
+		errors.Is(err, core.ErrSaveAlreadyInProgress),
+		errors.Is(err, core.ErrRestoreAlreadyInProgress),
+		errors.Is(err, core.ErrSaveBundleCorrupt):
 		return status.Error(codes.FailedPrecondition, err.Error())
 
 	// InvalidArgument — caller-supplied value violates the contract.
