@@ -104,4 +104,23 @@ type OwnershipCoordinator interface {
 		obj ObjectHandle,
 		attr AttributeHandle,
 	) bool
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns aggregate ownership counters for the
+	// AdminService handler. Read-only; cheap.
+	Snapshot(fed FederationName) OwnershipSnapshot
+}
+
+// OwnershipSnapshot is the federation-wide ownership rollup for the
+// AdminService Snapshot RPC.
+//
+// Phase 1 keeps this minimal — counts only — so the handler can show
+// "ownership transfers in flight" in the TUI without exposing
+// per-attribute history (the design doc §3.2 explicitly excludes
+// per-attribute ownership history from the snapshot).
+type OwnershipSnapshot struct {
+	OwnedAttributesCount    uint32
+	PendingDivestsCount     uint32
+	PendingAcquiresCount    uint32
 }

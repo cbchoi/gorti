@@ -70,6 +70,9 @@ func (s *stubObjectRegistry) SendInteraction(_ context.Context, fed core.Federat
 	s.sendCalls = append(s.sendCalls, sendCall{fed, producer, cls, params, ts})
 	return s.sendErr
 }
+func (s *stubObjectRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
+	return core.ObjectSnapshot{}
+}
 
 // ----------------------------------------------------------------------------
 // RegisterObjectInstance

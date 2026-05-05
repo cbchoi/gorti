@@ -162,4 +162,18 @@ type DataDistributionManagement interface {
 		attr AttributeHandle,
 		publisherRegions []DDMRegionHandleCore,
 	) []FederateHandle
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns aggregate DDM counters for the AdminService
+	// handler. Read-only; cheap.
+	Snapshot(fed FederationName) DDMSnapshot
+}
+
+// DDMSnapshot is the federation-wide DDM rollup for the AdminService
+// Snapshot RPC. Phase 1 keeps this minimal — region count only — so
+// the TUI's drill-down view (docs/rtid-tui.md §3.2) shows
+// "Region count: N" without per-region detail.
+type DDMSnapshot struct {
+	RegionCount uint32
 }

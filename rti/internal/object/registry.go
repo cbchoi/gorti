@@ -376,6 +376,27 @@ func (r *Registry) SendInteraction(
 	return r.sendInteraction(ctx, fed, producer, cls, params, ts)
 }
 
+// Snapshot returns aggregate object-instance counts for the
+// AdminService handler. Phase 1 of the rtid-TUI plan
+// (docs/rtid-tui.md): consumed by the drill-down view's
+// "OBJECTS" column.
+//
+// Read order: Registry RLock for the federation map, then per-
+// federation mu.Lock for the instance count. Cheap.
+func (r *Registry) Snapshot(fed core.FederationName) core.ObjectSnapshot {
+	r.mu.RLock()
+	st, ok := r.federations[fed]
+	r.mu.RUnlock()
+	if !ok {
+		return core.ObjectSnapshot{}
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return core.ObjectSnapshot{
+		InstanceCount: uint32(len(st.instances)),
+	}
+}
+
 // nextOutboundSeqLocked returns the next per-federation outbound seq.
 // Caller must hold st.mu.
 func (st *federationState) nextOutboundSeqLocked() uint64 {

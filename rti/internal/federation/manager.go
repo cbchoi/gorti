@@ -419,6 +419,52 @@ func (m *Manager) List(_ context.Context) ([]core.FederationSummary, error) {
 	return out, nil
 }
 
+// Snapshot returns the federation roster for the AdminService
+// handler. Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): consumed
+// to build per-federation FederationSnapshot entries with the
+// per-federate (handle, name) seed.
+//
+// Federations are sorted by name; each roster's Federates slice is
+// sorted by handle. Read under the manager RLock + per-federation
+// RLock; cheap.
+func (m *Manager) Snapshot() []core.FederationRoster {
+	m.mu.RLock()
+	names := make([]string, 0, len(m.federations))
+	for n := range m.federations {
+		names = append(names, string(n))
+	}
+	m.mu.RUnlock()
+	sort.Strings(names)
+
+	out := make([]core.FederationRoster, 0, len(names))
+	for _, n := range names {
+		m.mu.RLock()
+		fs, ok := m.federations[core.FederationName(n)]
+		m.mu.RUnlock()
+		if !ok {
+			continue
+		}
+		fs.mu.RLock()
+		roster := core.FederationRoster{
+			Name:      fs.name,
+			Mode:      fs.mode,
+			Federates: make([]core.FederateInfo, 0, len(fs.handleToName)),
+		}
+		for h, fname := range fs.handleToName {
+			roster.Federates = append(roster.Federates, core.FederateInfo{
+				Handle: h,
+				Name:   fname,
+			})
+		}
+		fs.mu.RUnlock()
+		sort.Slice(roster.Federates, func(i, j int) bool {
+			return roster.Federates[i].Handle < roster.Federates[j].Handle
+		})
+		out = append(out, roster)
+	}
+	return out
+}
+
 // Compile-time assertion that Manager implements core.FederationStore.
 // Removing any required method fails the build at this line.
 var _ core.FederationStore = (*Manager)(nil)

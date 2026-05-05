@@ -30,4 +30,16 @@ type ObjectRegistry interface {
 		params map[ParameterHandle][]byte,
 		ts *LogicalTime,
 	) error
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns aggregate object-instance counts for the
+	// AdminService handler. Read-only; cheap.
+	Snapshot(fed FederationName) ObjectSnapshot
+}
+
+// ObjectSnapshot is the federation-wide object rollup for the
+// AdminService Snapshot RPC.
+type ObjectSnapshot struct {
+	InstanceCount uint32
 }

@@ -31,6 +31,7 @@ func (stubFedStoreForServerTest) ResignFederation(_ context.Context, _ core.Fede
 func (stubFedStoreForServerTest) List(_ context.Context) ([]core.FederationSummary, error) {
 	return nil, nil
 }
+func (stubFedStoreForServerTest) Snapshot() []core.FederationRoster { return nil }
 
 type stubObjRegistryForServerTest struct{}
 
@@ -42,6 +43,9 @@ func (stubObjRegistryForServerTest) UpdateAttributes(_ context.Context, _ core.F
 }
 func (stubObjRegistryForServerTest) SendInteraction(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime) error {
 	return errors.New("stub")
+}
+func (stubObjRegistryForServerTest) Snapshot(_ core.FederationName) core.ObjectSnapshot {
+	return core.ObjectSnapshot{}
 }
 
 type stubOutboxForServerTest struct{}

@@ -334,6 +334,111 @@ func (m *Manager) InteractionPublishersFor(
 	return sortedHandles(st.intPubs[cls])
 }
 
+// Snapshot returns a point-in-time read of the per-federation pub/sub
+// state. Read under the manager RLock; safe for concurrent callers.
+//
+// Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): consumed by the
+// AdminService Snapshot RPC. Return type is core.DeclarationSnapshot
+// so the result threads through the core.DeclarationManagement
+// interface unchanged. The return value is a fresh allocation;
+// callers may retain it.
+func (m *Manager) Snapshot(fed core.FederationName) core.DeclarationSnapshot {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return core.DeclarationSnapshot{
+			PerFederate: map[core.FederateHandle]core.DeclarationFederatePubSub{},
+		}
+	}
+
+	type fedPubSubAcc struct {
+		objPubs map[core.ObjectClassHandle]struct{}
+		objSubs map[core.ObjectClassHandle]struct{}
+		intPubs map[core.InteractionClassHandle]struct{}
+		intSubs map[core.InteractionClassHandle]struct{}
+	}
+	acc := map[core.FederateHandle]*fedPubSubAcc{}
+	getAcc := func(h core.FederateHandle) *fedPubSubAcc {
+		a, ok := acc[h]
+		if !ok {
+			a = &fedPubSubAcc{
+				objPubs: map[core.ObjectClassHandle]struct{}{},
+				objSubs: map[core.ObjectClassHandle]struct{}{},
+				intPubs: map[core.InteractionClassHandle]struct{}{},
+				intSubs: map[core.InteractionClassHandle]struct{}{},
+			}
+			acc[h] = a
+		}
+		return a
+	}
+
+	pubClasses := map[core.ObjectClassHandle]struct{}{}
+	for k, set := range st.objPubs {
+		pubClasses[k.cls] = struct{}{}
+		for h := range set {
+			getAcc(h).objPubs[k.cls] = struct{}{}
+		}
+	}
+	for k, set := range st.objSubs {
+		for h := range set {
+			getAcc(h).objSubs[k.cls] = struct{}{}
+		}
+	}
+	for cls, set := range st.intPubs {
+		for h := range set {
+			getAcc(h).intPubs[cls] = struct{}{}
+		}
+	}
+	for cls, set := range st.intSubs {
+		for h := range set {
+			getAcc(h).intSubs[cls] = struct{}{}
+		}
+	}
+
+	out := core.DeclarationSnapshot{
+		PerFederate: make(map[core.FederateHandle]core.DeclarationFederatePubSub, len(acc)),
+	}
+
+	pubList := make([]core.ObjectClassHandle, 0, len(pubClasses))
+	for c := range pubClasses {
+		pubList = append(pubList, c)
+	}
+	slices.Sort(pubList)
+	out.PublishedObjectClasses = pubList
+
+	for h, a := range acc {
+		out.PerFederate[h] = core.DeclarationFederatePubSub{
+			Handle:                       h,
+			PublishedObjectClasses:       sortedObjClasses(a.objPubs),
+			SubscribedObjectClasses:      sortedObjClasses(a.objSubs),
+			PublishedInteractionClasses:  sortedIntClasses(a.intPubs),
+			SubscribedInteractionClasses: sortedIntClasses(a.intSubs),
+		}
+	}
+	return out
+}
+
+// sortedObjClasses materialises an object-class set as a sorted slice.
+func sortedObjClasses(set map[core.ObjectClassHandle]struct{}) []core.ObjectClassHandle {
+	out := make([]core.ObjectClassHandle, 0, len(set))
+	for c := range set {
+		out = append(out, c)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// sortedIntClasses materialises an interaction-class set as a sorted slice.
+func sortedIntClasses(set map[core.InteractionClassHandle]struct{}) []core.InteractionClassHandle {
+	out := make([]core.InteractionClassHandle, 0, len(set))
+	for c := range set {
+		out = append(out, c)
+	}
+	slices.Sort(out)
+	return out
+}
+
 // sortedHandles materializes a federate-handle set as a sorted slice.
 // Returns an empty (non-nil) slice for nil/empty input — callers (and
 // reflect.DeepEqual in tests) treat empty results uniformly.

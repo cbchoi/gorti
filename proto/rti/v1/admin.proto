@@ -1,0 +1,218 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+import "rti/v1/savepoint.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// AdminService — read-only introspection plane for `rti-top` and other
+// live-observability tools (docs/rtid-tui.md Phase 1).
+//
+// Bound to a SEPARATE listener (`--admin-listen`, default
+// localhost:8443) — independent from the federate-facing RPC plane on
+// `--listen`. Plaintext only in Phase 1; mTLS / RBAC are explicitly
+// out of scope.
+//
+// Every RPC is read-only. The handler MUST NOT call any Manager method
+// that mutates state. Mutating control-plane operations (force-resign,
+// kill, drain) are deferred to Phase 5+ and require a separate design
+// review.
+service AdminService {
+  // Snapshot returns one consistent point-in-time snapshot of every
+  // federation hosted by this rtid. Cheap enough for ~1Hz polling
+  // (the TUI's default cadence).
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
+
+  // TailEvents server-streams event-log entries for a single federation
+  // as they are appended. Cancelled via the stream context.
+  rpc TailEvents(TailEventsRequest) returns (stream TailEventsResponse);
+
+  // Status is a lightweight liveness probe — rtid version + uptime.
+  // Used by clients to verify the admin endpoint is reachable before
+  // committing to a Snapshot poll loop.
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+message StatusRequest {
+  WireVersion wire_version = 1;
+}
+
+message StatusResponse {
+  // rtid_version is the build identifier of the running daemon.
+  string rtid_version = 1;
+  // uptime_seconds is wall-clock seconds since rtid started.
+  uint64 uptime_seconds = 2;
+}
+
+message SnapshotRequest {
+  WireVersion wire_version = 1;
+  // federation_name, when non-empty, restricts the snapshot to one
+  // federation. Empty (default) returns every federation.
+  string federation_name = 2;
+}
+
+message SnapshotResponse {
+  // rtid_version + uptime_seconds let a single Snapshot call also
+  // serve as a Status response (saves one RPC for the TUI's first
+  // refresh).
+  string rtid_version = 1;
+  uint64 uptime_seconds = 2;
+  repeated FederationSnapshot federations = 3;
+}
+
+// FederationSnapshot is the per-federation rollup the TUI's
+// "Federations view" (docs/rtid-tui.md §3.1) and "drill-down view"
+// (§3.2) consume.
+message FederationSnapshot {
+  // name identifies the federation.
+  string name = 1;
+  // mode is the federation operating mode (verbose / best-effort).
+  Mode mode = 2;
+  // federates_joined is the count of currently-joined federates.
+  uint32 federates_joined = 3;
+  // federates carries the per-federate detail rows.
+  repeated FederateSnapshot federates = 4;
+  // time carries the federation-wide LBTS view.
+  TimeSnapshot time = 5;
+  // sync_points carries every registered sync point's current state.
+  repeated SyncPointSnapshot sync_points = 6;
+  // save_state is the current federation save state (idle when no
+  // save is in progress).
+  SaveState save_state = 7;
+  // restore_state is the current federation restore state.
+  RestoreState restore_state = 8;
+  // region_count is the number of DDM regions live in this federation.
+  uint32 region_count = 9;
+  // object_instance_count is the number of registered object
+  // instances (across all classes).
+  uint32 object_instance_count = 10;
+  // published_classes lists object-class handles with at least one
+  // active publisher in this federation (sorted handle order).
+  repeated uint64 published_classes = 11;
+}
+
+// FederateSnapshot is the per-federate row the TUI's drill-down,
+// time, and wire views consume. Field ordering follows the design
+// doc convention: identity → time → pub/sub → wire stats.
+message FederateSnapshot {
+  // --- Identity ----------------------------------------------------
+  uint64 handle = 1;
+  string name = 2;
+
+  // --- Time --------------------------------------------------------
+  // current_time is the federate's last granted (or initial) logical
+  // time.
+  double current_time = 3;
+  // pending_request_time, when present, is the t parameter of the
+  // outstanding time-advance request. Absent → no pending request.
+  optional double pending_request_time = 4;
+  // lookahead is the federate's regulating-set lookahead. Zero when
+  // not regulating.
+  double lookahead = 5;
+  // regulating reports whether the federate is in the regulating set.
+  bool regulating = 6;
+  // constrained reports whether the federate is in the constrained set.
+  bool constrained = 7;
+
+  // --- Pub/sub -----------------------------------------------------
+  // published_object_classes is the set of object-class handles this
+  // federate has at least one publication for (sorted handle order).
+  repeated uint64 published_object_classes = 8;
+  // subscribed_object_classes is the symmetric subscriber set.
+  repeated uint64 subscribed_object_classes = 9;
+  // published_interaction_classes is the per-federate interaction
+  // publisher set.
+  repeated uint64 published_interaction_classes = 10;
+  // subscribed_interaction_classes is the symmetric set.
+  repeated uint64 subscribed_interaction_classes = 11;
+
+  // --- Wire stats --------------------------------------------------
+  // updates_sent counts attribute-update sends from this federate
+  // (HLAfederate.HLAupdatesSent). Cumulative since join.
+  uint64 updates_sent = 12;
+  // interactions_sent counts interaction sends.
+  uint64 interactions_sent = 13;
+  // reflections_received counts attribute-reflection deliveries to
+  // this federate.
+  uint64 reflections_received = 14;
+  // interactions_received counts interaction deliveries to this
+  // federate.
+  uint64 interactions_received = 15;
+  // drops_total counts outbound events dropped by the multiOutbox
+  // because this federate's batch channel was full
+  // (core.ErrFederateOverflow).
+  uint64 drops_total = 16;
+  // outbox_queue_depth is the count of batches currently buffered in
+  // this federate's outbox channel (read of len(channel)).
+  uint32 outbox_queue_depth = 17;
+  // outbox_capacity is the channel's capacity (cap(channel)).
+  uint32 outbox_capacity = 18;
+}
+
+// TimeSnapshot is the federation-wide time view. The TUI's "Time
+// advance view" (docs/rtid-tui.md §3.3) consumes it.
+message TimeSnapshot {
+  // lbts is the current Lower Bound on Time-Stamp over the
+  // regulating set. When no federate is regulating, the field is
+  // serialised as +Inf (IEEE 754).
+  double lbts = 1;
+  // regulating_handles is the set of federate handles currently in
+  // the regulating set (sorted handle order).
+  repeated uint64 regulating_handles = 2;
+  // constrained_handles is the symmetric constrained set.
+  repeated uint64 constrained_handles = 3;
+  // pending_grants lists every federate with an outstanding
+  // time-advance request, in handle order.
+  repeated PendingGrant pending_grants = 4;
+}
+
+message PendingGrant {
+  uint64 federate_handle = 1;
+  double requested_time = 2;
+}
+
+// SyncPointSnapshot is one sync point's per-federation state. The
+// TUI shows these in the drill-down view (§3.2).
+message SyncPointSnapshot {
+  // label is the sync-point identifier.
+  string label = 1;
+  // state is the sync-point's current state.
+  SyncPointState state = 2;
+  // required_handles lists the federates required to achieve the
+  // point (sorted handle order).
+  repeated uint64 required_handles = 3;
+  // achieved_handles lists the federates that have called Achieve.
+  repeated uint64 achieved_handles = 4;
+}
+
+// SyncPointState mirrors sync.SyncPointState.
+enum SyncPointState {
+  SYNC_POINT_STATE_UNSPECIFIED = 0;
+  SYNC_POINT_STATE_ANNOUNCED = 1;
+  SYNC_POINT_STATE_ACHIEVED = 2;
+}
+
+// TailEventsRequest names a federation to follow. The handler opens
+// an eventlog.MultiplexWriter.OpenReader and emits TailedEvent
+// entries until the stream context is cancelled.
+message TailEventsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+// TailEventsResponse is one event-log entry, opaque framing — the
+// body carries whatever the eventlog wrote (proto-encoded EventEntry
+// payload bytes plus a few demux fields). Phase 1 keeps this minimal;
+// future revisions may richen the payload once the TUI consumer
+// demands it.
+message TailEventsResponse {
+  // seq is the event log's monotonic per-federation sequence number.
+  uint64 seq = 1;
+  // unix_nanos is the event's record timestamp in unix nanoseconds.
+  int64 unix_nanos = 2;
+  // payload is the raw event-log record bytes (proto-encoded
+  // rti.v1.EventEntry).
+  bytes payload = 3;
+}

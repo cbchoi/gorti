@@ -648,6 +648,31 @@ func (m *Manager) QueryRestoreState(fed core.FederationName, label string) Resto
 	return RestoreIdle
 }
 
+// Snapshot returns the federation's save / restore status for the
+// AdminService handler. When no save or restore is in progress the
+// state fields are StateIdle / RestoreIdle and the labels are empty.
+// Read under the manager mutex; cheap.
+//
+// Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): consumed by the
+// drill-down view's "Save state: IDLE" line.
+func (m *Manager) Snapshot(fed core.FederationName) core.SavepointSnapshot {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := core.SavepointSnapshot{
+		SaveState:    StateIdle,
+		RestoreState: RestoreIdle,
+	}
+	if as, ok := m.saves[fed]; ok {
+		out.SaveLabel = as.label
+		out.SaveState = as.state
+	}
+	if ar, ok := m.restore[fed]; ok {
+		out.RestoreLabel = ar.label
+		out.RestoreState = ar.state
+	}
+	return out
+}
+
 // LoadManifest reads only the manifest header from a stored bundle.
 // Used by tests + introspection tooling that needs to inspect the
 // federate list / save-time without paying for a full event-log replay.

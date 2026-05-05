@@ -59,6 +59,7 @@ func (f *fakeFedStore) ResignFederation(_ context.Context, fed core.FederationNa
 func (f *fakeFedStore) List(_ context.Context) ([]core.FederationSummary, error) {
 	return f.listResp, f.listErr
 }
+func (f *fakeFedStore) Snapshot() []core.FederationRoster { return nil }
 
 func newFedSvc(s core.FederationStore) *federationService {
 	return newFederationService(s)

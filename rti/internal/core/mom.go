@@ -83,4 +83,30 @@ type ManagementObjectModel interface {
 	// IncrementReflectionsReceived increments the per-federate
 	// HLAreflectionsReceived counter.
 	IncrementReflectionsReceived(fed FederationName, h FederateHandle)
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns aggregate per-federate counters for the
+	// AdminService handler. Read-only; cheap.
+	Snapshot(fed FederationName) MOMSnapshot
+}
+
+// MOMFederateCounters mirrors the per-federate counter set that
+// mom.Manager maintains via the four IncrementX methods. The
+// AdminService handler maps these onto FederateSnapshot.{updates_sent,
+// interactions_sent, reflections_received, interactions_received}.
+type MOMFederateCounters struct {
+	Handle               FederateHandle
+	UpdatesSent          uint32
+	InteractionsSent     uint32
+	ReflectionsReceived  uint32
+	InteractionsReceived uint32
+}
+
+// MOMSnapshot is the federation-wide MOM rollup for the AdminService
+// Snapshot RPC. PerFederate carries one entry per federate the MOM
+// has seen via FederateJoined; the AdminService handler joins this
+// against the federation manager's roster to build per-federate rows.
+type MOMSnapshot struct {
+	PerFederate map[FederateHandle]MOMFederateCounters
 }
