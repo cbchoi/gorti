@@ -88,6 +88,15 @@ type Options struct {
 	// Phase 2a swap-point: production wires nil and gets unchanged
 	// behavior; researchers wire an alternative impl through this slot.
 	LBTSStrategy LBTSStrategy
+
+	// GrantStrategy is the OPTIONAL algorithm hook for the time-advance
+	// grant decision. Nil → the package default (defaultGrant, which
+	// delegates to the unexported decideGrant function). See
+	// strategy.go for the interface.
+	//
+	// Phase 2a swap-point: production wires nil and gets unchanged
+	// behavior; researchers wire an alternative impl through this slot.
+	GrantStrategy GrantStrategy
 }
 
 // New constructs a Manager. Returns an error if any required Options
@@ -113,6 +122,9 @@ func New(opts Options) (*Manager, error) {
 	// Options. See strategy.go.
 	if opts.LBTSStrategy == nil {
 		opts.LBTSStrategy = defaultLBTS{}
+	}
+	if opts.GrantStrategy == nil {
+		opts.GrantStrategy = defaultGrant{}
 	}
 	return &Manager{
 		opts:   opts,
