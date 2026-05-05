@@ -38,22 +38,31 @@ extension; explicitly NOT Phase 1.)
 
 ---
 
-## 2. Approach choices — OPEN
+## 2. Approach choices
 
-### 2.1 Where the TUI runs
+### 2.1 Where the TUI runs — **PINNED: (B) separate `rti-top` binary**
 
-| Option | Sketch | Pros | Cons |
-|---|---|---|---|
-| **(A) `rtid tui` subcommand** | TUI runs in the same process; reads internal Go state directly. `rtid --mode=tui --listen=...` connects, but UI process == server process. | Zero-overhead reads; no new RPC | Doesn't work for remote `rtid`; ties UI to server lifecycle |
-| **(B) `rti-top` separate binary** | New binary in `rti/cmd/rti-top/`. Talks to `rtid` over a new `AdminService` gRPC contract. Local OR remote. | Works against any rtid; clean separation; can be packaged independently | New gRPC service to design + maintain; double-binary distribution |
-| **(C) Hybrid** | Build (B); also expose `rtid tui` as a convenience wrapper that spawns `rti-top` against the local socket. | Best of both | Most code |
-
-**Recommendation**: **(B)** for the long-term — builds the introspection
-surface that researchers and operators need anyway. **(C)** is a
-trivial follow-up. Skip (A) alone — local-only is too narrow.
+Pinned 2026-05-05. `rtid` stays headless (logs to stdout/stderr as
+today, runs cleanly under systemd / containers / CI). A new
+`rti-top` binary in `rti/cmd/rti-top/` talks to `rtid` over a new
+`AdminService` gRPC contract — works locally OR remotely, supports
+multiple simultaneous observers, gives operators the wire surface
+they'd need for any future observability consumer (a CLI snapshot
+tool, a web dashboard, etc.).
 
 The new `AdminService` is **read-only** in Phase 1. Mutating RPCs
 (force-resign, etc.) are out of scope.
+
+Considered and rejected:
+
+- **(A) `rtid tui` subcommand** — local-only; doesn't work for
+  remote `rtid` or containerized deployments.
+- **(D) integrated TUI in `rtid`** — simpler for local dev but loses
+  remote observation, multi-observer support, and the heterogeneous-
+  consumer story (CLI / web / Prometheus). Door isn't closed: a
+  thin `rtid --tui` wrapper that spawns `rti-top` against the local
+  socket can land as a Phase-2 follow-up if local-dev ergonomics
+  become a sticking point.
 
 ### 2.2 Data model — pull vs push
 
@@ -293,29 +302,29 @@ Manager fills in its share of the snapshot.
 
 ---
 
-## 7. Open decisions before Phase 1 starts
+## 7. Decisions
 
-1. **Approach (§2.1)**: (A) subcommand only / **(B) separate binary** /
-   (C) hybrid. Default proposal: **(B)** with (C) as a Phase-1
-   follow-up.
-2. **Pull vs push (§2.2)**: **pull** with potential future hybrid.
-   Default proposal: pull-only Phase 1; revisit if 1Hz overhead is
-   measurable.
-3. **TUI library (§2.3)**: **bubbletea** / tview / tcell. Default
-   proposal: bubbletea + lipgloss + bubbles.
-4. **Default refresh rate (§2.4)**: 1Hz / 500ms / 2s. Default
-   proposal: 1Hz, configurable in [100ms, 60s].
-5. **Out-of-scope reaffirmation**: read-only, no mutating RPCs in
-   Phase 1. Confirm or override.
+1. **Approach (§2.1)**: PINNED 2026-05-05 — **(B) separate `rti-top`
+   binary** + AdminService gRPC. Optional Phase-2 follow-up: a thin
+   `rtid --tui` wrapper that spawns `rti-top` against the local socket.
+2. **Pull vs push (§2.2)**: OPEN. Default proposal: pull-only Phase 1;
+   revisit if 1Hz overhead is measurable. (TailEvents is streaming
+   regardless — that's the only push channel Phase 1 ships.)
+3. **TUI library (§2.3)**: OPEN. Default proposal: bubbletea +
+   lipgloss + bubbles. Drives Phase-2 work; not Phase-1 blocker.
+4. **Default refresh rate (§2.4)**: OPEN. Default proposal: 1Hz,
+   configurable in [100ms, 60s]. Phase-2 setting.
+5. **Out-of-scope reaffirmation**: OPEN. Default proposal: read-only,
+   no mutating RPCs in Phase 1.
 6. **Federate column set (§3.2)**: PINNED 2026-05-05 — default
    columns (`name`, `handle`, `current_time`, `lookahead`, `role`,
    `tps`, `queue_depth`, `drops_total`, `age`) and the expanded view
    (identity + time + pub/sub + wire stats; collapsed-when-empty
    sections for save / ownership / DDM / sync). No additions.
 
-Once §7.1 + §7.3 are pinned, Phase 1 (admin proto + handler +
-Snapshot methods) is mechanical and dispatchable as ~5 small commits.
-Phase 2 (the TUI itself) builds on whatever §7.1 + §7.3 decided.
+§7.1 + §7.6 are now pinned. Phase 1 (AdminService proto + handler +
+per-Manager Snapshot methods) is dispatchable. §7.2..§7.5 affect
+Phase 2 (the `rti-top` TUI itself) and can be pinned later.
 
 ---
 
