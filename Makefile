@@ -1,4 +1,4 @@
-.PHONY: verify fmt lint typecheck test determinism proto py-codegen py-test py-lint py-typecheck clean ci-all help
+.PHONY: verify fmt lint typecheck test determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps clean ci-all help
 
 GO_PKGS := ./...
 PY_DIR := pysdk
@@ -16,6 +16,9 @@ help:
 	@echo "  py-test      pytest pysdk/ (M4)"
 	@echo "  py-lint      ruff check pysdk/"
 	@echo "  py-typecheck mypy --strict pysdk/"
+	@echo "  docs-deps    install MkDocs + Material + plugins (pip)"
+	@echo "  docs         build the docs site into ./site/"
+	@echo "  docs-serve   live-reload docs at http://127.0.0.1:8000/"
 	@echo "  clean        remove generated artifacts"
 	@echo "  ci-all       full CI gate including coverage"
 
@@ -80,8 +83,20 @@ py-typecheck:
 	@if ! command -v mypy >/dev/null; then echo "ERROR: mypy not installed"; exit 1; fi
 	cd $(PY_DIR) && mypy --strict .
 
+docs-deps:
+	@if ! command -v pip >/dev/null; then echo "ERROR: pip not installed"; exit 1; fi
+	pip install -r docs/requirements.txt
+
+docs:
+	@if ! command -v mkdocs >/dev/null; then echo "ERROR: mkdocs not installed (run: make docs-deps)"; exit 1; fi
+	mkdocs build --strict
+
+docs-serve:
+	@if ! command -v mkdocs >/dev/null; then echo "ERROR: mkdocs not installed (run: make docs-deps)"; exit 1; fi
+	mkdocs serve
+
 clean:
-	rm -rf bin/ coverage.* rti/internal/genproto/ pysdk/rti1516e/_generated/
+	rm -rf bin/ coverage.* rti/internal/genproto/ pysdk/rti1516e/_generated/ site/
 
 ci-all: lint
 	go test -race -coverprofile=coverage.out -covermode=atomic $(GO_PKGS)

@@ -1,0 +1,129 @@
+site_name: gorti
+site_description: Open-source IEEE 1516-2010 (HLA Evolved) RTI in Go with Python federate SDK
+site_url: https://gorti.readthedocs.io/
+repo_url: https://github.com/cbchoi/gorti
+repo_name: cbchoi/gorti
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.snippets:
+      base_path:
+        - .
+        - docs
+      check_paths: true
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+plugins:
+  - search
+  - include-markdown
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Architecture:
+      - Software Requirements (SRS): srs.md
+      - Software Design (SDD): sdd.md
+      - Interface Design (IDD): idd.md
+      - Path Ownership / Orthogonality: ORTHOGONALITY.md
+  - Workflow & Conventions:
+      - Test-Driven Discipline: TDD.md
+      - Coding Conventions: CODING_CONVENTIONS.md
+      - Multi-Agent Workflow: WORKFLOW.md
+      - Dispatch Model: DISPATCH.md
+      - Agents Overview: AGENTS.md
+      - Milestone Checking: MILESTONE_CHECK.md
+  - Research Platform:
+      - Design (Phase 0): research-platform.md
+      - How-to add an alternative: research-platform-howto.md
+  - Agent Briefs:
+      - Agent A — RTI Core: agent-a-rti-core.md
+      - Agent B — FOM / Encoding: agent-b-fom-encoding.md
+      - Agent C — Python SDK: agent-c-pysdk.md
+  - Dispatch Plans:
+      - M2 Dispatch Plan: M2_DISPATCH_PLAN.md
+      - M3 Dispatch Plan: M3_DISPATCH_PLAN.md
+      - M4 Dispatch Plan: M4_DISPATCH_PLAN.md
+      - M5 Dispatch Plan: M5_DISPATCH_PLAN.md
+  - Milestone Reports:
+      - M5:
+          - Agent A: reports/M5/agent-a.md
+          - Agent B: reports/M5/agent-b.md
+          - Agent C: reports/M5/agent-c.md
+      - M6:
+          - Agent A — Hardening: reports/M6/agent-a-hardening.md
+          - Agent A — RememberFor: reports/M6/agent-a-rememberfor.md
+          - Agent C — Handle Alignment: reports/M6/agent-c-handle-alignment.md
+          - Agent C — Close: reports/M6/agent-c-close.md
+      - M7:
+          - Agent A: reports/M7/agent-a.md
+      - M8:
+          - Agent A: reports/M8/agent-a.md
+      - M9:
+          - Agent A: reports/M9/agent-a.md
+      - M10:
+          - Agent A: reports/M10/agent-a.md
+      - M11:
+          - Agent A: reports/M11/agent-a.md
+      - M12:
+          - Agent A: reports/M12/agent-a.md
+          - Agent C: reports/M12/agent-c.md
+      - Performance optimization pass: reports/perf/M12-optimization-pass.md
+  - Templates:
+      - Status Report: templates/status-report.md
+  - Changelog: changelog.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/cbchoi/gorti

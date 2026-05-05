@@ -48,3 +48,6 @@ eventlogs/
 
 # perf-pass profile artifacts (large binaries; reproduce locally)
 docs/reports/perf/*.prof
+
+# MkDocs build output (Read the Docs builds remotely; locally `mkdocs serve` is preferred).
+/site/
