@@ -11,7 +11,6 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/ddm"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
-	"github.com/cbchoi/gorti/rti/internal/ownership"
 	"github.com/cbchoi/gorti/rti/internal/savepoint"
 )
 
@@ -97,7 +96,11 @@ type Options struct {
 	Sync core.SyncCoordinator
 
 	// Ownership handles OwnershipService RPCs (M12 W1).
-	Ownership *ownership.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.2): typed as core.OwnershipCoordinator so alternative
+	// implementations may be wired here.
+	Ownership core.OwnershipCoordinator
 
 	// DDM handles DDMService RPCs (M12 W1).
 	DDM *ddm.Manager

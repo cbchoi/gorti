@@ -56,6 +56,11 @@ type Manager struct {
 	fed map[core.FederationName]*federationState
 }
 
+// Compile-time assertion: *Manager satisfies core.OwnershipCoordinator.
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.2) introduced the interface; production keeps using *Manager.
+var _ core.OwnershipCoordinator = (*Manager)(nil)
+
 // federationState holds the per-federation ownership map.
 type federationState struct {
 	owners map[ownershipKey]ownershipRecord

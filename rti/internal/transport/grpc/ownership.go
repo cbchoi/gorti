@@ -13,16 +13,20 @@ import (
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
-	"github.com/cbchoi/gorti/rti/internal/ownership"
 )
 
 // ownershipService is the concrete OwnershipServiceServer impl.
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.2): the handler binds to core.OwnershipCoordinator instead of the
+// concrete *ownership.Manager so alternative implementations can be
+// wired in at the composition root.
 type ownershipService struct {
 	rtiv1.UnimplementedOwnershipServiceServer
-	mgr *ownership.Manager
+	mgr core.OwnershipCoordinator
 }
 
-func newOwnershipService(mgr *ownership.Manager) *ownershipService {
+func newOwnershipService(mgr core.OwnershipCoordinator) *ownershipService {
 	return &ownershipService{mgr: mgr}
 }
 

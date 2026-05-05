@@ -395,7 +395,7 @@ type rtid struct {
 	declMgr *declaration.Manager
 	objReg  *object.Registry
 	syncMgr core.SyncCoordinator
-	ownMgr  *ownership.Manager
+	ownMgr  core.OwnershipCoordinator
 	momMgr  *mom.Manager
 	ddmMgr  *ddm.Manager
 	saveMgr *savepoint.Manager
