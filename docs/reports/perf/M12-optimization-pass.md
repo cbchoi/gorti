@@ -9,14 +9,20 @@ Pre-opt revert tag: `perf-baseline-m12` (commit `3078f06`).
 
 ## Summary
 
-| Federation size | Throughput (interactions/sec) | Speedup |
-|---:|---:|---:|
-| 5   | 1,238,820 → 2,846,459 | **2.30×** |
-| 25  |   252,575 →   596,627 | **2.36×** |
-| 100 |    71,347 →    94,665 | **1.33×** |
+| Federation size | Baseline | Opt 1+2 | Opt 1+2+4 | Total speedup |
+|---:|---:|---:|---:|---:|
+| 5   | 1,238,820 | 2,846,459 | 2,296,716 | **1.85×** |
+| 25  |   252,575 |   596,627 | 1,036,128 | **4.10×** |
+| 100 |    71,347 |    94,665 |   270,286 | **3.79×** |
 
-Two commits, no regressions, all `go test -race ./...` packages green
-including the cross-language M5 and M12 cross-process suites.
+Four commits, no test regressions, all `go test -race ./...` packages
+green including the cross-language M5 and M12 cross-process suites.
+
+Note: at size 5 Opt 4 (batched delivery) regresses 19% vs Opt 1+2 —
+at small fanout the per-recipient mutex contention dominates the
+channel-op savings. Larger fanouts (25, 100) win heavily because the
+channel-send cost scales roughly with N and batch-flush amortizes by
+the batch factor (32x in this code).
 
 ## Profile-driven analysis
 
@@ -76,6 +82,38 @@ atomic load + map lookup with no mutex acquire. Subscribe/cancel
 serialize on a small `writeMu`, build a fresh map with the mutation,
 and atomic.Store the new pointer. Concurrent readers see either the
 pre- or post-write snapshot atomically.
+
+### Opt 4 — batched delivery: `chan []OutboundEvent` + per-recipient scratch
+Commit `b8489f3`. After Opt 1+2 the residual hotspot at size 25 was
+channel-select machinery: `runtime.selectgo` 44% cum +
+`runtime.sellock` 38% cum + `runtime.chansend` 28% cum, all driven
+by N×N per-event channel pushes during fanout.
+
+Switch the `perfOutbox` channel element from `OutboundEvent` to a
+batch (`[]OutboundEvent`) and add a per-recipient scratch slice.
+Send appends to scratch under a small per-recipient mutex; when
+scratch reaches `batchSize` (=32) it is handed to the recipient's
+`chan[]OutboundEvent` and a fresh scratch is started. Subscribe's
+cancel performs a final flush of any remaining scratch before close
+so receivers always observe every Send that completed before
+cancel.
+
+Tuning: batchSize=32 was the pick from a microbench sweep — 8
+regressed size 25 by ~21% without recovering size 5; 64 regressed
+size 100 by ~5% from cache pressure on the receive-side slice
+iteration. 32 lands at the throughput plateau.
+
+Trade-off at size 5: -19% throughput vs Opt 1+2 because at small
+fanout the per-recipient mutex contention dominates the channel-op
+savings. Latency improves substantially: at size 25, p50 9.60 ms →
+0.05 ms, p99 61.02 ms → 2.26 ms (shorter apparent queue depth as
+fewer items are in flight).
+
+The production `multiOutbox` (`cmd/rtid/outbox.go`) is left on the
+single-event channel signature in this commit because it shares the
+channel shape with the gRPC stream loop in
+`rti/internal/transport/grpc/stream.go`. Promoting batched delivery
+to the production wire path is the natural follow-up.
 
 ### Opt 3 — same atomic-snapshot pattern on production `multiOutbox`
 Commit `a191bfd`. The same RWMutex-around-stable-map pattern lived in
