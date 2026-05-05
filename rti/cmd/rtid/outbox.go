@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 )
 
 // defaultMultiBatchSize is how many events Send accumulates per
@@ -265,36 +266,22 @@ func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h co
 	return state.ch, cancel, nil
 }
 
-// outboxSnapshotEntry is one (fed, handle) recipient's wire-stat
-// snapshot: the channel's queue depth + capacity + cumulative drops.
-// Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): consumed by the
-// AdminService Snapshot handler to populate FederateSnapshot.{outbox_*,
-// drops_total}.
+// OutboxStats implements grpc.OutboxStatsSource — Phase 1 of the
+// rtid-TUI plan (docs/rtid-tui.md). Returns one entry per active
+// subscriber: the channel's queue depth + capacity + cumulative
+// drops.
 //
-// Atomic field reads + a single len/cap pair on the channel: cheap,
-// lock-free on the hot path of the underlying multiRecipientState
-// (the subscribers map is loaded via the existing atomic.Pointer and
-// no per-recipient mutex is acquired).
-type outboxSnapshotEntry struct {
-	Federation core.FederationName
-	Handle     core.FederateHandle
-	QueueDepth uint32
-	Capacity   uint32
-	DropsTotal uint64
-}
-
-// snapshot returns one outboxSnapshotEntry per active subscriber. The
-// hot Send path is unaffected: we acquire no per-recipient mutex (the
-// queue-depth read is len(channel), which Go documents as safe under
-// concurrent send/receive); we read dropsTotal via atomic.Load.
-//
-// The subscribers table is loaded via the existing atomic.Pointer, so
-// concurrent Subscribe/cancel sees a consistent in-flight snapshot.
-func (m *multiOutbox) snapshot() []outboxSnapshotEntry {
+// The hot Send path is unaffected: we acquire no per-recipient mutex
+// (the queue-depth read is len(channel), which Go documents as safe
+// under concurrent send/receive); we read dropsTotal via
+// atomic.Load. The subscribers table is loaded via the existing
+// atomic.Pointer, so concurrent Subscribe/cancel sees a consistent
+// in-flight snapshot.
+func (m *multiOutbox) OutboxStats() []grpcsvc.OutboxStat {
 	subs := *m.subs.Load()
-	out := make([]outboxSnapshotEntry, 0, len(subs))
+	out := make([]grpcsvc.OutboxStat, 0, len(subs))
 	for k, state := range subs {
-		out = append(out, outboxSnapshotEntry{
+		out = append(out, grpcsvc.OutboxStat{
 			Federation: k.fed,
 			Handle:     k.h,
 			QueueDepth: uint32(len(state.ch)),

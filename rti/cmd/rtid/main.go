@@ -57,6 +57,13 @@ import (
 func main() {
 	listen := flag.String("listen", ":8442", "gRPC listen address")
 	metricsListen := flag.String("metrics-listen", ":9090", "Prometheus HTTP listen")
+	// rtid-TUI Phase 1 (docs/rtid-tui.md §2.5 PINNED): a SEPARATE gRPC
+	// listener that serves the read-only AdminService (Snapshot /
+	// TailEvents / Status). Default localhost:8443 — admin is
+	// loopback-only by default. Empty string disables admin (no second
+	// listener constructed). TLS for admin is plaintext only in Phase
+	// 1; the existing --tls-cert / --tls-key apply only to --listen.
+	adminListen := flag.String("admin-listen", "localhost:8443", "AdminService gRPC listen address (read-only TUI / rti-top backend); empty disables")
 	logDir := flag.String("log-dir", "", "directory for per-federation event log files (empty = require explicit set)")
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFormat := flag.String("log-format", "json", "log format: json|text")
@@ -107,7 +114,7 @@ func main() {
 		runReplayMain(logger, *replayInput, *logDir)
 		return
 	case "server", "":
-		runServerMain(logger, *listen, *metricsListen, *logDir, *tlsCert, *tlsKey, *saveDir, *researchConfig)
+		runServerMain(logger, *listen, *adminListen, *metricsListen, *logDir, *tlsCert, *tlsKey, *saveDir, *researchConfig)
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
 		os.Exit(2)
@@ -154,7 +161,7 @@ func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
 // SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
-func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, tlsKey, saveDir, researchConfigPath string) {
+func runServerMain(logger *slog.Logger, listen, adminListen, metricsListen, logDir, tlsCert, tlsKey, saveDir, researchConfigPath string) {
 	if logDir == "" {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
 	}
@@ -179,6 +186,7 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, 
 
 	srv, err := newRTID(rtidConfig{
 		ListenAddr:        listen,
+		AdminListenAddr:   adminListen,
 		MetricsListenAddr: metricsListen,
 		LogDir:            logDir,
 		Logger:            logger,
@@ -384,6 +392,16 @@ type rtidConfig struct {
 	LogDir            string
 	Logger            *slog.Logger
 
+	// AdminListenAddr is the bind address for the read-only
+	// AdminService gRPC server (rtid-TUI Phase 1 — docs/rtid-tui.md
+	// §2.5 PINNED). Default localhost:8443 in main.go's flag binding.
+	// Empty string disables admin (no second listener / server is
+	// constructed). Plaintext only in Phase 1 — TLSConfig DOES NOT
+	// apply here; mTLS / RBAC for admin are deferred. Production
+	// deployments that need network-exposed admin should front it
+	// with a reverse proxy + ACL.
+	AdminListenAddr string
+
 	// TLSConfig, when non-nil, enables server-side TLS on the gRPC
 	// listener. nil keeps the listener insecure (the default for
 	// local/dev workloads). Construct via buildServerTLS or by hand
@@ -414,19 +432,24 @@ type rtidConfig struct {
 // rtid is the composed runtime: gRPC server + metrics handler + the
 // underlying core components. Construct via newRTID; run via Serve.
 type rtid struct {
-	cfg     rtidConfig
-	logger  *slog.Logger
-	fedMgr  *federation.Manager
-	declMgr core.DeclarationManagement
-	objReg  *object.Registry
-	syncMgr core.SyncCoordinator
-	ownMgr  core.OwnershipCoordinator
-	momMgr  core.ManagementObjectModel
-	ddmMgr  core.DataDistributionManagement
-	saveMgr core.SavepointCoordinator
-	multi   *eventlog.MultiplexWriter
-	outbox  *multiOutbox
-	grpcS   *stdgrpc.Server
+	cfg       rtidConfig
+	logger    *slog.Logger
+	startedAt time.Time
+	fedMgr    *federation.Manager
+	declMgr   core.DeclarationManagement
+	objReg    *object.Registry
+	syncMgr   core.SyncCoordinator
+	ownMgr    core.OwnershipCoordinator
+	momMgr    core.ManagementObjectModel
+	ddmMgr    core.DataDistributionManagement
+	saveMgr   core.SavepointCoordinator
+	timeMgr   core.TimeManager
+	multi     *eventlog.MultiplexWriter
+	outbox    *multiOutbox
+	grpcS     *stdgrpc.Server
+	// adminS is the dedicated AdminService gRPC server bound to
+	// cfg.AdminListenAddr. nil when admin is disabled.
+	adminS  *stdgrpc.Server
 	metrics *metricsHandler
 	foms    *fomRepository
 }
@@ -619,23 +642,71 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		multiplexSeqSource(multi),
 	)
 
+	// rtid-TUI Phase 1: AdminService gRPC server. Bound to
+	// cfg.AdminListenAddr — a SEPARATE listener so admin traffic does
+	// not contend with federate traffic on --listen, and the cfg.TLSConfig
+	// (server-side TLS for federates) does NOT apply (Phase 1 admin is
+	// plaintext only; production deployments front it with a reverse
+	// proxy + ACL when network-exposed). Empty AdminListenAddr means
+	// admin is disabled — adminS stays nil and Serve skips the
+	// listener.
+	startedAt := time.Now()
+	var adminGS *stdgrpc.Server
+	if cfg.AdminListenAddr != "" {
+		adminGS = stdgrpc.NewServer()
+		if err := grpcsvc.RegisterAdminService(adminGS, grpcsvc.AdminOptions{
+			Federations:  fedMgr,
+			Declarations: declMgr,
+			Sync:         syncMgr,
+			Ownership:    ownMgr,
+			DDM:          ddmMgr,
+			Savepoint:    saveMgr,
+			MOM:          momMgr,
+			// Time manager is composed inside the federation runtime
+			// today via cmd/rtid only when timed-demo / pingpong-demo
+			// modes run. Server mode currently does not stand up a
+			// time.Manager — the TimeService is exposed when wired,
+			// otherwise nil. The AdminService handler is nil-safe so
+			// the time section is simply elided. A follow-up patch
+			// composing time.Manager in server mode (out of scope for
+			// Phase 1) will thread it here.
+			Time:      nil,
+			Objects:   objReg,
+			Outbox:    outbox,
+			EventLog:  multi,
+			Version:   rtidVersion(),
+			StartedAt: startedAt,
+		}); err != nil {
+			return nil, fmt.Errorf("rtid: admin service register: %w", err)
+		}
+	}
+
 	return &rtid{
-		cfg:     cfg,
-		logger:  cfg.Logger,
-		fedMgr:  fedMgr,
-		declMgr: declMgr,
-		objReg:  objReg,
-		syncMgr: syncMgr,
-		ownMgr:  ownMgr,
-		momMgr:  momMgr,
-		ddmMgr:  ddmMgr,
-		saveMgr: saveMgr,
-		multi:   multi,
-		outbox:  outbox,
-		grpcS:   gs,
-		metrics: metrics,
-		foms:    foms,
+		cfg:       cfg,
+		logger:    cfg.Logger,
+		startedAt: startedAt,
+		fedMgr:    fedMgr,
+		declMgr:   declMgr,
+		objReg:    objReg,
+		syncMgr:   syncMgr,
+		ownMgr:    ownMgr,
+		momMgr:    momMgr,
+		ddmMgr:    ddmMgr,
+		saveMgr:   saveMgr,
+		multi:     multi,
+		outbox:    outbox,
+		grpcS:     gs,
+		adminS:    adminGS,
+		metrics:   metrics,
+		foms:      foms,
 	}, nil
+}
+
+// rtidVersion returns the build version used in the AdminService
+// Status / Snapshot responses. Cut-1 returns a static literal; a
+// future build flow can override via -ldflags injection.
+func rtidVersion() string {
+	return "rtid-cut2"
 }
 
 // ddmFilterAdapter bridges the core.DataDistributionManagement API
@@ -686,6 +757,12 @@ func (a ddmFilterAdapter) SubscribersForUpdate(
 
 // Serve runs the gRPC + metrics listeners until ctx is canceled. Returns
 // the first non-graceful error from either listener.
+//
+// rtid-TUI Phase 1: when r.adminS is non-nil, also binds a third
+// listener on cfg.AdminListenAddr serving the read-only AdminService.
+// Admin is plaintext only — the cfg.TLSConfig set by --tls-cert
+// does NOT apply (separate listener; production deployments add an
+// ACL via mTLS or a reverse proxy when network-exposed).
 func (r *rtid) Serve(ctx context.Context) error {
 	gln, err := net.Listen("tcp", r.cfg.ListenAddr)
 	if err != nil {
@@ -696,22 +773,44 @@ func (r *rtid) Serve(ctx context.Context) error {
 		_ = gln.Close()
 		return err
 	}
+	var aln net.Listener
+	if r.adminS != nil {
+		aln, err = net.Listen("tcp", r.cfg.AdminListenAddr)
+		if err != nil {
+			_ = gln.Close()
+			_ = mln.Close()
+			return err
+		}
+	}
 
-	r.logger.Info("rtid serving", "grpc", gln.Addr().String(), "metrics", mln.Addr().String())
+	logArgs := []any{"grpc", gln.Addr().String(), "metrics", mln.Addr().String()}
+	if aln != nil {
+		logArgs = append(logArgs, "admin", aln.Addr().String())
+		r.logger.Info("rtid: admin gRPC listening (plaintext, read-only)", "addr", aln.Addr().String())
+	}
+	r.logger.Info("rtid serving", logArgs...)
 
 	metricsSrv := &http.Server{
 		Handler:           r.metrics,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	errCh := make(chan error, 2)
+	// Channel sized for the worst case: federate gRPC + metrics +
+	// admin gRPC.
+	errCh := make(chan error, 3)
 	go func() { errCh <- r.grpcS.Serve(gln) }()
 	go func() { errCh <- metricsSrv.Serve(mln) }()
+	if r.adminS != nil {
+		go func() { errCh <- r.adminS.Serve(aln) }()
+	}
 
 	select {
 	case <-ctx.Done():
 		r.logger.Info("rtid shutting down", "cause", ctx.Err())
 		r.grpcS.GracefulStop()
+		if r.adminS != nil {
+			r.adminS.GracefulStop()
+		}
 		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = metricsSrv.Shutdown(shutCtx)
 		shutCancel()
@@ -720,6 +819,9 @@ func (r *rtid) Serve(ctx context.Context) error {
 	case err := <-errCh:
 		_ = gln.Close()
 		_ = mln.Close()
+		if aln != nil {
+			_ = aln.Close()
+		}
 		_ = r.multi.Close()
 		if errors.Is(err, http.ErrServerClosed) || errors.Is(err, stdgrpc.ErrServerStopped) {
 			return nil
