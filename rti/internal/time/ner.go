@@ -252,7 +252,10 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 	ext := extOf(m)
 	for {
 		snap := m.regulatingSnapshot(fed)
-		lbts := LBTS(snap)
+		// Strategy hook: default LBTSStrategy delegates to the package
+		// LBTS function so behavior is unchanged. New(opts) installs
+		// defaultLBTS{} when Options.LBTSStrategy is nil.
+		lbts := m.opts.LBTSStrategy.LBTS(snap)
 
 		// Materialise candidates under ext.mu, then release before any
 		// I/O. D-2: never iterate a map without sorting downstream.
@@ -286,11 +289,21 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 		// currentTime advance can unblock further peers.
 		fired := false
 		for _, c := range cands {
-			d := decideGrant(c.mode, c.current, c.req, lbts, solePending)
-			if !d.fire {
+			// Strategy hook: default GrantStrategy delegates to the
+			// package decideGrant function so behavior is unchanged.
+			// New(opts) installs defaultGrant{} when
+			// Options.GrantStrategy is nil.
+			d := m.opts.GrantStrategy.DecideGrant(GrantContext{
+				Mode:        c.mode,
+				CurrentTime: c.current,
+				Requested:   c.req,
+				LBTS:        lbts,
+				SolePending: solePending,
+			})
+			if !d.Fire {
 				continue
 			}
-			if err := m.emitGrant(ctx, fed, c.h, d.time, d.clearPending); err != nil {
+			if err := m.emitGrant(ctx, fed, c.h, d.Time, d.ClearPending); err != nil {
 				return err
 			}
 			fired = true
