@@ -332,13 +332,16 @@ Manager fills in its share of the snapshot.
 1. **Approach (§2.1)**: PINNED 2026-05-05 — **(B) separate `rti-top`
    binary** + AdminService gRPC. Optional Phase-2 follow-up: a thin
    `rtid --tui` wrapper that spawns `rti-top` against the local socket.
-2. **Pull vs push (§2.2)**: OPEN. Default proposal: pull-only Phase 1;
-   revisit if 1Hz overhead is measurable. (TailEvents is streaming
-   regardless — that's the only push channel Phase 1 ships.)
-3. **TUI library (§2.3)**: OPEN. Default proposal: bubbletea +
-   lipgloss + bubbles. Drives Phase-2 work; not Phase-1 blocker.
-4. **Default refresh rate (§2.4)**: OPEN. Default proposal: 1Hz,
-   configurable in [100ms, 60s]. Phase-2 setting.
+2. **Pull vs push (§2.2)**: PINNED 2026-05-05 — pull-only Phase 2.
+   `Snapshot` polled at the configured refresh rate; `TailEvents` is
+   streaming (server-stream), the one push channel that ships now.
+   Revisit only if measurement shows 1Hz overhead matters.
+3. **TUI library (§2.3)**: PINNED 2026-05-05 — bubbletea +
+   lipgloss + bubbles (Charm). Adds 4–5 transitive deps; worth it
+   for the MVU pattern + community + active maintenance.
+4. **Default refresh rate (§2.4)**: PINNED 2026-05-05 — 1Hz default,
+   configurable via key in [100ms, 60s] range. Familiar `top`-style
+   ergonomics; tail values cover both fast-debug and remote-WAN.
 5. **Out-of-scope reaffirmation**: PINNED 2026-05-05 — read-only
    Phase 1. AdminService exposes Snapshot / TailEvents / Status
    only; no `KillFederate`, no `ForceResign`, no `DrainOutbox`,
