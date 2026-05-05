@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
@@ -15,14 +16,19 @@ import (
 // crash-on-overflow contract). Subscribe registers the channel and
 // returns the read side + a cancel func that unregisters and closes.
 //
-// Concurrency: a single RWMutex guards the subscriber table. Send takes
-// a read lock + does a non-blocking channel send; Subscribe/cancel take
-// the write lock. The per-federate channel is goroutine-safe by Go's
-// channel semantics.
+// Concurrency: the subscriber table is held in an atomic.Pointer so
+// the hot Send path is a single atomic load + map lookup with no
+// mutex acquire. Subscribe / cancel serialize on writeMu, build a
+// fresh map (copy-on-write) with the mutation applied, and Store the
+// new pointer. Concurrent readers see either the pre- or post-write
+// snapshot atomically. Tuned for the production read-mostly profile
+// (one Subscribe per federate at join, N Sends per fanout). The
+// per-federate channel itself is goroutine-safe by Go's channel
+// semantics.
 type multiOutbox struct {
-	mu          sync.RWMutex
-	subscribers map[fedHandleKey]chan core.OutboundEvent
-	bufferSize  int
+	subs       atomic.Pointer[map[fedHandleKey]chan core.OutboundEvent]
+	writeMu    sync.Mutex
+	bufferSize int
 }
 
 type fedHandleKey struct {
@@ -37,10 +43,10 @@ func newMultiOutbox(bufferSize int) *multiOutbox {
 	if bufferSize < 1 {
 		bufferSize = 1
 	}
-	return &multiOutbox{
-		subscribers: map[fedHandleKey]chan core.OutboundEvent{},
-		bufferSize:  bufferSize,
-	}
+	m := &multiOutbox{bufferSize: bufferSize}
+	empty := map[fedHandleKey]chan core.OutboundEvent{}
+	m.subs.Store(&empty)
+	return m
 }
 
 // Send implements core.Outbox. The federate's channel is bounded; on a
@@ -51,9 +57,8 @@ func newMultiOutbox(bufferSize int) *multiOutbox {
 // established its outbound stream yet, which is a normal startup window
 // rather than a crash condition.
 func (m *multiOutbox) Send(_ context.Context, fed core.FederationName, h core.FederateHandle, evt core.OutboundEvent) error {
-	m.mu.RLock()
-	ch, ok := m.subscribers[fedHandleKey{fed: fed, h: h}]
-	m.mu.RUnlock()
+	subs := *m.subs.Load()
+	ch, ok := subs[fedHandleKey{fed: fed, h: h}]
 	if !ok {
 		return nil
 	}
@@ -79,23 +84,38 @@ func (m *multiOutbox) Send(_ context.Context, fed core.FederationName, h core.Fe
 // the request context.
 func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan core.OutboundEvent, func() error, error) {
 	key := fedHandleKey{fed: fed, h: h}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, dup := m.subscribers[key]; dup {
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
+	current := *m.subs.Load()
+	if _, dup := current[key]; dup {
 		return nil, nil, fmt.Errorf("rtid: subscriber already registered for federation %q federate %d", fed, h)
 	}
 	ch := make(chan core.OutboundEvent, m.bufferSize)
-	m.subscribers[key] = ch
+	next := make(map[fedHandleKey]chan core.OutboundEvent, len(current)+1)
+	for k, v := range current {
+		next[k] = v
+	}
+	next[key] = ch
+	m.subs.Store(&next)
 
 	var cancelOnce sync.Once
 	cancel := func() error {
 		cancelOnce.Do(func() {
-			m.mu.Lock()
-			defer m.mu.Unlock()
-			if existing, ok := m.subscribers[key]; ok && existing == ch {
-				delete(m.subscribers, key)
-				close(ch)
+			m.writeMu.Lock()
+			defer m.writeMu.Unlock()
+			cur := *m.subs.Load()
+			existing, ok := cur[key]
+			if !ok || existing != ch {
+				return
 			}
+			next := make(map[fedHandleKey]chan core.OutboundEvent, len(cur)-1)
+			for k, v := range cur {
+				if k != key {
+					next[k] = v
+				}
+			}
+			m.subs.Store(&next)
+			close(ch)
 		})
 		return nil
 	}
