@@ -87,6 +87,11 @@ type model struct {
 	federate  int    // index into selected federation's federates
 	filter    string // /-filter substring; empty = show-all
 	filtering bool   // filter input mode
+	wireSort  int    // wire view sort column index (commit 3)
+
+	// --- time view sparkline state (commit 3) ---
+	// timeHistory[fedName][handle] = recent current_time samples (ring).
+	timeHistory map[string]map[uint64]*timeRing
 }
 
 // initialModel builds a fresh model. The first Status response seeds
@@ -104,6 +109,7 @@ func initialModel(ctx context.Context, cli *client.Client, st *rtiv1.StatusRespo
 			RtidVersion:   st.GetRtidVersion(),
 			UptimeSeconds: st.GetUptimeSeconds(),
 		},
+		timeHistory: map[string]map[uint64]*timeRing{},
 	}
 }
 
@@ -153,6 +159,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastErr = nil
 		if v.resp != nil {
 			m.last = v.resp
+			m.recordTimeHistory(v.resp)
 		}
 		return m, nil
 
@@ -195,6 +202,28 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "f", "F":
 		m.view = viewFederations
+		return m, nil
+	case "t", "T":
+		// T from any view → Time advance view for the selected
+		// federation (or first federation if none selected yet).
+		if m.selFed == "" {
+			feds := m.filteredFederations()
+			if len(feds) > 0 {
+				m.selFed = feds[m.fedIdx].GetName()
+			}
+		}
+		m.view = viewTime
+		return m, nil
+	case "w", "W":
+		// W from any view → Wire stats view (cross-federation table).
+		m.view = viewWire
+		return m, nil
+	case "s", "S":
+		// In Wire view S cycles sort column. Outside Wire view S is
+		// a no-op in commit 3 (events filter takes S in commit 4).
+		if m.view == viewWire {
+			m.wireSort = (m.wireSort + 1) % wireSortColumnCount
+		}
 		return m, nil
 	case "o", "O":
 		// O = drilldown into the highlighted federation. The §3.1
@@ -256,7 +285,7 @@ func (m *model) escape() (tea.Model, tea.Cmd) {
 	switch m.view {
 	case viewFederateDetail:
 		m.view = viewDrilldown
-	case viewDrilldown:
+	case viewDrilldown, viewTime, viewWire:
 		m.view = viewFederations
 	}
 	return m, nil
@@ -271,12 +300,14 @@ func (m *model) moveSelection(delta int) {
 			return
 		}
 		m.fedIdx = clamp(m.fedIdx+delta, 0, len(feds)-1)
-	case viewDrilldown, viewFederateDetail:
+	case viewDrilldown, viewFederateDetail, viewTime:
 		fed := m.findFederation(m.selFed)
 		if fed == nil {
 			return
 		}
 		m.federate = clamp(m.federate+delta, 0, max(0, len(fed.GetFederates())-1))
+	case viewWire:
+		// scroll-only — no per-row selection in wire view.
 	}
 }
 

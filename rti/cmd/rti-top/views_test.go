@@ -82,6 +82,7 @@ func newTestModel(t *testing.T) *model {
 	st := &rtiv1.StatusResponse{RtidVersion: "rtid-cut2", UptimeSeconds: 1}
 	m := initialModel(ctx, nil, st, 1*time.Second)
 	m.last = fixtureSnapshot()
+	m.recordTimeHistory(m.last)
 	m.width = 120
 	m.height = 40
 	return m
@@ -165,6 +166,73 @@ func TestEnterDrilldownAndEscape(t *testing.T) {
 	m.escape()
 	if m.view != viewFederations {
 		t.Fatalf("after second esc: view=%v want %v", m.view, viewFederations)
+	}
+}
+
+func TestRender_TimeView(t *testing.T) {
+	m := newTestModel(t)
+	m.selFed = "demo"
+	out := m.renderTimeView()
+	for _, want := range []string{
+		"FEDERATE", "CURRENT", "PENDING", "LOOKAHEAD", "CONTRIBUTION", "STATE",
+		"LBTS:", "Time history",
+		"generator", "buffer", "processor",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("renderTimeView missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+}
+
+func TestRender_WireView(t *testing.T) {
+	m := newTestModel(t)
+	out := m.renderWireView()
+	for _, want := range []string{
+		"FEDERATION", "FEDERATE", "SENDS", "RECVS", "DROPS", "Q-DEPTH", "Q-MAX",
+		"Total:", "Outbox utilization",
+		"demo", "buffer",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("renderWireView missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+}
+
+func TestSparkline_DegenerateAndNonDegenerate(t *testing.T) {
+	if got := renderSparkline(nil); !strings.Contains(got, "no samples") {
+		t.Errorf("nil → %q; want placeholder", got)
+	}
+	if got := renderSparkline([]float64{1, 1, 1}); got == "" {
+		t.Errorf("flat input rendered empty")
+	}
+	got := renderSparkline([]float64{0, 0.25, 0.5, 0.75, 1.0})
+	if len(got) == 0 {
+		t.Errorf("non-flat input rendered empty")
+	}
+}
+
+func TestWireSort_CyclesColumns(t *testing.T) {
+	m := newTestModel(t)
+	for i := 0; i < wireSortColumnCount*2; i++ {
+		_ = m.renderWireView()
+		m.wireSort = (m.wireSort + 1) % wireSortColumnCount
+	}
+}
+
+func TestTimeRing_Order(t *testing.T) {
+	r := &timeRing{}
+	for i := 0; i < timeRingCap+5; i++ {
+		r.push(float64(i))
+	}
+	v := r.values()
+	if len(v) != timeRingCap {
+		t.Fatalf("len=%d want %d", len(v), timeRingCap)
+	}
+	if v[0] != 5 {
+		t.Errorf("oldest=%v want 5 (eviction order)", v[0])
+	}
+	if v[len(v)-1] != float64(timeRingCap+4) {
+		t.Errorf("newest=%v want %v", v[len(v)-1], timeRingCap+4)
 	}
 }
 

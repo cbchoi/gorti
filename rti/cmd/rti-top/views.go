@@ -13,6 +13,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -84,6 +85,10 @@ func (m *model) renderFooter() string {
 		hint = " Esc back  ↑↓ select federate  Enter inspect  T time view  W wire view  I events "
 	case viewFederateDetail:
 		hint = " Esc back  T time view  W wire view  I events  Q quit "
+	case viewTime:
+		hint = " Esc back  W wire view  R refresh-rate  Q quit "
+	case viewWire:
+		hint = " S sort  R refresh-rate  Esc back  Q quit "
 	}
 	if m.filtering {
 		hint = fmt.Sprintf(" filter: %s_  (Enter accept  Esc cancel) ", m.filter)
@@ -91,9 +96,9 @@ func (m *model) renderFooter() string {
 	return styleFooter.Width(m.width).Render(hint)
 }
 
-// renderBody dispatches to the per-view body renderer. Commit 2 has
-// only the first three views populated; T / W / I-bound views fall
-// back to a "coming soon" placeholder until commits 3 + 4 land.
+// renderBody dispatches to the per-view body renderer. Commit 3
+// adds Time + Wire; the Events view (I-bound) still falls back to
+// the placeholder until commit 4.
 func (m *model) renderBody() string {
 	switch m.view {
 	case viewFederations:
@@ -102,6 +107,10 @@ func (m *model) renderBody() string {
 		return m.renderDrilldownView()
 	case viewFederateDetail:
 		return m.renderFederateDetailView()
+	case viewTime:
+		return m.renderTimeView()
+	case viewWire:
+		return m.renderWireView()
 	}
 	return styleDim.Render("  (view not yet implemented in this commit)")
 }
@@ -273,6 +282,248 @@ func (m *model) renderFederateDetailView() string {
 	// (Ownership pending — Phase 1 SnapshotResponse does not carry
 	// per-federate pending ownership lists; documented in README.)
 	return b.String()
+}
+
+// --- Time view (§3.3) -------------------------------------------------------
+
+// renderTimeView is the per-federate time-advance view with the
+// ASCII sparkline of recent current_time samples.
+func (m *model) renderTimeView() string {
+	fed := m.findFederation(m.selFed)
+	if fed == nil {
+		// In the case where the user hits T from the Federations view
+		// without drilling down, default to the first federation.
+		feds := m.filteredFederations()
+		if len(feds) > 0 {
+			fed = feds[0]
+		}
+	}
+	if fed == nil {
+		return styleDim.Render("  (no federation)")
+	}
+	cols := []string{"FEDERATE", "CURRENT", "PENDING", "LOOKAHEAD", "CONTRIBUTION", "STATE"}
+	widths := []int{16, 9, 9, 10, 13, 30}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf(" Time advance — Federation: %s\n\n", fed.GetName()))
+	b.WriteString(styleColHead.Render(formatRow(cols, widths)))
+	b.WriteString("\n")
+	for _, f := range fed.GetFederates() {
+		row := []string{
+			f.GetName(),
+			fmt.Sprintf("%.2f", f.GetCurrentTime()),
+			formatPending1(f),
+			fmt.Sprintf("%.2f", f.GetLookahead()),
+			formatContribution(f),
+			timeStateString(f),
+		}
+		b.WriteString(formatRow(row, widths))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf(" LBTS: %s   (= min over regulators of current+lookahead)\n",
+		formatLBTS(fed.GetTime().GetLbts())))
+	b.WriteString("\n")
+	b.WriteString(" Time history (last 30 ticks, normalized):\n")
+	perFed := m.timeHistory[fed.GetName()]
+	for _, f := range fed.GetFederates() {
+		ring := perFed[f.GetHandle()]
+		var spark string
+		if ring != nil {
+			spark = renderSparkline(ring.values())
+		}
+		b.WriteString(fmt.Sprintf("   %-14s %s\n", f.GetName(), spark))
+	}
+	return b.String()
+}
+
+// timeStateString summarises a federate's time-management state for
+// the rightmost column of the Time view.
+func timeStateString(f *rtiv1.FederateSnapshot) string {
+	if f.PendingRequestTime != nil {
+		return fmt.Sprintf("awaiting LBTS≥%.2f", *f.PendingRequestTime)
+	}
+	if f.GetRegulating() && f.GetConstrained() {
+		return "idle (no request)"
+	}
+	if f.GetConstrained() {
+		return "constrained-only"
+	}
+	return "observer"
+}
+
+// --- Wire view (§3.4) -------------------------------------------------------
+
+// wireSortColumn enumerates the sortable columns in the Wire view,
+// cycled via `S`.
+const (
+	wireSortFederation = iota
+	wireSortFederate
+	wireSortSends
+	wireSortRecvs
+	wireSortDrops
+	wireSortQueue
+	wireSortColumnCount
+)
+
+func wireSortLabel(c int) string {
+	switch c {
+	case wireSortFederation:
+		return "FEDERATION"
+	case wireSortFederate:
+		return "FEDERATE"
+	case wireSortSends:
+		return "SENDS"
+	case wireSortRecvs:
+		return "RECVS"
+	case wireSortDrops:
+		return "DROPS"
+	case wireSortQueue:
+		return "Q-DEPTH"
+	}
+	return "?"
+}
+
+// wireRow is one (federation, federate) row for the Wire view.
+type wireRow struct {
+	fed   string
+	name  string
+	sends uint64
+	recvs uint64
+	drops uint64
+	q     uint32
+	qmax  uint32
+}
+
+// renderWireView is the top-style table across every (federation,
+// federate). Phase 2 reports cumulative totals only — the rate-window
+// selector (1s|5s|1m) is documented as a Phase-3 follow-up in the
+// README.
+func (m *model) renderWireView() string {
+	rows := []wireRow{}
+	for _, fed := range m.last.GetFederations() {
+		for _, f := range fed.GetFederates() {
+			rows = append(rows, wireRow{
+				fed:   fed.GetName(),
+				name:  f.GetName(),
+				sends: f.GetUpdatesSent() + f.GetInteractionsSent(),
+				recvs: f.GetReflectionsReceived() + f.GetInteractionsReceived(),
+				drops: f.GetDropsTotal(),
+				q:     f.GetOutboxQueueDepth(),
+				qmax:  f.GetOutboxCapacity(),
+			})
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		switch m.wireSort {
+		case wireSortFederation:
+			if rows[i].fed != rows[j].fed {
+				return rows[i].fed < rows[j].fed
+			}
+			return rows[i].name < rows[j].name
+		case wireSortFederate:
+			return rows[i].name < rows[j].name
+		case wireSortSends:
+			return rows[i].sends > rows[j].sends
+		case wireSortRecvs:
+			return rows[i].recvs > rows[j].recvs
+		case wireSortDrops:
+			return rows[i].drops > rows[j].drops
+		case wireSortQueue:
+			return rows[i].q > rows[j].q
+		}
+		return false
+	})
+
+	cols := []string{"FEDERATION", "FEDERATE", "SENDS", "RECVS", "DROPS", "Q-DEPTH", "Q-MAX"}
+	widths := []int{16, 14, 9, 9, 8, 9, 8}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf(" Wire stats — totals since federate join — sort: %s\n\n",
+		wireSortLabel(m.wireSort)))
+	b.WriteString(styleColHead.Render(formatRow(cols, widths)))
+	b.WriteString("\n")
+	var totalSends, totalRecvs, totalDrops uint64
+	var maxQ, maxQMax uint32
+	for _, r := range rows {
+		totalSends += r.sends
+		totalRecvs += r.recvs
+		totalDrops += r.drops
+		if r.q > maxQ {
+			maxQ = r.q
+		}
+		if r.qmax > maxQMax {
+			maxQMax = r.qmax
+		}
+		b.WriteString(formatRow([]string{
+			r.fed, r.name,
+			fmt.Sprintf("%d", r.sends),
+			fmt.Sprintf("%d", r.recvs),
+			fmt.Sprintf("%d", r.drops),
+			fmt.Sprintf("%d", r.q),
+			fmt.Sprintf("%d", r.qmax),
+		}, widths))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf(" Total: %d sends  %d recvs  %d drops\n",
+		totalSends, totalRecvs, totalDrops))
+	b.WriteString(fmt.Sprintf(" Outbox utilization (max q across federates): %s\n",
+		renderUtilizationBar(maxQ, maxQMax)))
+	b.WriteString(styleDim.Render(
+		"   note: Phase 2 reports cumulative totals; rate windows (1s|5s|1m) deferred to Phase 3.\n"))
+	return b.String()
+}
+
+// renderSparkline draws an 8-level ASCII sparkline of the given
+// samples normalised to their min/max range. Empty input returns a
+// faint placeholder.
+func renderSparkline(vals []float64) string {
+	if len(vals) == 0 {
+		return styleDim.Render("(no samples yet)")
+	}
+	const blocks = "▁▂▃▄▅▆▇█"
+	min, max := vals[0], vals[0]
+	for _, v := range vals[1:] {
+		if v < min {
+			min = v
+		}
+		if v > max {
+			max = v
+		}
+	}
+	span := max - min
+	var b strings.Builder
+	for _, v := range vals {
+		var idx int
+		if span <= 0 {
+			idx = 0
+		} else {
+			idx = int(((v - min) / span) * float64(len(blocks)-1))
+			if idx < 0 {
+				idx = 0
+			}
+			if idx >= len(blocks) {
+				idx = len(blocks) - 1
+			}
+		}
+		b.WriteRune(rune(blocks[idx]))
+	}
+	return b.String()
+}
+
+// renderUtilizationBar draws a fixed-width 8-segment bar representing
+// q/qmax. Used by the Wire view's footer.
+func renderUtilizationBar(q, qmax uint32) string {
+	if qmax == 0 {
+		return styleDim.Render("n/a")
+	}
+	pct := float64(q) / float64(qmax)
+	if pct > 1 {
+		pct = 1
+	}
+	const segs = 8
+	on := int(pct * float64(segs))
+	bar := strings.Repeat("█", on) + strings.Repeat("░", segs-on)
+	return fmt.Sprintf("%s %d%%", bar, int(pct*100))
 }
 
 // --- helpers ----------------------------------------------------------------
