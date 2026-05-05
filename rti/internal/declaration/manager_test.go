@@ -316,3 +316,66 @@ func TestManager_SubscribersFor_EmptyAttrs_ReturnsEmpty(t *testing.T) {
 		t.Errorf("SubscribersFor(empty attrs) = %v, want []", got)
 	}
 }
+
+func TestManager_Snapshot_RecordsPubSubPerFederate(t *testing.T) {
+	t.Parallel()
+	mgr := New()
+	ctx := context.Background()
+
+	// fed:demo — federate 1 publishes class 7; federate 2 subscribes class 7
+	// + publishes interaction class 50; federate 3 subscribes interaction 50.
+	if err := mgr.PublishObjectClassAttributes(ctx, "demo", 1, 7, []core.AttributeHandle{2, 3}); err != nil {
+		t.Fatalf("PublishObjectClassAttributes: %v", err)
+	}
+	if err := mgr.SubscribeObjectClassAttributes(ctx, "demo", 2, 7, []core.AttributeHandle{2}); err != nil {
+		t.Fatalf("SubscribeObjectClassAttributes: %v", err)
+	}
+	if err := mgr.PublishInteractionClass(ctx, "demo", 2, 50); err != nil {
+		t.Fatalf("PublishInteractionClass: %v", err)
+	}
+	if err := mgr.SubscribeInteractionClass(ctx, "demo", 3, 50); err != nil {
+		t.Fatalf("SubscribeInteractionClass: %v", err)
+	}
+
+	snap := mgr.Snapshot("demo")
+
+	wantPub := []core.ObjectClassHandle{7}
+	if !reflect.DeepEqual(snap.PublishedObjectClasses, wantPub) {
+		t.Errorf("PublishedObjectClasses = %v, want %v", snap.PublishedObjectClasses, wantPub)
+	}
+	if got := len(snap.PerFederate); got != 3 {
+		t.Errorf("PerFederate len = %d, want 3", got)
+	}
+	if pf, ok := snap.PerFederate[1]; !ok {
+		t.Errorf("PerFederate[1] missing")
+	} else if !reflect.DeepEqual(pf.PublishedObjectClasses, []core.ObjectClassHandle{7}) {
+		t.Errorf("federate 1 PublishedObjectClasses = %v, want [7]", pf.PublishedObjectClasses)
+	}
+	if pf, ok := snap.PerFederate[2]; !ok {
+		t.Errorf("PerFederate[2] missing")
+	} else {
+		if !reflect.DeepEqual(pf.SubscribedObjectClasses, []core.ObjectClassHandle{7}) {
+			t.Errorf("federate 2 SubscribedObjectClasses = %v, want [7]", pf.SubscribedObjectClasses)
+		}
+		if !reflect.DeepEqual(pf.PublishedInteractionClasses, []core.InteractionClassHandle{50}) {
+			t.Errorf("federate 2 PublishedInteractionClasses = %v, want [50]", pf.PublishedInteractionClasses)
+		}
+	}
+	if pf, ok := snap.PerFederate[3]; !ok {
+		t.Errorf("PerFederate[3] missing")
+	} else if !reflect.DeepEqual(pf.SubscribedInteractionClasses, []core.InteractionClassHandle{50}) {
+		t.Errorf("federate 3 SubscribedInteractionClasses = %v, want [50]", pf.SubscribedInteractionClasses)
+	}
+}
+
+func TestManager_Snapshot_UnknownFederation_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	mgr := New()
+	snap := mgr.Snapshot("nope")
+	if len(snap.PublishedObjectClasses) != 0 {
+		t.Errorf("PublishedObjectClasses = %v, want empty", snap.PublishedObjectClasses)
+	}
+	if snap.PerFederate == nil || len(snap.PerFederate) != 0 {
+		t.Errorf("PerFederate = %v, want empty non-nil map", snap.PerFederate)
+	}
+}

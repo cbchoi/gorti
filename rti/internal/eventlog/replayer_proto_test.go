@@ -53,6 +53,7 @@ func (s *stubFederation) ResignFederation(_ context.Context, fed core.Federation
 func (s *stubFederation) List(_ context.Context) ([]core.FederationSummary, error) {
 	return nil, nil
 }
+func (s *stubFederation) Snapshot() []core.FederationRoster { return nil }
 
 // stubObjects is a minimal core.ObjectRegistry. Records every call;
 // returns a configurable next ObjectHandle.
@@ -106,6 +107,9 @@ func (s *stubObjects) SendInteraction(_ context.Context, fed core.FederationName
 	defer s.mu.Unlock()
 	s.interactCalls = append(s.interactCalls, interactCall{fed, p, c, params, ts})
 	return nil
+}
+func (s *stubObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {
+	return core.ObjectSnapshot{}
 }
 
 // buildProtoSourceLog appends one or more *rtiv1.Event records
@@ -798,6 +802,7 @@ func (e *errorFederation) ResignFederation(_ context.Context, _ core.FederationN
 func (e *errorFederation) List(_ context.Context) ([]core.FederationSummary, error) {
 	return nil, e.err
 }
+func (e *errorFederation) Snapshot() []core.FederationRoster { return nil }
 
 // errorObjects always returns err.
 type errorObjects struct {
@@ -812,6 +817,9 @@ func (e *errorObjects) UpdateAttributes(_ context.Context, _ core.FederationName
 }
 func (e *errorObjects) SendInteraction(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime) error {
 	return e.err
+}
+func (e *errorObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {
+	return core.ObjectSnapshot{}
 }
 
 // TestReplayer_Replay_PropagatesSourceReadError: an I/O failure on

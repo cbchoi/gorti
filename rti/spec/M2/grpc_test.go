@@ -41,6 +41,7 @@ func (s *stubFedStore) ResignFederation(_ context.Context, _ core.FederationName
 func (s *stubFedStore) List(_ context.Context) ([]core.FederationSummary, error) {
 	return s.listResp, s.listErr
 }
+func (s *stubFedStore) Snapshot() []core.FederationRoster { return nil }
 
 // TestSpec_M2_GRPC_Server_RequiresAllRequiredOptions: NewServer rejects
 // nil Federations / Declarations / Objects (Time may be nil at M2;
@@ -114,6 +115,9 @@ func (stubObjectRegistry) UpdateAttributes(_ context.Context, _ core.FederationN
 }
 func (stubObjectRegistry) SendInteraction(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime) error {
 	return errors.New("stub")
+}
+func (stubObjectRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
+	return core.ObjectSnapshot{}
 }
 
 // TestSpec_M2_GRPC_Register_AttachesAllServices is the integration check

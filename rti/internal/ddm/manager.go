@@ -645,6 +645,22 @@ func (m *Manager) InteractionSubscribersForSend(
 	return sortedFederateHandles(hits)
 }
 
+// Snapshot returns aggregate DDM state for the AdminService handler.
+// Phase 1 of the rtid-TUI plan: region count only — sufficient for the
+// drill-down view's "Region count: N (no DDM activity)" line. Read
+// under the manager RLock; cheap.
+func (m *Manager) Snapshot(fed core.FederationName) core.DDMSnapshot {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return core.DDMSnapshot{}
+	}
+	return core.DDMSnapshot{
+		RegionCount: uint32(len(st.regions)),
+	}
+}
+
 // sortedFederateHandles materializes a federate-handle set as a sorted
 // slice. Returns an empty (non-nil) slice for nil/empty input
 // (NFR-DET-1).

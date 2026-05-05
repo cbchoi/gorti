@@ -69,6 +69,17 @@ type multiRecipientState struct {
 	// scratch indefinitely under low-rate workloads. nil means no
 	// flush is pending; the first Send into an empty scratch arms it.
 	flushTimer *time.Timer
+	// dropsTotal counts events dropped because the batch channel was
+	// full at the moment Send / flushScratch tried to enqueue. Read by
+	// the AdminService Snapshot RPC; mutated only via atomic.AddUint64
+	// to avoid acquiring the recipient mutex on the overflow path.
+	// Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): exposed as
+	// FederateSnapshot.drops_total. The accumulator is the count of
+	// batched events lost (each batch may carry up to batchSize
+	// individual events), so on a full-channel drop we add len(batch)
+	// to the counter — that matches the per-event semantics callers
+	// expect from "drops_total".
+	dropsTotal uint64
 }
 
 // newMultiOutbox constructs an outbox where the per-federate batch
@@ -143,6 +154,11 @@ func (m *multiOutbox) Send(_ context.Context, fed core.FederationName, h core.Fe
 	case state.ch <- batch:
 		return nil
 	default:
+		// Per-recipient drop counter — atomic so we don't reacquire
+		// state.mu on the overflow path. The counter is in-event
+		// units (batched events lost), matching what the TUI's
+		// "drops_total" column reports.
+		atomic.AddUint64(&state.dropsTotal, uint64(len(batch)))
 		return fmt.Errorf("%w: federation %q federate %d", core.ErrFederateOverflow, fed, h)
 	}
 }
@@ -167,6 +183,8 @@ func (m *multiOutbox) flushScratch(state *multiRecipientState) {
 	select {
 	case state.ch <- batch:
 	default:
+		// Same counter as Send's overflow path.
+		atomic.AddUint64(&state.dropsTotal, uint64(len(batch)))
 	}
 }
 
@@ -245,6 +263,46 @@ func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h co
 		return nil
 	}
 	return state.ch, cancel, nil
+}
+
+// outboxSnapshotEntry is one (fed, handle) recipient's wire-stat
+// snapshot: the channel's queue depth + capacity + cumulative drops.
+// Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): consumed by the
+// AdminService Snapshot handler to populate FederateSnapshot.{outbox_*,
+// drops_total}.
+//
+// Atomic field reads + a single len/cap pair on the channel: cheap,
+// lock-free on the hot path of the underlying multiRecipientState
+// (the subscribers map is loaded via the existing atomic.Pointer and
+// no per-recipient mutex is acquired).
+type outboxSnapshotEntry struct {
+	Federation core.FederationName
+	Handle     core.FederateHandle
+	QueueDepth uint32
+	Capacity   uint32
+	DropsTotal uint64
+}
+
+// snapshot returns one outboxSnapshotEntry per active subscriber. The
+// hot Send path is unaffected: we acquire no per-recipient mutex (the
+// queue-depth read is len(channel), which Go documents as safe under
+// concurrent send/receive); we read dropsTotal via atomic.Load.
+//
+// The subscribers table is loaded via the existing atomic.Pointer, so
+// concurrent Subscribe/cancel sees a consistent in-flight snapshot.
+func (m *multiOutbox) snapshot() []outboxSnapshotEntry {
+	subs := *m.subs.Load()
+	out := make([]outboxSnapshotEntry, 0, len(subs))
+	for k, state := range subs {
+		out = append(out, outboxSnapshotEntry{
+			Federation: k.fed,
+			Handle:     k.h,
+			QueueDepth: uint32(len(state.ch)),
+			Capacity:   uint32(cap(state.ch)),
+			DropsTotal: atomic.LoadUint64(&state.dropsTotal),
+		})
+	}
+	return out
 }
 
 // Compile-time assertion that multiOutbox implements core.Outbox. The

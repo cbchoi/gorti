@@ -39,4 +39,34 @@ type SyncCoordinator interface {
 		h FederateHandle,
 		label string,
 	) error
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns the current sync-point state for a federation
+	// for the AdminService handler. The slice is sorted by label
+	// (deterministic).
+	Snapshot(fed FederationName) []SyncPointInfo
+}
+
+// SyncPointSnapshotState mirrors sync.SyncPointState in the core
+// package so the AdminService handler can consume it via the
+// SyncCoordinator interface.
+type SyncPointSnapshotState int
+
+const (
+	// SyncPointStateUnknown — no such sync point.
+	SyncPointStateUnknown SyncPointSnapshotState = iota
+	// SyncPointStateAnnounced — registered, awaiting Achieve calls.
+	SyncPointStateAnnounced
+	// SyncPointStateAchieved — every required federate has called
+	// Achieve.
+	SyncPointStateAchieved
+)
+
+// SyncPointInfo is one sync point's per-federation state.
+type SyncPointInfo struct {
+	Label           string
+	State           SyncPointSnapshotState
+	RequiredHandles []FederateHandle
+	AchievedHandles []FederateHandle
 }

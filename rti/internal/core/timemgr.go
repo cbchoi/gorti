@@ -42,4 +42,37 @@ type TimeManager interface {
 	// FlushQueueRequest — IEEE 1516.1-2010 §8.13. Cut 2 (M7).
 	// Drains the federate's TSO queue up to t and emits a grant when complete.
 	FlushQueueRequest(ctx context.Context, fed FederationName, h FederateHandle, t LogicalTime) error
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns the per-federation time-management view for
+	// the AdminService handler. Read-only; cheap.
+	Snapshot(fed FederationName) TimeSnapshot
+}
+
+// TimeFederateState bundles one federate's time-management snapshot.
+// Phase 1 of the rtid-TUI plan: consumed by the AdminService handler
+// to populate FederateSnapshot.{current_time, pending_request_time,
+// lookahead, regulating, constrained}.
+type TimeFederateState struct {
+	Handle              FederateHandle
+	CurrentTime         LogicalTime
+	HasPendingRequest   bool
+	PendingRequestTime  LogicalTime
+	Lookahead           LogicalTime
+	Regulating          bool
+	Constrained         bool
+}
+
+// TimeSnapshot is the federation-wide time view for the AdminService
+// Snapshot RPC. The TUI's "Time advance" view (docs/rtid-tui.md §3.3)
+// consumes the LBTS + per-federate detail.
+type TimeSnapshot struct {
+	// LBTS is the current Lower Bound on Time Stamp over the
+	// regulating set. PositiveInfinity when no federate is regulating.
+	LBTS LogicalTime
+
+	// Federates carries every federate that has any time-management
+	// state recorded for the federation, in handle-sorted order.
+	Federates []TimeFederateState
 }

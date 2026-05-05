@@ -43,4 +43,26 @@ type FederationStore interface {
 	ResignFederation(ctx context.Context, fed FederationName, h FederateHandle, action ResignAction) error
 
 	List(ctx context.Context) ([]FederationSummary, error)
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns the federation roster (mode + per-federate
+	// handles + names) for the AdminService handler. The federations
+	// slice is sorted by name; each FederationRoster.Federates slice
+	// is sorted by handle. Returns an empty slice when no federations
+	// are active.
+	Snapshot() []FederationRoster
+}
+
+// FederateInfo is one (handle, name) entry on a FederationRoster.
+type FederateInfo struct {
+	Handle FederateHandle
+	Name   string
+}
+
+// FederationRoster is one federation's roster snapshot.
+type FederationRoster struct {
+	Name      FederationName
+	Mode      Mode
+	Federates []FederateInfo
 }

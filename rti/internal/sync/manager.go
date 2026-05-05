@@ -286,6 +286,47 @@ func (m *Manager) Achieve(
 	return nil
 }
 
+// Snapshot returns every sync point's per-federation state in label-
+// sorted order. Phase 1 of the rtid-TUI plan: consumed by the
+// AdminService handler. Read under the manager RLock; cheap.
+func (m *Manager) Snapshot(fed core.FederationName) []core.SyncPointInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return nil
+	}
+	labels := make([]string, 0, len(st.points))
+	for l := range st.points {
+		labels = append(labels, l)
+	}
+	slices.Sort(labels)
+	out := make([]core.SyncPointInfo, 0, len(labels))
+	for _, l := range labels {
+		sp := st.points[l]
+		out = append(out, core.SyncPointInfo{
+			Label:           l,
+			State:           syncStateToCore(sp.state),
+			RequiredHandles: sortedHandles(sp.required),
+			AchievedHandles: sortedHandles(sp.achieved),
+		})
+	}
+	return out
+}
+
+// syncStateToCore translates the package-internal SyncPointState
+// constants into the core mirror values exposed via the interface.
+func syncStateToCore(s SyncPointState) core.SyncPointSnapshotState {
+	switch s {
+	case StateAnnounced:
+		return core.SyncPointStateAnnounced
+	case StateAchieved:
+		return core.SyncPointStateAchieved
+	default:
+		return core.SyncPointStateUnknown
+	}
+}
+
 // QueryState returns the state of (fed, label). StateUnknown if no such
 // sync point exists. Used by tests + MOM (M11).
 func (m *Manager) QueryState(fed core.FederationName, label string) SyncPointState {

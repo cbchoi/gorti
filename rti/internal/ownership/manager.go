@@ -665,6 +665,24 @@ func (m *Manager) IsOwnedBy(
 	return ok && owner == h
 }
 
+// Snapshot returns aggregate ownership counts for the AdminService
+// handler. Phase 1 of the rtid-TUI plan: counts only — per-attribute
+// ownership history is explicitly excluded by docs/rtid-tui.md §3.2.
+// Read under the manager RLock; cheap.
+func (m *Manager) Snapshot(fed core.FederationName) core.OwnershipSnapshot {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return core.OwnershipSnapshot{}
+	}
+	return core.OwnershipSnapshot{
+		OwnedAttributesCount: uint32(len(st.owners)),
+		PendingDivestsCount:  uint32(len(st.pendingDivests)),
+		PendingAcquiresCount: uint32(len(st.pendingAcquires)),
+	}
+}
+
 // cloneAttrs makes a defensive copy of an attribute slice.
 func cloneAttrs(attrs []core.AttributeHandle) []core.AttributeHandle {
 	if len(attrs) == 0 {

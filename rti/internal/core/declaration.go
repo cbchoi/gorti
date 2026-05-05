@@ -140,4 +140,28 @@ type DeclarationManagement interface {
 		fed FederationName,
 		cls InteractionClassHandle,
 	) []FederateHandle
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns a point-in-time view of the per-federation
+	// pub/sub state for the AdminService handler. Read-only; cheap.
+	Snapshot(fed FederationName) DeclarationSnapshot
+}
+
+// DeclarationFederatePubSub bundles one federate's class-level pub/sub
+// sets. Same shape as declaration.FederatePubSub; declared in core so
+// the AdminService handler can consume it via the interface.
+type DeclarationFederatePubSub struct {
+	Handle                       FederateHandle
+	PublishedObjectClasses       []ObjectClassHandle
+	SubscribedObjectClasses      []ObjectClassHandle
+	PublishedInteractionClasses  []InteractionClassHandle
+	SubscribedInteractionClasses []InteractionClassHandle
+}
+
+// DeclarationSnapshot is the federation-wide pub/sub rollup the
+// AdminService handler aggregates per Snapshot RPC call.
+type DeclarationSnapshot struct {
+	PublishedObjectClasses []ObjectClassHandle
+	PerFederate            map[FederateHandle]DeclarationFederatePubSub
 }

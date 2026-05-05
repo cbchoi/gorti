@@ -112,4 +112,26 @@ type SavepointCoordinator interface {
 	// QueryRestoreState returns the current restore state for
 	// (fed, label).
 	QueryRestoreState(fed FederationName, label string) RestoreState
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns the current save / restore state for a
+	// federation for the AdminService handler. When no save or restore
+	// is in progress the returned states are SaveStateIdle /
+	// SaveRestoreIdle respectively.
+	Snapshot(fed FederationName) SavepointSnapshot
+}
+
+// SavepointSnapshot is the federation-wide save/restore status for
+// the AdminService Snapshot RPC.
+type SavepointSnapshot struct {
+	// SaveLabel is the label of the save in progress; empty when
+	// SaveState is SaveStateIdle.
+	SaveLabel string
+	SaveState SaveState
+
+	// RestoreLabel is the label of the restore in progress; empty
+	// when RestoreState is SaveRestoreIdle.
+	RestoreLabel string
+	RestoreState RestoreState
 }

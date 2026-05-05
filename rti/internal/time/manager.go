@@ -312,6 +312,116 @@ func (m *Manager) fireTimeStateChanged(ctx context.Context, fed core.FederationN
 	m.opts.OnTimeStateChanged(ctx, fed, h, snap.regulating, snap.constrained, snap.lookahead, 0)
 }
 
+// Snapshot returns the per-federation time-management view for the
+// AdminService handler. Phase 1 of the rtid-TUI plan
+// (docs/rtid-tui.md): consumed to populate the LBTS + per-federate
+// {current_time, pending_request_time, lookahead, regulating,
+// constrained} columns.
+//
+// Read order: stateStore (for regulating / constrained / lookahead),
+// then the nerStore extension (for currentTime / pendingNER /
+// requestedTime). Each lock is acquired briefly and released; the
+// resulting snapshot is consistent per-federate but not strictly
+// atomic across the two stores — sufficient for a read-only TUI.
+func (m *Manager) Snapshot(fed core.FederationName) core.TimeSnapshot {
+	// Step 1: collect every federate that has any state recorded for
+	// fed, plus its regulation flags + lookahead.
+	type rawState struct {
+		regulating  bool
+		constrained bool
+		lookahead   core.LogicalTime
+	}
+	collected := map[core.FederateHandle]rawState{}
+	m.states.mu.Lock()
+	for k, st := range m.states.states {
+		if k.fed != fed {
+			continue
+		}
+		collected[k.h] = rawState{
+			regulating:  st.regulating,
+			constrained: st.constrained,
+			lookahead:   st.lookahead,
+		}
+	}
+	m.states.mu.Unlock()
+
+	// Step 2: enrich with currentTime + pending state from the
+	// extension store, and add any federate present only there.
+	ext := extOf(m)
+	ext.mu.Lock()
+	defer ext.mu.Unlock()
+	for k, ns := range ext.states {
+		if k.fed != fed {
+			continue
+		}
+		if _, ok := collected[k.h]; !ok {
+			collected[k.h] = rawState{}
+		}
+		_ = ns
+	}
+
+	handles := make([]core.FederateHandle, 0, len(collected))
+	for h := range collected {
+		handles = append(handles, h)
+	}
+	// sort ascending (deterministic).
+	for i := 1; i < len(handles); i++ {
+		for j := i; j > 0 && handles[j-1] > handles[j]; j-- {
+			handles[j-1], handles[j] = handles[j], handles[j-1]
+		}
+	}
+
+	out := core.TimeSnapshot{
+		Federates: make([]core.TimeFederateState, 0, len(handles)),
+	}
+	for _, h := range handles {
+		raw := collected[h]
+		fs := core.TimeFederateState{
+			Handle:      h,
+			Lookahead:   raw.lookahead,
+			Regulating:  raw.regulating,
+			Constrained: raw.constrained,
+		}
+		if ns := ext.states[federateKey{fed: fed, h: h}]; ns != nil {
+			fs.CurrentTime = ns.currentTime
+			fs.HasPendingRequest = ns.pendingNER
+			fs.PendingRequestTime = ns.requestedTime
+		}
+		out.Federates = append(out.Federates, fs)
+	}
+
+	// Step 3: compute LBTS using the same regulator-snapshot logic as
+	// nextMessageRequest. We can't call regulatingSnapshot inside the
+	// ext.mu critical section (it takes ext.mu itself), so build the
+	// regulator slice inline from `collected` + the already-loaded
+	// pending state.
+	var regSet []RegulatingFederate
+	for _, h := range handles {
+		raw := collected[h]
+		if !raw.regulating {
+			continue
+		}
+		floor := core.LogicalTime(0)
+		if ns := ext.states[federateKey{fed: fed, h: h}]; ns != nil {
+			floor = ns.currentTime
+			if ns.pendingNER && float64(ns.requestedTime) > float64(floor) {
+				floor = ns.requestedTime
+			}
+		}
+		regSet = append(regSet, RegulatingFederate{
+			Handle:    h,
+			Time:      floor,
+			Lookahead: raw.lookahead,
+		})
+	}
+	if m.opts.LBTSStrategy != nil {
+		out.LBTS = m.opts.LBTSStrategy.LBTS(regSet)
+	} else {
+		out.LBTS = LBTS(regSet)
+	}
+	return out
+}
+
 // Compile-time assertion that Manager implements core.TimeManager.
 // Removing any required method fails the build at this line.
 var _ core.TimeManager = (*Manager)(nil)

@@ -326,6 +326,37 @@ type FederationAttributes struct {
 	FOMModuleNames  []string
 }
 
+// Snapshot returns aggregate per-federate counters for the
+// AdminService handler. Phase 1 of the rtid-TUI plan
+// (docs/rtid-tui.md): consumed to populate FederateSnapshot.{updates_sent,
+// interactions_sent, reflections_received, interactions_received}.
+//
+// Counter reads use atomic.LoadUint32 so concurrent Increment* calls
+// don't tear; the manager RLock guards the map walk only.
+func (m *Manager) Snapshot(fed core.FederationName) core.MOMSnapshot {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return core.MOMSnapshot{
+			PerFederate: map[core.FederateHandle]core.MOMFederateCounters{},
+		}
+	}
+	out := core.MOMSnapshot{
+		PerFederate: make(map[core.FederateHandle]core.MOMFederateCounters, len(st.federates)),
+	}
+	for h, fs := range st.federates {
+		out.PerFederate[h] = core.MOMFederateCounters{
+			Handle:               h,
+			UpdatesSent:          atomic.LoadUint32(&fs.updatesSent),
+			InteractionsSent:     atomic.LoadUint32(&fs.interactionsSent),
+			ReflectionsReceived:  atomic.LoadUint32(&fs.reflectionsReceived),
+			InteractionsReceived: atomic.LoadUint32(&fs.interactionsReceived),
+		}
+	}
+	return out
+}
+
 func (m *Manager) QueryFederationAttributes(fed core.FederationName) (FederationAttributes, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
