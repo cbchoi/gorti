@@ -37,11 +37,21 @@ type SubscribersResolver func(
 // Required: Outbox. Optional: EventLog (cut-1: nil silently drops;
 // proto Event variants for ownership transitions are not yet defined),
 // Subscribers (cut-1: nil disables fan-out — see SubscribersResolver
-// doc).
+// doc), Strategy (Phase 2b: nil → defaultNegotiation, see strategy.go).
 type Options struct {
 	Outbox      core.Outbox
 	EventLog    core.EventLog
 	Subscribers SubscribersResolver
+
+	// Strategy is the OPTIONAL algorithm hook for ownership negotiation
+	// policy. Nil → the package default (defaultNegotiation, which
+	// picks the lowest-handle candidate — preserving cut-1 behavior).
+	// See strategy.go for the interface and
+	// docs/research-platform.md §6.3 for the design context.
+	//
+	// Phase 2b swap-point: production wires nil and gets unchanged
+	// behavior; researchers wire an alternative impl through this slot.
+	Strategy NegotiationStrategy
 }
 
 // Manager owns per-federation, per-(object, attribute) ownership
@@ -116,6 +126,12 @@ type pendingAcquire struct {
 func New(opts Options) (*Manager, error) {
 	if opts.Outbox == nil {
 		return nil, errors.New("ownership.New: Options.Outbox is required")
+	}
+	// Strategy slot defaults to the package-default impl. nil → default
+	// preserves existing call-site behavior; researchers override via
+	// Options. See strategy.go.
+	if opts.Strategy == nil {
+		opts.Strategy = defaultNegotiation{}
 	}
 	return &Manager{
 		opts: opts,
@@ -292,27 +308,44 @@ func (m *Manager) recordPendingDivest(
 	var completions []pendingCompletion
 	for _, a := range attrs {
 		st.pendingDivests[ownershipKey{obj: obj, attr: a}] = pendingDivest{owner: owner, tag: tagCopy}
-		if first := st.firstQueuedAcquirerLocked(obj, a); first != core.InvalidFederateHandle {
-			completions = append(completions, pendingCompletion{attr: a, acquirer: first})
+		// Strategy hook: ask the policy which queued acquirer (if any)
+		// wins the opportunistic transfer. Default picks the
+		// lowest-handle candidate — equivalent to the prior
+		// firstQueuedAcquirerLocked helper.
+		candidates := st.queuedAcquirersLocked(obj, a)
+		winner := m.opts.Strategy.SelectAcquirer(SelectAcquirerContext{
+			Phase:      PhaseNegotiatedDivest,
+			Federation: fed,
+			Object:     obj,
+			Attribute:  a,
+			Owner:      owner,
+			Candidates: candidates,
+		})
+		if winner != core.InvalidFederateHandle {
+			completions = append(completions, pendingCompletion{attr: a, acquirer: winner})
 		}
 	}
 	return completions, nil
 }
 
-// firstQueuedAcquirerLocked returns the lowest-handle federate with a
-// pending Acquire for (obj, attr), or InvalidFederateHandle if none.
-// Caller MUST hold m.mu.
-func (st *federationState) firstQueuedAcquirerLocked(obj core.ObjectHandle, attr core.AttributeHandle) core.FederateHandle {
-	var first core.FederateHandle
+// queuedAcquirersLocked returns every federate with a pending Acquire
+// for (obj, attr), in ascending handle order. Empty slice when none
+// are queued. Caller MUST hold m.mu.
+//
+// Used by the strategy-driven swap-points (recordPendingDivest,
+// DivestIfWanted) to assemble the SelectAcquirerContext.Candidates
+// list. The default NegotiationStrategy picks Candidates[0] —
+// equivalent to the prior firstQueuedAcquirerLocked helper.
+func (st *federationState) queuedAcquirersLocked(obj core.ObjectHandle, attr core.AttributeHandle) []core.FederateHandle {
+	var out []core.FederateHandle
 	for ak := range st.pendingAcquires {
 		if ak.obj != obj || ak.attr != attr {
 			continue
 		}
-		if first == core.InvalidFederateHandle || ak.acquirer < first {
-			first = ak.acquirer
-		}
+		out = append(out, ak.acquirer)
 	}
-	return first
+	slices.Sort(out)
+	return out
 }
 
 // fanoutAssumption emits requestAttributeOwnershipAssumption to
@@ -364,9 +397,27 @@ func (m *Manager) Acquire(
 		k := ownershipKey{obj: obj, attr: a}
 		ak := acquireKey{obj: obj, attr: a, acquirer: acquirer}
 		if pd, ok := st.pendingDivests[k]; ok {
-			// Owner has already divested — the transfer fires now.
-			readyAttrs = append(readyAttrs, ready{attr: a, owner: pd.owner})
-			continue
+			// Strategy hook: owner has already divested — does the
+			// just-arrived acquirer win the transfer right now? The
+			// candidate set is the singleton {acquirer}; the default
+			// selects it (cut-1 "first acquirer to call Acquire after
+			// divest wins" rule). A market-based strategy might queue
+			// instead by returning InvalidFederateHandle.
+			winner := m.opts.Strategy.SelectAcquirer(SelectAcquirerContext{
+				Phase:      PhaseAcquire,
+				Federation: fed,
+				Object:     obj,
+				Attribute:  a,
+				Owner:      pd.owner,
+				Candidates: []core.FederateHandle{acquirer},
+			})
+			if winner == acquirer {
+				// The transfer fires now.
+				readyAttrs = append(readyAttrs, ready{attr: a, owner: pd.owner})
+				continue
+			}
+			// Strategy declined immediate transfer; fall through to the
+			// queue-the-acquire path so the request stays pending.
 		}
 		if _, dup := st.pendingAcquires[ak]; dup {
 			m.mu.Unlock()
@@ -550,17 +601,21 @@ func (m *Manager) DivestIfWanted(
 	}
 	var transfers []wanted
 	for _, a := range attrs {
-		// Find the lowest-handle queued acquirer for this attribute.
-		var first core.FederateHandle
-		for ak := range st.pendingAcquires {
-			if ak.obj == obj && ak.attr == a {
-				if first == core.InvalidFederateHandle || ak.acquirer < first {
-					first = ak.acquirer
-				}
-			}
-		}
-		if first != core.InvalidFederateHandle {
-			transfers = append(transfers, wanted{attr: a, acquirer: first})
+		// Strategy hook: ask the policy which queued acquirer (if any)
+		// wins the opportunistic transfer. Default picks the
+		// lowest-handle candidate; an empty queue yields
+		// InvalidFederateHandle and the attribute stays with the owner.
+		candidates := st.queuedAcquirersLocked(obj, a)
+		winner := m.opts.Strategy.SelectAcquirer(SelectAcquirerContext{
+			Phase:      PhaseDivestIfWanted,
+			Federation: fed,
+			Object:     obj,
+			Attribute:  a,
+			Owner:      owner,
+			Candidates: candidates,
+		})
+		if winner != core.InvalidFederateHandle {
+			transfers = append(transfers, wanted{attr: a, acquirer: winner})
 		}
 	}
 	m.mu.Unlock()
