@@ -47,6 +47,14 @@ type Manager struct {
 	fed map[core.FederationName]*federationState
 }
 
+// Compile-time assertion: *Manager satisfies core.DeclarationManagement.
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.6) introduced the interface; production keeps using *Manager. The
+// "no abstraction layer" stance from the cut-2 docs/idd.md §3 note has
+// been revised in the same Phase 1 commit (research reachability over
+// purity).
+var _ core.DeclarationManagement = (*Manager)(nil)
+
 // New constructs a Manager. No external dependencies — Manager is pure.
 func New() *Manager {
 	return &Manager{

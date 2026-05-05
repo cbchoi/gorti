@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
@@ -80,8 +79,14 @@ type objectInstance struct {
 // events; W4 wires a real log in production). All other fields are
 // required.
 type Options struct {
-	EventLog     core.EventLog
-	Declarations *declaration.Manager
+	EventLog core.EventLog
+	// Declarations consumes the four lookup queries the registry hot
+	// path needs (SubscribersFor / PublishersFor and the interaction
+	// twins). Phase 1 of the research-platform refactor
+	// (docs/research-platform.md §5.6) typed this as
+	// core.DeclarationManagement so alternative declaration impls flow
+	// through unchanged.
+	Declarations core.DeclarationManagement
 	Outbox       core.Outbox
 	Codec        core.CodecFactory
 	FOMs         core.FOMRepository
@@ -201,7 +206,7 @@ type DDMRegionHandle uint64
 // relaxation; nil => events silently dropped), Codec (cut-1; attribute
 // bytes pass through as-is until M2 wiring lands the production codec).
 func New(opts Options) (*Registry, error) {
-	if opts.Declarations == nil {
+	if isNilInterface(opts.Declarations) {
 		return nil, errors.New("object: Options.Declarations is required")
 	}
 	if opts.Outbox == nil {

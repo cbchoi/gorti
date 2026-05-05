@@ -110,7 +110,7 @@ const perfParameterHandle = core.ParameterHandle(1)
 type runtime struct {
 	clock   core.Clock
 	fedMgr  *federation.Manager
-	declMgr *declaration.Manager
+	declMgr core.DeclarationManagement
 	objReg  *object.Registry
 	outbox  *perfOutbox
 }

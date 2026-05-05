@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
@@ -35,15 +34,20 @@ import (
 // embeds UnimplementedDeclarationServiceServer for forward compatibility
 // (gRPC v1.65+ requirement; protoc-gen-go-grpc emits a deprecation
 // otherwise).
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.6): the handler binds to core.DeclarationManagement instead of
+// the concrete *declaration.Manager so alternative implementations can
+// be wired in at the composition root.
 type declarationService struct {
 	rtiv1.UnimplementedDeclarationServiceServer
-	decl *declaration.Manager
+	decl core.DeclarationManagement
 }
 
 // newDeclarationService constructs the service handler bound to the
 // given declaration manager. Constructor only — no validation of decl
 // (the composer in server.go owns that).
-func newDeclarationService(decl *declaration.Manager) *declarationService {
+func newDeclarationService(decl core.DeclarationManagement) *declarationService {
 	return &declarationService{decl: decl}
 }
 

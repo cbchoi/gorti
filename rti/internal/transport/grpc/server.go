@@ -8,7 +8,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
@@ -51,10 +50,14 @@ type Options struct {
 	// Federations handles FederationService RPCs.
 	Federations core.FederationStore
 
-	// Declarations handles DeclarationService RPCs. Concrete type, not
-	// interface, because declaration manager has no abstraction layer
-	// (per docs/idd.md §3 — pure local component).
-	Declarations *declaration.Manager
+	// Declarations handles DeclarationService RPCs.
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.6): typed as core.DeclarationManagement so alternative
+	// implementations may be wired here. The cut-2 docs/idd.md §3 note
+	// that called declaration "pure local component, no abstraction
+	// layer" has been revised in the same Phase 1 commit.
+	Declarations core.DeclarationManagement
 
 	// Objects handles ObjectService + StreamService data-plane RPCs.
 	Objects core.ObjectRegistry

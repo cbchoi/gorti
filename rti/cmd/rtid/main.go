@@ -392,7 +392,7 @@ type rtid struct {
 	cfg     rtidConfig
 	logger  *slog.Logger
 	fedMgr  *federation.Manager
-	declMgr *declaration.Manager
+	declMgr core.DeclarationManagement
 	objReg  *object.Registry
 	syncMgr core.SyncCoordinator
 	ownMgr  core.OwnershipCoordinator

@@ -618,6 +618,20 @@ Handle 0 is reserved as "invalid"; first valid handle is 1.
         +------------+              +------------+
 ```
 
+> **Note (2026-05-05, research-platform Phase 1):** the cut-2 stance —
+> that `declaration.Manager` is "a pure local component with no
+> abstraction layer", so consumers (object.Registry, the gRPC handler,
+> rtid composition) bind directly to the concrete type — has been
+> revised. Phase 1 of the research-platform refactor
+> (docs/research-platform.md §5.6) introduces
+> `core.DeclarationManagement` and switches every consumer from
+> `*declaration.Manager` to the interface. The production
+> `declaration.Manager` remains the only implementation in tree;
+> alternative implementations (Phase 4) plug in via the same
+> `Options{}.Declarations` field. The frozen-paths rule (§4) still
+> protects `rti/internal/core/` against agent-branch edits — the
+> interface addition is an orchestrator-controlled change.
+
 Rules:
 
 | Package | May import |
