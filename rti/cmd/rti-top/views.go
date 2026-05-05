@@ -169,7 +169,10 @@ func (m *model) renderDrilldownView() string {
 		fed.GetName(), modeString(fed.GetMode()), fed.GetFederatesJoined()))
 	b.WriteString("  " + styleColHead.Render(formatRow(cols, widths)))
 	b.WriteString("\n")
-	feds := fed.GetFederates()
+	// Phase 3 — §5 filter polish: in the drilldown view, the `/` filter
+	// substring matches against federate names within the current
+	// federation. Empty filter shows all federates.
+	feds := filterFederates(fed.GetFederates(), m.filter)
 	if len(feds) == 0 {
 		b.WriteString(styleDim.Render("  (no federates joined)\n"))
 	}
@@ -650,7 +653,21 @@ func (m *model) renderEventsView() string {
 	b.WriteString(fmt.Sprintf(" Event log — federation: %s — tail%s\n\n", m.events.fed, pause))
 	m.events.mu.Lock()
 	defer m.events.mu.Unlock()
-	if len(m.events.lines) == 0 {
+	// Phase 3 — §5 filter polish: apply the `F`-key filter to the
+	// in-memory tail (case-insensitive substring on the rendered
+	// line). Empty filter → no-op.
+	lines := m.events.lines
+	if m.filter != "" {
+		needle := strings.ToLower(m.filter)
+		filtered := make([]string, 0, len(lines))
+		for _, ln := range lines {
+			if strings.Contains(strings.ToLower(ln), needle) {
+				filtered = append(filtered, ln)
+			}
+		}
+		lines = filtered
+	}
+	if len(lines) == 0 {
 		b.WriteString(styleDim.Render("   (waiting for events …)\n"))
 	} else {
 		// Show the last N lines that fit in the body height. The body
@@ -661,10 +678,10 @@ func (m *model) renderEventsView() string {
 			visible = 5
 		}
 		from := 0
-		if len(m.events.lines) > visible {
-			from = len(m.events.lines) - visible
+		if len(lines) > visible {
+			from = len(lines) - visible
 		}
-		for _, ln := range m.events.lines[from:] {
+		for _, ln := range lines[from:] {
 			b.WriteString("  ")
 			b.WriteString(ln)
 			b.WriteString("\n")
@@ -863,6 +880,24 @@ func joinHandles(hs []uint64) string {
 		parts[i] = fmt.Sprintf("%d", h)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// filterFederates returns the subset of feds whose name matches the
+// given substring filter (case-insensitive). Empty filter returns
+// the input unchanged. rtid-TUI Phase 3 — §5 filter polish; used by
+// the drilldown + federate-detail views.
+func filterFederates(feds []*rtiv1.FederateSnapshot, filter string) []*rtiv1.FederateSnapshot {
+	if filter == "" {
+		return feds
+	}
+	needle := strings.ToLower(filter)
+	out := make([]*rtiv1.FederateSnapshot, 0, len(feds))
+	for _, f := range feds {
+		if strings.Contains(strings.ToLower(f.GetName()), needle) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // formatAge renders a federate's age (now - joinUnix) for the

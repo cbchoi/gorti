@@ -409,7 +409,14 @@ func (m *model) moveSelection(delta int) {
 		if fed == nil {
 			return
 		}
-		m.federate = clamp(m.federate+delta, 0, max(0, len(fed.GetFederates())-1))
+		// Phase 3 — §5 filter polish: clamp against the FILTERED
+		// federate slice in the drilldown view so up/down navigation
+		// matches what the user sees on screen.
+		feds := fed.GetFederates()
+		if m.view == viewDrilldown {
+			feds = filterFederates(feds, m.filter)
+		}
+		m.federate = clamp(m.federate+delta, 0, max(0, len(feds)-1))
 	case viewWire:
 		// scroll-only — no per-row selection in wire view.
 	case viewEvents:

@@ -485,6 +485,101 @@ func TestRender_WireColumnPicker_PopupVisible(t *testing.T) {
 	}
 }
 
+// TestFilter_FederationsView verifies the `/` filter substring
+// matches against federation names in the landing view (Phase 2
+// behavior preserved + smoketested).
+func TestFilter_FederationsView(t *testing.T) {
+	m := newTestModel(t)
+	m.filter = "bench"
+	feds := m.filteredFederations()
+	if len(feds) != 1 || feds[0].GetName() != "benchmark" {
+		t.Errorf("filter=bench → %v, want [benchmark]", feds)
+	}
+	m.filter = "DEMO"
+	feds = m.filteredFederations()
+	if len(feds) != 1 || feds[0].GetName() != "demo" {
+		t.Errorf("filter=DEMO (case-insensitive) → %v, want [demo]", feds)
+	}
+	m.filter = "nope"
+	if got := len(m.filteredFederations()); got != 0 {
+		t.Errorf("filter=nope → %d, want 0", got)
+	}
+}
+
+// TestFilter_DrilldownFiltersFederates verifies the drilldown view
+// filters federate rows by the `/` substring (Phase 3 — §5).
+func TestFilter_DrilldownFiltersFederates(t *testing.T) {
+	m := newTestModel(t)
+	m.selFed = "demo"
+	m.view = viewDrilldown
+	m.filter = "buf"
+	out := m.renderDrilldownView()
+	if !strings.Contains(out, "buffer") {
+		t.Errorf("filter=buf missing buffer:\n%s", out)
+	}
+	if strings.Contains(out, "generator") {
+		t.Errorf("filter=buf shouldn't show generator:\n%s", out)
+	}
+	if strings.Contains(out, "processor") {
+		t.Errorf("filter=buf shouldn't show processor:\n%s", out)
+	}
+}
+
+// TestFilter_WireViewFilters_AcrossFedAndFederate verifies the wire
+// view filters by federation OR federate substring.
+func TestFilter_WireViewFilters_AcrossFedAndFederate(t *testing.T) {
+	m := newTestModel(t)
+	// Filter by federation name → only benchmark federation rows.
+	m.filter = "bench"
+	out := m.renderWireView()
+	if strings.Contains(out, "generator") {
+		t.Errorf("wire filter=bench leaked generator:\n%s", out)
+	}
+	// Filter by federate name → only buffer rows.
+	m.filter = "buffer"
+	out = m.renderWireView()
+	if !strings.Contains(out, "buffer") {
+		t.Errorf("wire filter=buffer missing buffer:\n%s", out)
+	}
+	if strings.Contains(out, "generator") {
+		t.Errorf("wire filter=buffer leaked generator:\n%s", out)
+	}
+}
+
+// TestFilter_EventsView verifies the F-key filter narrows the event
+// log tail by substring on the rendered line.
+func TestFilter_EventsView(t *testing.T) {
+	m := newTestModel(t)
+	m.events = &eventsState{
+		fed:   "demo",
+		lines: []string{"seq=1 InteractionSent", "seq=2 ReceiveInteraction", "seq=3 ObjectUpdate"},
+	}
+	m.view = viewEvents
+	m.filter = "Receive"
+	out := m.renderEventsView()
+	if !strings.Contains(out, "ReceiveInteraction") {
+		t.Errorf("filter=Receive missing ReceiveInteraction:\n%s", out)
+	}
+	if strings.Contains(out, "seq=1 InteractionSent") {
+		t.Errorf("filter=Receive shouldn't show seq=1:\n%s", out)
+	}
+}
+
+// TestFilter_EscClears verifies Esc cancels filter input + clears the
+// substring (so the table snaps back to all-rows).
+func TestFilter_EscClears(t *testing.T) {
+	m := newTestModel(t)
+	m.filtering = true
+	m.filter = "anything"
+	m.handleKey(teaKey("esc"))
+	if m.filtering {
+		t.Errorf("Esc didn't exit filtering mode")
+	}
+	if m.filter != "" {
+		t.Errorf("Esc didn't clear filter; filter=%q", m.filter)
+	}
+}
+
 // TestRecordWireRates_PopulatesRing exercises the snapshot →
 // per-row ring path the model's Update step uses.
 func TestRecordWireRates_PopulatesRing(t *testing.T) {
