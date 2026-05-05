@@ -378,6 +378,16 @@ func (st *federationState) nextOutboundSeqLocked() uint64 {
 	return st.nextOutboundSeq
 }
 
+// nextOutboundSeqRangeLocked reserves n consecutive seq numbers and
+// returns the first. Used by fanout paths to amortize the lock acquire
+// across an N-subscriber delivery batch. Caller must hold st.mu.
+func (st *federationState) nextOutboundSeqRangeLocked(n int) uint64 {
+	st.nextOutboundSeq++
+	start := st.nextOutboundSeq
+	st.nextOutboundSeq += uint64(n - 1)
+	return start
+}
+
 // Compile-time assertion that Registry implements core.ObjectRegistry.
 var _ core.ObjectRegistry = (*Registry)(nil)
 

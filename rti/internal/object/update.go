@@ -198,11 +198,39 @@ func sortedAttrHandles(attrs map[core.AttributeHandle][]byte) []core.AttributeHa
 // unchanged — the FR-DDM-6 zero-cost contract.
 func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, inst *objectInstance, attrs map[core.AttributeHandle][]byte, updateAttrs []core.AttributeHandle, ts *core.LogicalTime) {
 	subs := r.subscribersForReflect(ctx, fed, inst, updateAttrs)
+	// Hoist: see fanoutReceive for the rationale (single defensive
+	// copy + shared inner proto + batched seq allocation).
+	pb := &rtiv1.ReflectAttributeValues{
+		ObjectHandle:      uint64(inst.handle),
+		ObjectClassHandle: uint64(inst.cls),
+		Attributes:        copyAttrMap(attrs),
+	}
+	if ts != nil {
+		v := float64(*ts)
+		pb.LogicalTime = &v
+	}
+	nSeq := 0
+	for _, sub := range subs {
+		if sub != producer {
+			nSeq++
+		}
+	}
+	if nSeq == 0 {
+		return
+	}
+	st.mu.Lock()
+	startSeq := st.nextOutboundSeqRangeLocked(nSeq)
+	st.mu.Unlock()
+	seq := startSeq
 	for _, sub := range subs {
 		if sub == producer {
 			continue
 		}
-		evt := r.buildReflectEvent(st, inst, attrs, ts)
+		evt := &outboundEvent{pb: &rtiv1.FederateEvent{
+			Seq:   seq,
+			Event: &rtiv1.FederateEvent_Reflect{Reflect: pb},
+		}}
+		seq++
 		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
 		if r.opts.OnReflectDelivered != nil {
 			r.opts.OnReflectDelivered(fed, sub)
@@ -241,25 +269,6 @@ func (r *Registry) subscribersForReflect(ctx context.Context, fed core.Federatio
 	}
 	slices.Sort(out)
 	return out
-}
-
-func (r *Registry) buildReflectEvent(st *federationState, inst *objectInstance, attrs map[core.AttributeHandle][]byte, ts *core.LogicalTime) *outboundEvent {
-	st.mu.Lock()
-	seq := st.nextOutboundSeqLocked()
-	st.mu.Unlock()
-	pb := &rtiv1.ReflectAttributeValues{
-		ObjectHandle:      uint64(inst.handle),
-		ObjectClassHandle: uint64(inst.cls),
-		Attributes:        copyAttrMap(attrs),
-	}
-	if ts != nil {
-		v := float64(*ts)
-		pb.LogicalTime = &v
-	}
-	return &outboundEvent{pb: &rtiv1.FederateEvent{
-		Seq:   seq,
-		Event: &rtiv1.FederateEvent_Reflect{Reflect: pb},
-	}}
 }
 
 // copyAttrMap defensively copies the attribute map so per-subscriber

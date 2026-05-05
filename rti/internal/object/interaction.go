@@ -89,22 +89,13 @@ func (r *Registry) producerPublishesInteraction(ctx context.Context, fed core.Fe
 
 func (r *Registry) fanoutReceive(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, cls core.InteractionClassHandle, params map[core.ParameterHandle][]byte, ts *core.LogicalTime) {
 	subs := r.opts.Declarations.InteractionSubscribersFor(ctx, fed, cls)
-	for _, sub := range subs {
-		if sub == producer {
-			continue
-		}
-		evt := r.buildReceiveEvent(st, cls, params, ts)
-		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
-		if r.opts.OnInteractionDelivered != nil {
-			r.opts.OnInteractionDelivered(fed, sub)
-		}
-	}
-}
-
-func (r *Registry) buildReceiveEvent(st *federationState, cls core.InteractionClassHandle, params map[core.ParameterHandle][]byte, ts *core.LogicalTime) *outboundEvent {
-	st.mu.Lock()
-	seq := st.nextOutboundSeqLocked()
-	st.mu.Unlock()
+	// Hoist the inner proto and the param-map defensive copy out of
+	// the per-subscriber loop. The producer's input map is copied once
+	// (so the producer can mutate post-call); the resulting map and
+	// the *ReceiveInteraction wrapping it are read-only from here on
+	// and shared by every per-subscriber FederateEvent. proto.Marshal
+	// does not mutate, so concurrent serialization across subscriber
+	// streams is safe.
 	pb := &rtiv1.ReceiveInteraction{
 		InteractionClassHandle: uint64(cls),
 		Parameters:             copyParamMap(params),
@@ -113,10 +104,35 @@ func (r *Registry) buildReceiveEvent(st *federationState, cls core.InteractionCl
 		v := float64(*ts)
 		pb.LogicalTime = &v
 	}
-	return &outboundEvent{pb: &rtiv1.FederateEvent{
-		Seq:   seq,
-		Event: &rtiv1.FederateEvent_Receive{Receive: pb},
-	}}
+	// Acquire a seq range once per fanout instead of once per
+	// subscriber to cut N-1 lock acquires from the hot path.
+	nSeq := 0
+	for _, sub := range subs {
+		if sub != producer {
+			nSeq++
+		}
+	}
+	if nSeq == 0 {
+		return
+	}
+	st.mu.Lock()
+	startSeq := st.nextOutboundSeqRangeLocked(nSeq)
+	st.mu.Unlock()
+	seq := startSeq
+	for _, sub := range subs {
+		if sub == producer {
+			continue
+		}
+		evt := &outboundEvent{pb: &rtiv1.FederateEvent{
+			Seq:   seq,
+			Event: &rtiv1.FederateEvent_Receive{Receive: pb},
+		}}
+		seq++
+		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		if r.opts.OnInteractionDelivered != nil {
+			r.opts.OnInteractionDelivered(fed, sub)
+		}
+	}
 }
 
 func copyParamMap(params map[core.ParameterHandle][]byte) map[uint64][]byte {
