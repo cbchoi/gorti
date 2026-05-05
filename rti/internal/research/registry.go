@@ -71,8 +71,11 @@ func NewRegistry() *Registry {
 // identical to today's hand-wired runtime.
 //
 // Phase-4 alts pre-registered here:
-//   - "max-projected" (time.lbts) — non-conservative max-of-projections
+//   - "max-projected" (time.lbts)  — non-conservative max-of-projections
 //     variant; preserves determinism.
+//   - "eager"         (time.grant) — fires every grant immediately at
+//     the requested time, ignoring LBTS; preserves determinism (the
+//     causality violation is correctness, not non-determinism).
 //
 // Adding a new alt is a one-liner here plus the alt_*.go file in the
 // owning package; see docs/research-platform-howto.md for the full
@@ -87,6 +90,7 @@ func Default() *Registry {
 	_ = r.RegisterLBTS("default", timepkg.DefaultLBTSStrategy())
 	_ = r.RegisterLBTS("max-projected", timepkg.MaxProjectedLBTSStrategy())
 	_ = r.RegisterGrant("default", timepkg.DefaultGrantStrategy())
+	_ = r.RegisterGrant("eager", timepkg.EagerGrantStrategy())
 	_ = r.RegisterNegotiation("default", ownership.DefaultNegotiationStrategy())
 	return r
 }
