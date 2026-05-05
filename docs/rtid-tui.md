@@ -89,6 +89,31 @@ overhead matters.
 **bubbles** (input/list/viewport widgets). Modern, well-maintained,
 fits the model.
 
+### 2.5 Admin listener — **PINNED: separate port**
+
+Pinned 2026-05-05. The `AdminService` binds to a dedicated port via
+a new `--admin-listen` flag, separate from the federate-facing
+`--listen :8442` and the existing Prometheus `--metrics-listen :9090`.
+
+**Default**: `--admin-listen localhost:8443`. Bound to `localhost`
+by default so admin RPCs are not exposed on the network unless the
+operator explicitly opts in (`--admin-listen 0.0.0.0:8443` for
+remote rti-top access). This matches the existing convention of the
+metrics endpoint and aligns with how etcd, envoy, kubernetes-apiserver,
+and Prometheus separate "control" from "data" ports.
+
+**Implementation**: `cmd/rtid/main.go` constructs a second
+`grpc.NewServer()` instance for the admin service, listens on the
+admin port, and registers the AdminService handler against it.
+Shutdown wires both servers into the existing SIGINT/SIGTERM signal
+handler.
+
+**Trade made**: ~30 lines of additional listener wiring +
+documentation surface for one more flag, in exchange for:
+independent TLS / ACL when mTLS lands (cut-3 backlog item),
+resource isolation (admin clients can't starve federate RPCs), and
+safer defaults for the future mutating-ops phase.
+
 ### 2.4 Refresh cadence
 
 | Option | Default | Trade |
@@ -321,10 +346,15 @@ Manager fills in its share of the snapshot.
    `tps`, `queue_depth`, `drops_total`, `age`) and the expanded view
    (identity + time + pub/sub + wire stats; collapsed-when-empty
    sections for save / ownership / DDM / sync). No additions.
+7. **Admin listener (§2.5)**: PINNED 2026-05-05 — separate port via
+   `--admin-listen` flag, default `localhost:8443`. Independent
+   `grpc.Server` instance from federate-facing `:8442`. Aligns with
+   existing `--metrics-listen :9090` convention.
 
-§7.1 + §7.6 are now pinned. Phase 1 (AdminService proto + handler +
-per-Manager Snapshot methods) is dispatchable. §7.2..§7.5 affect
-Phase 2 (the `rti-top` TUI itself) and can be pinned later.
+§7.1 + §7.6 + §7.7 are now pinned. Phase 1 (AdminService proto +
+handler + per-Manager Snapshot methods + admin listener wiring) is
+dispatchable. §7.2..§7.5 affect Phase 2 (the `rti-top` TUI itself)
+and can be pinned later.
 
 ---
 
