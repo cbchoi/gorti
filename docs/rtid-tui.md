@@ -339,8 +339,11 @@ Manager fills in its share of the snapshot.
    lipgloss + bubbles. Drives Phase-2 work; not Phase-1 blocker.
 4. **Default refresh rate (§2.4)**: OPEN. Default proposal: 1Hz,
    configurable in [100ms, 60s]. Phase-2 setting.
-5. **Out-of-scope reaffirmation**: OPEN. Default proposal: read-only,
-   no mutating RPCs in Phase 1.
+5. **Out-of-scope reaffirmation**: PINNED 2026-05-05 — read-only
+   Phase 1. AdminService exposes Snapshot / TailEvents / Status
+   only; no `KillFederate`, no `ForceResign`, no `DrainOutbox`,
+   nothing that mutates federation state. Mutating ops become a
+   separately-scoped Phase 5+.
 6. **Federate column set (§3.2)**: PINNED 2026-05-05 — default
    columns (`name`, `handle`, `current_time`, `lookahead`, `role`,
    `tps`, `queue_depth`, `drops_total`, `age`) and the expanded view
