@@ -45,3 +45,6 @@ eventlogs/
 # Sub-agent worktrees created by the Agent tool with isolation:"worktree".
 # These are linked to .git/ but live as siblings on disk; never commit.
 .claude/
+
+# perf-pass profile artifacts (large binaries; reproduce locally)
+docs/reports/perf/*.prof
