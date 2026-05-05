@@ -34,7 +34,19 @@ __version__ = "0.1.0"
 # importable, so each submodule's symbols are placeholders raising
 # NotImplementedError at call time, not at import time.
 
+from rti1516e._grpc_errors import (
+    InvalidOwnershipState,
+    InvalidSaveState,
+    InvalidSyncState,
+    OwnershipNotPermitted,
+    RegionNotFound,
+    SaveBundleAlreadyExists,
+    SaveBundleNotFound,
+    SyncPointAlreadyExists,
+    SyncPointNotFound,
+)
 from rti1516e.connection import Federate, FederationSpec, RtiConnection
+from rti1516e.ddm import AttributeRegions, DDMClient
 from rti1516e.errors import (
     EncodingInsufficientBytes,
     EncodingPaddingViolation,
@@ -65,9 +77,14 @@ from rti1516e.events import (
     ReflectAttributeValues,
     TimeAdvanceGrant,
 )
+from rti1516e.ownership import OwnershipClient
+from rti1516e.savepoint import RestoreState, SavepointClient, SaveState
 from rti1516e.standard import Rti1516eAmbassador
+from rti1516e.sync import SyncClient
 
 __all__ = [
+    "AttributeRegions",
+    "DDMClient",
     "DiscoverObjectInstance",
     "EncodingInsufficientBytes",
     "EncodingPaddingViolation",
@@ -83,14 +100,28 @@ __all__ = [
     "FederationSpec",
     "FomMimRedefinition",
     "FomValidationFailed",
+    "InvalidOwnershipState",
+    "InvalidSaveState",
+    "InvalidSyncState",
     "ObjectAttributeNotOwned",
     "ObjectClassNotPublished",
     "ObjectNotFound",
+    "OwnershipClient",
+    "OwnershipNotPermitted",
     "ReceiveInteraction",
     "ReflectAttributeValues",
+    "RegionNotFound",
+    "RestoreState",
     "Rti1516eAmbassador",
     "RtiConnection",
     "RtiError",
+    "SaveBundleAlreadyExists",
+    "SaveBundleNotFound",
+    "SaveState",
+    "SavepointClient",
+    "SyncClient",
+    "SyncPointAlreadyExists",
+    "SyncPointNotFound",
     "TimeAdvanceGrant",
     "TimeAlreadyConstrained",
     "TimeAlreadyRegulating",

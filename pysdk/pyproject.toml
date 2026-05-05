@@ -136,3 +136,8 @@ extend-exclude = ["rti1516e/_generated"]
 # mapping is direct. The base class is RtiError; subclasses intentionally
 # omit the -Error suffix to mirror the proto naming.
 "rti1516e/errors.py" = ["N818"]
+# _grpc_errors.py: cut-3 typed exceptions (M12 W2) follow the same
+# naming convention as errors.py — they live alongside the cut-1
+# RtiError hierarchy and the unsuffixed names match the gRPC status
+# semantics they represent (NotFound, AlreadyExists, etc.).
+"rti1516e/_grpc_errors.py" = ["N818"]
