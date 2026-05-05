@@ -109,7 +109,23 @@ fits the model.
 └── ↑↓ select  Enter drill-down  R refresh-rate  / filter  Q quit ────────────┘
 ```
 
-### 3.2 Federation drill-down (per-federate)
+### 3.2 Federation drill-down (per-federate) — PINNED
+
+**Default columns** (pinned 2026-05-05):
+`name`, `handle`, `current_time`, `lookahead`, `role` (regulator /
+constrained / both), `tps`, `queue_depth`, `drops_total`, `age`.
+
+**Federate-expanded view (Enter on a row)**: identity + time +
+pub/sub + wire stats. Save state, ownership pending, DDM regions,
+sync labels — only shown when **non-empty** (collapsed sections that
+auto-expand on activity).
+
+No additional columns or fields beyond the above set in Phase 1.
+Stall-risk indicators, last-activity timestamps, per-attribute
+ownership history, and any field requiring data not currently on
+the wire (notably `HLAfederateType`, which is a cut-3 backlog item)
+are explicitly out of scope for Phase 1; revisit only when there's
+operator demand.
 
 ```
 ┌─ Federation: demo ─ verbose ─ created 12m ago ──────────────────────────────┐
@@ -291,6 +307,11 @@ Manager fills in its share of the snapshot.
    proposal: 1Hz, configurable in [100ms, 60s].
 5. **Out-of-scope reaffirmation**: read-only, no mutating RPCs in
    Phase 1. Confirm or override.
+6. **Federate column set (§3.2)**: PINNED 2026-05-05 — default
+   columns (`name`, `handle`, `current_time`, `lookahead`, `role`,
+   `tps`, `queue_depth`, `drops_total`, `age`) and the expanded view
+   (identity + time + pub/sub + wire stats; collapsed-when-empty
+   sections for save / ownership / DDM / sync). No additions.
 
 Once §7.1 + §7.3 are pinned, Phase 1 (admin proto + handler +
 Snapshot methods) is mechanical and dispatchable as ~5 small commits.
