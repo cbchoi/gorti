@@ -6,6 +6,41 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-05 (post-M12 perf pass — outbox optimization, 1.6–3.8× throughput)
+
+**Single-session optimization pass on the in-process perf harness, profile-driven.** Pre-pass revert tag: `perf-baseline-m12` at commit `3078f06` (M12 close). Full report in `docs/reports/perf/M12-optimization-pass.md`.
+
+**Method**: profile baseline → identify hotspots → fix one at a time → benchmark each step → commit. `runtime.procyield` started at 48% flat (lock contention); `(*Registry).buildReceiveEvent` 65% of allocs (per-subscriber proto + map copy + lock acquire); `(*perfOutbox).Send` 28% cum (RWMutex + channel send).
+
+**Optimizations** (each independently revertable):
+
+| Commit | Change | Effect |
+|---|---|---|
+| `e01a6d3` | Hoist inner proto + map copy + batched seq-alloc out of `fanoutReceive` / `fanoutReflect` per-subscriber loop | 65% of allocs eliminated; lock acquires drop from N/fanout to 1/fanout |
+| `890e18a` | `perfOutbox`: replace RWMutex+map subscriber lookup with `atomic.Pointer[map]` + copy-on-write | Send becomes lock-free atomic load |
+| `a191bfd` | `cmd/rtid/multiOutbox`: same atomic-snapshot pattern (production gRPC outbox) | Production wire path matches perf harness lock-free Send |
+| `b8489f3` | `perfOutbox`: switch channel element from `OutboundEvent` to `[]OutboundEvent` + per-recipient scratch + flush-on-batchSize=32 | Channel ops drop ~32× |
+| `7ca819d` | Promote batched delivery to production: `SubscribableOutbox.Subscribe` returns `<-chan []core.OutboundEvent`; updated `multiOutbox`, `streamService.Events`, `syncOutbox`, all test fakes; added deferred-flush timer (`time.AfterFunc`, 1 ms) so low-rate workloads don't stall in scratch | Production gRPC wire path now amortizes channel ops across batches |
+
+**Throughput** (in-process perf harness, isolated runs, 5s, 12-core i7):
+
+| Size | Baseline | Final | Speedup |
+|---:|---:|---:|---:|
+|   5 | 1,238,820/s | 1,956,160/s | **1.58×** |
+|  25 |   252,575/s |   966,753/s | **3.83×** |
+| 100 |    71,347/s |   259,624/s | **3.64×** |
+
+**Trade-offs documented**:
+- Size-5 throughput drops 19% from peak (no-flush opt 1+2+4 was 2.85M/s) once the deferred-flush timer is added. The flush timer is a correctness-required mechanism — without it, low-rate production federations stall `batchSize/sender_rate` seconds. Size-25/100 shed ~5-7% similarly.
+- Latency at size 25 improves substantially: p50 9.60 ms → 0.04 ms, p99 61 ms → 1.76 ms (shorter apparent queue depth as fewer items are in flight).
+- Residual hotspot is now `runtime.selectgo` / `chansend` machinery itself — the unavoidable inter-goroutine communication cost. Further gains require architectural changes (lock-free MPSC queues, sharded outbox); marked out of scope.
+
+**Verified at every step**: `go test -race ./...` clean across all 30 packages; cross-language M5 + M12 cross-process tests green (Python federate ↔ rtid subprocess over real gRPC); pysdk 498-test suite green; M0..M12 spec tests stable.
+
+**Untouched**: production cmd/rtid main.go's `newMultiOutbox(1024)` call — still uses default `batchSize=32`, `flushInterval=1ms`. `newMultiOutboxWithBatch(...)` is the explicit-knobs constructor for tests and future tuning.
+
+---
+
 ## 2026-05-05 (M12 — DONE; cut-3 service groups reachable over gRPC)
 
 **`scripts/check-milestones.sh` reports M12: DONE.** First cut-3 milestone closed. M12 wires gRPC handlers + Python SDK exposure for the four cut-2 service groups (sync, ownership, DDM, savepoint) that had been internal-only at the close of cut-2 — closing the biggest user-visible gap from cut-2.
