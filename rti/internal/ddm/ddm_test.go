@@ -330,10 +330,10 @@ func TestRangeOverlap_Basics(t *testing.T) {
 		a, b Range
 		want bool
 	}{
-		{Range{0, 100}, Range{50, 200}, true},
-		{Range{0, 100}, Range{100, 200}, false}, // touch but don't overlap
-		{Range{0, 0}, Range{0, 10}, false},      // empty range
-		{Range{^uint64(0) - 1, ^uint64(0)}, Range{0, ^uint64(0)}, true},
+		{Range{Lower: 0, Upper: 100}, Range{Lower: 50, Upper: 200}, true},
+		{Range{Lower: 0, Upper: 100}, Range{Lower: 100, Upper: 200}, false}, // touch but don't overlap
+		{Range{Lower: 0, Upper: 0}, Range{Lower: 0, Upper: 10}, false},      // empty range
+		{Range{Lower: ^uint64(0) - 1, Upper: ^uint64(0)}, Range{Lower: 0, Upper: ^uint64(0)}, true},
 	}
 	for _, tc := range cases {
 		if got := tc.a.Overlap(tc.b); got != tc.want {

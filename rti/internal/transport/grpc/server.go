@@ -8,7 +8,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/ddm"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 	"github.com/cbchoi/gorti/rti/internal/savepoint"
@@ -103,7 +102,11 @@ type Options struct {
 	Ownership core.OwnershipCoordinator
 
 	// DDM handles DDMService RPCs (M12 W1).
-	DDM *ddm.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.4): typed as core.DataDistributionManagement so alternative
+	// implementations may be wired here.
+	DDM core.DataDistributionManagement
 
 	// Savepoint handles SavepointService RPCs (M12 W1).
 	Savepoint *savepoint.Manager

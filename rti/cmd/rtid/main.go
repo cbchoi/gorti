@@ -397,7 +397,7 @@ type rtid struct {
 	syncMgr core.SyncCoordinator
 	ownMgr  core.OwnershipCoordinator
 	momMgr  core.ManagementObjectModel
-	ddmMgr  *ddm.Manager
+	ddmMgr  core.DataDistributionManagement
 	saveMgr *savepoint.Manager
 	multi   *eventlog.MultiplexWriter
 	outbox  *multiOutbox
@@ -608,14 +608,18 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	}, nil
 }
 
-// ddmFilterAdapter bridges the ddm.Manager API into the
-// object.DDMFilter contract. The two packages use distinct typed
-// handles (ddm.RegionHandle vs object.DDMRegionHandle, both uint64)
-// so the adapter performs the trivial conversion at the boundary.
-// Defined here (cmd/rtid composition) rather than inside ddm so the
-// ddm package stays free of an object-package import.
+// ddmFilterAdapter bridges the core.DataDistributionManagement API
+// into the object.DDMFilter contract. The two packages use distinct
+// typed handles (core.DDMRegionHandleCore vs object.DDMRegionHandle,
+// both uint64) so the adapter performs the trivial conversion at the
+// boundary. Defined here (cmd/rtid composition) rather than inside ddm
+// so the ddm package stays free of an object-package import.
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.4): the field type is the interface so alternative DDM impls
+// composed at the rtid root flow through unchanged.
 type ddmFilterAdapter struct {
-	m *ddm.Manager
+	m core.DataDistributionManagement
 }
 
 func (a ddmFilterAdapter) HasObjectAssociations(fed core.FederationName, obj core.ObjectHandle) bool {
@@ -643,9 +647,9 @@ func (a ddmFilterAdapter) SubscribersForUpdate(
 	if len(publisherRegions) == 0 {
 		return nil
 	}
-	rs := make([]ddm.RegionHandle, len(publisherRegions))
+	rs := make([]core.DDMRegionHandleCore, len(publisherRegions))
 	for i, r := range publisherRegions {
-		rs[i] = ddm.RegionHandle(r)
+		rs[i] = core.DDMRegionHandleCore(r)
 	}
 	return a.m.SubscribersForUpdate(fed, cls, attr, rs)
 }
