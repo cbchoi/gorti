@@ -22,7 +22,7 @@ import (
 // cancel error is best-effort.
 type SubscribableOutbox interface {
 	core.Outbox
-	Subscribe(ctx context.Context, fed core.FederationName, h core.FederateHandle) (<-chan core.OutboundEvent, func() error, error)
+	Subscribe(ctx context.Context, fed core.FederationName, h core.FederateHandle) (<-chan []core.OutboundEvent, func() error, error)
 }
 
 // streamService binds rtiv1.StreamServiceServer to a core.Outbox. If the
@@ -60,16 +60,18 @@ func (s *streamService) Events(req *rtiv1.EventsRequest, stream rtiv1.StreamServ
 
 	for {
 		select {
-		case evt, alive := <-ch:
+		case batch, alive := <-ch:
 			if !alive {
 				return nil
 			}
-			pb, err := toFederateEvent(evt)
-			if err != nil {
-				return status.Error(codes.Internal, err.Error())
-			}
-			if err := stream.Send(pb); err != nil {
-				return err
+			for _, evt := range batch {
+				pb, err := toFederateEvent(evt)
+				if err != nil {
+					return status.Error(codes.Internal, err.Error())
+				}
+				if err := stream.Send(pb); err != nil {
+					return err
+				}
 			}
 		case <-stream.Context().Done():
 			return stream.Context().Err()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
@@ -17,6 +18,11 @@ import (
 // throughput at fanout sizes 25-100 without dropping latency below the
 // channel send floor.
 const defaultPerfBatchSize = 32
+
+// defaultPerfFlushInterval bounds the time an event sits in scratch
+// before being flushed. Mirrors the production multiOutbox setting so
+// low-rate test paths see batched semantics without unbounded waits.
+const defaultPerfFlushInterval = 1 * time.Millisecond
 
 // perfOutbox is the in-process outbox used by the perf harness. It
 // satisfies core.Outbox AND a batched-channel Subscribe shape.
@@ -39,10 +45,11 @@ const defaultPerfBatchSize = 32
 // protected by its own small mutex so contention scales with
 // senders-per-recipient, not all-recipients.
 type perfOutbox struct {
-	subs       atomic.Pointer[map[fedHandleKey]*perfRecipientState]
-	writeMu    sync.Mutex
-	bufferSize int
-	batchSize  int
+	subs          atomic.Pointer[map[fedHandleKey]*perfRecipientState]
+	writeMu       sync.Mutex
+	bufferSize    int
+	batchSize     int
+	flushInterval time.Duration
 }
 
 type fedHandleKey struct {
@@ -51,9 +58,10 @@ type fedHandleKey struct {
 }
 
 type perfRecipientState struct {
-	ch      chan []core.OutboundEvent
-	mu      sync.Mutex
-	scratch []core.OutboundEvent
+	ch         chan []core.OutboundEvent
+	mu         sync.Mutex
+	scratch    []core.OutboundEvent
+	flushTimer *time.Timer
 }
 
 // newPerfOutbox constructs an outbox where the per-recipient channel
@@ -67,7 +75,11 @@ func newPerfOutbox(eventCapacity int) *perfOutbox {
 	if bufferSize < 1 {
 		bufferSize = 1
 	}
-	o := &perfOutbox{bufferSize: bufferSize, batchSize: batchSize}
+	o := &perfOutbox{
+		bufferSize:    bufferSize,
+		batchSize:     batchSize,
+		flushInterval: defaultPerfFlushInterval,
+	}
 	empty := map[fedHandleKey]*perfRecipientState{}
 	o.subs.Store(&empty)
 	return o
@@ -81,13 +93,23 @@ func (o *perfOutbox) Send(_ context.Context, fed core.FederationName, h core.Fed
 		return nil
 	}
 	state.mu.Lock()
+	wasEmpty := len(state.scratch) == 0
 	state.scratch = append(state.scratch, evt)
 	if len(state.scratch) < o.batchSize {
+		if wasEmpty && o.flushInterval > 0 && state.flushTimer == nil {
+			state.flushTimer = time.AfterFunc(o.flushInterval, func() {
+				o.flushScratch(state)
+			})
+		}
 		state.mu.Unlock()
 		return nil
 	}
 	batch := state.scratch
 	state.scratch = make([]core.OutboundEvent, 0, o.batchSize)
+	if state.flushTimer != nil {
+		state.flushTimer.Stop()
+		state.flushTimer = nil
+	}
 	state.mu.Unlock()
 	select {
 	case state.ch <- batch:
@@ -95,6 +117,24 @@ func (o *perfOutbox) Send(_ context.Context, fed core.FederationName, h core.Fed
 	default:
 		// Drop on full — measurement-mode contract.
 		return nil
+	}
+}
+
+// flushScratch fires from the deferred-flush timer and pushes any
+// pending scratch onto the channel.
+func (o *perfOutbox) flushScratch(state *perfRecipientState) {
+	state.mu.Lock()
+	state.flushTimer = nil
+	if len(state.scratch) == 0 {
+		state.mu.Unlock()
+		return
+	}
+	batch := state.scratch
+	state.scratch = make([]core.OutboundEvent, 0, o.batchSize)
+	state.mu.Unlock()
+	select {
+	case state.ch <- batch:
+	default:
 	}
 }
 
@@ -143,6 +183,10 @@ func (o *perfOutbox) Subscribe(_ context.Context, fed core.FederationName, h cor
 			// after the table mutation so the table is unblocked even
 			// if a slow receiver still holds the channel full.
 			state.mu.Lock()
+			if state.flushTimer != nil {
+				state.flushTimer.Stop()
+				state.flushTimer = nil
+			}
 			if len(state.scratch) > 0 {
 				final := state.scratch
 				state.scratch = nil

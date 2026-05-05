@@ -20,7 +20,7 @@ func (e *fakeOutboundEvent) Seq() uint64 { return e.seq }
 // TestMultiOutbox_SendDeliversToSubscriber: a Send to (fed, h) appears on
 // the channel returned by Subscribe(fed, h).
 func TestMultiOutbox_SendDeliversToSubscriber(t *testing.T) {
-	mo := newMultiOutbox(8)
+	mo := newMultiOutboxWithBatch(8, 1, 0)
 	ch, cancel, err := mo.Subscribe(context.Background(), "alpha", core.FederateHandle(7))
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -32,9 +32,9 @@ func TestMultiOutbox_SendDeliversToSubscriber(t *testing.T) {
 	}
 
 	select {
-	case evt := <-ch:
-		if evt.Seq() != 42 {
-			t.Errorf("delivered evt.Seq() = %d, want 42", evt.Seq())
+	case batch := <-ch:
+		if len(batch) != 1 || batch[0].Seq() != 42 {
+			t.Errorf("delivered batch = %v, want [Seq=42]", batch)
 		}
 	case <-time.After(time.Second):
 		t.Fatalf("Send did not deliver within 1s")
@@ -47,7 +47,7 @@ func TestMultiOutbox_SendDeliversToSubscriber(t *testing.T) {
 // "no subscriber" is a separate condition (federate hasn't started its
 // stream yet) that must NOT crash the federation.
 func TestMultiOutbox_SendNoSubscriber_NoError(t *testing.T) {
-	mo := newMultiOutbox(4)
+	mo := newMultiOutboxWithBatch(4, 1, 0)
 	if err := mo.Send(context.Background(), "alpha", core.FederateHandle(99), &fakeOutboundEvent{seq: 1}); err != nil {
 		t.Errorf("Send to absent subscriber: err = %v, want nil (drop silently)", err)
 	}
@@ -56,7 +56,7 @@ func TestMultiOutbox_SendNoSubscriber_NoError(t *testing.T) {
 // TestMultiOutbox_OverflowReturnsError: when the per-federate channel is
 // full, Send returns ErrFederateOverflow.
 func TestMultiOutbox_OverflowReturnsError(t *testing.T) {
-	mo := newMultiOutbox(2)
+	mo := newMultiOutboxWithBatch(2, 1, 0)
 	_, cancel, err := mo.Subscribe(context.Background(), "alpha", core.FederateHandle(1))
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -77,7 +77,7 @@ func TestMultiOutbox_OverflowReturnsError(t *testing.T) {
 // TestMultiOutbox_PerFederateIsolation: a subscriber for (fed, 1) does NOT
 // see events sent to (fed, 2).
 func TestMultiOutbox_PerFederateIsolation(t *testing.T) {
-	mo := newMultiOutbox(8)
+	mo := newMultiOutboxWithBatch(8, 1, 0)
 	ch1, cancel1, err := mo.Subscribe(context.Background(), "alpha", core.FederateHandle(1))
 	if err != nil {
 		t.Fatalf("Subscribe 1: %v", err)
@@ -94,8 +94,8 @@ func TestMultiOutbox_PerFederateIsolation(t *testing.T) {
 	}
 
 	select {
-	case evt := <-ch1:
-		t.Errorf("federate 1 received event %v intended for federate 2", evt)
+	case batch := <-ch1:
+		t.Errorf("federate 1 received batch %v intended for federate 2", batch)
 	case <-time.After(50 * time.Millisecond):
 	}
 }
@@ -103,7 +103,7 @@ func TestMultiOutbox_PerFederateIsolation(t *testing.T) {
 // TestMultiOutbox_CancelClosesChannel: cancel() unregisters the subscriber
 // and closes its channel; subsequent Sends do not block.
 func TestMultiOutbox_CancelClosesChannel(t *testing.T) {
-	mo := newMultiOutbox(4)
+	mo := newMultiOutboxWithBatch(4, 1, 0)
 	ch, cancel, err := mo.Subscribe(context.Background(), "alpha", core.FederateHandle(1))
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -126,7 +126,7 @@ func TestMultiOutbox_CancelClosesChannel(t *testing.T) {
 // TestMultiOutbox_DoubleSubscribeIsRejected: the same (fed, h) pair cannot
 // have two concurrent subscribers — the federate already owns the stream.
 func TestMultiOutbox_DoubleSubscribeIsRejected(t *testing.T) {
-	mo := newMultiOutbox(4)
+	mo := newMultiOutboxWithBatch(4, 1, 0)
 	_, cancel, err := mo.Subscribe(context.Background(), "alpha", core.FederateHandle(1))
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -140,7 +140,7 @@ func TestMultiOutbox_DoubleSubscribeIsRejected(t *testing.T) {
 
 // TestMultiOutbox_ConcurrentSendSubscribe: race-clean under -race.
 func TestMultiOutbox_ConcurrentSendSubscribe(t *testing.T) {
-	mo := newMultiOutbox(64)
+	mo := newMultiOutboxWithBatch(64, 1, 0)
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		i := i

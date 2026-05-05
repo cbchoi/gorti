@@ -25,12 +25,13 @@ func (pushOnlyOutbox) Send(_ context.Context, _ core.FederationName, _ core.Fede
 }
 
 // fakeSubscribableOutbox is an in-memory SubscribableOutbox: every
-// Subscribe gets its own channel, and events pushed via push() flow to
-// the most recent subscriber. The fake is sufficient for handler tests
-// that don't exercise multi-federate fanout.
+// Subscribe gets its own batch channel, and events pushed via push()
+// flow to the most recent subscriber as singleton batches. The fake
+// is sufficient for handler tests that don't exercise multi-federate
+// fanout.
 type fakeSubscribableOutbox struct {
 	mu          sync.Mutex
-	ch          chan core.OutboundEvent
+	ch          chan []core.OutboundEvent
 	subscribeErr error
 	cancelErr    error
 	subscribed   int
@@ -38,15 +39,15 @@ type fakeSubscribableOutbox struct {
 }
 
 func newFakeSubscribableOutbox() *fakeSubscribableOutbox {
-	return &fakeSubscribableOutbox{ch: make(chan core.OutboundEvent, 8)}
+	return &fakeSubscribableOutbox{ch: make(chan []core.OutboundEvent, 8)}
 }
 
 func (f *fakeSubscribableOutbox) Send(_ context.Context, _ core.FederationName, _ core.FederateHandle, evt core.OutboundEvent) error {
-	f.ch <- evt
+	f.ch <- []core.OutboundEvent{evt}
 	return nil
 }
 
-func (f *fakeSubscribableOutbox) Subscribe(_ context.Context, _ core.FederationName, _ core.FederateHandle) (<-chan core.OutboundEvent, func() error, error) {
+func (f *fakeSubscribableOutbox) Subscribe(_ context.Context, _ core.FederationName, _ core.FederateHandle) (<-chan []core.OutboundEvent, func() error, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.subscribeErr != nil {
@@ -62,7 +63,7 @@ func (f *fakeSubscribableOutbox) Subscribe(_ context.Context, _ core.FederationN
 	return f.ch, cancel, nil
 }
 
-func (f *fakeSubscribableOutbox) push(evt core.OutboundEvent) { f.ch <- evt }
+func (f *fakeSubscribableOutbox) push(evt core.OutboundEvent) { f.ch <- []core.OutboundEvent{evt} }
 
 func (f *fakeSubscribableOutbox) closeChan() {
 	f.mu.Lock()

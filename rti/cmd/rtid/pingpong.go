@@ -215,12 +215,18 @@ func pingpongDeclarations(ctx context.Context, cfg pingpongConfig, rt *pingpongR
 
 // startPongWorker launches the pong-side loop and returns a channel
 // that yields its terminal error (nil on clean completion).
-func startPongWorker(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, pong core.FederateHandle, pongChan <-chan core.OutboundEvent) <-chan error {
+//
+// pongChan delivers batches of events; a single round here always
+// produces a 1-event batch (one honk per cycle), so we drain
+// per-batch and count one received event per batch.
+func startPongWorker(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, pong core.FederateHandle, pongChan <-chan []core.OutboundEvent) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		for i := 0; i < cfg.Rounds; i++ {
+		received := 0
+		for received < cfg.Rounds {
 			select {
-			case <-pongChan:
+			case batch := <-pongChan:
+				received += len(batch)
 			case <-ctx.Done():
 				done <- ctx.Err()
 				return
@@ -236,7 +242,7 @@ func startPongWorker(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntim
 }
 
 // drivePingLoop runs the ping side of the round-trip.
-func drivePingLoop(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, ping core.FederateHandle, pingChan <-chan core.OutboundEvent) error {
+func drivePingLoop(ctx context.Context, cfg pingpongConfig, rt *pingpongRuntime, ping core.FederateHandle, pingChan <-chan []core.OutboundEvent) error {
 	for i := 0; i < cfg.Rounds; i++ {
 		if err := rt.objReg.SendInteraction(ctx, cfg.FederationName, ping, honkClass, nil, nil); err != nil {
 			return fmt.Errorf("ping: SendInteraction: %w", err)
@@ -307,14 +313,16 @@ func pingpongDiscardFactory(clock core.Clock) eventlog.WriterFactory {
 // syncOutbox is the in-process Outbox used by the pingpong demo. It
 // satisfies grpc.SubscribableOutbox shape (channel-per-federate) but
 // without the bounded-overflow contract — the demo uses a 1024-buffered
-// channel and never overflows under expected load.
+// channel and never overflows under expected load. Each Send is wrapped
+// in a 1-event batch so the channel signature matches the production
+// SubscribableOutbox after the batched-delivery refactor.
 type syncOutbox struct {
 	mu          sync.Mutex
-	subscribers map[fedHandleKey]chan core.OutboundEvent
+	subscribers map[fedHandleKey]chan []core.OutboundEvent
 }
 
 func newSyncOutbox() *syncOutbox {
-	return &syncOutbox{subscribers: map[fedHandleKey]chan core.OutboundEvent{}}
+	return &syncOutbox{subscribers: map[fedHandleKey]chan []core.OutboundEvent{}}
 }
 
 // Send implements core.Outbox.
@@ -325,19 +333,19 @@ func (s *syncOutbox) Send(_ context.Context, fed core.FederationName, h core.Fed
 	if !ok {
 		return nil
 	}
-	ch <- evt
+	ch <- []core.OutboundEvent{evt}
 	return nil
 }
 
 // Subscribe registers a per-federate inbox.
-func (s *syncOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan core.OutboundEvent, func() error, error) {
+func (s *syncOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan []core.OutboundEvent, func() error, error) {
 	key := fedHandleKey{fed: fed, h: h}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, dup := s.subscribers[key]; dup {
 		return nil, nil, fmt.Errorf("pingpong: subscriber already registered for (%s, %d)", fed, h)
 	}
-	ch := make(chan core.OutboundEvent, 1024)
+	ch := make(chan []core.OutboundEvent, 1024)
 	s.subscribers[key] = ch
 	cancel := func() error {
 		s.mu.Lock()

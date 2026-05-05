@@ -394,7 +394,7 @@ func dumpGoroutineProfile(t *testing.T) {
 // service requires it) plus core.Outbox.
 type soakOutbox struct {
 	mu          sync.RWMutex
-	subscribers map[soakKey]chan core.OutboundEvent
+	subscribers map[soakKey]chan []core.OutboundEvent
 	bufferSize  int
 }
 
@@ -408,7 +408,7 @@ func newSoakOutbox(bufferSize int) *soakOutbox {
 		bufferSize = 1
 	}
 	return &soakOutbox{
-		subscribers: map[soakKey]chan core.OutboundEvent{},
+		subscribers: map[soakKey]chan []core.OutboundEvent{},
 		bufferSize:  bufferSize,
 	}
 }
@@ -421,20 +421,20 @@ func (o *soakOutbox) Send(_ context.Context, fed core.FederationName, h core.Fed
 		return nil
 	}
 	select {
-	case ch <- evt:
+	case ch <- []core.OutboundEvent{evt}:
 	default:
 	}
 	return nil
 }
 
-func (o *soakOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan core.OutboundEvent, func() error, error) {
+func (o *soakOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan []core.OutboundEvent, func() error, error) {
 	key := soakKey{fed, h}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if _, dup := o.subscribers[key]; dup {
 		return nil, nil, fmt.Errorf("soak: subscriber already registered for %v", key)
 	}
-	ch := make(chan core.OutboundEvent, o.bufferSize)
+	ch := make(chan []core.OutboundEvent, o.bufferSize)
 	o.subscribers[key] = ch
 	var once sync.Once
 	cancel := func() error {
