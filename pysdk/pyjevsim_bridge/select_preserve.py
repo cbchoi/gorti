@@ -29,13 +29,14 @@ def order_simultaneous_events(
     Cut-1 implementation
     --------------------
     The orchestrator-frozen ``CoupledModelProtocol`` shim does NOT expose
-    ``select()`` (real pyjevsim 1.3.x exposes it on a per-coupled-model
-    basis but that surface is intentionally outside W6's contract — see
-    pyjevsim_bridge/_protocol.py and docs/agent-c-pysdk.md §4.4). Until
-    W7 wires the real pyjevsim adapter we use a deterministic stand-in:
-    sort by port name (lexicographic), preserving the relative order of
-    ties in payload. ``sorted()`` is stable, so two entries with the
-    same port name retain their input order.
+    ``select()`` (real pyjevsim — both 1.3.x and 2.0.x — exposes it on
+    a per-coupled-model basis but that surface is intentionally outside
+    W6's contract — see pyjevsim_bridge/_protocol.py and
+    docs/agent-c-pysdk.md §4.4). Until W7 wires the real pyjevsim
+    adapter we use a deterministic stand-in: sort by port name
+    (lexicographic), preserving the relative order of ties in payload.
+    ``sorted()`` is stable, so two entries with the same port name
+    retain their input order.
 
     This satisfies FR-PYJ-4's "no Python list ordering, no dict iteration
     nondeterminism" requirement: the output for a given input is always

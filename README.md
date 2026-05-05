@@ -26,7 +26,7 @@ go run ./examples/go-timed -ticks=10       # 3 federates with NER over 10 logica
 
 ```bash
 # Install Python deps (Python 3.11+)
-cd pysdk && pip install -e '.[dev]' pyjevsim==1.3.1
+cd pysdk && pip install -e '.[dev]' pyjevsim==2.0.1
 make py-codegen                            # regenerate gRPC stubs into _generated/
 
 # Two-Python smoke against a real rtid (subprocess-spawned)

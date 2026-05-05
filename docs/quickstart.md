@@ -40,7 +40,7 @@ Federates connect with `grpc://localhost:8442`. TLS via `--tls-cert / --tls-key`
 ```bash
 # Install Python deps (Python 3.11+)
 cd pysdk
-pip install -e '.[dev]' pyjevsim==1.3.1
+pip install -e '.[dev]' pyjevsim==2.0.1
 cd ..
 
 # Generate gRPC stubs

@@ -7,11 +7,12 @@ object — it uses DEVS-canonical names (`time_advance`, `output_handler`,
 Spec tests under pysdk/tests/spec/m4/ consume this Protocol via the
 StubCoupledModel test double (avoids a hard pyjevsim runtime dep).
 
-Real pyjevsim 1.3.x exports `StructuralModel` (coupled) + `BehaviorModel`
+Real pyjevsim (1.3.x and 2.0.x — API-compatible at every surface the
+bridge touches) exports `StructuralModel` (coupled) + `BehaviorModel`
 (atomic) with DIFFERENT method names than this Protocol:
 
-  pyjevsim 1.3.x          this Protocol
-  --------------          -------------
+  pyjevsim                this Protocol
+  --------                -------------
   output()                output_handler()
   int_trans()             internal_transition()
   ext_trans(input_ports)  external_transition(port, payload)
