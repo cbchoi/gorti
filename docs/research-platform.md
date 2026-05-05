@@ -437,7 +437,32 @@ Each is independently revertable.
 
 ---
 
-## 11. Non-goals (stated to prevent scope creep)
+## 11. Adding a new alternative — the researcher recipe
+
+Phase 4 ships three reference alts (`time.lbts = "max-projected"`,
+`time.grant = "eager"`, `ownership.negotiation = "random-acquirer"`)
+plus a step-by-step how-to in `docs/research-platform-howto.md`. The
+short version:
+
+1. Drop `rti/internal/<svc>/alt_<name>.go` implementing the strategy
+   interface. Include `Name()` (registry key) and an honest
+   `DeterminismPreserving()`.
+2. Add one `RegisterXxx` line in `rti/internal/research/registry.go`'s
+   `Default()` constructor.
+3. Add a unit test in the owning package + (for non-preserving alts) a
+   strict-mode rejection-path test in
+   `rti/internal/research/apply_test.go`.
+4. Ship a TOML stanza pointing at it; `rtid --research-config <file>`
+   wires it up.
+
+The full walkthrough — including a worked end-to-end example using the
+Phase-4 `eager` GrantStrategy — is in
+`docs/research-platform-howto.md`.
+
+---
+
+## 12. Non-goals (stated to prevent scope creep)
+
 
 - Hot-swapping running implementations.
 - Out-of-process plugin loading (`plugin` package, gRPC plugins, WebAssembly).
