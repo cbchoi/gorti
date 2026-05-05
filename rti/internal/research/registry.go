@@ -71,11 +71,17 @@ func NewRegistry() *Registry {
 // identical to today's hand-wired runtime.
 //
 // Phase-4 alts pre-registered here:
-//   - "max-projected" (time.lbts)  — non-conservative max-of-projections
-//     variant; preserves determinism.
-//   - "eager"         (time.grant) — fires every grant immediately at
-//     the requested time, ignoring LBTS; preserves determinism (the
-//     causality violation is correctness, not non-determinism).
+//   - "max-projected"   (time.lbts)              — non-conservative
+//     max-of-projections variant; preserves determinism.
+//   - "eager"           (time.grant)             — fires every grant
+//     immediately at the requested time, ignoring LBTS; preserves
+//     determinism (the causality violation is correctness, not
+//     non-determinism).
+//   - "random-acquirer" (ownership.negotiation)  — math/rand candidate
+//     pick; DOES NOT preserve determinism. Selecting this alt under
+//     determinism = "strict" causes Apply to return a NonPreservingError;
+//     under "per-impl-opt-in" the replay tests skip with reason. This
+//     is the canonical illustration of the strict-mode rejection path.
 //
 // Adding a new alt is a one-liner here plus the alt_*.go file in the
 // owning package; see docs/research-platform-howto.md for the full
@@ -92,6 +98,7 @@ func Default() *Registry {
 	_ = r.RegisterGrant("default", timepkg.DefaultGrantStrategy())
 	_ = r.RegisterGrant("eager", timepkg.EagerGrantStrategy())
 	_ = r.RegisterNegotiation("default", ownership.DefaultNegotiationStrategy())
+	_ = r.RegisterNegotiation("random-acquirer", ownership.RandomAcquirerNegotiationStrategy())
 	return r
 }
 

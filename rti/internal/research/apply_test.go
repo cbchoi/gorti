@@ -177,3 +177,59 @@ func TestApplyStrictRejectsNonPreservingNegotiation(t *testing.T) {
 		t.Errorf("Category: want %s, got %s", research.CategoryOwnershipNegotiation, npe.Category)
 	}
 }
+
+// TestApplyStrictRejectsRandomAcquirerAlt is the Phase-4 end-to-end
+// integration check: the production-shipped, pre-registered
+// "random-acquirer" alt MUST trip the strict-mode gate. Without this
+// the gate is dead code in real deployments — every other apply test
+// uses a test-local fake. The test cements the contract: any
+// determinism-preserving=false alt added in Default() is guaranteed
+// to be rejected when an operator opts into strict mode.
+func TestApplyStrictRejectsRandomAcquirerAlt(t *testing.T) {
+	t.Parallel()
+
+	reg := research.Default()
+	cfg := research.DefaultConfig()
+	cfg.Determinism = research.DeterminismStrict
+	cfg.Ownership.Negotiation = "random-acquirer"
+
+	_, err := research.Apply(cfg, reg)
+	if err == nil {
+		t.Fatalf("Apply(strict + random-acquirer): want error, got nil")
+	}
+	var npe *research.NonPreservingError
+	if !errors.As(err, &npe) {
+		t.Fatalf("Apply(strict + random-acquirer): want NonPreservingError, got %T: %v", err, err)
+	}
+	if npe.Category != research.CategoryOwnershipNegotiation {
+		t.Errorf("NonPreservingError.Category: want %s, got %s", research.CategoryOwnershipNegotiation, npe.Category)
+	}
+	if npe.Name != "random-acquirer" {
+		t.Errorf("NonPreservingError.Name: want random-acquirer, got %q", npe.Name)
+	}
+}
+
+// TestApplyPerImplOptInAllowsRandomAcquirerAlt: under per-impl-opt-in
+// the random-acquirer alt is admitted (no error from Apply); the gate
+// shifts to AllPreserving() == false, which the replay-test fixtures
+// consult to skip-with-reason. This pins the second leg of the
+// determinism contract.
+func TestApplyPerImplOptInAllowsRandomAcquirerAlt(t *testing.T) {
+	t.Parallel()
+
+	reg := research.Default()
+	cfg := research.DefaultConfig()
+	cfg.Determinism = research.DeterminismPerImplOptIn
+	cfg.Ownership.Negotiation = "random-acquirer"
+
+	res, err := research.Apply(cfg, reg)
+	if err != nil {
+		t.Fatalf("Apply(per-impl-opt-in + random-acquirer): unexpected err %v", err)
+	}
+	if res.AllPreserving() {
+		t.Errorf("AllPreserving: want false (random-acquirer is non-preserving), got true")
+	}
+	if res.Ownership.Negotiation == nil || res.Ownership.Negotiation.Name() != "random-acquirer" {
+		t.Errorf("Ownership.Negotiation: want random-acquirer, got %v", res.Ownership.Negotiation)
+	}
+}
