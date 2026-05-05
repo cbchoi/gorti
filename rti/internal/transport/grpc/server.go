@@ -10,7 +10,6 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/core"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
-	"github.com/cbchoi/gorti/rti/internal/savepoint"
 )
 
 // ErrNotImplemented is returned by stub methods until the real handler
@@ -109,7 +108,11 @@ type Options struct {
 	DDM core.DataDistributionManagement
 
 	// Savepoint handles SavepointService RPCs (M12 W1).
-	Savepoint *savepoint.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.5): typed as core.SavepointCoordinator so alternative
+	// implementations may be wired here.
+	Savepoint core.SavepointCoordinator
 }
 
 // NewServer constructs a Server. Validates that all required Options

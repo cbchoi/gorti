@@ -398,7 +398,7 @@ type rtid struct {
 	ownMgr  core.OwnershipCoordinator
 	momMgr  core.ManagementObjectModel
 	ddmMgr  core.DataDistributionManagement
-	saveMgr *savepoint.Manager
+	saveMgr core.SavepointCoordinator
 	multi   *eventlog.MultiplexWriter
 	outbox  *multiOutbox
 	grpcS   *stdgrpc.Server
