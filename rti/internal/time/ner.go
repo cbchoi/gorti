@@ -252,7 +252,10 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 	ext := extOf(m)
 	for {
 		snap := m.regulatingSnapshot(fed)
-		lbts := LBTS(snap)
+		// Strategy hook: default LBTSStrategy delegates to the package
+		// LBTS function so behavior is unchanged. New(opts) installs
+		// defaultLBTS{} when Options.LBTSStrategy is nil.
+		lbts := m.opts.LBTSStrategy.LBTS(snap)
 
 		// Materialise candidates under ext.mu, then release before any
 		// I/O. D-2: never iterate a map without sorting downstream.

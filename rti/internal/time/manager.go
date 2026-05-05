@@ -79,6 +79,15 @@ type Options struct {
 		lookahead core.LogicalTime,
 		logicalTime core.LogicalTime,
 	)
+
+	// LBTSStrategy is the OPTIONAL algorithm hook for LBTS computation.
+	// Nil → the package default (defaultLBTS, which delegates to the
+	// exported LBTS function). See strategy.go for the interface and
+	// docs/research-platform.md §6.1 for the design context.
+	//
+	// Phase 2a swap-point: production wires nil and gets unchanged
+	// behavior; researchers wire an alternative impl through this slot.
+	LBTSStrategy LBTSStrategy
 }
 
 // New constructs a Manager. Returns an error if any required Options
@@ -98,6 +107,12 @@ func New(opts Options) (*Manager, error) {
 	}
 	if opts.StallTimeout == 0 {
 		opts.StallTimeout = DefaultStallTimeout
+	}
+	// Strategy slots default to the package-default impls. nil → default
+	// preserves existing call-site behavior; researchers override via
+	// Options. See strategy.go.
+	if opts.LBTSStrategy == nil {
+		opts.LBTSStrategy = defaultLBTS{}
 	}
 	return &Manager{
 		opts:   opts,
