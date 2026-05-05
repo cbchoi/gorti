@@ -11,11 +11,11 @@
 // transport modes selected at startup:
 //
 //   - Insecure (default): no --tls-cert / --tls-key flags. Clients
-//     dial with the URL form “grpc://host:port“ (Python SDK
+//     dial with the URL form ``grpc://host:port`` (Python SDK
 //     transport strips the scheme and uses
-//     “grpc.aio.insecure_channel“).
+//     ``grpc.aio.insecure_channel``).
 //   - Server-side TLS: --tls-cert + --tls-key both set. Clients dial
-//     with the URL form “grpcs://host:port“ and supply a CA bundle
+//     with the URL form ``grpcs://host:port`` and supply a CA bundle
 //     (or trust the system roots when the cert chains to one). mTLS
 //     and cert rotation are explicitly out of scope for this cut and
 //     are tracked as M7 follow-ups.

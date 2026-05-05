@@ -6,6 +6,43 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-05 (M12 — DONE; cut-3 service groups reachable over gRPC)
+
+**`scripts/check-milestones.sh` reports M12: DONE.** First cut-3 milestone closed. M12 wires gRPC handlers + Python SDK exposure for the four cut-2 service groups (sync, ownership, DDM, savepoint) that had been internal-only at the close of cut-2 — closing the biggest user-visible gap from cut-2.
+
+**Wave summary** (merged to `main` in dispatch order):
+
+| Wave | Sub-agent | Bundled scope | Outcome |
+|---|---|---|---|
+| **W1** (Go side) | A | gRPC handlers for SyncService (2 RPCs), OwnershipService (8 RPCs), DDMService (10 RPCs), SavepointService (7 RPCs); Options extension on `transport/grpc.Server`; `errs.go` extended with 16 cut-2 sentinel mappings; composition root in `cmd/rtid` wires the 4 managers | 5/5 spec tests in `rti/spec/M12/`; merged via `d2fbe1b` |
+| **W2** (Python SDK) | C | `Federate.{sync,ownership,ddm,savepoint}` lazy property accessors; 4 client modules + `_grpc_errors.py` typed exception layer; `_transport.py` upgraded from record-only to real RPC for pub/sub/register/update via FOM-cached attribute name→handle resolution; cross-process test harness (`_helpers.py` with `RtidProcess` async cm + 2-federate scenarios) | 4/4 spec tests in `pysdk/tests/spec/m12/` over real subprocess-spawned rtid; 498-test pysdk suite stays green |
+| **Cleanup** | orchestrator | Fixed `rti/pkg/fom/mim/merge.go:166` `NewFOM` → `NewFOMWithDimensions` (Agent C deferral #2 — was silently dropping user `<dimensions>` post-merge); added `TestSpec_Merge_UserDimensionsPreserved` regression; reverted unintended smart-quote rewrite in `rti/cmd/rtid/main.go` doc comment from W1 | 1 critical bug fix; 1 cosmetic revert |
+
+**M12 stats**:
+- 2 sub-agents (A + C)
+- ~3.5k LoC added (Go: 4 handler files + Options + sentinels + 5 round-trip tests; Python: 4 client modules + transport upgrade + helpers + 4 integration tests; 2 status reports)
+- 5/5 Go spec tests + 4/4 Python spec tests = 9 net test additions
+- 0 RED across M0..M12; 0 new skips
+- Critical bug found mid-flight (merge.go dimensions drop) and closed in cleanup
+
+**Notable architectural choices made during M12**:
+- **Optional Options pattern** — cut-3 services use the same nil-permissive contract as the M3 `timeService`: nil → service simply not registered, mirroring the long-standing precedent so older test harnesses keep compiling unchanged.
+- **Two-step DDM register-with-regions** — the §6.7 fused call straddles `object.Registry` and `ddm.Manager`. Go handler returns `object_handle=0` by design; Python SDK's `DDMClient.register_object_instance_with_regions` performs the two-step (ObjectService.RegisterObject → DDMService.RegisterObjectInstanceWithRegions). Cross-package straddle deferred.
+- **Cross-process test harness as a reusable component** — Agent C extracted `RtidProcess` async cm + 2-federate fixtures into `pysdk/tests/spec/m12/_helpers.py` with robust subprocess teardown. Pattern for future cross-language tests.
+- **Wire-callback gap accepted as cut-4 scope** — proto Event variants don't include sync/ownership/save event types, so federate-side callbacks for those services can't ride EventLog yet. Tests work around via Query RPCs (`query_attribute_ownership`, `query_save_state`, `query_restore_state`) and round-trip success assertions.
+
+**Cut-4 backlog** (deferred from M12):
+- Proto Event variants for sync/ownership/save (enables callback delivery + replay byte-determinism)
+- MOM gRPC exposure (M12 explicitly scoped MOM out — Go runtime exists but no wire surface)
+- Multi-federate save aggregation requires `MembersResolver` wiring (single-federate round trip works today)
+- Restore-side federate-handle parity (rejoin under new handle fails membership check; same root cause as MembersResolver gap)
+- Per-manager state snapshots in save bundle manifest (currently event-log slice is the FR-SR-5 vehicle; carried over from cut-2 backlog)
+- Optimistic time advance variants beyond TARA, mTLS+OIDC, distributed RTI, non-Python SDKs, DDS adapter (carried over from cut-2 backlog)
+
+**What gorti is now**: a complete IEEE 1516-2010 RTI with all cut-2 service groups reachable from federates of any supported language (Python today; C++/Java/C# = cut-4). The biggest cut-2 caveat — "internal-only sync/ownership/DDM/savepoint" — is closed. Production-deployable for HLA workloads of up to ~100 federates without DDM, ~25 with active DDM regions. Cross-language Python+Go federations supported via the SDK's full cut-3 service surface.
+
+---
+
 ## 2026-05-03 (Cut 2 — DONE; M6..M11; production-grade RTI achieved)
 
 **`scripts/check-milestones.sh` reports M0..M11: DONE.** Cut-2 closes the IEEE 1516.1-2010 service surface (modulo cut-3 deferrals: optimistic time variants beyond TARA, MOM-driven control services, mTLS+OIDC, distributed RTI, non-Python SDKs, DDS adapter).

@@ -261,6 +261,50 @@ func TestSpec_Merge_DiagnosticCarriesName(t *testing.T) {
 	}
 }
 
+// TestSpec_Merge_UserDimensionsPreserved asserts that user-declared
+// <dimensions> survive the MIM merge. Regression for the M12 W2
+// finding (Agent C report, deferral #2) where mergeNoCollision called
+// model.NewFOM and silently dropped the dimensions slice.
+//
+// Implements: FR-DDM-1 (dimensions reachable post-MIM merge).
+func TestSpec_Merge_UserDimensionsPreserved(t *testing.T) {
+	t.Parallel()
+
+	base, err := mim.StandardMIMHandle()
+	if err != nil {
+		t.Fatalf("StandardMIMHandle: %v", err)
+	}
+	user := &userFOMWithDimensions{
+		dims: []model.Dimension{
+			{Name: "BearingDeg", UpperBound: 360},
+			{Name: "RangeKm", UpperBound: 1000},
+		},
+	}
+
+	merged, diags := mim.Merge(base, user.fom())
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %+v", diags)
+	}
+	if merged == nil {
+		t.Fatal("merged FOM is nil")
+	}
+	got := merged.Dimensions()
+	if len(got) != 2 {
+		t.Fatalf("merged FOM has %d dimensions; want 2", len(got))
+	}
+	if got[0].Name != "BearingDeg" || got[1].Name != "RangeKm" {
+		t.Errorf("merged dimensions = %+v; want [BearingDeg RangeKm] (sorted)", got)
+	}
+}
+
+type userFOMWithDimensions struct {
+	dims []model.Dimension
+}
+
+func (u *userFOMWithDimensions) fom() *model.FOM {
+	return model.NewFOMWithDimensions(nil, nil, nil, u.dims)
+}
+
 // contains is a tiny substring helper to avoid pulling in strings just for
 // one assertion; keeps the test file self-contained.
 func contains(haystack, needle string) bool {

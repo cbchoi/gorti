@@ -163,5 +163,11 @@ func mergeNoCollision(base, user *model.FOM) *model.FOM {
 		dataTypes = append(dataTypes, dt)
 	}
 
-	return model.NewFOM(objectClasses, interactionClasses, dataTypes)
+	// Dimensions: MIM declares none; user FOM may carry <dimensions>
+	// (M10 / FR-DDM-1). Merge defensively to preserve any base-side
+	// future-extension dimensions as well.
+	dimensions := append([]model.Dimension(nil), base.Dimensions()...)
+	dimensions = append(dimensions, user.Dimensions()...)
+
+	return model.NewFOMWithDimensions(objectClasses, interactionClasses, dataTypes, dimensions)
 }
