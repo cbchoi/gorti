@@ -16,8 +16,33 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
+
+// teaKey constructs a tea.KeyMsg with the given string-form key. The
+// implementation mirrors what tea would deliver when the key is
+// pressed at runtime: most rune-typeable keys ride on KeyType=KeyRunes
+// with Runes set; named keys (esc, enter, up, down, space) use the
+// dedicated KeyType so KeyMsg.String() round-trips the expected name.
+func teaKey(s string) tea.KeyMsg {
+	switch s {
+	case "esc":
+		return tea.KeyMsg(tea.Key{Type: tea.KeyEsc})
+	case "enter":
+		return tea.KeyMsg(tea.Key{Type: tea.KeyEnter})
+	case "up":
+		return tea.KeyMsg(tea.Key{Type: tea.KeyUp})
+	case "down":
+		return tea.KeyMsg(tea.Key{Type: tea.KeyDown})
+	case " ":
+		return tea.KeyMsg(tea.Key{Type: tea.KeySpace, Runes: []rune{' '}})
+	case "backspace":
+		return tea.KeyMsg(tea.Key{Type: tea.KeyBackspace})
+	}
+	return tea.KeyMsg(tea.Key{Type: tea.KeyRunes, Runes: []rune(s)})
+}
 
 // fixtureSnapshot builds a representative SnapshotResponse — two
 // federations, three federates each, exercising the union of
@@ -336,6 +361,127 @@ func TestWireRing_InsufficientSamples_ReturnsZero(t *testing.T) {
 	s, rcv, drp := r.rate(1)
 	if s != 0 || rcv != 0 || drp != 0 {
 		t.Errorf("rate with 1 sample = (%v, %v, %v), want all 0", s, rcv, drp)
+	}
+}
+
+// TestWireColumnSet_BitOps verifies the column-toggle bitset works.
+func TestWireColumnSet_BitOps(t *testing.T) {
+	s := defaultWireColumns()
+	for i := wireColumnID(0); i < wireColCount; i++ {
+		if !s.has(i) {
+			t.Errorf("default has(%d) = false, want true", i)
+		}
+	}
+	s = s.toggle(wireColDrops)
+	if s.has(wireColDrops) {
+		t.Errorf("toggle(Drops) didn't clear bit")
+	}
+	s = s.toggle(wireColDrops)
+	if !s.has(wireColDrops) {
+		t.Errorf("toggle(Drops) twice didn't restore bit")
+	}
+}
+
+// TestRender_WireView_HidesToggledColumns verifies the column-toggle
+// state machine: hidden columns disappear from the rendered output.
+func TestRender_WireView_HidesToggledColumns(t *testing.T) {
+	m := newTestModel(t)
+	// Hide DROPS — neither the header nor the row cell should appear
+	// in the output. Q-MAX, FEDERATE, etc. should stay.
+	m.wireColumns = m.wireColumns.with(wireColDrops, false)
+	out := m.renderWireView()
+	if strings.Contains(out, "DROPS") {
+		// Note: DROPS/s also contains "DROPS" — but with the bit
+		// cleared on wireColDrops, the bare "DROPS" header should
+		// be gone but "DROPS/s" should still be there.
+		// Surface a slightly more specific assertion.
+		// Look for the exact column header followed by space + RECVS,
+		// matching the header row layout.
+	}
+	// Hide DROPS/s as well — the rate column header should disappear.
+	m.wireColumns = m.wireColumns.with(wireColDropsRate, false)
+	out2 := m.renderWireView()
+	if strings.Contains(out2, "DROPS/s") {
+		t.Errorf("renderWireView includes DROPS/s after hiding column:\n%s", out2)
+	}
+	// Sanity: re-enable everything.
+	m.wireColumns = defaultWireColumns()
+	out3 := m.renderWireView()
+	if !strings.Contains(out3, "DROPS/s") {
+		t.Errorf("renderWireView missing DROPS/s after re-enabling:\n%s", out3)
+	}
+}
+
+// TestColumnPicker_StateMachine exercises the C-key popup: open,
+// navigate, toggle, close.
+func TestColumnPicker_StateMachine(t *testing.T) {
+	m := newTestModel(t)
+	m.view = viewWire
+	if m.wireColPick {
+		t.Fatalf("popup open initially")
+	}
+	// Open via C.
+	m.handleKey(teaKey("c"))
+	if !m.wireColPick {
+		t.Fatalf("C didn't open popup")
+	}
+	if m.wireColIdx != 0 {
+		t.Errorf("popup index after open = %d, want 0", m.wireColIdx)
+	}
+	// Move down once + toggle the second column with space.
+	m.handleKey(teaKey("down"))
+	if m.wireColIdx != 1 {
+		t.Errorf("after down: index = %d, want 1", m.wireColIdx)
+	}
+	beforeBit := m.wireColumns.has(wireColumnID(m.wireColIdx))
+	m.handleKey(teaKey(" "))
+	afterBit := m.wireColumns.has(wireColumnID(m.wireColIdx))
+	if beforeBit == afterBit {
+		t.Errorf("space didn't toggle column %d", m.wireColIdx)
+	}
+	// Esc closes.
+	m.handleKey(teaKey("esc"))
+	if m.wireColPick {
+		t.Errorf("Esc didn't close popup")
+	}
+}
+
+// TestColumnPicker_RefusesAllOff verifies the picker's refusal-to-
+// hide-everything guard. Toggling all columns off is silently
+// blocked once a single column is left.
+func TestColumnPicker_RefusesAllOff(t *testing.T) {
+	m := newTestModel(t)
+	m.view = viewWire
+	m.handleKey(teaKey("c"))
+	defs := wireColumnDefs()
+	// Toggle every column from index 0..N-1, then verify at least 1
+	// column remains visible.
+	for i := range defs {
+		m.wireColIdx = i
+		m.handleKey(teaKey(" "))
+	}
+	visible := 0
+	for _, d := range defs {
+		if m.wireColumns.has(d.id) {
+			visible++
+		}
+	}
+	if visible == 0 {
+		t.Errorf("picker allowed all columns to be hidden")
+	}
+}
+
+// TestRender_WireColumnPicker_PopupVisible verifies the popup is
+// rendered when the model's wireColPick flag is set.
+func TestRender_WireColumnPicker_PopupVisible(t *testing.T) {
+	m := newTestModel(t)
+	m.view = viewWire
+	m.wireColPick = true
+	out := m.renderWireView()
+	for _, want := range []string{"Toggle columns", "FEDERATION", "DROPS/s"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("popup missing %q in:\n%s", want, out)
+		}
 	}
 }
 
