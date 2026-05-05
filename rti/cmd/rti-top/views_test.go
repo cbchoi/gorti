@@ -236,6 +236,39 @@ func TestTimeRing_Order(t *testing.T) {
 	}
 }
 
+func TestRender_EventsView_NoStream(t *testing.T) {
+	m := newTestModel(t)
+	m.view = viewEvents
+	out := m.renderEventsView()
+	if !strings.Contains(out, "events stream not running") {
+		t.Errorf("renderEventsView (no stream) missing placeholder: %q", out)
+	}
+}
+
+func TestRender_EventsView_WithLines(t *testing.T) {
+	m := newTestModel(t)
+	m.view = viewEvents
+	m.events = &eventsState{fed: "demo"}
+	m.events.lines = []string{"seq=1  ts=0  payload_bytes=0", "seq=2  ts=0  payload_bytes=0"}
+	out := m.renderEventsView()
+	for _, want := range []string{"Event log", "demo", "seq=1", "seq=2", "Phase 2 limitation"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("renderEventsView missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+}
+
+func TestEventsState_PauseToggleAndCap(t *testing.T) {
+	m := newTestModel(t)
+	m.events = &eventsState{fed: "demo"}
+	for i := 0; i < eventLineCap+50; i++ {
+		m.handleEventMsg(eventTailMsg{line: "x"})
+	}
+	if got := len(m.events.lines); got != eventLineCap {
+		t.Errorf("cap: got %d want %d", got, eventLineCap)
+	}
+}
+
 func TestFilter_Federations(t *testing.T) {
 	m := newTestModel(t)
 	m.filter = "bench"

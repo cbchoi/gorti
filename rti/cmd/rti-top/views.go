@@ -89,6 +89,8 @@ func (m *model) renderFooter() string {
 		hint = " Esc back  W wire view  R refresh-rate  Q quit "
 	case viewWire:
 		hint = " S sort  R refresh-rate  Esc back  Q quit "
+	case viewEvents:
+		hint = " F filter  P pause/resume  Esc back  Q quit "
 	}
 	if m.filtering {
 		hint = fmt.Sprintf(" filter: %s_  (Enter accept  Esc cancel) ", m.filter)
@@ -96,9 +98,7 @@ func (m *model) renderFooter() string {
 	return styleFooter.Width(m.width).Render(hint)
 }
 
-// renderBody dispatches to the per-view body renderer. Commit 3
-// adds Time + Wire; the Events view (I-bound) still falls back to
-// the placeholder until commit 4.
+// renderBody dispatches to the per-view body renderer.
 func (m *model) renderBody() string {
 	switch m.view {
 	case viewFederations:
@@ -111,8 +111,10 @@ func (m *model) renderBody() string {
 		return m.renderTimeView()
 	case viewWire:
 		return m.renderWireView()
+	case viewEvents:
+		return m.renderEventsView()
 	}
-	return styleDim.Render("  (view not yet implemented in this commit)")
+	return styleDim.Render("  (unknown view)")
 }
 
 // --- Federations view (§3.1) ------------------------------------------------
@@ -524,6 +526,50 @@ func renderUtilizationBar(q, qmax uint32) string {
 	on := int(pct * float64(segs))
 	bar := strings.Repeat("█", on) + strings.Repeat("░", segs-on)
 	return fmt.Sprintf("%s %d%%", bar, int(pct*100))
+}
+
+// --- Events view (§3.5) -----------------------------------------------------
+
+// renderEventsView renders the live tail of TailEventsResponse lines
+// for the selected federation. Phase-1 limitation: payload is empty
+// in this cut, so the line surfaces only seq + timestamp.
+func (m *model) renderEventsView() string {
+	if m.events == nil {
+		return styleDim.Render("  (events stream not running — press I to start)")
+	}
+	var b strings.Builder
+	pause := ""
+	if m.events.paused {
+		pause = " [PAUSED]"
+	}
+	b.WriteString(fmt.Sprintf(" Event log — federation: %s — tail%s\n\n", m.events.fed, pause))
+	m.events.mu.Lock()
+	defer m.events.mu.Unlock()
+	if len(m.events.lines) == 0 {
+		b.WriteString(styleDim.Render("   (waiting for events …)\n"))
+	} else {
+		// Show the last N lines that fit in the body height. The body
+		// is height ~ m.height-6 (header 2 lines + footer 1 line + a bit).
+		// Use a conservative cap.
+		visible := m.height - 8
+		if visible < 5 {
+			visible = 5
+		}
+		from := 0
+		if len(m.events.lines) > visible {
+			from = len(m.events.lines) - visible
+		}
+		for _, ln := range m.events.lines[from:] {
+			b.WriteString("  ")
+			b.WriteString(ln)
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(styleDim.Render(
+		"   Phase 2 limitation: TailEventsResponse.payload is empty in this cut;\n" +
+			"   the view shows seq + timestamp only. Richer event detail lands in Phase 3.\n"))
+	return b.String()
 }
 
 // --- helpers ----------------------------------------------------------------

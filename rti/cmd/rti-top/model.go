@@ -92,6 +92,10 @@ type model struct {
 	// --- time view sparkline state (commit 3) ---
 	// timeHistory[fedName][handle] = recent current_time samples (ring).
 	timeHistory map[string]map[uint64]*timeRing
+
+	// --- events view state (commit 4) ---
+	events   *eventsState
+	eventsOn bool
 }
 
 // initialModel builds a fresh model. The first Status response seeds
@@ -167,6 +171,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Dispatch the next fetch + schedule another tick.
 		return m, tea.Batch(m.fetchSnapshot(), m.tickAfter(m.refresh))
 
+	case eventTailMsg:
+		return m.handleEventMsg(v)
+
 	case tea.KeyMsg:
 		return m.handleKey(v)
 	}
@@ -201,7 +208,19 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cancelFn()
 		return m, tea.Quit
 	case "f", "F":
+		if m.view == viewEvents {
+			// In Events view, F = filter input — matches the §3.5 footer.
+			m.filtering = true
+			return m, nil
+		}
 		m.view = viewFederations
+		return m, nil
+	case "i", "I":
+		return m.enterEventsView()
+	case "p", "P":
+		if m.view == viewEvents && m.events != nil {
+			m.events.paused = !m.events.paused
+		}
 		return m, nil
 	case "t", "T":
 		// T from any view → Time advance view for the selected
@@ -287,6 +306,9 @@ func (m *model) escape() (tea.Model, tea.Cmd) {
 		m.view = viewDrilldown
 	case viewDrilldown, viewTime, viewWire:
 		m.view = viewFederations
+	case viewEvents:
+		m.stopEventsLocked()
+		m.view = viewFederations
 	}
 	return m, nil
 }
@@ -308,6 +330,10 @@ func (m *model) moveSelection(delta int) {
 		m.federate = clamp(m.federate+delta, 0, max(0, len(fed.GetFederates())-1))
 	case viewWire:
 		// scroll-only — no per-row selection in wire view.
+	case viewEvents:
+		if m.events != nil {
+			m.events.scroll = clamp(m.events.scroll+delta, 0, max(0, len(m.events.lines)-1))
+		}
 	}
 }
 
@@ -393,6 +419,11 @@ func (m *model) findFederation(name string) *rtiv1.FederationSnapshot {
 func runTUI(ctx context.Context, cli *client.Client, st *rtiv1.StatusResponse, refresh time.Duration) error {
 	m := initialModel(ctx, cli, st, refresh)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	// Install the program sender so the TailEvents goroutine can
+	// push eventTailMsg back into the MVU loop. setProgramSender is
+	// package-level state in events.go; we clear it on exit.
+	setProgramSender(func(msg tea.Msg) { p.Send(msg) })
+	defer setProgramSender(nil)
 	if _, err := p.Run(); err != nil {
 		// Don't propagate context.Canceled — that's the expected exit
 		// path when the user hits Q.
