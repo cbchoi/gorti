@@ -76,6 +76,11 @@ type Manager struct {
 	fed map[core.FederationName]*momState
 }
 
+// Compile-time assertion: *Manager satisfies core.ManagementObjectModel.
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.3) introduced the interface; production keeps using *Manager.
+var _ core.ManagementObjectModel = (*Manager)(nil)
+
 // New constructs a Manager. Returns an error if Outbox is nil. EventLog
 // is optional in cut 1 (a nil log silently drops MOM events).
 func New(opts Options) (*Manager, error) {

@@ -221,11 +221,11 @@ func TestSpec_M10_RangeOverlap_ClosedOpen(t *testing.T) {
 		a, b ddmpkg.Range
 		want bool
 	}{
-		{ddmpkg.Range{0, 5}, ddmpkg.Range{5, 10}, false},
-		{ddmpkg.Range{0, 5}, ddmpkg.Range{4, 10}, true},
-		{ddmpkg.Range{0, 5}, ddmpkg.Range{5, 5}, false},
-		{ddmpkg.Range{0, 5}, ddmpkg.Range{0, 5}, true},
-		{ddmpkg.Range{0, 0}, ddmpkg.Range{0, 5}, false}, // empty range
+		{ddmpkg.Range{Lower: 0, Upper: 5}, ddmpkg.Range{Lower: 5, Upper: 10}, false},
+		{ddmpkg.Range{Lower: 0, Upper: 5}, ddmpkg.Range{Lower: 4, Upper: 10}, true},
+		{ddmpkg.Range{Lower: 0, Upper: 5}, ddmpkg.Range{Lower: 5, Upper: 5}, false},
+		{ddmpkg.Range{Lower: 0, Upper: 5}, ddmpkg.Range{Lower: 0, Upper: 5}, true},
+		{ddmpkg.Range{Lower: 0, Upper: 0}, ddmpkg.Range{Lower: 0, Upper: 5}, false}, // empty range
 	}
 	for _, tc := range cases {
 		got := tc.a.Overlap(tc.b)

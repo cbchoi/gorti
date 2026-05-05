@@ -17,36 +17,44 @@ import (
 var ErrNotImplemented = errors.New("savepoint: not implemented (Agent A M9 deliverable)")
 
 // SaveState reports the current state of a save in progress.
-type SaveState int
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.5) declared the canonical SaveState in core/savepoint.go so the
+// concrete *Manager satisfies core.SavepointCoordinator without
+// per-method conversion. SaveState (and the constants below) are
+// re-exported here at the package boundary that external callers have
+// always used.
+type SaveState = core.SaveState
 
 const (
 	// StateIdle — no save in progress.
-	StateIdle SaveState = iota
+	StateIdle = core.SaveStateIdle
 	// StateInitiated — requestFederationSave succeeded; awaiting per-federate
 	// federateSaveComplete responses.
-	StateInitiated
+	StateInitiated = core.SaveStateInitiated
 	// StateSaved — all federates reported complete; bundle written;
 	// federationSaved emitted.
-	StateSaved
+	StateSaved = core.SaveStateSaved
 	// StateNotSaved — at least one federate reported failure;
 	// federationNotSaved emitted; bundle NOT written.
-	StateNotSaved
+	StateNotSaved = core.SaveStateNotSaved
 )
 
 // RestoreState reports the current state of a restore in progress.
-type RestoreState int
+type RestoreState = core.RestoreState
 
 const (
-	RestoreIdle RestoreState = iota
+	// RestoreIdle — no restore in progress.
+	RestoreIdle = core.SaveRestoreIdle
 	// RestoreLoading — bundle is being read + event log is replaying.
-	RestoreLoading
+	RestoreLoading = core.SaveRestoreLoading
 	// RestoreInitiated — initiateFederateRestore broadcast; awaiting
 	// per-federate federateRestoreComplete responses.
-	RestoreInitiated
+	RestoreInitiated = core.SaveRestoreInitiated
 	// RestoreCompleted — all federates reported complete; federationRestored emitted.
-	RestoreCompleted
+	RestoreCompleted = core.SaveRestoreCompleted
 	// RestoreFailed — bundle missing/corrupt OR a federate reported failure.
-	RestoreFailed
+	RestoreFailed = core.SaveRestoreFailed
 )
 
 // MembersResolver returns the snapshot of currently joined federate
@@ -133,6 +141,13 @@ type Manager struct {
 	// completedRestore mirrors completed for restores.
 	completedRestore map[saveKey]RestoreState
 }
+
+// Compile-time assertion: *Manager satisfies core.SavepointCoordinator.
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.5) introduced the interface; the SaveState / RestoreState type
+// aliases above let the existing method signatures match it without
+// any conversion.
+var _ core.SavepointCoordinator = (*Manager)(nil)
 
 type saveKey struct {
 	fed   core.FederationName

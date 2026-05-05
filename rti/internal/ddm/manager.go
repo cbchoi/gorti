@@ -20,11 +20,17 @@ var ErrNotImplemented = errors.New("ddm: not implemented (Agent A M10 deliverabl
 
 // DimensionHandle identifies one dimension of a routing space.
 // 1-based; 0 is the invalid sentinel.
-type DimensionHandle uint64
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.4) declared the canonical handle types in core/ddm.go so that the
+// concrete *ddm.Manager satisfies core.DataDistributionManagement
+// without per-method conversion. The ddm-package aliases below preserve
+// the existing public spelling.
+type DimensionHandle = core.DDMDimensionHandle
 
 // RegionHandle identifies one region instance.
 // 1-based; 0 is the invalid sentinel.
-type RegionHandle uint64
+type RegionHandle = core.DDMRegionHandleCore
 
 // RoutingSpaceHandle identifies one routing space.
 // 1-based; 0 is the invalid sentinel.
@@ -34,7 +40,7 @@ type RegionHandle uint64
 // per federation named "default" (handle 1). The RoutingSpaceHandle
 // type stays in the API to keep the surface forward-compatible with
 // 1.3-style multi-routing-space FOMs (cut-3).
-type RoutingSpaceHandle uint64
+type RoutingSpaceHandle = core.DDMRoutingSpaceHandle
 
 // DefaultRoutingSpace is the implicit routing-space name used by the
 // 1516-2010 flat-dimension model. Every dimension in the FOM belongs
@@ -44,16 +50,12 @@ const DefaultRoutingSpace = "default"
 // Range describes a closed-open interval [Lower, Upper) on one
 // dimension. Per IEEE 1516.1-2010 §6.5; bounds are uint64 normalized
 // values (the FOM declares the upper bound + normalization).
-type Range struct {
-	Lower uint64
-	Upper uint64
-}
-
-// Overlap returns true iff this range overlaps r (closed-open
-// semantics, so [0,5) and [5,10) do NOT overlap; [0,5) and [4,10) do).
-func (r Range) Overlap(other Range) bool {
-	return r.Lower < other.Upper && other.Lower < r.Upper
-}
+//
+// Aliased to core.DDMRange so the .Overlap method (declared on the core
+// type) is reachable as ddm.Range.Overlap, and so *ddm.Manager
+// signatures using Range satisfy core.DataDistributionManagement
+// without conversion.
+type Range = core.DDMRange
 
 // Options bundles Manager dependencies.
 type Options struct {
@@ -91,6 +93,12 @@ type Manager struct {
 	mu  sync.RWMutex
 	fed map[core.FederationName]*federationDDMState
 }
+
+// Compile-time assertion: *Manager satisfies core.DataDistributionManagement.
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.4) introduced the interface; the typed handle aliases above let
+// the existing method signatures match it without any conversion.
+var _ core.DataDistributionManagement = (*Manager)(nil)
 
 // New constructs a Manager. Returns an error if any required Options
 // field is nil.

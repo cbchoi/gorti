@@ -8,12 +8,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/ddm"
-	"github.com/cbchoi/gorti/rti/internal/declaration"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
-	"github.com/cbchoi/gorti/rti/internal/ownership"
-	"github.com/cbchoi/gorti/rti/internal/savepoint"
-	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
 )
 
 // ErrNotImplemented is returned by stub methods until the real handler
@@ -55,10 +50,14 @@ type Options struct {
 	// Federations handles FederationService RPCs.
 	Federations core.FederationStore
 
-	// Declarations handles DeclarationService RPCs. Concrete type, not
-	// interface, because declaration manager has no abstraction layer
-	// (per docs/idd.md §3 — pure local component).
-	Declarations *declaration.Manager
+	// Declarations handles DeclarationService RPCs.
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.6): typed as core.DeclarationManagement so alternative
+	// implementations may be wired here. The cut-2 docs/idd.md §3 note
+	// that called declaration "pure local component, no abstraction
+	// layer" has been revised in the same Phase 1 commit.
+	Declarations core.DeclarationManagement
 
 	// Objects handles ObjectService + StreamService data-plane RPCs.
 	Objects core.ObjectRegistry
@@ -91,16 +90,32 @@ type Options struct {
 	// nil, the SyncService is NOT registered on the gRPC server (the
 	// service is simply absent from GetServiceInfo). Production wiring
 	// in cmd/rtid passes a real *syncpkg.Manager.
-	Sync *syncpkg.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.1): typed as core.SyncCoordinator so alternative
+	// implementations may be wired here.
+	Sync core.SyncCoordinator
 
 	// Ownership handles OwnershipService RPCs (M12 W1).
-	Ownership *ownership.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.2): typed as core.OwnershipCoordinator so alternative
+	// implementations may be wired here.
+	Ownership core.OwnershipCoordinator
 
 	// DDM handles DDMService RPCs (M12 W1).
-	DDM *ddm.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.4): typed as core.DataDistributionManagement so alternative
+	// implementations may be wired here.
+	DDM core.DataDistributionManagement
 
 	// Savepoint handles SavepointService RPCs (M12 W1).
-	Savepoint *savepoint.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.5): typed as core.SavepointCoordinator so alternative
+	// implementations may be wired here.
+	Savepoint core.SavepointCoordinator
 }
 
 // NewServer constructs a Server. Validates that all required Options

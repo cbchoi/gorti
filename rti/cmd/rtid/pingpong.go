@@ -114,7 +114,7 @@ type pingpongRuntime struct {
 	clock   core.Clock
 	log     core.EventLog
 	fedMgr  *federation.Manager
-	declMgr *declaration.Manager
+	declMgr core.DeclarationManagement
 	objReg  *object.Registry
 	outbox  *syncOutbox
 }

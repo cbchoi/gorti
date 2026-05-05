@@ -21,12 +21,17 @@ import (
 )
 
 // savepointService is the concrete SavepointServiceServer impl.
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.5): the handler binds to core.SavepointCoordinator instead of the
+// concrete *savepoint.Manager so alternative implementations can be
+// wired in at the composition root.
 type savepointService struct {
 	rtiv1.UnimplementedSavepointServiceServer
-	mgr *savepoint.Manager
+	mgr core.SavepointCoordinator
 }
 
-func newSavepointService(mgr *savepoint.Manager) *savepointService {
+func newSavepointService(mgr core.SavepointCoordinator) *savepointService {
 	return &savepointService{mgr: mgr}
 }
 

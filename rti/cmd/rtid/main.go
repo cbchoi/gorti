@@ -392,13 +392,13 @@ type rtid struct {
 	cfg     rtidConfig
 	logger  *slog.Logger
 	fedMgr  *federation.Manager
-	declMgr *declaration.Manager
+	declMgr core.DeclarationManagement
 	objReg  *object.Registry
-	syncMgr *syncpkg.Manager
-	ownMgr  *ownership.Manager
-	momMgr  *mom.Manager
-	ddmMgr  *ddm.Manager
-	saveMgr *savepoint.Manager
+	syncMgr core.SyncCoordinator
+	ownMgr  core.OwnershipCoordinator
+	momMgr  core.ManagementObjectModel
+	ddmMgr  core.DataDistributionManagement
+	saveMgr core.SavepointCoordinator
 	multi   *eventlog.MultiplexWriter
 	outbox  *multiOutbox
 	grpcS   *stdgrpc.Server
@@ -608,14 +608,18 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	}, nil
 }
 
-// ddmFilterAdapter bridges the ddm.Manager API into the
-// object.DDMFilter contract. The two packages use distinct typed
-// handles (ddm.RegionHandle vs object.DDMRegionHandle, both uint64)
-// so the adapter performs the trivial conversion at the boundary.
-// Defined here (cmd/rtid composition) rather than inside ddm so the
-// ddm package stays free of an object-package import.
+// ddmFilterAdapter bridges the core.DataDistributionManagement API
+// into the object.DDMFilter contract. The two packages use distinct
+// typed handles (core.DDMRegionHandleCore vs object.DDMRegionHandle,
+// both uint64) so the adapter performs the trivial conversion at the
+// boundary. Defined here (cmd/rtid composition) rather than inside ddm
+// so the ddm package stays free of an object-package import.
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.4): the field type is the interface so alternative DDM impls
+// composed at the rtid root flow through unchanged.
 type ddmFilterAdapter struct {
-	m *ddm.Manager
+	m core.DataDistributionManagement
 }
 
 func (a ddmFilterAdapter) HasObjectAssociations(fed core.FederationName, obj core.ObjectHandle) bool {
@@ -643,9 +647,9 @@ func (a ddmFilterAdapter) SubscribersForUpdate(
 	if len(publisherRegions) == 0 {
 		return nil
 	}
-	rs := make([]ddm.RegionHandle, len(publisherRegions))
+	rs := make([]core.DDMRegionHandleCore, len(publisherRegions))
 	for i, r := range publisherRegions {
-		rs[i] = ddm.RegionHandle(r)
+		rs[i] = core.DDMRegionHandleCore(r)
 	}
 	return a.m.SubscribersForUpdate(fed, cls, attr, rs)
 }
@@ -807,7 +811,7 @@ func (zeroSeqSource) EventLogSeq(core.FederationName) uint64 { return 0 }
 // not yet carry it (proto FROZEN). Errors are logged but not propagated
 // — MOM is a metric/introspection layer, not a federation-correctness
 // gate.
-func momFederateJoinedHook(momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle, string) {
+func momFederateJoinedHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle, string) {
 	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string) {
 		if err := momMgr.FederateJoined(ctx, fed, h, federateName, ""); err != nil {
 			logger.Warn("rtid: MOM FederateJoined hook failed",
@@ -817,7 +821,7 @@ func momFederateJoinedHook(momMgr *mom.Manager, logger *slog.Logger) func(contex
 }
 
 // momFederateResignedHook is the resign-side analogue.
-func momFederateResignedHook(momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle) {
+func momFederateResignedHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle) {
 	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
 		if err := momMgr.FederateResigned(ctx, fed, h); err != nil {
 			logger.Warn("rtid: MOM FederateResigned hook failed",
@@ -833,7 +837,7 @@ func momFederateResignedHook(momMgr *mom.Manager, logger *slog.Logger) func(cont
 // federation manager already validated them, so a Load failure here
 // would be a programmer error — surfacing it would lie about the
 // federation's existence (it has already been created).
-func createFederationHook(foms *fomRepository, momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName, []core.FOMModule) {
+func createFederationHook(foms *fomRepository, momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, []core.FOMModule) {
 	return func(ctx context.Context, name core.FederationName, modules []core.FOMModule) {
 		h, err := foms.Load(ctx, modules)
 		if err != nil {
@@ -851,7 +855,7 @@ func createFederationHook(foms *fomRepository, momMgr *mom.Manager, logger *slog
 }
 
 // destroyFederationHook is the destroy-side analogue.
-func destroyFederationHook(momMgr *mom.Manager, logger *slog.Logger) func(context.Context, core.FederationName) {
+func destroyFederationHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName) {
 	return func(ctx context.Context, name core.FederationName) {
 		if err := momMgr.FederationDestroyed(ctx, name); err != nil {
 			logger.Warn("rtid: MOM FederationDestroyed hook failed",

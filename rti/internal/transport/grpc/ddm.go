@@ -17,17 +17,25 @@ import (
 )
 
 // ddmService is the concrete DDMServiceServer impl.
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.4): the handler binds to core.DataDistributionManagement instead
+// of the concrete *ddm.Manager so alternative implementations can be
+// wired in at the composition root.
 type ddmService struct {
 	rtiv1.UnimplementedDDMServiceServer
-	mgr *ddm.Manager
+	mgr core.DataDistributionManagement
 }
 
-func newDDMService(mgr *ddm.Manager) *ddmService {
+func newDDMService(mgr core.DataDistributionManagement) *ddmService {
 	return &ddmService{mgr: mgr}
 }
 
 // regionHandlesFromUint64s converts a slice of uint64 region handles
-// into the typed ddm.RegionHandle slice.
+// into the typed ddm.RegionHandle slice. ddm.RegionHandle is a type
+// alias for core.DDMRegionHandleCore (see rti/internal/core/ddm.go),
+// so the slice satisfies both the manager interface and any
+// ddm-package consumer.
 func regionHandlesFromUint64s(in []uint64) []ddm.RegionHandle {
 	if in == nil {
 		return nil
@@ -40,7 +48,8 @@ func regionHandlesFromUint64s(in []uint64) []ddm.RegionHandle {
 }
 
 // dimHandlesFromUint64s converts a slice of uint64 dimension handles
-// into the typed ddm.DimensionHandle slice.
+// into the typed ddm.DimensionHandle slice (alias of
+// core.DDMDimensionHandle).
 func dimHandlesFromUint64s(in []uint64) []ddm.DimensionHandle {
 	if in == nil {
 		return nil
