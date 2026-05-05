@@ -1,0 +1,16 @@
+- agent: agent-b
+- branch: (work landed via M1 wave; topic branch since deleted in cleanup)
+- summary: |
+    Parser handles <interactions>, <interactionClass>, <parameter>;
+    pyjevsim-bridge.xml accepts with zero diagnostics.
+    TestSpec_M1_ParsePyjevsimBridgeFOM_NoDiagnostics passes; coverage
+    on rti/pkg/fom/parser is 78.3% (target >= 65%).
+    Implementation lives in rti/pkg/fom/parser/parser.go (inlined into
+    the main parser walk rather than a separate interaction.go).
+- acceptance:
+    - all criteria from TASK-002.md passing (verified 2026-05-05 during
+      M12 close: spec test green, fom/parser tests green, coverage 78.3%)
+- closeout-note: |
+    Sentinel added late as part of M12 close cleanup. The implementation
+    work was completed during M1 but the sentinel was never committed.
+    No code changes — pure bookkeeping.

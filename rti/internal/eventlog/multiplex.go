@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
@@ -222,9 +223,20 @@ func (m *MultiplexWriter) Close() error {
 		return nil
 	}
 	m.closed = true
+	// Sort federation names before iterating so the "first error"
+	// returned on multi-failure paths is deterministic. Without this
+	// the caller would see whichever close failed first under Go's
+	// randomized map iteration order — fine for correctness, bad for
+	// any test that asserts on the returned error's federation name.
+	// (M5-audit issue #3.)
+	names := make([]core.FederationName, 0, len(m.writers))
+	for fed := range m.writers {
+		names = append(names, fed)
+	}
+	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
 	var firstErr error
-	for fed, w := range m.writers {
-		if err := w.Close(); err != nil && firstErr == nil {
+	for _, fed := range names {
+		if err := m.writers[fed].Close(); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("eventlog: close federation %q: %w", fed, err)
 		}
 	}

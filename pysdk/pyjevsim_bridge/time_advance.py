@@ -251,7 +251,12 @@ class HLAFederate:
         full FOM-driven encoding is W7's territory.
         """
         outputs = self.coupled_model.output_handler()
-        for port_name, payload in outputs.items():
+        # Sort port names before iterating so the wire-visible
+        # send_interaction order is deterministic regardless of how
+        # the user model assembled its output dict. Mirrors Go's D-2
+        # discipline (sort before iterate over maps). M5-audit issue #2.
+        for port_name in sorted(outputs):
+            payload = outputs[port_name]
             class_name = self.port_mapping.fom_class_for_out_port(port_name)
             if class_name is None:
                 continue
