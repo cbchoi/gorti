@@ -59,6 +59,12 @@ func (defaultLBTS) DeterminismPreserving() bool { return true }
 // Compile-time assertion: defaultLBTS satisfies LBTSStrategy.
 var _ LBTSStrategy = (*defaultLBTS)(nil)
 
+// DefaultLBTSStrategy returns the package-default LBTSStrategy. Phase 3
+// research registry uses this to pre-register the "default" impl so the
+// composition root and tests share the exact same instance the Manager
+// uses when Options.LBTSStrategy is nil.
+func DefaultLBTSStrategy() LBTSStrategy { return defaultLBTS{} }
+
 // GrantContext is the input bundle for a single grant decision. It
 // captures the inputs that decideGrant takes today and is passed by
 // value so strategies cannot mutate the caller's state.
@@ -141,3 +147,9 @@ func (defaultGrant) DeterminismPreserving() bool { return true }
 
 // Compile-time assertion: defaultGrant satisfies GrantStrategy.
 var _ GrantStrategy = (*defaultGrant)(nil)
+
+// DefaultGrantStrategy returns the package-default GrantStrategy. Phase 3
+// research registry uses this to pre-register the "default" impl so the
+// composition root and tests share the exact same instance the Manager
+// uses when Options.GrantStrategy is nil.
+func DefaultGrantStrategy() GrantStrategy { return defaultGrant{} }

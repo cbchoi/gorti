@@ -144,3 +144,10 @@ func (defaultNegotiation) DeterminismPreserving() bool { return true }
 
 // Compile-time assertion: defaultNegotiation satisfies NegotiationStrategy.
 var _ NegotiationStrategy = (*defaultNegotiation)(nil)
+
+// DefaultNegotiationStrategy returns the package-default
+// NegotiationStrategy. Phase 3 research registry uses this to
+// pre-register the "default" impl so the composition root and tests
+// share the exact same instance the Manager uses when
+// Options.Strategy is nil.
+func DefaultNegotiationStrategy() NegotiationStrategy { return defaultNegotiation{} }

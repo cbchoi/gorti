@@ -44,6 +44,7 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/mom"
 	"github.com/cbchoi/gorti/rti/internal/object"
 	"github.com/cbchoi/gorti/rti/internal/ownership"
+	"github.com/cbchoi/gorti/rti/internal/research"
 	"github.com/cbchoi/gorti/rti/internal/savepoint"
 	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
 	timepkg "github.com/cbchoi/gorti/rti/internal/time"
@@ -74,6 +75,7 @@ func main() {
 	tlsCert := flag.String("tls-cert", "", "path to TLS server cert PEM (enables TLS when set; clients dial grpcs://host:port). Requires --tls-key.")
 	tlsKey := flag.String("tls-key", "", "path to TLS server key PEM. Required when --tls-cert is set.")
 	saveDir := flag.String("save-dir", "./gorti-saves", "directory under which federation save bundles are written + read (M9: FR-SR-1..5)")
+	researchConfig := flag.String("research-config", "", "path to a TOML research-config file (Phase 3 of docs/research-platform.md). Server mode only; absent → default strategies + per-impl-opt-in determinism. Honors GORTI_RESEARCH_CONFIG as fallback when flag is empty; GORTI_DETERMINISM overrides the determinism field if set.")
 	flag.Parse()
 
 	logger := buildLogger(*logLevel, *logFormat)
@@ -105,7 +107,7 @@ func main() {
 		runReplayMain(logger, *replayInput, *logDir)
 		return
 	case "server", "":
-		runServerMain(logger, *listen, *metricsListen, *logDir, *tlsCert, *tlsKey, *saveDir)
+		runServerMain(logger, *listen, *metricsListen, *logDir, *tlsCert, *tlsKey, *saveDir, *researchConfig)
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
 		os.Exit(2)
@@ -152,7 +154,7 @@ func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
 // SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
-func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, tlsKey, saveDir string) {
+func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, tlsKey, saveDir, researchConfigPath string) {
 	if logDir == "" {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
 	}
@@ -163,6 +165,18 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, 
 		os.Exit(2)
 	}
 
+	// Phase 3 research-platform: resolve the research-config (if any)
+	// before constructing the runtime so any error halts startup with
+	// exit 2 (config error) rather than a half-started rtid. Path
+	// resolution priority: --research-config flag > GORTI_RESEARCH_CONFIG
+	// env > "" (defaults). The GORTI_DETERMINISM env var, when set,
+	// overrides whatever determinism mode the file selected.
+	resolved, err := resolveResearchConfig(researchConfigPath, os.Getenv("GORTI_RESEARCH_CONFIG"), os.Getenv("GORTI_DETERMINISM"))
+	if err != nil {
+		logger.Error("rtid research-config invalid", "err", err)
+		os.Exit(2)
+	}
+
 	srv, err := newRTID(rtidConfig{
 		ListenAddr:        listen,
 		MetricsListenAddr: metricsListen,
@@ -170,6 +184,7 @@ func runServerMain(logger *slog.Logger, listen, metricsListen, logDir, tlsCert, 
 		Logger:            logger,
 		TLSConfig:         tlsConfig,
 		SaveDir:           saveDir,
+		Research:          resolved,
 	})
 	if err != nil {
 		logger.Error("rtid initialization failed", "err", err)
@@ -384,6 +399,16 @@ type rtidConfig struct {
 	// this; tests may leave it empty when they construct the manager
 	// directly).
 	SaveDir string
+
+	// Research carries the resolved research-platform strategies +
+	// determinism mode (Phase 3 of docs/research-platform.md). Zero
+	// value (Resolved{} with all-nil strategies) means "no
+	// research-config wired"; newRTID falls back to package defaults
+	// for every Manager so behavior is identical to today's
+	// hand-wired runtime. When non-zero, the resolved
+	// Time.LBTS/Time.Grant/Ownership.Negotiation strategies thread
+	// into the corresponding Options fields at Manager construction.
+	Research research.Resolved
 }
 
 // rtid is the composed runtime: gRPC server + metrics handler + the
@@ -460,6 +485,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	ownMgr, err := ownership.New(ownership.Options{
 		Outbox:   outbox,
 		EventLog: multi,
+		// Phase 3 research-platform: thread the resolved
+		// NegotiationStrategy when --research-config is set; nil →
+		// ownership.New falls back to defaultNegotiation, identical
+		// to today's behavior.
+		Strategy: cfg.Research.Ownership.Negotiation,
 	})
 	if err != nil {
 		return nil, err
@@ -734,6 +764,56 @@ func discardWriterFactory(clock core.Clock) eventlog.WriterFactory {
 type discardSink struct{}
 
 func (discardSink) Write(p []byte) (int, error) { return len(p), nil }
+
+// resolveResearchConfig produces a research.Resolved bundle from the
+// --research-config flag value, the GORTI_RESEARCH_CONFIG env var
+// fallback, and the GORTI_DETERMINISM env var override.
+//
+// Path resolution priority: flagPath > envPath > "". When the
+// resolved path is "" the returned Resolved is the all-defaults
+// bundle (default strategies + per-impl-opt-in determinism), which
+// makes the code path through newRTID identical to today's
+// hand-wired runtime — Options.Strategy on the resulting Manager is
+// the package default, and behavior is bit-for-bit unchanged.
+//
+// The determinismOverride argument, when non-empty, replaces the
+// determinism mode on the resolved Config before Apply runs. This is
+// the documented escape hatch from design doc §8 step 2 for one-off
+// determinism flips without editing the TOML file. Unknown override
+// values are rejected with the same error LoadConfig would produce.
+//
+// Errors are returned wrapped so the caller can log them with
+// context. The caller (runServerMain) exits 2 on any error so the
+// rtid never starts in a misconfigured state.
+func resolveResearchConfig(flagPath, envPath, determinismOverride string) (research.Resolved, error) {
+	path := flagPath
+	if path == "" {
+		path = envPath
+	}
+	cfg, err := research.LoadConfig(path)
+	if err != nil {
+		return research.Resolved{}, err
+	}
+	if determinismOverride != "" {
+		// Re-encode through ParseConfig's path validation so an
+		// unknown override surfaces with the same error wording the
+		// TOML field would. We synthesize a one-line TOML body to
+		// reuse parseDeterminismMode without exposing it.
+		var probe research.Config
+		probe.Determinism = cfg.Determinism
+		ovrCfg, err := research.ParseConfig([]byte("determinism = \"" + determinismOverride + "\""))
+		if err != nil {
+			return research.Resolved{}, fmt.Errorf("rtid: GORTI_DETERMINISM override: %w", err)
+		}
+		cfg.Determinism = ovrCfg.Determinism
+	}
+	reg := research.Default()
+	resolved, err := research.Apply(cfg, reg)
+	if err != nil {
+		return research.Resolved{}, err
+	}
+	return resolved, nil
+}
 
 // buildServerTLS loads a server-side *tls.Config from the
 // --tls-cert/--tls-key flag pair. Returns (nil, nil) when both are empty
