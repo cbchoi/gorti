@@ -64,10 +64,19 @@ func NewRegistry() *Registry {
 }
 
 // Default returns a Registry pre-populated with the package-default
-// impls under the name "default". This is the registry shape rtid uses
+// impls under the name "default", PLUS the Phase-4 reference alt impls
+// shipped in their owning packages. This is the registry shape rtid uses
 // when no alternative impls have been linked into the binary; a TOML
 // config that selects "default" everywhere resolves to behavior
 // identical to today's hand-wired runtime.
+//
+// Phase-4 alts pre-registered here:
+//   - "max-projected" (time.lbts) — non-conservative max-of-projections
+//     variant; preserves determinism.
+//
+// Adding a new alt is a one-liner here plus the alt_*.go file in the
+// owning package; see docs/research-platform-howto.md for the full
+// recipe.
 func Default() *Registry {
 	r := NewRegistry()
 	// Errors from the Register* helpers can only come from duplicate-name
@@ -76,6 +85,7 @@ func Default() *Registry {
 	// returning errors for the public API (researchers calling
 	// Register* on a populated registry).
 	_ = r.RegisterLBTS("default", timepkg.DefaultLBTSStrategy())
+	_ = r.RegisterLBTS("max-projected", timepkg.MaxProjectedLBTSStrategy())
 	_ = r.RegisterGrant("default", timepkg.DefaultGrantStrategy())
 	_ = r.RegisterNegotiation("default", ownership.DefaultNegotiationStrategy())
 	return r
