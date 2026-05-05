@@ -1,0 +1,106 @@
+// Package client wraps the rti.v1.AdminService gRPC stub for the
+// rti-top TUI. The wrapper centralises dial setup, deadline policy,
+// and the version-pin (every request carries WIRE_VERSION_V1) so the
+// TUI MVU code never touches gRPC directly.
+//
+// Read-only by design — see docs/rtid-tui.md §7.5 (PINNED). No
+// mutating RPCs are exposed here, and no helper accepts arguments
+// that could change rtid state.
+package client
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+)
+
+// Client is the typed AdminService façade. Holds the underlying
+// *grpc.ClientConn so callers can Close() once the program exits.
+type Client struct {
+	conn   *grpc.ClientConn
+	stub   rtiv1.AdminServiceClient
+	target string
+}
+
+// Dial establishes a connection to the AdminService listener at addr
+// (typically `localhost:8443`). Plaintext only — Phase 1's admin
+// listener is plaintext per docs/rtid-tui.md §2.5 (mTLS deferred to
+// cut-3). The first Status() roundtrip should be used as the
+// liveness probe before entering the TUI loop.
+func Dial(addr string) (*Client, error) {
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("rti-top: dial admin %q: %w", addr, err)
+	}
+	return &Client{
+		conn:   conn,
+		stub:   rtiv1.NewAdminServiceClient(conn),
+		target: addr,
+	}, nil
+}
+
+// Target returns the dial address for log/diagnostic strings.
+func (c *Client) Target() string { return c.target }
+
+// Close releases the underlying gRPC connection.
+func (c *Client) Close() error {
+	if c == nil || c.conn == nil {
+		return nil
+	}
+	return c.conn.Close()
+}
+
+// Status calls AdminService.Status with a 3-second deadline. Used at
+// startup as a liveness probe; the response also seeds the TUI's
+// version + uptime header before the first Snapshot lands.
+func (c *Client) Status(ctx context.Context) (*rtiv1.StatusResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	resp, err := c.stub.Status(ctx, &rtiv1.StatusRequest{
+		WireVersion: rtiv1.WireVersion_WIRE_VERSION_V1,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Status: %w", err)
+	}
+	return resp, nil
+}
+
+// Snapshot calls AdminService.Snapshot with a deadline equal to the
+// poll interval (so a stuck server cannot back up the TUI's polling
+// goroutine). When federation is empty, every federation is returned;
+// otherwise only the named one.
+func (c *Client) Snapshot(ctx context.Context, federation string, deadline time.Duration) (*rtiv1.SnapshotResponse, error) {
+	if deadline <= 0 {
+		deadline = 3 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+	resp, err := c.stub.Snapshot(ctx, &rtiv1.SnapshotRequest{
+		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName: federation,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Snapshot: %w", err)
+	}
+	return resp, nil
+}
+
+// TailEvents opens a server-streaming subscription on the named
+// federation. Caller cancels via the supplied context. The wrapper
+// returns the typed gRPC stream so the consumer reads
+// TailEventsResponse messages directly (no intermediate channel).
+func (c *Client) TailEvents(ctx context.Context, federation string) (grpc.ServerStreamingClient[rtiv1.TailEventsResponse], error) {
+	stream, err := c.stub.TailEvents(ctx, &rtiv1.TailEventsRequest{
+		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName: federation,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("TailEvents: %w", err)
+	}
+	return stream, nil
+}
