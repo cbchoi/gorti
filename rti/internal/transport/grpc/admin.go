@@ -323,6 +323,13 @@ func buildFederationSnapshot(
 			Handle: uint64(info.Handle),
 			Name:   info.Name,
 		}
+		// rtid-TUI Phase 3: surface the federate's wall-clock join time
+		// for the drilldown view's `age` column. JoinedAt.IsZero() means
+		// the federation manager could not record it (legacy data path);
+		// surface 0 so clients can hide the column for that row.
+		if !info.JoinedAt.IsZero() {
+			row.JoinUnixSeconds = info.JoinedAt.Unix()
+		}
 		if t, ok := timeByHandle[info.Handle]; ok {
 			row.CurrentTime = float64(t.CurrentTime)
 			row.Lookahead = float64(t.Lookahead)

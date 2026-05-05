@@ -55,9 +55,18 @@ type FederationStore interface {
 }
 
 // FederateInfo is one (handle, name) entry on a FederationRoster.
+//
+// JoinedAt is the wall-clock instant the federate completed
+// JoinFederation. Used by the AdminService Snapshot path to populate
+// FederateSnapshot.join_unix_seconds (rtid-TUI Phase 3 — the
+// drilldown view's `age` column). The zero value indicates the
+// federation manager could not record a join time (e.g. a legacy
+// federation predating the field) — callers MUST treat
+// JoinedAt.IsZero() as "unknown / hide".
 type FederateInfo struct {
-	Handle FederateHandle
-	Name   string
+	Handle   FederateHandle
+	Name     string
+	JoinedAt time.Time
 }
 
 // FederationRoster is one federation's roster snapshot.

@@ -61,6 +61,15 @@ type federationState struct {
 	nextFederateHandle uint64
 	nameToHandle       map[string]core.FederateHandle
 	handleToName       map[core.FederateHandle]string
+	// joinedAt records the wall-clock instant each federate completed
+	// JoinFederation. Phase-3 of the rtid-TUI plan
+	// (docs/rtid-tui.md) feeds this through Snapshot →
+	// FederationRoster.Federates[i].JoinedAt → AdminService's
+	// FederateSnapshot.join_unix_seconds for the drilldown view's
+	// `age` column. Maintained as a sibling map (rather than enriching
+	// the existing handleToName) so resign / lookup paths stay
+	// allocation-free for the hot path that doesn't need join time.
+	joinedAt map[core.FederateHandle]time.Time
 }
 
 // Options bundles Manager dependencies. Nil values use sensible defaults
@@ -195,6 +204,7 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		nextFederateHandle: 0, // first Join produces handle 1
 		nameToHandle:       map[string]core.FederateHandle{},
 		handleToName:       map[core.FederateHandle]string{},
+		joinedAt:           map[core.FederateHandle]time.Time{},
 	}
 	return nil
 }
@@ -281,6 +291,13 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 	assigned := core.FederateHandle(fs.nextFederateHandle)
 	fs.nameToHandle[req.FederateName] = assigned
 	fs.handleToName[assigned] = req.FederateName
+	// Phase-3 rtid-TUI: stamp the wall-clock join time so the
+	// AdminService Snapshot path can surface it as the drilldown view's
+	// `age` column. Sourced from the same Clock the eventlog's
+	// federateJoinedEvent.at uses below — both stamps therefore advance
+	// in lock-step, including under FakeClock in tests.
+	joinTime := m.opts.Clock.Now()
+	fs.joinedAt[assigned] = joinTime
 
 	// Write-ahead: append before returning. EventLog optional in cut 1.
 	if m.opts.EventLog != nil {
@@ -288,7 +305,7 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 			fed:      req.Federation,
 			federate: req.FederateName,
 			handle:   assigned,
-			at:       m.opts.Clock.Now(),
+			at:       joinTime,
 		}); err != nil {
 			// Roll back the roster mutation so the join is atomic on the
 			// event log boundary; the caller sees a clean failure. The
@@ -298,6 +315,7 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 			// nextFederateHandle even on append failure recovery.
 			delete(fs.nameToHandle, req.FederateName)
 			delete(fs.handleToName, assigned)
+			delete(fs.joinedAt, assigned)
 			return core.InvalidFederateHandle, fmt.Errorf("federation %q join %q: eventlog append: %w",
 				req.Federation, req.FederateName, err)
 		}
@@ -382,6 +400,7 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 	// exactly the same handle-to-name binding even after the resign.
 	delete(fs.nameToHandle, name)
 	delete(fs.handleToName, h)
+	delete(fs.joinedAt, h)
 	if m.opts.OnFederateResigned != nil {
 		m.opts.OnFederateResigned(ctx, fed, h)
 	}
@@ -452,8 +471,9 @@ func (m *Manager) Snapshot() []core.FederationRoster {
 		}
 		for h, fname := range fs.handleToName {
 			roster.Federates = append(roster.Federates, core.FederateInfo{
-				Handle: h,
-				Name:   fname,
+				Handle:   h,
+				Name:     fname,
+				JoinedAt: fs.joinedAt[h], // zero for legacy entries; AdminService elides
 			})
 		}
 		fs.mu.RUnlock()

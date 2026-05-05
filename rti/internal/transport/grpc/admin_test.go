@@ -179,6 +179,52 @@ func TestAdminService_Snapshot_AssemblesPerFederation(t *testing.T) {
 	}
 }
 
+// TestAdminService_Snapshot_JoinUnixSeconds verifies that Phase-3's
+// new FederateSnapshot.join_unix_seconds field is populated from the
+// federation manager's JoinedAt stamp. rtid-TUI Phase 3 — drilldown
+// `age` column source data.
+func TestAdminService_Snapshot_JoinUnixSeconds(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	clk := core.NewFakeClock(t0)
+	fedMgr, err := federation.New(federation.Options{
+		Clock: clk,
+		FOMs:  adminFOMs{},
+	})
+	if err != nil {
+		t.Fatalf("federation.New: %v", err)
+	}
+	if err := fedMgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "demo", Mode: core.ModeVerbose}); err != nil {
+		t.Fatalf("CreateFederation: %v", err)
+	}
+	if _, err := fedMgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: "demo", FederateName: "alpha"}); err != nil {
+		t.Fatalf("JoinFederation alpha: %v", err)
+	}
+	clk.Advance(7 * time.Second)
+	if _, err := fedMgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: "demo", FederateName: "beta"}); err != nil {
+		t.Fatalf("JoinFederation beta: %v", err)
+	}
+
+	svc := newAdminService(AdminOptions{Federations: fedMgr})
+	resp, err := svc.Snapshot(ctx, &rtiv1.SnapshotRequest{
+		WireVersion: rtiv1.WireVersion_WIRE_VERSION_V1,
+	})
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	feds := resp.GetFederations()[0].GetFederates()
+	if len(feds) != 2 {
+		t.Fatalf("Federates len = %d, want 2", len(feds))
+	}
+	if got := feds[0].GetJoinUnixSeconds(); got != t0.Unix() {
+		t.Errorf("alpha JoinUnixSeconds = %d, want %d", got, t0.Unix())
+	}
+	if got, want := feds[1].GetJoinUnixSeconds(), t0.Add(7*time.Second).Unix(); got != want {
+		t.Errorf("beta JoinUnixSeconds = %d, want %d", got, want)
+	}
+}
+
 func TestAdminService_Snapshot_FilterByFederationName(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
