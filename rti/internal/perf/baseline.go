@@ -150,7 +150,7 @@ func (m *Manager) RunBaseline(ctx context.Context) (Result, error) {
 
 	// Per-federate inbox subscriptions. cancels are deferred so the
 	// outbox tears down cleanly on return.
-	subs := make([]<-chan core.OutboundEvent, len(handles))
+	subs := make([]<-chan []core.OutboundEvent, len(handles))
 	cancels := make([]func() error, len(handles))
 	for i, h := range handles {
 		ch, cancel, err := rt.outbox.Subscribe(ctx, core.FederationName(m.opts.FederationName), h)
@@ -190,13 +190,24 @@ func (m *Manager) RunBaseline(ctx context.Context) (Result, error) {
 			defer wg.Done()
 			local := make([]int64, 0, 4096)
 			ch := subs[i]
+			processBatch := func(batch []core.OutboundEvent) {
+				now := rt.clock.Now().UnixNano()
+				for _, evt := range batch {
+					if sendNs, ok := extractSendNanos(evt); ok {
+						lat := now - sendNs
+						if lat >= 0 {
+							local = append(local, lat)
+						}
+					}
+				}
+			}
 			for {
 				select {
 				case <-runCtx.Done():
 					latNanosMu.Lock()
 					latNanos = append(latNanos, local...)
 					latNanosMu.Unlock()
-					// Drain remaining buffered events without blocking
+					// Drain remaining buffered batches without blocking
 					// so the outbox cancel can close the channel.
 					for {
 						select {
@@ -205,19 +216,14 @@ func (m *Manager) RunBaseline(ctx context.Context) (Result, error) {
 							return
 						}
 					}
-				case evt, alive := <-ch:
+				case batch, alive := <-ch:
 					if !alive {
 						latNanosMu.Lock()
 						latNanos = append(latNanos, local...)
 						latNanosMu.Unlock()
 						return
 					}
-					if sendNs, ok := extractSendNanos(evt); ok {
-						lat := rt.clock.Now().UnixNano() - sendNs
-						if lat >= 0 {
-							local = append(local, lat)
-						}
-					}
+					processBatch(batch)
 				}
 			}
 		}()
