@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
@@ -20,10 +21,18 @@ import (
 // crash-on-overflow contract, which is appropriate for production but
 // would terminate the harness prematurely under sustained tight-loop
 // load.
+//
+// Concurrency: the subscriber table is held in an atomic.Pointer so
+// the hot Send path is a single atomic load + map lookup with no
+// mutex acquire. Subscribe/cancel take writeMu, build a fresh map
+// (copy-on-write) with the mutation applied, and Store the new
+// pointer. Reads see either the pre-write or post-write snapshot
+// atomically. Suited to read-mostly workloads (one Subscribe per
+// federate at start, N Sends per fanout).
 type perfOutbox struct {
-	mu          sync.RWMutex
-	subscribers map[fedHandleKey]chan core.OutboundEvent
-	bufferSize  int
+	subs       atomic.Pointer[map[fedHandleKey]chan core.OutboundEvent]
+	writeMu    sync.Mutex
+	bufferSize int
 }
 
 type fedHandleKey struct {
@@ -35,17 +44,16 @@ func newPerfOutbox(bufferSize int) *perfOutbox {
 	if bufferSize < 1 {
 		bufferSize = 1
 	}
-	return &perfOutbox{
-		subscribers: map[fedHandleKey]chan core.OutboundEvent{},
-		bufferSize:  bufferSize,
-	}
+	o := &perfOutbox{bufferSize: bufferSize}
+	empty := map[fedHandleKey]chan core.OutboundEvent{}
+	o.subs.Store(&empty)
+	return o
 }
 
 // Send implements core.Outbox.
 func (o *perfOutbox) Send(_ context.Context, fed core.FederationName, h core.FederateHandle, evt core.OutboundEvent) error {
-	o.mu.RLock()
-	ch, ok := o.subscribers[fedHandleKey{fed: fed, h: h}]
-	o.mu.RUnlock()
+	subs := *o.subs.Load()
+	ch, ok := subs[fedHandleKey{fed: fed, h: h}]
 	if !ok {
 		return nil
 	}
@@ -61,22 +69,37 @@ func (o *perfOutbox) Send(_ context.Context, fed core.FederationName, h core.Fed
 // Subscribe registers a per-federate inbox.
 func (o *perfOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan core.OutboundEvent, func() error, error) {
 	key := fedHandleKey{fed: fed, h: h}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if _, dup := o.subscribers[key]; dup {
+	o.writeMu.Lock()
+	defer o.writeMu.Unlock()
+	current := *o.subs.Load()
+	if _, dup := current[key]; dup {
 		return nil, nil, fmt.Errorf("perf: subscriber already registered for federation %q federate %d", fed, h)
 	}
 	ch := make(chan core.OutboundEvent, o.bufferSize)
-	o.subscribers[key] = ch
+	next := make(map[fedHandleKey]chan core.OutboundEvent, len(current)+1)
+	for k, v := range current {
+		next[k] = v
+	}
+	next[key] = ch
+	o.subs.Store(&next)
 	var cancelOnce sync.Once
 	cancel := func() error {
 		cancelOnce.Do(func() {
-			o.mu.Lock()
-			defer o.mu.Unlock()
-			if existing, ok := o.subscribers[key]; ok && existing == ch {
-				delete(o.subscribers, key)
-				close(ch)
+			o.writeMu.Lock()
+			defer o.writeMu.Unlock()
+			cur := *o.subs.Load()
+			existing, ok := cur[key]
+			if !ok || existing != ch {
+				return
 			}
+			next := make(map[fedHandleKey]chan core.OutboundEvent, len(cur)-1)
+			for k, v := range cur {
+				if k != key {
+					next[k] = v
+				}
+			}
+			o.subs.Store(&next)
+			close(ch)
 		})
 		return nil
 	}
