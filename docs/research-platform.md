@@ -1,7 +1,15 @@
 # gorti as an HLA/RTI research platform — design
 
-Status: DRAFT. Phase 0 of the research-platform refactor — design only,
-no code changes yet. Pending decisions are marked **OPEN**.
+Status: Phase 0 — design only, no code changes yet. The five decisions
+flagged in §10 of the original draft are now PINNED (see §3); Phase 1
+work can be dispatched once this is reviewed.
+
+Decisions pinned 2026-05-05:
+- (b) in-tree alternatives selected by TOML config
+- determinism contract is a config knob with default "per-impl opt-in"
+- Phase 2 focus: time + ownership
+- declaration management is in Phase 1 (not deferred)
+- config format: TOML
 
 This document maps the existing modularity, lists every extension point
 worth opening up for research, and proposes a staged path to get there
@@ -79,60 +87,43 @@ done at once.
 
 ---
 
-## 3. Design decisions — OPEN
+## 3. Design decisions — PINNED
 
-These three pin the rest of the doc and the implementation work.
+### 3.1 Researcher-friendliness level — **(b) in-tree alternatives**
 
-### 3.1 Researcher-friendliness level — OPEN
+Multiple impls live in tree under `rti/internal/<service>/alt_*.go`;
+researchers contribute new impls alongside the defaults. Selection is
+config-driven (§7.2). Out-of-process plugins are deferred indefinitely.
 
-| Option | What it means | Cost | Recommendation |
-|---|---|---|---|
-| (a) Interface refactor only | Researchers fork the repo, swap an impl, recompile rtid | smallest; just phases 0+1+2 | start here |
-| (b) In-tree alternatives | Multiple impls live in tree, selected by config; researchers add alongside | medium; adds phases 3+4 | **proposed default** |
-| (c) Out-of-tree plugins | Go `plugin` package / WebAssembly / RPC | high; determinism + version-pinning headache | not recommended |
+### 3.2 Determinism contract — **per-impl opt-in (default), config-selectable**
 
-Default proposal: **(b)**. Lets researchers contribute their alt
-implementations upstream without needing fork maintenance. Keeps
-determinism review centralized. Doesn't preclude (c) later.
+The contract itself is a runtime knob with three settings; the default
+is **per-impl opt-in**.
 
-### 3.2 Determinism contract — OPEN
-
-The cut-1 master plan promised byte-identical event-log replay across
-runs. Alternative algorithm implementations may or may not preserve
-that:
-
-| Mode | Rule | Spec-test consequence |
+| Setting | Rule | Spec-test consequence |
 |---|---|---|
-| **strict** | Every alt impl MUST produce a byte-identical event log to the default impl on the same inputs | Hardest bar; rules out non-deterministic algorithms; current spec tests apply unchanged |
-| **per-impl opt-in** | Each impl declares whether it is determinism-preserving; the M3/M4 replay tests run only against impls that opt in | Most flexible; researchers can study non-deterministic optimistic variants without breaking the suite |
-| **off** | Determinism is researcher-managed; replay tests skip when an alt is selected | Loosest; complicates conformance comparisons |
+| `determinism = "strict"` | Every wired impl must satisfy `DeterminismPreserving() == true`; the rtid composition root rejects mixes that include any non-preserving impl. Current M3/M4 replay tests apply unchanged | Conservative; rules out optimistic / market-based research variants |
+| `determinism = "per-impl-opt-in"` (default) | Each impl declares its own `DeterminismPreserving() bool`. Replay tests filter by the active impls' flags: skip with reason when any wired impl is non-preserving; run normally when all are | Most flexible; the conformance baseline is preserved without locking out non-deterministic research |
+| `determinism = "off"` | Replay tests are unconditionally skipped. Researchers manage determinism manually | Pure exploratory work; conformance comparisons become per-researcher responsibility |
 
-Default proposal: **per-impl opt-in**. Each `Module` declares
-`DeterminismPreserving() bool`. The replay test suite filters by this
-flag; conformance behavior tests (M0..M12 service correctness) run
-against all impls.
+Mechanism: the TOML research config carries a top-level
+`determinism = "..."` setting that defaults to `"per-impl-opt-in"`
+when absent. Replay test fixtures read it (via env var
+`GORTI_DETERMINISM=...` or by reflecting on the active rtid config)
+and gate accordingly.
 
-### 3.3 Research focus order — OPEN
+### 3.3 Research focus order — **time + ownership**
 
-Phase 2 extracts algorithms. Order matters because each algorithm
-extraction is a real refactor of a working service. Common research
-foci:
+Phase 2 carves algorithm-level strategies in this order:
 
-1. **Time advance** — the richest research area; LBTS variants,
-   optimistic vs conservative, lookahead policies. Touches: `time/`,
-   `core.TimeManager`.
-2. **DDM filtering** — overlap algorithms are well-studied; this
-   already has a TODO for interval trees (M10 W2 follow-up). Touches:
-   `ddm/`.
-3. **Ownership protocols** — negotiation strategies (market-based,
-   bidding, etc.). Touches: `ownership/`.
-4. **Replay / save** — partial replay, snapshot-based save. Touches:
-   `savepoint/`, `eventlog/`.
-5. **Fanout strategy** — already well-optimized post-perf-pass; less
-   research-relevant unless studying scaling.
+1. **Time advance** — LBTS variants, grant decision strategies. Touches
+   `time/` and `core.TimeManager`. (See §6.1.)
+2. **Ownership protocols** — negotiation / divest / acquire strategies.
+   Touches `ownership/`. (See §6.3.)
 
-Default proposal: pick **2 of the top 3** for Phase 2 (time + DDM, or
-time + ownership). Defer the rest.
+DDM overlap, replay/save, and fanout strategy are deferred to a later
+phase; the §6 sketches for them stay in this document as a roadmap
+but no Phase 2 work targets them.
 
 ---
 
@@ -233,10 +224,18 @@ Risk: low.
 
 ### 5.6 `declaration.Manager` → `core.DeclarationManagement`
 
-Per `docs/idd.md` §3 this is intentionally concrete; revisit whether
-research demand justifies an interface. **OPEN — recommend deferring
-to Phase 2** if a concrete need arises (e.g., a researcher wanting to
-swap subscriber resolution).
+**Included in Phase 1** (decision §3 / 2026-05-05).
+
+`docs/idd.md` §3 currently calls this "pure local component, no
+abstraction layer". The Phase 1 commit adds `core.DeclarationManagement`
+and updates that doc note: research-platform reachability outweighs the
+purity argument. The interface exposes the publish / subscribe / lookup
+methods plus the InteractionPublishersFor / InteractionSubscribersFor
+slice (the only ones currently consumed by `object.Registry` and the
+gRPC declaration handler).
+
+Risk: low. Touching the doc note in `docs/idd.md` is a small
+secondary edit.
 
 ---
 
@@ -266,19 +265,12 @@ type GrantStrategy interface {
 default impls (the current code, lifted into `defaultLBTS`,
 `defaultGrant` types). Existing tests untouched.
 
-### 6.2 DDM package
+### 6.2 DDM package — DEFERRED past Phase 2
 
-```go
-// rti/internal/ddm/strategy.go
-type OverlapStrategy interface {
-    Overlap(pub, sub []regionBounds) bool
-    Name() string
-    DeterminismPreserving() bool
-}
-```
-
-The current `regionsOverlap` becomes the default. Researchers add
-`alt_intervaltree.go`, `alt_dimensionhash.go`, etc.
+(Sketch retained as roadmap.) The current `regionsOverlap` would
+become the default behind an `OverlapStrategy` interface; researchers
+would add `alt_intervaltree.go`, `alt_dimensionhash.go`, etc. Not in
+Phase 2 per §3.3; revisit when a researcher signals demand.
 
 ### 6.3 Ownership package
 
@@ -324,16 +316,16 @@ to study scaling.
 `cmd/rtid/main.go` constructs all managers today. Phase 1 doesn't
 change that — researchers fork it and swap the `New(...)` calls.
 
-### 7.2 Phase 3: registry + config
+### 7.2 Phase 3: registry + TOML config
 
 After Phase 2, add a small registry:
 
 ```go
 // rti/internal/research/registry.go
 type Registry struct {
-    timeStrategies   map[string]time.GrantStrategy
-    lbtsStrategies   map[string]time.LBTSStrategy
-    overlapStrategies map[string]ddm.OverlapStrategy
+    lbtsStrategies        map[string]time.LBTSStrategy
+    grantStrategies       map[string]time.GrantStrategy
+    negotiationStrategies map[string]ownership.NegotiationStrategy
     // ...
 }
 
@@ -341,12 +333,29 @@ func (r *Registry) Register(category, name string, impl any) error
 func (r *Registry) Lookup(category, name string) (any, bool)
 ```
 
-`cmd/rtid/main.go` reads a `--research-config <file>` flag (or env
-vars) that names which alt impls to wire. If the flag is absent, all
-defaults apply and behavior is identical to today.
+`cmd/rtid/main.go` reads `--research-config <file.toml>` (or env vars
+for one-off overrides). Flag absent → all defaults apply, behavior
+identical to today.
 
-OPEN: config format. Recommendation = **TOML** for human-friendly hand
-editing; JSON if we want to keep the existing JSON-everywhere pattern.
+**Config format: TOML** (decision §3 / 2026-05-05). Sample:
+
+```toml
+# Top-level determinism contract: "strict" | "per-impl-opt-in" | "off".
+# Default when absent: "per-impl-opt-in".
+determinism = "per-impl-opt-in"
+
+[time]
+lbts = "default"             # alternates: "naive-min", "lookahead-pinned"
+grant = "default"            # alternates: "optimistic-tara", "lazy"
+
+[ownership]
+negotiation = "default"      # alternates: "market-based", "bidding"
+```
+
+Researchers add a TOML file, point rtid at it, get an alternative
+configuration. Adding a new alternative impl = ship a `alt_*.go` file
++ add a `Register(...)` call in the package's `init()` (or a small
+manual registration in main).
 
 ---
 
@@ -356,19 +365,27 @@ Pinning the rule from §3.2:
 
 1. Every algorithm strategy interface declares
    `DeterminismPreserving() bool`.
-2. The replay tests (`rti/spec/M3/replay_test.go`,
+2. The active rtid carries a determinism mode read from the TOML
+   research config (or env `GORTI_DETERMINISM`); default is
+   `"per-impl-opt-in"`.
+3. Replay tests (`rti/spec/M3/replay_test.go`,
    `examples/go-timed/replay_test.go`,
-   `pysdk/tests/spec/m4/test_spec_m4_replay.py`) check the active
-   impl's flag at startup. If false, the test reports SKIP with a
-   reason, and the suite continues.
-3. Behavioral conformance tests (M0..M12 except replay) run against
-   all impls.
-4. Researchers writing non-determinism-preserving impls add a
+   `pysdk/tests/spec/m4/test_spec_m4_replay.py`) gate based on the
+   active mode AND the wired impls' flags:
+   - `strict`: composition root rejects any non-preserving impl at
+     boot; replay tests run unchanged.
+   - `per-impl-opt-in`: replay tests SKIP with reason if any wired
+     impl reports `DeterminismPreserving() == false`; otherwise run
+     unchanged.
+   - `off`: replay tests skip unconditionally.
+4. Behavioral conformance tests (M0..M12 except replay) run against
+   every wired impl regardless of mode.
+5. Researchers writing non-determinism-preserving impls add a
    regression suite under `rti/research/<name>/` validating their
    own correctness.
 
-This makes determinism a property of the chosen impl set, not of the
-codebase.
+This makes determinism a property of the active rtid configuration,
+not of the codebase.
 
 ---
 
@@ -378,30 +395,45 @@ Repeated from earlier with refinement.
 
 | Phase | Deliverable | Concrete output | Risk | Effort |
 |---|---|---|---|---|
-| 0 | This doc + agreement | `docs/research-platform.md` | none | DONE pending review |
-| 1 | Service-level interfaces for the 6 concrete-only managers | 6 commits, one per service: extract interface, switch consumers | low; no behavior change | medium |
-| 2a | Time strategies | `time/strategy.go` + extracted defaults; alt LBTS/Grant impls deferred | medium; touches hot path | medium |
-| 2b | DDM overlap strategy | `ddm/strategy.go` + interval-tree alt as reference | medium | small |
-| 2c | Ownership negotiation strategy | `ownership/strategy.go` + extraction | medium | medium-large |
-| 3 | Module registry + config-driven assembly | `internal/research/` + `--research-config` flag | medium; new infra | medium |
-| 4 | One reference alternative impl per Phase-2 service | e.g. `ddm/alt_intervaltree.go`, `time/alt_optimistic.go` | low (additive) | medium |
+| 0 | This doc + agreement | `docs/research-platform.md` | none | DONE 2026-05-05 |
+| 1 | Service-level interfaces for the 6 concrete-only managers (sync, ownership, MOM, DDM, savepoint, declaration) | 6 commits, one per service: extract interface in `core/`, switch consumers | low; no behavior change | medium |
+| 2a | Time strategies | `time/strategy.go` with `LBTSStrategy` + `GrantStrategy`; defaults extracted unchanged; no alt impls yet | medium; touches hot path | medium |
+| 2b | Ownership negotiation strategy | `ownership/strategy.go` with `NegotiationStrategy`; defaults extracted unchanged | medium | medium-large |
+| 3 | Module registry + TOML config-driven assembly | `internal/research/` registry + `--research-config <file.toml>` flag in cmd/rtid; determinism mode honored | medium; new infra | medium |
+| 4 | One reference alternative impl per Phase-2 service | e.g. `time/alt_optimistic.go`, `ownership/alt_market.go`; opt-in via TOML | low (additive) | medium |
+| Future | DDM overlap, replay/save, fanout strategies; out-of-process plugins | (deferred — see §6.2, §6.4, §6.5, §11) | n/a | n/a |
 
 Each phase keeps M0..M12 spec tests green. Per-phase commits are
 revertable.
 
 ---
 
-## 10. Open questions before Phase 1 starts
+## 10. Phase 1 dispatch plan
 
-1. **Researcher-friendliness level** (§3.1): default proposal (b)?
-2. **Determinism contract** (§3.2): default proposal "per-impl opt-in"?
-3. **Phase 2 focus** (§3.3): which 2 services first? Default proposal:
-   time + DDM.
-4. **Declaration management** (§5.6): defer or include in Phase 1?
-5. **Config format** (§7.2): TOML or JSON?
+Decisions pinned. Phase 1 is six small mechanical commits, one per
+concrete-only manager. Each commit:
 
-Once §10.1 + §10.2 + §10.3 are pinned, Phase 1 is mechanical and can
-be dispatched as 6 small commits.
+1. Adds a `core.<Name>` interface in `rti/internal/core/`.
+2. Asserts the existing concrete `*Manager` satisfies it (compile-time
+   `var _ core.<Name> = (*Manager)(nil)`).
+3. Switches consumers (gRPC handlers, composition root in
+   `cmd/rtid/main.go`, related test fakes) from `*Manager` to the
+   interface.
+4. Updates `docs/idd.md` if the service had an explicit "no
+   abstraction" note (declaration is the only one).
+5. Verifies `go test -race ./...` clean + cross-language pysdk tests
+   green.
+
+Per-commit subjects:
+
+1. `refactor(sync): extract core.SyncCoordinator interface`
+2. `refactor(ownership): extract core.OwnershipCoordinator interface`
+3. `refactor(mom): extract core.ManagementObjectModel interface`
+4. `refactor(ddm): extract core.DataDistributionManagement interface`
+5. `refactor(savepoint): extract core.SavepointCoordinator interface`
+6. `refactor(declaration): extract core.DeclarationManagement interface`
+
+Each is independently revertable.
 
 ---
 
