@@ -87,9 +87,9 @@ exits with a clear usage error and exit code 2.
 ```
  Federation: demo — verbose — federates_joined=3
    FEDERATE           HANDLE  TIME      LOOKAHEAD  ROLE           TPS     Q     DROP    AGE
- ▶ generator          1       5.00      1.00       regulator      50      0     0       -
-   buffer             2       5.00      0.50       reg+const      25      4     6       -
-   processor          3       5.00      1.00       constrained    0       0     0       -
+ ▶ generator          1       5.00      1.00       regulator      50      0     0       12m3s
+   buffer             2       5.00      0.50       reg+const      25      4     6       12m3s
+   processor          3       5.00      1.00       constrained    0       0     0       11m48s
 
  LBTS: 5.50    Pending grants: [h=1 @ 6.00]
  Sync points: [start_simulation: ✓ achieved]
@@ -101,9 +101,10 @@ exits with a clear usage error and exit code 2.
 
 The PINNED column set is: `name`, `handle`, `current_time`,
 `lookahead`, `role`, `tps`, `queue_depth`, `drops_total`, `age`.
-`age` is rendered as `-` because Phase 1's
-`AdminService.SnapshotResponse.FederateSnapshot` does not yet
-carry per-federate join time. Adding it is a Phase-3 follow-up.
+`age` is computed client-side as `now - join_unix_seconds` and
+rendered with a magnitude-appropriate unit (`5s`, `12m3s`, `2h15m`,
+`3d4h`). A zero `join_unix_seconds` (legacy data path or pre-
+Phase-3 daemon) renders as `-` so the row still aligns.
 
 ### 3. Federate detail (`Enter` on a federate row)
 
@@ -199,9 +200,9 @@ These are documented here so they don't get lost. None of them
 require proto changes; they're all client-side ergonomic
 enhancements that can land independently in Phase 3.
 
-- **`age` column on the federate row.** The Phase-1
-  `FederateSnapshot` carries no join timestamp, so the drilldown
-  view shows `-`. Add a `join_unix_seconds` field in Phase 3.
+- ~~**`age` column on the federate row.**~~ DONE in Phase 3 —
+  `join_unix_seconds` (proto field 19) is populated by the
+  federation manager at JoinFederation and rendered client-side.
 - **Rate windows in Wire view (1s | 5s | 1m).** §3.4 mocks them up;
   Phase 2 surfaces only cumulative totals. Implementation requires
   client-side ring buffers of `(snapshot_at, totals)` pairs — fine

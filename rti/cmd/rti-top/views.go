@@ -183,7 +183,7 @@ func (m *model) renderDrilldownView() string {
 			tpsForFederate(f),
 			fmt.Sprintf("%d", f.GetOutboxQueueDepth()),
 			fmt.Sprintf("%d", f.GetDropsTotal()),
-			"-", // age — not on the wire in Phase 1; documented in README.
+			formatAge(f.GetJoinUnixSeconds(), time.Now()),
 		}
 		line := formatRow(row, widths)
 		if i == m.federate {
@@ -758,4 +758,41 @@ func joinHandles(hs []uint64) string {
 		parts[i] = fmt.Sprintf("%d", h)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// formatAge renders a federate's age (now - joinUnix) for the
+// drilldown view's `age` column. rtid-TUI Phase 3 — replaces the
+// Phase-2 "-" placeholder.
+//
+// Output format scales with magnitude (`5s`, `12m3s`, `2h15m`,
+// `3d4h`) — chosen to fit the column's 6-char width while still
+// surfacing the dominant unit. A zero joinUnix means the daemon
+// did not record a join time (legacy data path or pre-Phase-3
+// rtid) → render `-` so the row still aligns.
+func formatAge(joinUnix int64, now time.Time) string {
+	if joinUnix <= 0 {
+		return "-"
+	}
+	d := now.Sub(time.Unix(joinUnix, 0))
+	if d < 0 {
+		// Clock skew between rtid and rti-top — surface as 0s rather
+		// than confusing the operator with a negative duration.
+		return "0s"
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		m := int(d.Minutes())
+		s := int(d.Seconds()) % 60
+		return fmt.Sprintf("%dm%ds", m, s)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		m := int(d.Minutes()) % 60
+		return fmt.Sprintf("%dh%dm", h, m)
+	default:
+		days := int(d / (24 * time.Hour))
+		h := int(d.Hours()) % 24
+		return fmt.Sprintf("%dd%dh", days, h)
+	}
 }

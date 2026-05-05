@@ -184,6 +184,59 @@ func TestRender_TimeView(t *testing.T) {
 	}
 }
 
+// TestFormatAge_ScaleSelection verifies that the Phase-3 age
+// formatter chooses the right human-readable unit at each magnitude.
+// docs/rtid-tui.md §3.2 — the drilldown view's `age` column.
+func TestFormatAge_ScaleSelection(t *testing.T) {
+	now := time.Unix(2_000_000_000, 0).UTC()
+	cases := []struct {
+		name   string
+		joinAt time.Time
+		want   string
+	}{
+		{"sub-minute_5s", now.Add(-5 * time.Second), "5s"},
+		{"sub-hour_5min", now.Add(-5 * time.Minute), "5m0s"},
+		{"sub-hour_12m3s", now.Add(-(12*time.Minute + 3*time.Second)), "12m3s"},
+		{"sub-day_5h", now.Add(-5 * time.Hour), "5h0m"},
+		{"sub-day_2h15m", now.Add(-(2*time.Hour + 15*time.Minute)), "2h15m"},
+		{"multi-day", now.Add(-(3*24*time.Hour + 4*time.Hour)), "3d4h"},
+		{"zero_join_unix", time.Unix(0, 0), "-"},
+		{"negative_skew", now.Add(2 * time.Second), "0s"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatAge(tc.joinAt.Unix(), now)
+			if tc.name == "zero_join_unix" {
+				got = formatAge(0, now)
+			}
+			if got != tc.want {
+				t.Errorf("formatAge = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRender_DrilldownView_RendersAgeColumn verifies the drilldown
+// view replaces Phase-2's `-` placeholder with a populated age value
+// when the snapshot carries join_unix_seconds. rtid-TUI Phase 3.
+func TestRender_DrilldownView_RendersAgeColumn(t *testing.T) {
+	m := newTestModel(t)
+	m.selFed = "demo"
+	m.view = viewDrilldown
+	// Stamp a join_unix_seconds 30s in the past on every federate so
+	// the age column renders as `30s`.
+	now := time.Now()
+	for _, f := range m.last.GetFederations()[0].GetFederates() {
+		f.JoinUnixSeconds = now.Add(-30 * time.Second).Unix()
+	}
+	out := m.renderDrilldownView()
+	// At least one populated age cell should appear (avoids matching
+	// the `-` placeholder used elsewhere in the UI).
+	if !strings.Contains(out, "30s") {
+		t.Errorf("renderDrilldownView age column not populated\n--- output ---\n%s", out)
+	}
+}
+
 func TestRender_WireView(t *testing.T) {
 	m := newTestModel(t)
 	out := m.renderWireView()
