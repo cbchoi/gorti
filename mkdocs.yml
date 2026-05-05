@@ -86,6 +86,8 @@ nav:
   - Research Platform:
       - Design (Phase 0): research-platform.md
       - How-to add an alternative: research-platform-howto.md
+  - rtid TUI:
+      - Design (Phase 0): rtid-tui.md
   - Agent Briefs:
       - Agent A — RTI Core: agent-a-rti-core.md
       - Agent B — FOM / Encoding: agent-b-fom-encoding.md
