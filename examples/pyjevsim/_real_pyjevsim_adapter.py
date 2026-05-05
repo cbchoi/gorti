@@ -13,11 +13,12 @@ Two adapter shapes ship in this module:
     internal_transition / external_transition``) that the bridge can
     consume identically to the single-atomic case.
 
-Both adapters translate pyjevsim 1.3.x's API to the bridge's
+Both adapters translate pyjevsim's API (1.3.x and 2.0.x —
+API-compatible at every surface the adapter touches) to the bridge's
 DEVS-canonical names::
 
-      bridge (CoupledModelProtocol)        pyjevsim 1.3.x
-      ----------------------------         ---------------
+      bridge (CoupledModelProtocol)        pyjevsim
+      ----------------------------         --------
       time_advance() -> float              per-state ``deadline``
                                            (single-atomic) OR
                                            ``SysExecutor.get_next_event_time
@@ -385,12 +386,14 @@ class RealPyjevsimStructuralAdapter:
         #
         # 1. Output ports route to a private "sink" leaf model, NOT to
         #    the executor's external output queue. The latter would
-        #    seem cleaner but pyjevsim 1.3.x's
+        #    seem cleaner but pyjevsim's
         #    ``SysExecutor.single_output_handling`` has a bug
         #    (``msg[1].retrieve()`` on a non-subscriptable
         #    ``SysMessage``) when the destination is the executor
         #    itself; routing through a sink atomic sidesteps the bug
-        #    while preserving the same observable behaviour.
+        #    while preserving the same observable behaviour. The bug
+        #    exists in 1.3.1 and is unchanged in 2.0.1 — the new
+        #    Phase B router in 2.0's `step()` keeps the same shape.
         #
         # 2. Input ports use the standard
         #    ``insert_input_port`` + ``coupling_relation(None, port,
@@ -439,7 +442,8 @@ class RealPyjevsimStructuralAdapter:
         # call ``step(0)`` once at construction time to move every
         # waiting entity into the active map and seed its req_time.
         # After this, ``step(grant)`` correctly fires entities whose
-        # req_time <= grant.
+        # req_time <= grant. (Behaviour is identical in 1.3.1 and 2.0.1
+        # — `create_entity` semantics are unchanged.)
         self._executor.step(0)
 
     # --- Hierarchy walk + coupling replay -----------------------------------

@@ -6,6 +6,94 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## 2026-05-03 (deps: pyjevsim 1.3.1 → 2.0.1 — pin bump, no bridge changes)
+
+**Upgraded the bridge's pyjevsim dependency from `==1.3.1` to `==2.0.1`.**
+2.0.1 was published 2026-05-05 (alongside 2.0.0) and is the new latest on
+PyPI. The upgrade ships as a pin bump only — no bridge code or adapter
+code needed to be adapted. The relevant API surface is unchanged.
+
+**API delta investigated by diffing the wheels and reading the source.**
+Same module list (23 modules in both releases). 10 modules changed
+content; the changes are internal-only optimisations and additive
+features:
+
+| Module | Change shape | Bridge impact |
+|---|---|---|
+| `__init__.py` | identical | none |
+| `behavior_executor.py` | hot-path attribute snapshots; new `con_trans(port_msgs)` method | none — bridge never invokes con_trans |
+| `behavior_model.py` | new `con_trans` default impl (δ_int ; δ_ext per std DEVS) | none |
+| `executor.py` | removes `__lt__` (heap ordering moved to ScheduleQueue) | none — bridge doesn't compare executors |
+| `message_deliverer.py` | docstring only (clarifies by-reference semantics) | none |
+| `schedule_queue.py` | full rewrite to heapset (heap of unique timestamps + dict[time→set(executor)]); `pop_all_at(time)` added | none — same `push/pop/peek_time/remove` public API |
+| `structural_executor.py` | uses ScheduleQueue + cached `_obj_id` | none |
+| `structural_model.py` | docstrings only | none |
+| `system_executor.py` | new `track_uncaught=False` kwarg (additive); `step()` rewritten as full Parallel-DEVS two-phase tick that advances `global_time` round-by-round and ends at `granted_time` per IEEE 1516-2010 (was: set `global_time=granted_time` upfront then drain at fixed time); explicit `HLA_TIME` execution-mode docs | none — bridge's `RealPyjevsimStructuralAdapter` was already using `step(0)` for entity bootstrap and `step(global_time + dt)` per cycle, both of which behave identically under the new round semantics |
+| `system_message.py` | docstring only | none |
+| `system_object.py` | drops `datetime.now()` field on `SystemObject` (perf) | none — never read by the bridge |
+
+**Notably preserved (the bridge depends on these and they did not change):**
+
+- Top-level `pyjevsim` exports: `StructuralModel`, `BehaviorModel`,
+  `SysExecutor`, `SysMessage`, `ExecutionType`, `Infinite`.
+- Method names the adapter calls: `output`, `int_trans`, `ext_trans`,
+  `register_entity`, `coupling_relation`, `insert_external_event`,
+  `insert_input_port`, `step`, `get_next_event_time`,
+  `get_global_time`, `set_output_event_callback`,
+  `output_event_queue`, `insert_state`, `insert_input_port`,
+  `insert_output_port`, `init_state`, `get_models`, `get_couplings`.
+- The `SysExecutor.single_output_handling` bug
+  (`msg[1].retrieve()` on a non-subscriptable `SysMessage` when the
+  destination is the executor itself) is unchanged in 2.0.1. The
+  structural adapter's sink-leaf workaround remains required.
+- `select_preserve.py` was already a deterministic stand-in (sort by
+  port name) — pyjevsim's per-coupled-model `select()` is still
+  outside the W6 `CoupledModelProtocol` contract, so the upgrade
+  changed nothing here.
+
+**Files touched** (pin bump + comment freshening only):
+
+- `pysdk/pyproject.toml` — `pyjevsim==1.3.1` → `pyjevsim==2.0.1`,
+  comment block rewritten to summarise the 2.0.1 surface.
+- `README.md`, `docs/quickstart.md` — install line bumped.
+- `pysdk/pyjevsim_bridge/_protocol.py`,
+  `pysdk/pyjevsim_bridge/select_preserve.py`,
+  `examples/pyjevsim/_real_pyjevsim_adapter.py` — docstring/comment
+  refreshes to note 1.3.x and 2.0.x parity. No code changes.
+
+**Test status (final)**:
+
+- `python3 -m pytest pysdk/tests/` — 498 passed.
+- Per-example: `examples/pyjevsim/` 3 passed, `examples/pyjevsim-relay/`
+  6 passed, `examples/pyjevsim-dashboard/` 7 passed,
+  `examples/pyjevsim-time-advance/` 8 passed,
+  `examples/pyjevsim-sync-points/` 7 passed (31 example tests total).
+- `go test -race -count=1 ./...` — clean across 30+ packages.
+- M5 + M12 cross-language tests — green (covered by the pysdk suite).
+- Smoke run of `python3 examples/pyjevsim/runner.py` — 5-tick
+  producer/consumer round trip succeeds, payload sequence
+  `[1, 2, 3, 4, 5]` delivered.
+
+**Deferrals / not integrated:**
+
+- 2.0.1's new `BehaviorModel.con_trans` (Parallel-DEVS confluent
+  transition) and `ExecutionType.HLA_TIME` mode are NOT plumbed
+  through the bridge. The current `HLAFederate` cycle is sequential
+  (output → send → int_trans, or external_transition) which matches
+  how IEEE 1516-2010 NER grants are surfaced — confluence at the
+  same simulated instant collapses to either internal-only or
+  external-only per the `t < t_request` check in `step_once`. Wiring
+  `con_trans` would let a federation observe simultaneous internal +
+  external events as a single δ_con instead of two ordered
+  transitions, but it requires a CoupledModelProtocol shape change
+  that is out of scope for a pin bump. Filed-in-comment for the next
+  bridge revision.
+- `track_uncaught` on `SysExecutor` is left at its default (False);
+  the structural adapter does not register any models with dangling
+  outputs, so the diagnostic adds no value at present.
+
+---
+
 ## 2026-05-05 (post-M12 perf pass — outbox optimization, 1.6–3.8× throughput)
 
 **Single-session optimization pass on the in-process perf harness, profile-driven.** Pre-pass revert tag: `perf-baseline-m12` at commit `3078f06` (M12 close). Full report in `docs/reports/perf/M12-optimization-pass.md`.

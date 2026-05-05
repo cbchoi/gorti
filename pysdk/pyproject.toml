@@ -34,20 +34,31 @@ dev = [
 # avoid importing real pyjevsim — they consume the typing.Protocol shim in
 # pysdk/pyjevsim_bridge/_protocol.py via the StubCoupledModel fake.
 pyjevsim = [
-    # TASK-072 (Agent C / W5B): pinned to 1.3.1 (latest on PyPI as of 2026-05).
-    # Published versions: 1.0.0, 1.3.0, 1.3.1. Upstream:
+    # Pinned to 2.0.1 (latest on PyPI as of 2026-05). Published versions:
+    # 1.0.0, 1.3.0, 1.3.1, 2.0.0, 2.0.1. Upstream:
     # https://github.com/cbchoi/pyjevsim
     #
-    # API note: pyjevsim 1.3.x exports `StructuralModel` (coupled DEVS) and
+    # 2.0.1 is API-compatible with 1.3.1 at every surface the bridge
+    # touches — top-level exports (`StructuralModel`, `BehaviorModel`,
+    # `SysExecutor`, `SysMessage`, `ExecutionType`, `Infinite`) and the
+    # method names the adapter calls (`output`, `int_trans`, `ext_trans`,
+    # `register_entity`, `coupling_relation`, `insert_external_event`,
+    # `insert_input_port`, `step`, `get_next_event_time`,
+    # `get_global_time`) are unchanged. The release adds Parallel-DEVS
+    # confluent transitions (`con_trans`), a heapset-backed scheduler
+    # (`ScheduleQueue`), and a documented HLA_TIME execution mode — all
+    # additive. The bridge needed no code changes for the upgrade; see
+    # the 2026-05-03 entry in CHANGELOG-MASTERPLAN.md for the full delta.
+    #
+    # API note: pyjevsim exports `StructuralModel` (coupled DEVS) and
     # `BehaviorModel` (atomic DEVS) — NOT the DEVS-canonical names
-    # `CoupledModel` / `AtomicModel` that earlier docs referenced. The
-    # smoke test (pysdk/tests/spec/m4/test_spec_m4_pyjevsim_smoke.py) was
-    # updated by the orchestrator to assert on the real names. Method
-    # names also differ: pyjevsim uses `output()` / `int_trans()` /
-    # `ext_trans()`. The bridge's CoupledModelProtocol in
-    # pysdk/pyjevsim_bridge/_protocol.py keeps the canonical names; W7
-    # (TASK-073) writes the adapter that maps real pyjevsim to the Protocol.
-    "pyjevsim==1.3.1",
+    # `CoupledModel` / `AtomicModel`. Method names also differ:
+    # pyjevsim uses `output()` / `int_trans()` / `ext_trans()`. The
+    # bridge's `CoupledModelProtocol` in
+    # pysdk/pyjevsim_bridge/_protocol.py keeps the canonical names;
+    # `examples/pyjevsim/_real_pyjevsim_adapter.py` maps the real
+    # pyjevsim surface onto the Protocol.
+    "pyjevsim==2.0.1",
 ]
 
 [tool.setuptools.packages.find]
