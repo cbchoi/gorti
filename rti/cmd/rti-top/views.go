@@ -88,7 +88,7 @@ func (m *model) renderFooter() string {
 	case viewTime:
 		hint = " Esc back  W wire view  R refresh-rate  Q quit "
 	case viewWire:
-		hint = " S sort  R refresh-rate  Esc back  Q quit "
+		hint = " S sort  T window  C columns  / filter  R refresh-rate  Esc back  Q quit "
 	case viewEvents:
 		hint = " F filter  P pause/resume  Esc back  Q quit "
 	}
@@ -169,7 +169,10 @@ func (m *model) renderDrilldownView() string {
 		fed.GetName(), modeString(fed.GetMode()), fed.GetFederatesJoined()))
 	b.WriteString("  " + styleColHead.Render(formatRow(cols, widths)))
 	b.WriteString("\n")
-	feds := fed.GetFederates()
+	// Phase 3 — §5 filter polish: in the drilldown view, the `/` filter
+	// substring matches against federate names within the current
+	// federation. Empty filter shows all federates.
+	feds := filterFederates(fed.GetFederates(), m.filter)
 	if len(feds) == 0 {
 		b.WriteString(styleDim.Render("  (no federates joined)\n"))
 	}
@@ -183,7 +186,7 @@ func (m *model) renderDrilldownView() string {
 			tpsForFederate(f),
 			fmt.Sprintf("%d", f.GetOutboxQueueDepth()),
 			fmt.Sprintf("%d", f.GetDropsTotal()),
-			"-", // age — not on the wire in Phase 1; documented in README.
+			formatAge(f.GetJoinUnixSeconds(), time.Now()),
 		}
 		line := formatRow(row, widths)
 		if i == m.federate {
@@ -387,24 +390,36 @@ func wireSortLabel(c int) string {
 
 // wireRow is one (federation, federate) row for the Wire view.
 type wireRow struct {
-	fed   string
-	name  string
-	sends uint64
-	recvs uint64
-	drops uint64
-	q     uint32
-	qmax  uint32
+	fed       string
+	name      string
+	sends     uint64
+	recvs     uint64
+	drops     uint64
+	q         uint32
+	qmax      uint32
+	sendsRate float64
+	recvsRate float64
+	dropsRate float64
 }
 
 // renderWireView is the top-style table across every (federation,
-// federate). Phase 2 reports cumulative totals only — the rate-window
-// selector (1s|5s|1m) is documented as a Phase-3 follow-up in the
-// README.
+// federate). Phase-3 of the rtid-TUI plan adds:
+//   - per-row rate columns (`SENDS/s`, `RECVS/s`, `DROPS/s`)
+//     computed from a client-side ring of the last 60 snapshot
+//     ticks; the `T` key cycles the averaging window;
+//   - a header status line that names the active window so the
+//     operator knows what they're reading.
+//
+// Cumulative totals stay on the row (small font in the README's
+// fixed-width sample; just additional columns here) — they're
+// the source of truth that the rate columns derive from.
 func (m *model) renderWireView() string {
 	rows := []wireRow{}
+	span := wireWindowSpan(m.wireWindow)
 	for _, fed := range m.last.GetFederations() {
+		perFed := m.wireRates[fed.GetName()]
 		for _, f := range fed.GetFederates() {
-			rows = append(rows, wireRow{
+			r := wireRow{
 				fed:   fed.GetName(),
 				name:  f.GetName(),
 				sends: f.GetUpdatesSent() + f.GetInteractionsSent(),
@@ -412,9 +427,16 @@ func (m *model) renderWireView() string {
 				drops: f.GetDropsTotal(),
 				q:     f.GetOutboxQueueDepth(),
 				qmax:  f.GetOutboxCapacity(),
-			})
+			}
+			if perFed != nil {
+				if ring := perFed[f.GetHandle()]; ring != nil {
+					r.sendsRate, r.recvsRate, r.dropsRate = ring.rate(span)
+				}
+			}
+			rows = append(rows, r)
 		}
 	}
+	rows = m.wireFilterRows(rows)
 	sort.SliceStable(rows, func(i, j int) bool {
 		switch m.wireSort {
 		case wireSortFederation:
@@ -436,42 +458,128 @@ func (m *model) renderWireView() string {
 		return false
 	})
 
-	cols := []string{"FEDERATION", "FEDERATE", "SENDS", "RECVS", "DROPS", "Q-DEPTH", "Q-MAX"}
-	widths := []int{16, 14, 9, 9, 8, 9, 8}
+	cols, widths, getCell := m.wireColumnLayout()
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(" Wire stats — totals since federate join — sort: %s\n\n",
-		wireSortLabel(m.wireSort)))
+	b.WriteString(fmt.Sprintf(" Wire stats — window: %s — sort: %s\n\n",
+		wireWindowLabel(m.wireWindow), wireSortLabel(m.wireSort)))
 	b.WriteString(styleColHead.Render(formatRow(cols, widths)))
 	b.WriteString("\n")
 	var totalSends, totalRecvs, totalDrops uint64
+	var totalSendsRate, totalRecvsRate, totalDropsRate float64
 	var maxQ, maxQMax uint32
 	for _, r := range rows {
 		totalSends += r.sends
 		totalRecvs += r.recvs
 		totalDrops += r.drops
+		totalSendsRate += r.sendsRate
+		totalRecvsRate += r.recvsRate
+		totalDropsRate += r.dropsRate
 		if r.q > maxQ {
 			maxQ = r.q
 		}
 		if r.qmax > maxQMax {
 			maxQMax = r.qmax
 		}
-		b.WriteString(formatRow([]string{
-			r.fed, r.name,
-			fmt.Sprintf("%d", r.sends),
-			fmt.Sprintf("%d", r.recvs),
-			fmt.Sprintf("%d", r.drops),
-			fmt.Sprintf("%d", r.q),
-			fmt.Sprintf("%d", r.qmax),
-		}, widths))
+		cells := make([]string, len(cols))
+		for i := range cols {
+			cells[i] = getCell(i, r)
+		}
+		b.WriteString(formatRow(cells, widths))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf(" Total: %d sends  %d recvs  %d drops\n",
-		totalSends, totalRecvs, totalDrops))
+	b.WriteString(fmt.Sprintf(" Total: %d sends  %d recvs  %d drops  (%s sends/s  %s recvs/s  %s drops/s)\n",
+		totalSends, totalRecvs, totalDrops,
+		formatRate(totalSendsRate), formatRate(totalRecvsRate), formatRate(totalDropsRate)))
 	b.WriteString(fmt.Sprintf(" Outbox utilization (max q across federates): %s\n",
 		renderUtilizationBar(maxQ, maxQMax)))
-	b.WriteString(styleDim.Render(
-		"   note: Phase 2 reports cumulative totals; rate windows (1s|5s|1m) deferred to Phase 3.\n"))
+	if m.wireColPick {
+		b.WriteString(renderWireColumnPicker(m))
+	}
+	return b.String()
+}
+
+// wireFilterRows applies the `/` filter to wire rows (Phase 3 — §5
+// filter polish). Matches federation OR federate name substring,
+// case-insensitive. Empty filter returns rows unchanged.
+func (m *model) wireFilterRows(rows []wireRow) []wireRow {
+	if m.filter == "" {
+		return rows
+	}
+	needle := strings.ToLower(m.filter)
+	out := rows[:0:len(rows)]
+	for _, r := range rows {
+		if strings.Contains(strings.ToLower(r.fed), needle) ||
+			strings.Contains(strings.ToLower(r.name), needle) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// formatRate renders a /s rate value with magnitude-appropriate
+// precision. Sub-1.0 rates are surfaced with two decimals so
+// "0.10 drops/s" doesn't snap to 0.
+func formatRate(v float64) string {
+	if v == 0 {
+		return "0"
+	}
+	if v < 10 {
+		return fmt.Sprintf("%.2f", v)
+	}
+	if v < 1000 {
+		return fmt.Sprintf("%.1f", v)
+	}
+	return fmt.Sprintf("%.0f", v)
+}
+
+// wireColumnLayout returns the (header labels, widths, cell-getter)
+// triple for the Wire view's table, honoring the column-toggle set.
+// Phase 3 (commit 3) ships the layout with all columns on; commit 4
+// wires the `C` column-picker to flip bits in m.wireColumns.
+func (m *model) wireColumnLayout() ([]string, []int, func(int, wireRow) string) {
+	defs := wireColumnDefs()
+	cols := make([]string, 0, len(defs))
+	widths := make([]int, 0, len(defs))
+	cellFns := make([]func(wireRow) string, 0, len(defs))
+	for _, d := range defs {
+		if !m.wireColumns.has(d.id) {
+			continue
+		}
+		cols = append(cols, d.label)
+		widths = append(widths, d.width)
+		cellFns = append(cellFns, d.cell)
+	}
+	getCell := func(i int, r wireRow) string {
+		return cellFns[i](r)
+	}
+	return cols, widths, getCell
+}
+
+// renderWireColumnPicker is the body for the C-key column-toggle
+// popup (Phase 3 — added in commit 4). Renders the current toggle
+// state with a highlighted cursor; the popup state machine lives
+// in model.go.
+func renderWireColumnPicker(m *model) string {
+	defs := wireColumnDefs()
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(styleColHead.Render(" Toggle columns") + "\n")
+	for i, d := range defs {
+		mark := "[ ]"
+		if m.wireColumns.has(d.id) {
+			mark = "[x]"
+		}
+		line := fmt.Sprintf("   %s %s", mark, d.label)
+		if i == m.wireColIdx {
+			line = styleSelectedRow.Render("▶ " + line)
+		} else {
+			line = "  " + line
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	b.WriteString(styleDim.Render("   space toggle  enter close  esc close\n"))
 	return b.String()
 }
 
@@ -545,7 +653,21 @@ func (m *model) renderEventsView() string {
 	b.WriteString(fmt.Sprintf(" Event log — federation: %s — tail%s\n\n", m.events.fed, pause))
 	m.events.mu.Lock()
 	defer m.events.mu.Unlock()
-	if len(m.events.lines) == 0 {
+	// Phase 3 — §5 filter polish: apply the `F`-key filter to the
+	// in-memory tail (case-insensitive substring on the rendered
+	// line). Empty filter → no-op.
+	lines := m.events.lines
+	if m.filter != "" {
+		needle := strings.ToLower(m.filter)
+		filtered := make([]string, 0, len(lines))
+		for _, ln := range lines {
+			if strings.Contains(strings.ToLower(ln), needle) {
+				filtered = append(filtered, ln)
+			}
+		}
+		lines = filtered
+	}
+	if len(lines) == 0 {
 		b.WriteString(styleDim.Render("   (waiting for events …)\n"))
 	} else {
 		// Show the last N lines that fit in the body height. The body
@@ -556,10 +678,10 @@ func (m *model) renderEventsView() string {
 			visible = 5
 		}
 		from := 0
-		if len(m.events.lines) > visible {
-			from = len(m.events.lines) - visible
+		if len(lines) > visible {
+			from = len(lines) - visible
 		}
-		for _, ln := range m.events.lines[from:] {
+		for _, ln := range lines[from:] {
 			b.WriteString("  ")
 			b.WriteString(ln)
 			b.WriteString("\n")
@@ -758,4 +880,59 @@ func joinHandles(hs []uint64) string {
 		parts[i] = fmt.Sprintf("%d", h)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// filterFederates returns the subset of feds whose name matches the
+// given substring filter (case-insensitive). Empty filter returns
+// the input unchanged. rtid-TUI Phase 3 — §5 filter polish; used by
+// the drilldown + federate-detail views.
+func filterFederates(feds []*rtiv1.FederateSnapshot, filter string) []*rtiv1.FederateSnapshot {
+	if filter == "" {
+		return feds
+	}
+	needle := strings.ToLower(filter)
+	out := make([]*rtiv1.FederateSnapshot, 0, len(feds))
+	for _, f := range feds {
+		if strings.Contains(strings.ToLower(f.GetName()), needle) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// formatAge renders a federate's age (now - joinUnix) for the
+// drilldown view's `age` column. rtid-TUI Phase 3 — replaces the
+// Phase-2 "-" placeholder.
+//
+// Output format scales with magnitude (`5s`, `12m3s`, `2h15m`,
+// `3d4h`) — chosen to fit the column's 6-char width while still
+// surfacing the dominant unit. A zero joinUnix means the daemon
+// did not record a join time (legacy data path or pre-Phase-3
+// rtid) → render `-` so the row still aligns.
+func formatAge(joinUnix int64, now time.Time) string {
+	if joinUnix <= 0 {
+		return "-"
+	}
+	d := now.Sub(time.Unix(joinUnix, 0))
+	if d < 0 {
+		// Clock skew between rtid and rti-top — surface as 0s rather
+		// than confusing the operator with a negative duration.
+		return "0s"
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		m := int(d.Minutes())
+		s := int(d.Seconds()) % 60
+		return fmt.Sprintf("%dm%ds", m, s)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		m := int(d.Minutes()) % 60
+		return fmt.Sprintf("%dh%dm", h, m)
+	default:
+		days := int(d / (24 * time.Hour))
+		h := int(d.Hours()) % 24
+		return fmt.Sprintf("%dd%dh", days, h)
+	}
 }

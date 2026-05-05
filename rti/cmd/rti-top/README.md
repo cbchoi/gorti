@@ -55,17 +55,18 @@ exits with a clear usage error and exit code 2.
 | Key | Effect |
 |---|---|
 | `F` | Federations view (landing). In the Events view, `F` enters the filter input. |
-| `T` | Time-advance view for the selected federation. |
+| `T` | Time-advance view for the selected federation. In the Wire view, `T` cycles the rate-window (1s / 5s avg / 1m avg). |
 | `W` | Wire-stats view (cross-federation top-style table). |
 | `O` | Drill into the highlighted federation. |
 | `I` | Open the event-log tail for the selected federation. |
+| `C` | In Wire view: open the column-toggle popup. Up/Down navigate, Space toggles, Esc/Enter/C closes. |
 | `Enter` | Drill in (Federations → Drilldown → FederateDetail). |
 | `Esc` | Pop back one view level. |
 | `↑` / `↓` (or `k` / `j`) | Move selection / scroll. |
 | `R` | Cycle refresh interval through `100ms, 500ms, 1s, 2s, 5s, 10s, 30s, 60s`. |
 | `S` | In Wire view: cycle the sort column. |
 | `P` | In Events view: pause / resume the live tail. |
-| `/` | Open the federation filter input. |
+| `/` | Open the filter input. Federations view filters by federation name; Drilldown filters by federate name; Wire filters by federation OR federate substring. Esc clears. |
 | `Q` / `Ctrl-C` | Quit. |
 
 ## Views
@@ -87,9 +88,9 @@ exits with a clear usage error and exit code 2.
 ```
  Federation: demo — verbose — federates_joined=3
    FEDERATE           HANDLE  TIME      LOOKAHEAD  ROLE           TPS     Q     DROP    AGE
- ▶ generator          1       5.00      1.00       regulator      50      0     0       -
-   buffer             2       5.00      0.50       reg+const      25      4     6       -
-   processor          3       5.00      1.00       constrained    0       0     0       -
+ ▶ generator          1       5.00      1.00       regulator      50      0     0       12m3s
+   buffer             2       5.00      0.50       reg+const      25      4     6       12m3s
+   processor          3       5.00      1.00       constrained    0       0     0       11m48s
 
  LBTS: 5.50    Pending grants: [h=1 @ 6.00]
  Sync points: [start_simulation: ✓ achieved]
@@ -101,9 +102,10 @@ exits with a clear usage error and exit code 2.
 
 The PINNED column set is: `name`, `handle`, `current_time`,
 `lookahead`, `role`, `tps`, `queue_depth`, `drops_total`, `age`.
-`age` is rendered as `-` because Phase 1's
-`AdminService.SnapshotResponse.FederateSnapshot` does not yet
-carry per-federate join time. Adding it is a Phase-3 follow-up.
+`age` is computed client-side as `now - join_unix_seconds` and
+rendered with a magnitude-appropriate unit (`5s`, `12m3s`, `2h15m`,
+`3d4h`). A zero `join_unix_seconds` (legacy data path or pre-
+Phase-3 daemon) renders as `-` so the row still aligns.
 
 ### 3. Federate detail (`Enter` on a federate row)
 
@@ -156,25 +158,35 @@ does not reset the history.
 ### 5. Wire stats (`W`)
 
 ```
- Wire stats — totals since federate join — sort: FEDERATION
- FEDERATION       FEDERATE       SENDS     RECVS     DROPS    Q-DEPTH   Q-MAX
- demo             buffer         25        50        6        4         8192
- demo             generator      50        0         0        0         8192
- demo             processor      0         25        0        0         8192
+ Wire stats — window: 5s avg (last 5 ticks) — sort: FEDERATION
+ FEDERATION       FEDERATE       SENDS     RECVS     DROPS    Q-DEPTH   Q-MAX     SENDS/s   RECVS/s   DROPS/s
+ demo             buffer         125       250       12       4         8192      25.0      50.0      0.40
+ demo             generator      250       0         0        0         8192      50.0      0         0
+ demo             processor      0         125       0        0         8192      0         25.0      0
 
- Total: 75 sends  75 recvs  6 drops
+ Total: 375 sends  375 recvs  12 drops  (75.0 sends/s  75.0 recvs/s  0.40 drops/s)
  Outbox utilization (max q across federates): ░░░░░░░░ 0%
-   note: Phase 2 reports cumulative totals; rate windows (1s|5s|1m) deferred to Phase 3.
 
- S sort  R refresh-rate  Esc back  Q quit
+ S sort  T window  C columns  / filter  R refresh-rate  Esc back  Q quit
 ```
 
 `S` cycles the sort column (federation, federate, sends, recvs,
-drops, q-depth). The 1s|5s|1m rate-window selector from the design
-doc's §3.4 mockup is **deferred to Phase 3** — the proto exposes
-"since federate join" totals only, and computing rate windows
-requires either a delta-capable proto (a Phase-3 proto bump) or
-client-side delta tracking which is unreliable across reconnects.
+drops, q-depth). `T` cycles the rate window (1s instantaneous /
+5s avg / 1m avg). `C` opens the column-toggle popup so the
+operator can hide / show any of the table's ten columns
+(federation, federate, sends, recvs, drops, q-depth, q-max,
+sends/s, recvs/s, drops/s) — the picker refuses to disable every
+column at once. `/` filters rows by federation OR federate name
+substring.
+
+About the rate windows: "5s avg" means *the average over the
+last 5 refresh ticks*. At the default 1Hz refresh that's a
+5-second window; at 100ms refresh it's a 500ms window. Federate
+re-joins (a counter dropping vs the prior tick) reset the per-
+federate ring so rates don't flash a negative spike. Rates are
+computed entirely client-side from `(updates_sent +
+interactions_sent) / refresh_interval`; the AdminService proto
+remains delta-free.
 
 ### 6. Event log tail (`I`)
 
@@ -193,31 +205,52 @@ client-side delta tracking which is unreliable across reconnects.
 stream — incoming records are dropped while paused), `Esc` cancels
 the stream and returns to the Federations list.
 
-## Phase-2 deferrals
+## Phase-3 added
 
-These are documented here so they don't get lost. None of them
-require proto changes; they're all client-side ergonomic
-enhancements that can land independently in Phase 3.
+Phase 3 closes every Phase-2 client-side ergonomic deferral. None
+of these required new RPCs; one proto FIELD landed
+(`FederateSnapshot.join_unix_seconds`, field 19).
 
-- **`age` column on the federate row.** The Phase-1
-  `FederateSnapshot` carries no join timestamp, so the drilldown
-  view shows `-`. Add a `join_unix_seconds` field in Phase 3.
-- **Rate windows in Wire view (1s | 5s | 1m).** §3.4 mocks them up;
-  Phase 2 surfaces only cumulative totals. Implementation requires
-  client-side ring buffers of `(snapshot_at, totals)` pairs — fine
-  to add but adds memory pressure for federations with many
-  federates, so deferred until there's a concrete user demand.
-- **Rich event-log payloads.** Phase 1's `TailEventsResponse` ships
-  `seq` + `unix_nanos` + `payload bytes` — but the server-side
-  handler currently emits empty payloads (the `eventlog.MultiplexWriter`
-  reader doesn't yet round-trip the proto-encoded `EventEntry`).
-  When the eventlog encoder lands, Phase 3 can decode the payload
-  in `formatEvent` and render `class + sender + seq` per the §3.5
-  mockup.
-- **Federate column toggle.** §3.1 keybinding row shows a `[O]bjects`
-  column-toggle; we use `O` as drilldown for now. A column-toggle
-  framework would let users hide / show columns at will (e.g. drop
-  `AGE` once it's empty for everyone).
+- **`age` column on the federate row.** Computed client-side as
+  `now - federate.join_unix_seconds`, formatted with magnitude-
+  appropriate units (`5s`, `12m3s`, `2h15m`, `3d4h`). The
+  federation manager stamps the wall-clock join time at
+  JoinFederation; the AdminService Snapshot path threads it
+  through.
+- **Rate windows in Wire view (1s | 5s | 1m).** Rendered as
+  `SENDS/s`, `RECVS/s`, `DROPS/s` per row plus an aggregate
+  `Total:` line. Computed client-side from a 60-tick ring of
+  per-(federation, federate) cumulative totals; `T` cycles the
+  averaging window. Federate re-join detection (counter going
+  backwards) resets the ring so rates never go negative.
+- **Wire view column toggle (`C`).** Popup over the table; up/down
+  navigate, space flips, esc/enter/c closes. Refuses to disable
+  every column at once. Selection persists across view switches
+  (in-memory only — no config file in Phase 3).
+- **Filter polish.** The `/` filter narrows rows in the
+  Federations view (by federation name), Drilldown view (by
+  federate name within the current federation), and Wire view
+  (by federation OR federate substring). The `F` filter in the
+  Events view narrows the live tail by line substring. All
+  filters are case-insensitive; Esc cancels filter input AND
+  clears the substring.
+
+## Phase-3 deferrals
+
+The following remain unaddressed in Phase 3 and roll forward to
+Phase 4+:
+
+- **Rich event-log payloads.** `TailEventsResponse.payload` is
+  still empty in this cut — the server-side eventlog encoder
+  doesn't round-trip the proto-encoded `EventEntry`. When that
+  lands, `formatEvent` can decode the payload and render
+  `class + sender + seq` per the §3.5 mockup.
+- **Push streaming for events** — the `TailEvents` server-stream
+  is fine for one federation at a time, but a federation-list
+  watch would let the Federations view update in real time.
+  §5 of the design doc tags this as Phase 4 (optional).
+- **Mutating ops** — kill federation, force-resign, drain queue.
+  PINNED §7.5: read-only Phase 3. Phase 5+ at the earliest.
 - **Per-attribute ownership history**, **stall-risk indicators**,
   **last-activity timestamps** — explicitly out of scope per §3.2
   PINNED. Revisit only on operator demand.

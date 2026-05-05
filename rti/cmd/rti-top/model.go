@@ -89,6 +89,17 @@ type model struct {
 	filtering bool   // filter input mode
 	wireSort  int    // wire view sort column index (commit 3)
 
+	// --- wire view state (Phase 3) ---
+	// wireRates[fedName][handle] = recent (sends, recvs, drops) ring
+	// used to compute Phase-3 rate windows. Populated from every
+	// snapshot tick before m.last is advanced.
+	wireRates  map[string]map[uint64]*wireRing
+	wireWindow wireWindow // active rate window for the Wire view
+	// wireColumns controls the Wire-view column toggle popup (Phase 3).
+	wireColumns wireColumnSet
+	wireColPick bool // column-toggle popup open (Wire view)
+	wireColIdx  int  // highlighted column in the popup
+
 	// --- time view sparkline state (commit 3) ---
 	// timeHistory[fedName][handle] = recent current_time samples (ring).
 	timeHistory map[string]map[uint64]*timeRing
@@ -114,6 +125,9 @@ func initialModel(ctx context.Context, cli *client.Client, st *rtiv1.StatusRespo
 			UptimeSeconds: st.GetUptimeSeconds(),
 		},
 		timeHistory: map[string]map[uint64]*timeRing{},
+		wireRates:   map[string]map[uint64]*wireRing{},
+		wireWindow:  wireWindow1Tick,
+		wireColumns: defaultWireColumns(),
 	}
 }
 
@@ -164,6 +178,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.resp != nil {
 			m.last = v.resp
 			m.recordTimeHistory(v.resp)
+			m.recordWireRates(v.resp, v.at)
 		}
 		return m, nil
 
@@ -202,6 +217,13 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Wire view's column-picker popup captures up/down/space/enter/esc
+	// before the global keymap so the user can navigate the popup
+	// without it leaking into the table beneath.
+	if m.wireColPick {
+		return m.handleWireColPickerKey(k)
+	}
+
 	switch k.String() {
 	// global navigation
 	case "q", "Q", "ctrl+c":
@@ -223,8 +245,12 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "t", "T":
-		// T from any view → Time advance view for the selected
-		// federation (or first federation if none selected yet).
+		// In Wire view: T cycles the rate window (Phase 3).
+		// Outside Wire view: T → Time advance view as before.
+		if m.view == viewWire {
+			m.wireWindow = (m.wireWindow + 1) % wireWindowCount
+			return m, nil
+		}
 		if m.selFed == "" {
 			feds := m.filteredFederations()
 			if len(feds) > 0 {
@@ -242,6 +268,19 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// a no-op in commit 3 (events filter takes S in commit 4).
 		if m.view == viewWire {
 			m.wireSort = (m.wireSort + 1) % wireSortColumnCount
+		}
+		return m, nil
+	case "c", "C":
+		// Phase 3 — Wire view's column-toggle popup. Enables hiding /
+		// showing any of the table's columns (federation, federate,
+		// sends, recvs, drops, q-depth, q-max + per-row rate columns).
+		// Outside Wire view: C is a no-op so we don't claim the keymap
+		// in views that don't have a columnar table.
+		if m.view == viewWire {
+			m.wireColPick = !m.wireColPick
+			if m.wireColPick {
+				m.wireColIdx = 0
+			}
 		}
 		return m, nil
 	case "o", "O":
@@ -266,6 +305,49 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "down", "j":
 		m.moveSelection(+1)
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleWireColPickerKey services the Wire-view column-toggle popup
+// (Phase 3). Captures up/down/space/enter/esc; everything else is a
+// no-op until the popup is closed via Esc, Enter, or another `C`.
+//
+// Edge case: the picker forbids hiding every column at once — at
+// least one column must remain visible so the table doesn't render
+// as a blank grid. The space-toggle on the last visible column is
+// silently ignored.
+func (m *model) handleWireColPickerKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	defs := wireColumnDefs()
+	switch k.String() {
+	case "esc", "enter", "c", "C":
+		m.wireColPick = false
+		return m, nil
+	case "up", "k":
+		m.wireColIdx = clamp(m.wireColIdx-1, 0, len(defs)-1)
+		return m, nil
+	case "down", "j":
+		m.wireColIdx = clamp(m.wireColIdx+1, 0, len(defs)-1)
+		return m, nil
+	case " ", "space", "x", "X":
+		if m.wireColIdx < 0 || m.wireColIdx >= len(defs) {
+			return m, nil
+		}
+		id := defs[m.wireColIdx].id
+		// Refuse to disable the last visible column.
+		if m.wireColumns.has(id) {
+			visible := 0
+			for _, d := range defs {
+				if m.wireColumns.has(d.id) {
+					visible++
+				}
+			}
+			if visible <= 1 {
+				return m, nil
+			}
+		}
+		m.wireColumns = m.wireColumns.toggle(id)
 		return m, nil
 	}
 	return m, nil
@@ -327,7 +409,14 @@ func (m *model) moveSelection(delta int) {
 		if fed == nil {
 			return
 		}
-		m.federate = clamp(m.federate+delta, 0, max(0, len(fed.GetFederates())-1))
+		// Phase 3 — §5 filter polish: clamp against the FILTERED
+		// federate slice in the drilldown view so up/down navigation
+		// matches what the user sees on screen.
+		feds := fed.GetFederates()
+		if m.view == viewDrilldown {
+			feds = filterFederates(feds, m.filter)
+		}
+		m.federate = clamp(m.federate+delta, 0, max(0, len(feds)-1))
 	case viewWire:
 		// scroll-only — no per-row selection in wire view.
 	case viewEvents:

@@ -149,6 +149,15 @@ message FederateSnapshot {
   uint32 outbox_queue_depth = 17;
   // outbox_capacity is the channel's capacity (cap(channel)).
   uint32 outbox_capacity = 18;
+
+  // --- Lifecycle ---------------------------------------------------
+  // join_unix_seconds is the wall-clock unix timestamp (seconds) the
+  // federate completed JoinFederation. Zero when the federation
+  // manager could not record a join time (legacy data path /
+  // pre-Phase-3 daemons). Phase-3 of the rtid-TUI plan
+  // (docs/rtid-tui.md) populates this so the drilldown view can
+  // render the federate `age` column.
+  int64 join_unix_seconds = 19;
 }
 
 // TimeSnapshot is the federation-wide time view. The TUI's "Time
