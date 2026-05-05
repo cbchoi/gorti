@@ -394,7 +394,7 @@ type rtid struct {
 	fedMgr  *federation.Manager
 	declMgr *declaration.Manager
 	objReg  *object.Registry
-	syncMgr *syncpkg.Manager
+	syncMgr core.SyncCoordinator
 	ownMgr  *ownership.Manager
 	momMgr  *mom.Manager
 	ddmMgr  *ddm.Manager

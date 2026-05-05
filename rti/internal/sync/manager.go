@@ -80,6 +80,11 @@ type Manager struct {
 	fed map[core.FederationName]*federationState
 }
 
+// Compile-time assertion: *Manager satisfies core.SyncCoordinator.
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.1) introduced the interface; production keeps using *Manager.
+var _ core.SyncCoordinator = (*Manager)(nil)
+
 // federationState holds all sync points for one federation.
 type federationState struct {
 	// points indexed by label.

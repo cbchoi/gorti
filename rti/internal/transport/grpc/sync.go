@@ -14,18 +14,22 @@ import (
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
-	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
 )
 
 // syncService is the concrete SyncServiceServer impl. It embeds
 // UnimplementedSyncServiceServer for forward compatibility (gRPC v1.65+
 // requirement; protoc-gen-go-grpc emits a deprecation warning otherwise).
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.1): the handler binds to core.SyncCoordinator instead of the
+// concrete *sync.Manager so alternative implementations can be wired in
+// at the composition root.
 type syncService struct {
 	rtiv1.UnimplementedSyncServiceServer
-	mgr *syncpkg.Manager
+	mgr core.SyncCoordinator
 }
 
-func newSyncService(mgr *syncpkg.Manager) *syncService {
+func newSyncService(mgr core.SyncCoordinator) *syncService {
 	return &syncService{mgr: mgr}
 }
 

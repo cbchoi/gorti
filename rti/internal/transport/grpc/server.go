@@ -13,7 +13,6 @@ import (
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 	"github.com/cbchoi/gorti/rti/internal/ownership"
 	"github.com/cbchoi/gorti/rti/internal/savepoint"
-	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
 )
 
 // ErrNotImplemented is returned by stub methods until the real handler
@@ -91,7 +90,11 @@ type Options struct {
 	// nil, the SyncService is NOT registered on the gRPC server (the
 	// service is simply absent from GetServiceInfo). Production wiring
 	// in cmd/rtid passes a real *syncpkg.Manager.
-	Sync *syncpkg.Manager
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.1): typed as core.SyncCoordinator so alternative
+	// implementations may be wired here.
+	Sync core.SyncCoordinator
 
 	// Ownership handles OwnershipService RPCs (M12 W1).
 	Ownership *ownership.Manager
