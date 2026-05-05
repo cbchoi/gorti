@@ -89,6 +89,17 @@ type model struct {
 	filtering bool   // filter input mode
 	wireSort  int    // wire view sort column index (commit 3)
 
+	// --- wire view state (Phase 3) ---
+	// wireRates[fedName][handle] = recent (sends, recvs, drops) ring
+	// used to compute Phase-3 rate windows. Populated from every
+	// snapshot tick before m.last is advanced.
+	wireRates  map[string]map[uint64]*wireRing
+	wireWindow wireWindow // active rate window for the Wire view
+	// wireColumns controls the Wire-view column toggle popup (Phase 3).
+	wireColumns wireColumnSet
+	wireColPick bool // column-toggle popup open (Wire view)
+	wireColIdx  int  // highlighted column in the popup
+
 	// --- time view sparkline state (commit 3) ---
 	// timeHistory[fedName][handle] = recent current_time samples (ring).
 	timeHistory map[string]map[uint64]*timeRing
@@ -114,6 +125,9 @@ func initialModel(ctx context.Context, cli *client.Client, st *rtiv1.StatusRespo
 			UptimeSeconds: st.GetUptimeSeconds(),
 		},
 		timeHistory: map[string]map[uint64]*timeRing{},
+		wireRates:   map[string]map[uint64]*wireRing{},
+		wireWindow:  wireWindow1Tick,
+		wireColumns: defaultWireColumns(),
 	}
 }
 
@@ -164,6 +178,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.resp != nil {
 			m.last = v.resp
 			m.recordTimeHistory(v.resp)
+			m.recordWireRates(v.resp, v.at)
 		}
 		return m, nil
 
@@ -223,8 +238,12 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "t", "T":
-		// T from any view → Time advance view for the selected
-		// federation (or first federation if none selected yet).
+		// In Wire view: T cycles the rate window (Phase 3).
+		// Outside Wire view: T → Time advance view as before.
+		if m.view == viewWire {
+			m.wireWindow = (m.wireWindow + 1) % wireWindowCount
+			return m, nil
+		}
 		if m.selFed == "" {
 			feds := m.filteredFederations()
 			if len(feds) > 0 {

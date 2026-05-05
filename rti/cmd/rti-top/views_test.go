@@ -242,12 +242,120 @@ func TestRender_WireView(t *testing.T) {
 	out := m.renderWireView()
 	for _, want := range []string{
 		"FEDERATION", "FEDERATE", "SENDS", "RECVS", "DROPS", "Q-DEPTH", "Q-MAX",
-		"Total:", "Outbox utilization",
+		"SENDS/s", "RECVS/s", "DROPS/s",
+		"Total:", "Outbox utilization", "window:",
 		"demo", "buffer",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("renderWireView missing %q\n--- output ---\n%s", want, out)
 		}
+	}
+}
+
+// TestRender_WireView_AllRateWindows verifies each of the three
+// Phase-3 rate windows renders its label in the Wire-view header.
+func TestRender_WireView_AllRateWindows(t *testing.T) {
+	cases := []struct {
+		w     wireWindow
+		label string
+	}{
+		{wireWindow1Tick, "1s (last 1 tick)"},
+		{wireWindow5Tick, "5s avg (last 5 ticks)"},
+		{wireWindow60Tick, "1m avg (last 60 ticks)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			m := newTestModel(t)
+			m.wireWindow = tc.w
+			out := m.renderWireView()
+			if !strings.Contains(out, tc.label) {
+				t.Errorf("window %v missing label %q in:\n%s", tc.w, tc.label, out)
+			}
+		})
+	}
+}
+
+// TestWireRing_RateOverTicks checks rate computation across tick
+// counts. Mirrors the real polling cadence: equal time deltas
+// between samples, monotonically growing counters.
+func TestWireRing_RateOverTicks(t *testing.T) {
+	r := &wireRing{}
+	t0 := time.Unix(1_700_000_000, 0)
+	// 6 ticks at 1s apart; sends grows by 10 per tick, recvs by 5,
+	// drops by 1.
+	for i := 0; i < 6; i++ {
+		r.push(wireSample{
+			at:    t0.Add(time.Duration(i) * time.Second),
+			sends: uint64(i * 10),
+			recvs: uint64(i * 5),
+			drops: uint64(i * 1),
+		})
+	}
+	// 1-tick window: last delta = (10, 5, 1) over 1s.
+	s, rcv, drp := r.rate(1)
+	if s != 10 || rcv != 5 || drp != 1 {
+		t.Errorf("1-tick rate = (%v, %v, %v), want (10, 5, 1)", s, rcv, drp)
+	}
+	// 5-tick window: deltas across 5 intervals = (50, 25, 5) over 5s
+	// → still (10, 5, 1)/s — uniform growth.
+	s, rcv, drp = r.rate(5)
+	if s != 10 || rcv != 5 || drp != 1 {
+		t.Errorf("5-tick rate = (%v, %v, %v), want (10, 5, 1)", s, rcv, drp)
+	}
+}
+
+// TestWireRing_ResetOnFederateRejoin verifies the ring discards
+// history when a counter goes backwards (indicates a federate
+// resigned + a new federate took the same handle slot).
+func TestWireRing_ResetOnFederateRejoin(t *testing.T) {
+	r := &wireRing{}
+	t0 := time.Unix(1_700_000_000, 0)
+	// First federate accumulates: sends 100, recvs 50.
+	r.push(wireSample{at: t0.Add(0), sends: 0, recvs: 0, drops: 0})
+	r.push(wireSample{at: t0.Add(1 * time.Second), sends: 100, recvs: 50, drops: 0})
+	if r.used != 2 {
+		t.Fatalf("used after first federate = %d, want 2", r.used)
+	}
+	// New federate joined → counters drop to 5/2/0. Ring should reset.
+	r.push(wireSample{at: t0.Add(2 * time.Second), sends: 5, recvs: 2, drops: 0})
+	if r.used != 1 {
+		t.Errorf("used after rejoin = %d, want 1 (reset)", r.used)
+	}
+	// Rate is 0 with one sample.
+	s, rcv, drp := r.rate(5)
+	if s != 0 || rcv != 0 || drp != 0 {
+		t.Errorf("rate after reset = (%v, %v, %v), want all 0", s, rcv, drp)
+	}
+}
+
+// TestWireRing_InsufficientSamples_ReturnsZero verifies one-sample
+// rings produce a zero rate (no delta to compute against).
+func TestWireRing_InsufficientSamples_ReturnsZero(t *testing.T) {
+	r := &wireRing{}
+	r.push(wireSample{at: time.Now(), sends: 10})
+	s, rcv, drp := r.rate(1)
+	if s != 0 || rcv != 0 || drp != 0 {
+		t.Errorf("rate with 1 sample = (%v, %v, %v), want all 0", s, rcv, drp)
+	}
+}
+
+// TestRecordWireRates_PopulatesRing exercises the snapshot →
+// per-row ring path the model's Update step uses.
+func TestRecordWireRates_PopulatesRing(t *testing.T) {
+	m := newTestModel(t)
+	t0 := time.Unix(1_700_000_000, 0)
+	// First snapshot: sends=50.
+	m.recordWireRates(m.last, t0)
+	// Mutate the same fixture's counters → second snapshot 1s later.
+	m.last.GetFederations()[0].GetFederates()[0].UpdatesSent = 60
+	m.recordWireRates(m.last, t0.Add(1*time.Second))
+	ring := m.wireRates["demo"][1]
+	if ring == nil {
+		t.Fatalf("ring for demo/handle=1 not populated")
+	}
+	s, _, _ := ring.rate(1)
+	if s != 10 {
+		t.Errorf("sends/s after one tick = %v, want 10", s)
 	}
 }
 
