@@ -21,9 +21,17 @@ type CreateFederationRequest struct {
 }
 
 // JoinFederationRequest is the input to FederationStore.JoinFederation.
+//
+// FederateType is optional (M13 thread B — docs/srs.md §10.4): when
+// non-empty, the federation manager records it per-federate and the
+// rtid composition root forwards it through to the MOM hook so the
+// HLAfederate.HLAfederateType attribute reflects what the federate
+// declared at join-time. Empty FederateType preserves the cut-1
+// default behavior.
 type JoinFederationRequest struct {
-	Federation    FederationName
-	FederateName  string
+	Federation   FederationName
+	FederateName string
+	FederateType string
 }
 
 // FederationSummary is what ListFederations returns per federation.
@@ -63,10 +71,16 @@ type FederationStore interface {
 // federation manager could not record a join time (e.g. a legacy
 // federation predating the field) — callers MUST treat
 // JoinedAt.IsZero() as "unknown / hide".
+//
+// Type is the HLAfederateType string the federate declared on
+// JoinFederation (M13 thread B — docs/srs.md §10.4). Empty string
+// means "not declared" — federates joining via the cut-1 wire format
+// (no federate_type field) keep the empty value.
 type FederateInfo struct {
 	Handle   FederateHandle
 	Name     string
 	JoinedAt time.Time
+	Type     string
 }
 
 // FederationRoster is one federation's roster snapshot.

@@ -759,6 +759,98 @@ func (r *recordingEventLog) Calls() []recordedAppend {
 	return out
 }
 
+// TestJoinFederation_RecordsFederateType exercises M13 thread B
+// (docs/srs.md §10.4): JoinFederationRequest.FederateType is recorded
+// per-federate, surfaced via FederateTypeOf, fed into the
+// OnFederateJoined hook, and reflected in the Snapshot's FederateInfo.
+func TestJoinFederation_RecordsFederateType(t *testing.T) {
+	t.Parallel()
+	var hookFed core.FederationName
+	var hookHandle core.FederateHandle
+	var hookName, hookType string
+	opts := validOptions()
+	opts.OnFederateJoined = func(_ context.Context, fed core.FederationName, h core.FederateHandle, name string, ftype string) {
+		hookFed = fed
+		hookHandle = h
+		hookName = name
+		hookType = ftype
+	}
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "f"}); err != nil {
+		t.Fatalf("CreateFederation: %v", err)
+	}
+	h, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{
+		Federation:   "f",
+		FederateName: "alpha",
+		FederateType: "Sensor",
+	})
+	if err != nil {
+		t.Fatalf("JoinFederation: %v", err)
+	}
+	if hookFed != "f" || hookHandle != h || hookName != "alpha" || hookType != "Sensor" {
+		t.Errorf("hook = (%q, %d, %q, %q); want (f, %d, alpha, Sensor)",
+			hookFed, hookHandle, hookName, hookType, h)
+	}
+	got, ok := mgr.FederateTypeOf("f", h)
+	if !ok || got != "Sensor" {
+		t.Errorf("FederateTypeOf = (%q, %v), want (Sensor, true)", got, ok)
+	}
+	rosters := mgr.Snapshot()
+	if len(rosters) != 1 || len(rosters[0].Federates) != 1 {
+		t.Fatalf("Snapshot shape unexpected: %+v", rosters)
+	}
+	if rosters[0].Federates[0].Type != "Sensor" {
+		t.Errorf("Snapshot Federates[0].Type = %q, want Sensor", rosters[0].Federates[0].Type)
+	}
+}
+
+// TestJoinFederation_EmptyFederateType_PreservesCut1Behavior asserts
+// that a JoinFederationRequest without FederateType does not regress
+// any previous behavior — FederateTypeOf returns ("", true) for the
+// joined federate and the OnFederateJoined hook receives "" for type.
+func TestJoinFederation_EmptyFederateType_PreservesCut1Behavior(t *testing.T) {
+	t.Parallel()
+	var hookType string
+	hookFired := false
+	opts := validOptions()
+	opts.OnFederateJoined = func(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ string, ftype string) {
+		hookType = ftype
+		hookFired = true
+	}
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "f"}); err != nil {
+		t.Fatalf("CreateFederation: %v", err)
+	}
+	h, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{
+		Federation:   "f",
+		FederateName: "alpha",
+	})
+	if err != nil {
+		t.Fatalf("JoinFederation: %v", err)
+	}
+	if !hookFired {
+		t.Fatal("hook never fired")
+	}
+	if hookType != "" {
+		t.Errorf("hookType = %q, want empty", hookType)
+	}
+	got, ok := mgr.FederateTypeOf("f", h)
+	if !ok {
+		t.Errorf("FederateTypeOf joined = (_, false), want (_, true)")
+	}
+	if got != "" {
+		t.Errorf("FederateTypeOf = %q, want empty", got)
+	}
+}
+
 // TestMembersOf_UnknownFederation_ReturnsEmpty exercises the M13
 // thread-A accessor (docs/srs.md §10.4): unknown federation must yield
 // a non-nil empty slice so callers can iterate without a nil-guard.

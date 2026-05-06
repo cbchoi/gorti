@@ -70,6 +70,12 @@ type federationState struct {
 	// the existing handleToName) so resign / lookup paths stay
 	// allocation-free for the hot path that doesn't need join time.
 	joinedAt map[core.FederateHandle]time.Time
+
+	// federateType records the optional HLAfederateType designator the
+	// federate declared on JoinFederation (M13 thread B —
+	// docs/srs.md §10.4). Empty string means "type not declared".
+	// Sibling map for the same reason as joinedAt.
+	federateType map[core.FederateHandle]string
 }
 
 // Options bundles Manager dependencies. Nil values use sensible defaults
@@ -100,9 +106,11 @@ type Options struct {
 	// successful JoinFederation (after the eventlog append). M11 wires
 	// this to MOM.FederateJoined so HLAfederate / HLAfederation
 	// snapshots reflect the new federate. The hook receives the
-	// resolved federation name + the assigned handle + the federate
-	// name. MUST NOT block.
-	OnFederateJoined func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string)
+	// resolved federation name, the assigned handle, the federate
+	// name, and the optional federate-type string the federate
+	// declared on its JoinFederationRequest (M13 thread B —
+	// docs/srs.md §10.4; empty string when unset). MUST NOT block.
+	OnFederateJoined func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string, federateType string)
 
 	// OnFederateResigned is the resign-side analogue. M11 wires this
 	// to MOM.FederateResigned. Fires after the eventlog append + roster
@@ -205,6 +213,7 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		nameToHandle:       map[string]core.FederateHandle{},
 		handleToName:       map[core.FederateHandle]string{},
 		joinedAt:           map[core.FederateHandle]time.Time{},
+		federateType:       map[core.FederateHandle]string{},
 	}
 	return nil
 }
@@ -298,6 +307,12 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 	// in lock-step, including under FakeClock in tests.
 	joinTime := m.opts.Clock.Now()
 	fs.joinedAt[assigned] = joinTime
+	// M13 thread B: stash the optional HLAfederateType string the
+	// federate declared. Empty when unset; the MOM hook still receives
+	// it (its own no-op when empty).
+	if fs.federateType != nil {
+		fs.federateType[assigned] = req.FederateType
+	}
 
 	// Write-ahead: append before returning. EventLog optional in cut 1.
 	if m.opts.EventLog != nil {
@@ -316,12 +331,13 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 			delete(fs.nameToHandle, req.FederateName)
 			delete(fs.handleToName, assigned)
 			delete(fs.joinedAt, assigned)
+			delete(fs.federateType, assigned)
 			return core.InvalidFederateHandle, fmt.Errorf("federation %q join %q: eventlog append: %w",
 				req.Federation, req.FederateName, err)
 		}
 	}
 	if m.opts.OnFederateJoined != nil {
-		m.opts.OnFederateJoined(ctx, req.Federation, assigned, req.FederateName)
+		m.opts.OnFederateJoined(ctx, req.Federation, assigned, req.FederateName, req.FederateType)
 	}
 	return assigned, nil
 }
@@ -401,6 +417,7 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 	delete(fs.nameToHandle, name)
 	delete(fs.handleToName, h)
 	delete(fs.joinedAt, h)
+	delete(fs.federateType, h)
 	if m.opts.OnFederateResigned != nil {
 		m.opts.OnFederateResigned(ctx, fed, h)
 	}
@@ -466,6 +483,28 @@ func (m *Manager) MembersOf(fed core.FederationName) []core.FederateHandle {
 	return out
 }
 
+// FederateTypeOf returns the HLAfederateType string the federate
+// declared on JoinFederation, plus a presence flag. Returns ("", false)
+// for an unknown federation or unknown handle. M13 thread B
+// (docs/srs.md §10.4): consumed by the cmd/rtid Snapshot path so the
+// FederationRoster.Federates entries carry the type forward to the
+// AdminService FederateSnapshot. An empty stored value still returns
+// ("", true) — the federate is known but did not declare a type.
+func (m *Manager) FederateTypeOf(fed core.FederationName, h core.FederateHandle) (string, bool) {
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return "", false
+	}
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	if _, joined := fs.handleToName[h]; !joined {
+		return "", false
+	}
+	return fs.federateType[h], true
+}
+
 // Snapshot returns the federation roster for the AdminService
 // handler. Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): consumed
 // to build per-federation FederationSnapshot entries with the
@@ -502,6 +541,7 @@ func (m *Manager) Snapshot() []core.FederationRoster {
 				Handle:   h,
 				Name:     fname,
 				JoinedAt: fs.joinedAt[h], // zero for legacy entries; AdminService elides
+				Type:     fs.federateType[h],
 			})
 		}
 		fs.mu.RUnlock()

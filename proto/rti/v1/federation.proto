@@ -41,6 +41,13 @@ message JoinFederationRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
   string federate_name = 3;
+
+  // M13 thread B (docs/srs.md §10.4): optional federate type designator.
+  // Recorded by federation.Manager and surfaced via the MOM HLAfederate
+  // attribute set as HLAfederateType. Wire-version compatible: an
+  // unset / empty field is treated as "no type declared" (preserving
+  // the cut-1 default behavior).
+  string federate_type = 4;
 }
 
 message JoinFederationResponse {

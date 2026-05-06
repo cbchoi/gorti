@@ -91,6 +91,11 @@ func (s *federationService) JoinFederation(ctx context.Context, req *rtiv1.JoinF
 	h, err := s.fed.JoinFederation(ctx, core.JoinFederationRequest{
 		Federation:   core.FederationName(req.GetFederationName()),
 		FederateName: req.GetFederateName(),
+		// M13 thread B (docs/srs.md §10.4): forward the optional
+		// federate type from the wire. Old clients that omit the
+		// field arrive with the empty string, which the federation
+		// manager + MOM hook treat as "no type declared".
+		FederateType: req.GetFederateType(),
 	})
 	if err != nil {
 		return nil, errToStatus(err)

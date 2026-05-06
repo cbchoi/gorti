@@ -1124,14 +1124,15 @@ type zeroSeqSource struct{}
 func (zeroSeqSource) EventLogSeq(core.FederationName) uint64 { return 0 }
 
 // momFederateJoinedHook returns the federation.Manager OnFederateJoined
-// closure that forwards joins to MOM.FederateJoined. M11: the federate
-// "type" field is left empty in cut-1 because JoinFederationRequest does
-// not yet carry it (proto FROZEN). Errors are logged but not propagated
-// — MOM is a metric/introspection layer, not a federation-correctness
-// gate.
-func momFederateJoinedHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle, string) {
-	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string) {
-		if err := momMgr.FederateJoined(ctx, fed, h, federateName, ""); err != nil {
+// closure that forwards joins to MOM.FederateJoined. M13 thread B
+// (docs/srs.md §10.4): the federate-type string the federate declared
+// on its JoinFederationRequest is now plumbed through, so HLAfederate
+// snapshots reflect HLAfederateType. Errors are logged but not
+// propagated — MOM is a metric/introspection layer, not a
+// federation-correctness gate.
+func momFederateJoinedHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle, string, string) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string, federateType string) {
+		if err := momMgr.FederateJoined(ctx, fed, h, federateName, federateType); err != nil {
 			logger.Warn("rtid: MOM FederateJoined hook failed",
 				"federation", fed, "handle", h, "err", err)
 		}
