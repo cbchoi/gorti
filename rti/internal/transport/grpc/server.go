@@ -42,6 +42,7 @@ type Server struct {
 	ownershipService *ownershipService
 	ddmService       *ddmService
 	savepointService *savepointService
+	momService       *momService
 }
 
 // Options bundles Server dependencies. All MUST be non-nil except Time
@@ -116,6 +117,19 @@ type Options struct {
 	// §5.5): typed as core.SavepointCoordinator so alternative
 	// implementations may be wired here.
 	Savepoint core.SavepointCoordinator
+
+	// MOM handles MomService RPCs (M12 W3: cut-3 gRPC exposure of the
+	// cut-2 mom.Manager). May be nil at construction time — when nil,
+	// MomService is NOT registered on the gRPC server (the service is
+	// simply absent from GetServiceInfo). Production wiring in
+	// cmd/rtid passes the federate-port-side ManagementObjectModel so
+	// federates can introspect HLAfederation / HLAfederate state via
+	// the standard MOM RPCs.
+	//
+	// Phase 1 research-platform refactor (docs/research-platform.md
+	// §5.3): typed as core.ManagementObjectModel so alternative
+	// implementations may be wired here.
+	MOM core.ManagementObjectModel
 }
 
 // NewServer constructs a Server. Validates that all required Options
@@ -158,6 +172,9 @@ func NewServer(opts Options) (*Server, error) {
 	}
 	if opts.Savepoint != nil {
 		srv.savepointService = newSavepointService(opts.Savepoint)
+	}
+	if opts.MOM != nil {
+		srv.momService = newMomService(opts.MOM)
 	}
 	return srv, nil
 }
@@ -208,6 +225,9 @@ func (s *Server) Register(grpcServer any) error {
 	}
 	if s.savepointService != nil {
 		rtiv1.RegisterSavepointServiceServer(gs, s.savepointService)
+	}
+	if s.momService != nil {
+		rtiv1.RegisterMomServiceServer(gs, s.momService)
 	}
 	return nil
 }
