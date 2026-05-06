@@ -438,6 +438,34 @@ func (m *Manager) List(_ context.Context) ([]core.FederationSummary, error) {
 	return out, nil
 }
 
+// MembersOf returns the snapshot of currently-joined federate handles
+// for fed, sorted ascending. Returns an empty (non-nil) slice when no
+// such federation exists, or when the federation has zero joined
+// federates. M13 deliverable (docs/srs.md §10.4) — the production
+// rtid wires this into sync.Options.MembersResolver and
+// savepoint.Options.MembersResolver so the implicit "all joined
+// federates" required-set resolution lands at request-time without
+// dynamic-mode aggregation.
+//
+// Read under the manager RLock + per-federation RLock; cheap.
+// Returned slice is freshly allocated and safe for the caller to retain.
+func (m *Manager) MembersOf(fed core.FederationName) []core.FederateHandle {
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return []core.FederateHandle{}
+	}
+	fs.mu.RLock()
+	out := make([]core.FederateHandle, 0, len(fs.handleToName))
+	for h := range fs.handleToName {
+		out = append(out, h)
+	}
+	fs.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
 // Snapshot returns the federation roster for the AdminService
 // handler. Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): consumed
 // to build per-federation FederationSnapshot entries with the

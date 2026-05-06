@@ -759,6 +759,65 @@ func (r *recordingEventLog) Calls() []recordedAppend {
 	return out
 }
 
+// TestMembersOf_UnknownFederation_ReturnsEmpty exercises the M13
+// thread-A accessor (docs/srs.md §10.4): unknown federation must yield
+// a non-nil empty slice so callers can iterate without a nil-guard.
+func TestMembersOf_UnknownFederation_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got := mgr.MembersOf("nope")
+	if got == nil {
+		t.Errorf("MembersOf unknown returned nil; want empty non-nil slice")
+	}
+	if len(got) != 0 {
+		t.Errorf("MembersOf unknown = %v; want empty", got)
+	}
+}
+
+// TestMembersOf_ReturnsSortedJoinedHandles asserts that the snapshot
+// is the live joined-handle set and ordered ascending. Threads A wires
+// this as the sync.Options.MembersResolver and savepoint.Options.
+// MembersResolver in cmd/rtid; the deterministic order keeps
+// announceSynchronizationPoint / initiateFederateSave fan-out
+// reproducible across replays.
+func TestMembersOf_ReturnsSortedJoinedHandles(t *testing.T) {
+	t.Parallel()
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "f"}); err != nil {
+		t.Fatalf("CreateFederation: %v", err)
+	}
+	for _, n := range []string{"alpha", "beta", "gamma"} {
+		if _, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: "f", FederateName: n}); err != nil {
+			t.Fatalf("JoinFederation %s: %v", n, err)
+		}
+	}
+	got := mgr.MembersOf("f")
+	if len(got) != 3 {
+		t.Fatalf("MembersOf len = %d, want 3", len(got))
+	}
+	// Handles assigned by monotonic counter — alpha=1, beta=2, gamma=3.
+	if got[0] != 1 || got[1] != 2 || got[2] != 3 {
+		t.Errorf("MembersOf = %v, want [1 2 3]", got)
+	}
+
+	// Resign beta; MembersOf must reflect the gap.
+	if err := mgr.ResignFederation(ctx, "f", core.FederateHandle(2),
+		core.ResignActionUnconditionallyDivestAttributes); err != nil {
+		t.Fatalf("ResignFederation: %v", err)
+	}
+	got = mgr.MembersOf("f")
+	if len(got) != 2 || got[0] != 1 || got[1] != 3 {
+		t.Errorf("MembersOf after resign = %v, want [1 3]", got)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
