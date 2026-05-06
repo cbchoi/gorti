@@ -93,3 +93,40 @@ message IsOwnedRequest {
 message IsOwnedResponse {
   bool owned = 1;
 }
+
+// OwnershipRecordEntry is one (object, attribute) ownership entry in
+// OwnershipManagerState.owners — captures the current owner of one
+// attribute on one object. M13 thread C (docs/srs.md §10.4).
+message OwnershipRecordEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 owner_federate = 3;
+}
+
+// PendingDivestEntry is one in-flight NegotiatedDivest entry in
+// OwnershipManagerState.pending_divests.
+message PendingDivestEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 owner_federate = 3;
+  bytes tag = 4;
+}
+
+// PendingAcquireEntry is one queued Acquire entry in
+// OwnershipManagerState.pending_acquires.
+message PendingAcquireEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 acquirer_federate = 3;
+  bytes tag = 4;
+}
+
+// OwnershipManagerState is the per-federation snapshot persisted into
+// the save manifest under key "ownership". M13 thread C
+// (docs/srs.md §10.4). On Marshal, every entry slice is sorted
+// deterministically (ObjectHandle, AttributeHandle, AcquirerHandle).
+message OwnershipManagerState {
+  repeated OwnershipRecordEntry owners = 1;
+  repeated PendingDivestEntry pending_divests = 2;
+  repeated PendingAcquireEntry pending_acquires = 3;
+}
