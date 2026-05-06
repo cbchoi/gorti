@@ -436,3 +436,91 @@ on `<dds/dds.h>: file not found`.
 This is a different shape of work from the Phase-1-of-anything-
 in-this-session-arc dispatches. It needs deliberate environment
 setup before code can land.
+
+### 11.1 Phase 1a — foundation (LANDED)
+
+The first M19 dispatch shipped the no-CGo foundation so the rest of
+the work can land incrementally without holding the rest of the
+codebase up on a Cyclone DDS apt-package availability gate.
+
+**What landed:**
+
+- Proto extensions (`CreateFederationRequest.transport_mode`,
+  `JoinFederationResponse.transport_mode`, `JoinFederationResponse.dds_domain_id`,
+  `FederationSnapshot.transport_mode`, `FederationSnapshot.dds_domain_id`);
+  append-only — old federates connecting to new rtid land in the
+  GRPC code path; new federates connecting to old rtid see empty
+  defaults and fall back to GRPC
+- New enum `TransportMode { UNSPECIFIED=0, GRPC=1, DDS=2 }`
+- `core.TransportMode` mirror + `federation.Manager.TransportFor()`
+  + `Snapshot()` carries the per-federation transport
+- `cmd/rtid` flags `--enable-dds` (default false) +
+  `--dds-domain-id` (default 0); the flag exists in EVERY rtid
+  build but its EFFECTIVE behavior depends on `-tags=dds`
+- `transport/grpc` `CreateFederation` rejects `transport_mode=DDS`
+  with `FailedPrecondition + "this rtid was not built with DDS
+  support"` when `--enable-dds` is false
+- `rti/internal/transport/dds/` package skeleton:
+  - `doc.go` — package docs, no build tag
+  - `qos.go` — pure-Go HLA→DDS QoS mapping (real code, callable
+    from Phase 1b's CGo)
+  - `participant.go`, `topic.go`, `writer.go`, `reader.go` — all
+    `//go:build dds`, all stubs returning `errors.ErrUnsupported`
+- Stub-contract tests under `//go:build dds` document the Phase 1a
+  contract; Phase 1b's first failing assertion will signal the C
+  interop has landed
+- `rti-top` drilldown header surfaces `transport: gRPC | DDS
+  (domain N)`
+- `make build-dds` + `make test-dds` Make targets
+
+**Verified:**
+
+- `go build ./...` (default) clean, byte-identical binary size
+  versus `main`
+- `go build -tags=dds ./...` clean (no Cyclone DDS dependency yet)
+- `go test ./...` + `go test -tags=dds ./...` both green
+- `go test -tags=dds_e2e ./...` reports `SKIPPED` for the
+  Phase 1b placeholder
+
+### 11.2 Phase 1b — CGo implementation (TODO, blocked on libcyclonedds-dev)
+
+The next M19 dispatch lands the actual CGo bindings under
+`rti/internal/transport/dds/cgo_dds.go`. Required for the dispatch
+to succeed:
+
+1. **Build environment**: `apt install libcyclonedds-dev` (Linux) or
+   `brew install cyclonedds` (macOS) on the runner. Without it,
+   `cgo_dds.go` won't compile.
+2. **Drop in `cgo_dds.go`** with `import "C"` referencing
+   `<dds/dds.h>` and the four primitives:
+   - `dds_create_participant(domain_id, NULL, NULL)` →
+     `defaultParticipant.dds_entity_t`
+   - `dds_create_topic(participant, &type_descriptor, name, qos,
+     NULL)` → `defaultTopic.dds_entity_t`
+   - `dds_create_writer(publisher, topic, qos, NULL)` →
+     `defaultWriter.dds_entity_t`
+   - `dds_create_reader(subscriber, topic, qos, NULL)` →
+     `defaultReader.dds_entity_t`
+3. **Replace stub bodies** in `participant.go` / `topic.go` /
+   `writer.go` / `reader.go` with calls into the CGo helpers. The
+   interface contract stays unchanged — Phase 1a's stub-contract
+   tests will start failing (signal that real lifecycle has
+   landed) and need rewriting as real lifecycle tests.
+4. **Plumb `FromHLA`** into `dds_qos_create()` plus the
+   `dds_qset_reliability` / `dds_qset_history` /
+   `dds_qset_destination_order` setters. The QoS mapping itself
+   is already locked by Phase 1a's `qos_test.go` so the C glue
+   only needs to translate value objects, not re-derive the
+   mapping.
+5. **Wire `defaultParticipant.Join`** to the federation runtime
+   (Phase 2 — `cmd/rtid` constructs a participant per DDS-mode
+   federation; in Phase 1b the test scaffold creates one directly).
+6. **Land the end-to-end smoke test** (`rti/spec/M19/dds_smoke_test.go`,
+   build tag `dds_e2e`) that verifies federate-to-federate samples
+   flow through DDS without rtid in the data path.
+7. **Replay-determinism gate**: M3/M4 byte-identical replay tests
+   SKIP (not FAIL) when the federation is in DDS mode. Use the
+   research-platform per-impl-opt-in pattern (§6.7 PINNED).
+
+Estimated effort: 60–80 hours (the bulk of Phase 1's original
+~80–120 hour budget; Phase 1a chipped the cheap parts off the top).
