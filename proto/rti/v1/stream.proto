@@ -41,6 +41,11 @@ message FederateEvent {
     RequestAttributeOwnershipAssumption ownership_assumption = 30;
     AttributeOwnershipAcquisitionNotification ownership_acquired = 31;
     RequestDivestitureConfirmation ownership_divest_confirmed = 32;
+    // Save (§4.8 / §4.9). Restore variants are deferred — see
+    // proto comment on InitiateFederateSave below.
+    InitiateFederateSave save_initiate = 40;
+    FederationSaved save_completed = 41;
+    FederationNotSaved save_failed = 42;
     FederationHalted halted = 99;
   }
 }
@@ -127,4 +132,27 @@ message AttributeOwnershipAcquisitionNotification {
 message RequestDivestitureConfirmation {
   uint64 object_handle = 1;
   repeated uint64 attribute_handles = 2;
+}
+
+// InitiateFederateSave — IEEE 1516.1-2010 §4.8 initiateFederateSave.
+// Fires on every joined federate when the federation save starts.
+//
+// The optional save_time pin is carried as a `oneof` to preserve the
+// nullability the Go-side core.LogicalTime pointer represents; absent
+// when the caller passed a nil saveTime ("save now").
+message InitiateFederateSave {
+  string label = 1;
+  optional double save_time = 2;
+}
+
+// FederationSaved — IEEE 1516.1-2010 §4.9 federationSaved. Fires on
+// every federate when all complete.
+message FederationSaved {
+  string label = 1;
+}
+
+// FederationNotSaved — IEEE 1516.1-2010 §4.9 federationNotSaved. Fires
+// on every federate when the save aborts.
+message FederationNotSaved {
+  string label = 1;
 }
