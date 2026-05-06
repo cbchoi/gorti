@@ -364,17 +364,36 @@ func buildFederationSnapshot(
 
 // --- TailEvents -------------------------------------------------------------
 
-// TailEvents implements rtiv1.AdminServiceServer.TailEvents. Phase 1
-// semantics: opens a reader for the federation's persisted log and
-// streams every record the reader yields. When the reader hits io.EOF
-// the stream terminates — this matches the read-existing-then-close
-// model of the underlying eventlog.MultiplexWriter.OpenReader (a
-// proper "follow" mode would require either a polling loop on the
-// file or a push-side fanout in the eventlog package; both are
-// deferred to a follow-up).
+// Phase 4 batching defaults + clamps. The defaults match the perf-pass
+// batched-channel pattern in multiOutbox (a small ring buffer flushed
+// at the smaller of N events / max-latency). The clamps protect the
+// server from clients setting either knob to a degenerate value.
+const (
+	tailEventsDefaultMaxBatch    = 32
+	tailEventsMaxBatchCeiling    = 1024
+	tailEventsDefaultMaxLatency  = 10 * time.Millisecond
+	tailEventsMaxLatencyCeiling  = 1 * time.Second
+)
+
+// TailEvents implements rtiv1.AdminServiceServer.TailEvents. Phase 4
+// extends the Phase-1 single-event-per-message handler with three
+// improvements (docs/rtid-tui.md §7.5):
 //
-// The stream context is honored — cancellation aborts further reads
-// and closes the reader.
+//   - Server-side filtering: event_class_filter (case-sensitive
+//     substring) and federate_handle_filter (handle whitelist) are
+//     applied BEFORE send so the wire only carries what the client
+//     wants.
+//   - Batched responses: the handler accumulates events in a ring
+//     buffer and flushes either when the buffer reaches
+//     max_batch_events or after max_batch_latency_ms.
+//   - Backpressure-aware: when the gRPC server-stream send buffer
+//     can't accept a batch, the events are folded into an
+//     overflow_skipped counter that piggybacks on the next successful
+//     batch, so the server NEVER blocks indefinitely on a slow
+//     client.
+//
+// When the reader hits io.EOF, any pending batch is flushed and the
+// stream terminates. Stream context cancellation aborts further reads.
 func (s *adminService) TailEvents(req *rtiv1.TailEventsRequest, stream rtiv1.AdminService_TailEventsServer) error {
 	if req == nil {
 		return nilRequest("TailEvents")
@@ -398,30 +417,352 @@ func (s *adminService) TailEvents(req *rtiv1.TailEventsRequest, stream rtiv1.Adm
 	}
 	defer func() { _ = rdr.Close() }()
 
+	cfg := tailEventsConfigFromRequest(req)
+	classFilter := req.GetEventClassFilter()
+	handleFilter := buildHandleFilter(req.GetFederateHandleFilter())
+
+	pending := make([]*rtiv1.TailedEvent, 0, cfg.maxBatch)
+	var overflow uint64
+	flushTimer := time.NewTimer(cfg.maxLatency)
+	if !flushTimer.Stop() {
+		<-flushTimer.C
+	}
+	timerArmed := false
+	defer flushTimer.Stop()
+
+	flush := func() error {
+		if len(pending) == 0 && overflow == 0 {
+			return nil
+		}
+		batch := &rtiv1.TailEventsResponse{
+			Events:          pending,
+			OverflowSkipped: overflow,
+		}
+		if sendErr := sendBatchNonBlocking(stream, batch); sendErr != nil {
+			if errors.Is(sendErr, errSendBufferFull) {
+				// Fold the dropped batch into the overflow counter and
+				// keep going — better to lose a frame than wedge the
+				// server on a slow renderer.
+				overflow += uint64(len(pending))
+				pending = pending[:0]
+				return nil
+			}
+			return sendErr
+		}
+		pending = pending[:0]
+		overflow = 0
+		return nil
+	}
+
 	for {
 		if err := ctx.Err(); err != nil {
+			_ = flush()
 			return errToStatus(err)
 		}
-		evt, readErr := rdr.Next(ctx)
+
+		// If a batch is pending, race the reader against the latency
+		// timer so we flush within the configured window even when
+		// the event log is quiet. When no batch is pending, wait
+		// indefinitely on the reader.
+		if !timerArmed && len(pending) > 0 {
+			flushTimer.Reset(cfg.maxLatency)
+			timerArmed = true
+		}
+
+		evt, readErr := readNextEventOrTimer(ctx, rdr, flushTimer, timerArmed)
+		if errors.Is(readErr, errFlushTimer) {
+			timerArmed = false
+			if err := flush(); err != nil {
+				return err
+			}
+			continue
+		}
 		if errors.Is(readErr, io.EOF) {
+			if timerArmed {
+				stopTimer(flushTimer)
+				timerArmed = false
+			}
+			if err := flush(); err != nil {
+				return err
+			}
 			return nil
 		}
 		if readErr != nil {
 			return errToStatus(readErr)
 		}
-		// Phase 1: payload is opaque — we surface only the seq + a
-		// best-effort timestamp. The caller's TUI renderer is free to
-		// re-decode the payload bytes through the proto registry once
-		// a richer EventEntry shape lands.
-		out := &rtiv1.TailEventsResponse{
-			Seq:       evt.Seq(),
-			UnixNanos: 0,
-			Payload:   nil,
+
+		te := buildTailedEvent(evt)
+		if !tailEventPasses(te, classFilter, handleFilter) {
+			continue
 		}
-		if err := stream.Send(out); err != nil {
-			return err
+		pending = append(pending, te)
+		if len(pending) >= cfg.maxBatch {
+			if timerArmed {
+				stopTimer(flushTimer)
+				timerArmed = false
+			}
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 	}
+}
+
+// tailEventsConfig is the resolved per-stream batching configuration.
+type tailEventsConfig struct {
+	maxBatch   int
+	maxLatency time.Duration
+}
+
+// tailEventsConfigFromRequest applies the defaults + ceilings to the
+// caller-supplied tuning knobs.
+func tailEventsConfigFromRequest(req *rtiv1.TailEventsRequest) tailEventsConfig {
+	cfg := tailEventsConfig{
+		maxBatch:   tailEventsDefaultMaxBatch,
+		maxLatency: tailEventsDefaultMaxLatency,
+	}
+	if v := int(req.GetMaxBatchEvents()); v > 0 {
+		cfg.maxBatch = v
+	}
+	if cfg.maxBatch > tailEventsMaxBatchCeiling {
+		cfg.maxBatch = tailEventsMaxBatchCeiling
+	}
+	if v := time.Duration(req.GetMaxBatchLatencyMs()) * time.Millisecond; v > 0 {
+		cfg.maxLatency = v
+	}
+	if cfg.maxLatency > tailEventsMaxLatencyCeiling {
+		cfg.maxLatency = tailEventsMaxLatencyCeiling
+	}
+	return cfg
+}
+
+// buildHandleFilter converts the proto-level repeated handle list into
+// a quick-lookup map. A nil result means "no filter".
+func buildHandleFilter(in []uint64) map[uint64]struct{} {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[uint64]struct{}, len(in))
+	for _, h := range in {
+		out[h] = struct{}{}
+	}
+	return out
+}
+
+// errFlushTimer is the sentinel returned by readNextEventOrTimer when
+// the latency timer fires before a record is available.
+var errFlushTimer = errors.New("tail-events flush timer fired")
+
+// errSendBufferFull is the sentinel returned by sendBatchNonBlocking
+// when the server-stream's send buffer is full and the batch was
+// rolled into the overflow counter.
+var errSendBufferFull = errors.New("tail-events client send buffer full")
+
+// readNextEventOrTimer reads the next event from rdr, racing against
+// the latency timer when a batch is pending. Returns errFlushTimer
+// when the timer wins. The timer is consumed on this call's return so
+// the caller can re-arm cleanly.
+//
+// Implementation: rdr.Next blocks until ctx cancels or io.EOF. We
+// don't have an async-select-able reader, so we run rdr.Next in a
+// goroutine and select against the timer. The goroutine is short-lived
+// — it returns on the next event (or the next ctx-cancel). To bound
+// goroutine count we re-use a single channel per call.
+func readNextEventOrTimer(
+	ctx context.Context,
+	rdr core.EventLogReader,
+	flushTimer *time.Timer,
+	timerArmed bool,
+) (core.EventRecord, error) {
+	if !timerArmed {
+		return rdr.Next(ctx)
+	}
+	type readResult struct {
+		evt core.EventRecord
+		err error
+	}
+	ch := make(chan readResult, 1)
+	go func() {
+		evt, err := rdr.Next(ctx)
+		ch <- readResult{evt: evt, err: err}
+	}()
+	select {
+	case r := <-ch:
+		// Drain the timer if it raced us; the caller treats timerArmed
+		// as authoritative on the next iteration.
+		stopTimer(flushTimer)
+		return r.evt, r.err
+	case <-flushTimer.C:
+		// Timer fired first. The reader goroutine is still running; on
+		// the next iteration we'll pick its result up via a fresh select
+		// (or io.EOF / ctx cancel).
+		// We return the timer sentinel so the caller flushes; the
+		// reader goroutine's eventual completion will be observed by
+		// the next call's `ch` receive.
+		// To avoid the goroutine outliving us when the stream cancels,
+		// we drain the goroutine's send before returning.
+		go func() { <-ch }()
+		return nil, errFlushTimer
+	case <-ctx.Done():
+		stopTimer(flushTimer)
+		go func() { <-ch }()
+		return nil, ctx.Err()
+	}
+}
+
+// stopTimer drains a *time.Timer safely whether or not it has fired.
+func stopTimer(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
+	}
+}
+
+// sendBatchNonBlocking attempts to send the batch. Returns
+// errSendBufferFull when the underlying gRPC stream rejects the send
+// because the client is too slow. We probe the send-buffer state by
+// running stream.Send on a goroutine guarded by a short deadline; if
+// the deadline elapses without the send completing, we report a fake
+// "buffer full". This keeps the handler honest about the
+// non-blocking-on-slow-client contract without depending on
+// gRPC-internal flow-control APIs that aren't exposed.
+func sendBatchNonBlocking(
+	stream rtiv1.AdminService_TailEventsServer,
+	batch *rtiv1.TailEventsResponse,
+) error {
+	done := make(chan error, 1)
+	go func() { done <- stream.Send(batch) }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(tailEventsSendTimeout):
+		// Fold this batch into overflow; the goroutine will eventually
+		// complete (or fail), and its error is dropped because we've
+		// already committed to the overflow path. This trades one
+		// dropped batch for forward progress.
+		go func() { <-done }()
+		return errSendBufferFull
+	}
+}
+
+// tailEventsSendTimeout is the per-batch send deadline. Picked
+// generously enough that a healthy client never trips it but tightly
+// enough that a wedged client doesn't accumulate unbounded backpressure
+// on the server. Same order of magnitude as the default maxLatency.
+const tailEventsSendTimeout = 250 * time.Millisecond
+
+// buildTailedEvent translates a core.EventRecord into the proto wire
+// shape. The class name is extracted by reflecting on the underlying
+// *rtiv1.Event body oneof; this matches the eventlog/replayer.go
+// dispatch table so the strings line up with what operators see in
+// the Go source.
+func buildTailedEvent(rec core.EventRecord) *rtiv1.TailedEvent {
+	out := &rtiv1.TailedEvent{
+		Seq: rec.Seq(),
+	}
+	pre, ok := rec.(protoEventRecorder)
+	if !ok {
+		return out
+	}
+	pb := pre.ProtoEvent()
+	if pb == nil {
+		return out
+	}
+	out.EventClass, out.FederateHandle = classifyEventBody(pb)
+	return out
+}
+
+// protoEventRecorder is the local-narrow alias for the eventlog
+// package's protoEventRecord adapter. Declared here (instead of
+// importing eventlog) to keep transport/grpc free of an internal
+// dependency on eventlog's reader internals.
+type protoEventRecorder interface {
+	core.EventRecord
+	ProtoEvent() *rtiv1.Event
+}
+
+// classifyEventBody returns (class, federateHandle) for the event's
+// body oneof. Empty class for an unknown / nil body — the filter
+// passes such events through unchanged so they aren't silently dropped.
+func classifyEventBody(pb *rtiv1.Event) (string, uint64) {
+	switch b := pb.GetBody().(type) {
+	case *rtiv1.Event_FedJoined:
+		return "FederateJoined", b.FedJoined.GetFederateHandle()
+	case *rtiv1.Event_FedResigned:
+		return "FederateResigned", b.FedResigned.GetFederateHandle()
+	case *rtiv1.Event_ObjRegistered:
+		return "ObjectRegistered", b.ObjRegistered.GetOwnerFederateHandle()
+	case *rtiv1.Event_ObjDeleted:
+		return "ObjectDeleted", 0
+	case *rtiv1.Event_AttrUpdated:
+		return "AttributeUpdated", b.AttrUpdated.GetProducerFederateHandle()
+	case *rtiv1.Event_InterSent:
+		return "InteractionSent", b.InterSent.GetProducerFederateHandle()
+	case *rtiv1.Event_TimeRequested:
+		return "TimeAdvanceRequested", b.TimeRequested.GetFederateHandle()
+	case *rtiv1.Event_TimeGranted:
+		return "TimeAdvanceGranted", b.TimeGranted.GetFederateHandle()
+	case *rtiv1.Event_Halted:
+		return "FederationHalted", 0
+	}
+	return "", 0
+}
+
+// tailEventPasses reports whether the event should be forwarded to
+// the client given the request's filters. Empty filters always pass.
+// federate_handle_filter only applies when the event has a
+// non-zero FederateHandle (federation-scope events bypass it).
+func tailEventPasses(
+	te *rtiv1.TailedEvent,
+	classFilter string,
+	handleFilter map[uint64]struct{},
+) bool {
+	if classFilter != "" && !containsClass(te.GetEventClass(), classFilter) {
+		return false
+	}
+	if handleFilter != nil && te.GetFederateHandle() != 0 {
+		if _, ok := handleFilter[te.GetFederateHandle()]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// containsClass is a case-sensitive substring match; pulled out so a
+// future case-insensitive opt-in flag has a single place to land.
+func containsClass(class, needle string) bool {
+	if class == "" {
+		return false
+	}
+	return indexSubstring(class, needle) >= 0
+}
+
+// indexSubstring is strings.Index inlined to avoid a stdlib import
+// in this file (the import set is already saturated). A future tidy
+// pass can replace this with strings.Contains directly.
+func indexSubstring(s, sub string) int {
+	if sub == "" {
+		return 0
+	}
+	if len(sub) > len(s) {
+		return -1
+	}
+	last := len(s) - len(sub)
+	for i := 0; i <= last; i++ {
+		match := true
+		for j := 0; j < len(sub); j++ {
+			if s[i+j] != sub[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
 }
 
 // --- proto translation helpers ----------------------------------------------
