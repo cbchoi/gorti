@@ -342,11 +342,14 @@ Manager fills in its share of the snapshot.
 4. **Default refresh rate (§2.4)**: PINNED 2026-05-05 — 1Hz default,
    configurable via key in [100ms, 60s] range. Familiar `top`-style
    ergonomics; tail values cover both fast-debug and remote-WAN.
-5. **Out-of-scope reaffirmation**: PINNED 2026-05-05 — read-only
-   Phase 1. AdminService exposes Snapshot / TailEvents / Status
-   only; no `KillFederate`, no `ForceResign`, no `DrainOutbox`,
-   nothing that mutates federation state. Mutating ops become a
-   separately-scoped Phase 5+.
+5. **Out-of-scope reaffirmation**: REVISED 2026-05-06 — Phases 1-3
+   shipped read-only. **Phase 5 unblocks mutating ops** under an
+   explicit opt-in flag. AdminService stays read-only; a separate
+   `MutatingService` ships ForceResign / DestroyFederation, gated
+   by `--admin-mutating=true` (default false) and refusing to enable
+   when the admin listener is bound to non-loopback addresses
+   without explicit override. Phase 4 stays optional (high-rate
+   event-log streaming improvements).
 6. **Federate column set (§3.2)**: PINNED 2026-05-05 — default
    columns (`name`, `handle`, `current_time`, `lookahead`, `role`,
    `tps`, `queue_depth`, `drops_total`, `age`) and the expanded view
