@@ -249,6 +249,12 @@ func buildFederationSnapshot(
 		Name:            string(roster.Name),
 		Mode:            modeToProto(roster.Mode),
 		FederatesJoined: uint32(len(roster.Federates)),
+		// M19 Phase 1a (docs/m19-dds-adapter.md §4.2): surface the
+		// data-plane transport so the rti-top drilldown can render
+		// the per-federation header. coreTransportToProto preserves
+		// "UNSPECIFIED → GRPC" for the append-only contract.
+		TransportMode: coreTransportToProto(roster.TransportMode),
+		DdsDomainId:   roster.DDSDomainID,
 	}
 
 	// Per-Manager federation-level snapshots (cheap; nil-safe).

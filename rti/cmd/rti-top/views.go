@@ -218,8 +218,19 @@ func (m *model) renderDrilldownView() string {
 	cols := []string{"FEDERATE", "HANDLE", "TIME", "LOOKAHEAD", "ROLE", "TPS", "Q", "DROP", "AGE"}
 	widths := []int{18, 7, 9, 10, 14, 7, 5, 7, 6}
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(" Federation: %s — %s — federates_joined=%d\n\n",
-		fed.GetName(), modeString(fed.GetMode()), fed.GetFederatesJoined()))
+	// M19 Phase 1a (docs/m19-dds-adapter.md §4.2): one-column
+	// drilldown header addition — surface the federation's
+	// data-plane transport. The default "transport: gRPC"
+	// rendering matches cut-2 captures byte-identically; only
+	// DDS-mode federations show "transport: DDS (domain N)".
+	transport := transportModeString(fed.GetTransportMode())
+	transportSuffix := ""
+	if fed.GetTransportMode() == rtiv1.TransportMode_TRANSPORT_MODE_DDS {
+		transportSuffix = fmt.Sprintf(" (domain %d)", fed.GetDdsDomainId())
+	}
+	b.WriteString(fmt.Sprintf(" Federation: %s — %s — federates_joined=%d — transport: %s%s\n\n",
+		fed.GetName(), modeString(fed.GetMode()), fed.GetFederatesJoined(),
+		transport, transportSuffix))
 	b.WriteString("  " + styleColHead.Render(formatRow(cols, widths)))
 	b.WriteString("\n")
 	// Phase 3 — §5 filter polish: in the drilldown view, the `/` filter
@@ -816,6 +827,25 @@ func modeString(m rtiv1.Mode) string {
 		return "best-effort"
 	}
 	return "unspecified"
+}
+
+// transportModeString renders the M19 Phase 1a transport mode for the
+// drilldown header. UNSPECIFIED collapses to GRPC for backward-compat
+// with cut-2 captures. Returns the empty string for unknown / cut-2
+// values so the drilldown header omits the column entirely (the TUI
+// still renders a useful view for older rtid binaries).
+func transportModeString(t rtiv1.TransportMode) string {
+	switch t {
+	case rtiv1.TransportMode_TRANSPORT_MODE_DDS:
+		return "DDS"
+	case rtiv1.TransportMode_TRANSPORT_MODE_GRPC:
+		return "gRPC"
+	default:
+		// UNSPECIFIED — pre-M19 rtid that does not populate the
+		// field. Render "gRPC" for the user's mental model since
+		// the wire path WAS gRPC at cut-2.
+		return "gRPC"
+	}
 }
 
 func roleString(f *rtiv1.FederateSnapshot) string {

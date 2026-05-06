@@ -3,6 +3,7 @@ syntax = "proto3";
 package rti.v1;
 
 import "rti/v1/common.proto";
+import "rti/v1/federation.proto";
 import "rti/v1/savepoint.proto";
 
 option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
@@ -91,6 +92,16 @@ message FederationSnapshot {
   // published_classes lists object-class handles with at least one
   // active publisher in this federation (sorted handle order).
   repeated uint64 published_classes = 11;
+
+  // M19 Phase 1a (docs/m19-dds-adapter.md §4.2): the federation's
+  // data-plane wire path. Default UNSPECIFIED on responses from
+  // pre-M19 rtid binaries; rti-top's drilldown header surfaces
+  // "transport: gRPC" / "transport: DDS" only when the field is
+  // non-UNSPECIFIED so cut-2 captures continue to render unchanged.
+  TransportMode transport_mode = 12;
+  // dds_domain_id is only meaningful when transport_mode == DDS.
+  // The drilldown header shows "(domain N)" when both fields are set.
+  int32 dds_domain_id = 13;
 }
 
 // FederateSnapshot is the per-federate row the TUI's drill-down,
