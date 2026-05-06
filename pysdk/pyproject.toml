@@ -18,7 +18,14 @@ authors = [{ name = "gorti contributors" }]
 #   here so the orchestrator pre-work doesn't pre-empt that task's decision.
 dependencies = [
     "grpcio>=1.60",
-    "protobuf>=4.25",
+    # protobuf >= 7.34 required to match the gencode emitted by
+    # grpcio-tools >= 1.80 (which is what we use for `_generated/`).
+    # Earlier 4.x / 5.x / 6.x runtimes raise VersionError at import on
+    # any module that ran through the new gencode — this happens in
+    # fresh pip envs that resolve to protobuf 6.x without the explicit
+    # floor. Multiple sub-agent dispatches hit this; the pin here
+    # prevents future debugging.
+    "protobuf>=7.34",
 ]
 
 [project.optional-dependencies]

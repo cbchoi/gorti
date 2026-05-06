@@ -26,14 +26,19 @@ from pathlib import Path
 import pytest
 
 _HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
 _PYSDK = _HERE.parents[1] / "pysdk"
 if str(_PYSDK) not in sys.path:
     sys.path.insert(0, str(_PYSDK))
 
-# ruff: noqa: E402
-from runner import run_once, verify
+# Load this example's runner.py under a UNIQUE module name to avoid
+# the bare-name shadow collision when pytest collects multiple
+# examples/pyjevsim*/runner.py files in one invocation.
+import importlib.util as _il  # noqa: E402
+_spec = _il.spec_from_file_location("_pyjevsim_time_advance_runner", _HERE / "runner.py")
+_runner = _il.module_from_spec(_spec)
+sys.modules.setdefault("_pyjevsim_time_advance_runner", _runner)
+_spec.loader.exec_module(_runner)
+run_once, verify = _runner.run_once, _runner.verify
 
 
 def test_time_advance_default_config() -> None:

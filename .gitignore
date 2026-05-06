@@ -51,3 +51,6 @@ docs/reports/perf/*.prof
 
 # MkDocs build output (Read the Docs builds remotely; locally `mkdocs serve` is preferred).
 /site/
+
+# Local sandbox tooling — Dockerfile.codex etc. Per-machine; never committed.
+docker/
