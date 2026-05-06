@@ -593,13 +593,21 @@ class GrpcTransport:
             # Server closed or error — let the queue drain quietly.
             return
 
-    def _translate_event(self, fed_event: Any) -> Any | None:
+    def _translate_event(self, fed_event: Any) -> Any | None:  # noqa: PLR0911, PLR0912
         """Translate a wire FederateEvent into one of rti1516e.events.*."""
         from rti1516e.events import (
+            AttributeOwnershipAcquisitionNotification,
             DiscoverObjectInstance,
             FederationHalted,
+            FederationNotSaved,
+            FederationSaved,
+            FederationSynchronized,
+            InitiateFederateSave,
             ReceiveInteraction,
             ReflectAttributeValues,
+            RequestAttributeOwnershipAssumption,
+            RequestDivestitureConfirmation,
+            SynchronizationPointAnnounced,
             TimeAdvanceGrant,
         )
 
@@ -634,6 +642,45 @@ class GrpcTransport:
                 values={str(k): bytes(v) for k, v in r.attributes.items()},
                 timestamp=ts,
             )
+        # M12 W2 cut-2 service-group callbacks (deferral #1 close).
+        if which == "sync_announced":
+            a = fed_event.sync_announced
+            return SynchronizationPointAnnounced(
+                label=str(a.label),
+                tag=bytes(a.tag),
+                required_federates=tuple(int(h) for h in a.required_federates),
+            )
+        if which == "sync_synchronized":
+            return FederationSynchronized(label=str(fed_event.sync_synchronized.label))
+        if which == "ownership_assumption":
+            o = fed_event.ownership_assumption
+            return RequestAttributeOwnershipAssumption(
+                object_handle=int(o.object_handle),
+                attribute_handles=tuple(int(h) for h in o.attribute_handles),
+                divesting_federate=int(o.divesting_federate),
+                tag=bytes(o.tag),
+            )
+        if which == "ownership_acquired":
+            o = fed_event.ownership_acquired
+            return AttributeOwnershipAcquisitionNotification(
+                object_handle=int(o.object_handle),
+                attribute_handles=tuple(int(h) for h in o.attribute_handles),
+                owning_federate=int(o.owning_federate),
+            )
+        if which == "ownership_divest_confirmed":
+            o = fed_event.ownership_divest_confirmed
+            return RequestDivestitureConfirmation(
+                object_handle=int(o.object_handle),
+                attribute_handles=tuple(int(h) for h in o.attribute_handles),
+            )
+        if which == "save_initiate":
+            s = fed_event.save_initiate
+            save_time = s.save_time if s.HasField("save_time") else None
+            return InitiateFederateSave(label=str(s.label), save_time=save_time)
+        if which == "save_completed":
+            return FederationSaved(label=str(fed_event.save_completed.label))
+        if which == "save_failed":
+            return FederationNotSaved(label=str(fed_event.save_failed.label))
         if which == "halted":
             # The proto FederationHalted lacks a stalled-federate field;
             # surface 0 as "no specific federate identified" so the

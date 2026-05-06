@@ -21,15 +21,14 @@ generated stub, maps gRPC ``StatusCode`` errors onto the SDK's typed
 ``RtiError`` hierarchy via :func:`rti1516e._grpc_errors.translate_rpc_error`,
 and otherwise stays out of the way.
 
-Cut-3 wire limitation: the proto ``FederateEvent`` oneof does not yet
-carry ``announceSynchronizationPoint`` / ``federationSynchronized``
-variants (see ``rti/internal/sync/events.go``), so the
-``federationSynchronized`` callback is NOT delivered over the
-StreamService.Events stream in this cut. Tests that need to observe
-the callback inspect manager state via the protocol round-trip
-(register + 2x achieve completing without error implies the manager
-ran allRequiredAchieved → emitted federationSynchronized internally).
-A cut-4 follow-up extends the proto.
+M12 W2 follow-up (deferral #1 closed): the proto ``FederateEvent`` oneof
+now carries ``SynchronizationPointAnnounced`` (tag 20) and
+``FederationSynchronized`` (tag 21). Federates receive both callbacks
+over the standard StreamService.Events stream; the typed event is
+yielded as :class:`rti1516e.events.SynchronizationPointAnnounced` /
+:class:`rti1516e.events.FederationSynchronized` from
+``Federate.events()``. Tests can therefore assert on callback delivery
+in addition to (or instead of) Query observation.
 """
 
 from __future__ import annotations
