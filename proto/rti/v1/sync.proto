@@ -29,3 +29,39 @@ message AchieveSyncPointRequest {
   uint64 federate_handle = 3;
   string label = 4;
 }
+
+// SyncPointSnapshotState — used inside SyncManagerState for the
+// runtime state of one sync point. Distinct from the AdminService
+// SyncPointState enum (admin.proto) so the two enums can evolve
+// independently.
+enum SyncPointSnapshotState {
+  SYNC_POINT_SNAPSHOT_STATE_UNSPECIFIED = 0;
+  SYNC_POINT_SNAPSHOT_STATE_ANNOUNCED = 1;
+  SYNC_POINT_SNAPSHOT_STATE_ACHIEVED = 2;
+}
+
+// SyncPointStateEntry is one (label → record) entry in
+// SyncManagerState.points. Carries only fields that change at
+// runtime — setup-time configuration (the federation name itself)
+// lives on the manifest.
+message SyncPointStateEntry {
+  string label = 1;
+  bytes tag = 2;
+  SyncPointSnapshotState state = 3;
+  repeated uint64 required = 4;  // sorted ascending
+  repeated uint64 achieved = 5;  // sorted ascending
+  bool dynamic = 6;
+}
+
+// SyncManagerState is the per-federation snapshot persisted into the
+// save manifest's manager_snapshots map under key "sync".
+// M13 thread C (docs/srs.md §10.4): structured save bundle.
+//
+// On Marshal, every active sync point in the federation is serialized
+// in label-sorted order so the bytes are determinism-stable. On
+// Unmarshal, the manager replaces the federation's sync state with
+// the bundled set (additive — the manager is empty pre-Unmarshal in
+// the production restore-bootstrap path).
+message SyncManagerState {
+  repeated SyncPointStateEntry points = 1;
+}
