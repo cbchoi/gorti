@@ -64,6 +64,15 @@ func main() {
 	// listener constructed). TLS for admin is plaintext only in Phase
 	// 1; the existing --tls-cert / --tls-key apply only to --listen.
 	adminListen := flag.String("admin-listen", "localhost:8443", "AdminService gRPC listen address (read-only TUI / rti-top backend); empty disables")
+	// rtid-TUI Phase 5: gate the MutatingService behind --admin-mutating
+	// (default false). When true, the composition root REFUSES to start
+	// unless --admin-listen resolves to a loopback address — the
+	// operator can override with --admin-mutating-allow-non-loopback=true
+	// if they really know what they're doing.
+	//
+	// See docs/rtid-tui.md §7.5 (Phase 5 unblocked under opt-in flag).
+	adminMutating := flag.Bool("admin-mutating", false, "register MutatingService (ForceResign / DestroyFederation) on the admin port. DANGEROUS — requires loopback bind unless --admin-mutating-allow-non-loopback is also set.")
+	adminMutatingAllowNonLoopback := flag.Bool("admin-mutating-allow-non-loopback", false, "override the loopback bind requirement for --admin-mutating. Operators that enable this MUST front the admin port with their own ACL.")
 	logDir := flag.String("log-dir", "", "directory for per-federation event log files (empty = require explicit set)")
 	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
 	logFormat := flag.String("log-format", "json", "log format: json|text")
@@ -114,7 +123,18 @@ func main() {
 		runReplayMain(logger, *replayInput, *logDir)
 		return
 	case "server", "":
-		runServerMain(logger, *listen, *adminListen, *metricsListen, *logDir, *tlsCert, *tlsKey, *saveDir, *researchConfig)
+		runServerMain(logger, serverMainArgs{
+			Listen:                            *listen,
+			AdminListen:                       *adminListen,
+			MetricsListen:                     *metricsListen,
+			LogDir:                            *logDir,
+			TLSCert:                           *tlsCert,
+			TLSKey:                            *tlsKey,
+			SaveDir:                           *saveDir,
+			ResearchConfigPath:                *researchConfig,
+			AdminMutating:                     *adminMutating,
+			AdminMutatingAllowNonLoopback:     *adminMutatingAllowNonLoopback,
+		})
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
 		os.Exit(2)
@@ -159,14 +179,30 @@ func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
 	logger.Info("replay complete", "input", inputPath, "output_dir", logDir)
 }
 
+// serverMainArgs bundles the runServerMain CLI inputs. Extracted so
+// the call site stays one-line per flag and a future flag can land
+// without churning the function signature.
+type serverMainArgs struct {
+	Listen                        string
+	AdminListen                   string
+	MetricsListen                 string
+	LogDir                        string
+	TLSCert                       string
+	TLSKey                        string
+	SaveDir                       string
+	ResearchConfigPath            string
+	AdminMutating                 bool
+	AdminMutatingAllowNonLoopback bool
+}
+
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
 // SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
-func runServerMain(logger *slog.Logger, listen, adminListen, metricsListen, logDir, tlsCert, tlsKey, saveDir, researchConfigPath string) {
-	if logDir == "" {
+func runServerMain(logger *slog.Logger, args serverMainArgs) {
+	if args.LogDir == "" {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
 	}
 
-	tlsConfig, err := buildServerTLS(tlsCert, tlsKey)
+	tlsConfig, err := buildServerTLS(args.TLSCert, args.TLSKey)
 	if err != nil {
 		logger.Error("rtid TLS configuration failed", "err", err)
 		os.Exit(2)
@@ -178,28 +214,60 @@ func runServerMain(logger *slog.Logger, listen, adminListen, metricsListen, logD
 	// resolution priority: --research-config flag > GORTI_RESEARCH_CONFIG
 	// env > "" (defaults). The GORTI_DETERMINISM env var, when set,
 	// overrides whatever determinism mode the file selected.
-	resolved, err := resolveResearchConfig(researchConfigPath, os.Getenv("GORTI_RESEARCH_CONFIG"), os.Getenv("GORTI_DETERMINISM"))
+	resolved, err := resolveResearchConfig(args.ResearchConfigPath, os.Getenv("GORTI_RESEARCH_CONFIG"), os.Getenv("GORTI_DETERMINISM"))
 	if err != nil {
 		logger.Error("rtid research-config invalid", "err", err)
 		os.Exit(2)
 	}
 
+	// rtid-TUI Phase 5: enforce the loopback safety gate BEFORE
+	// constructing the runtime so an attempted mis-bind exits cleanly
+	// without standing up half a daemon. The gate fires only when
+	// the operator opted into mutating ops; default-off rtid keeps
+	// the existing read-only admin contract untouched.
+	if args.AdminMutating {
+		if args.AdminListen == "" {
+			logger.Error("rtid: --admin-mutating requires --admin-listen to be set")
+			os.Exit(2)
+		}
+		loopback := isLoopbackBind(args.AdminListen)
+		if !loopback && !args.AdminMutatingAllowNonLoopback {
+			logger.Error(
+				"rtid: --admin-mutating refuses to start on a non-loopback bind; "+
+					"either set --admin-listen to localhost:PORT or pass "+
+					"--admin-mutating-allow-non-loopback=true (and front the port with an ACL)",
+				"admin_listen", args.AdminListen,
+			)
+			os.Exit(2)
+		}
+		// Prominent warning either way — even on loopback, anyone with
+		// shell access can resign federates and destroy federations.
+		logger.Warn(
+			"rtid: MUTATING ADMIN OPS ENABLED — anyone with admin-port access "+
+				"can resign federates and destroy federations",
+			"admin_listen", args.AdminListen,
+			"loopback", loopback,
+		)
+	}
+
 	srv, err := newRTID(rtidConfig{
-		ListenAddr:        listen,
-		AdminListenAddr:   adminListen,
-		MetricsListenAddr: metricsListen,
-		LogDir:            logDir,
-		Logger:            logger,
-		TLSConfig:         tlsConfig,
-		SaveDir:           saveDir,
-		Research:          resolved,
+		ListenAddr:                    args.Listen,
+		AdminListenAddr:               args.AdminListen,
+		MetricsListenAddr:             args.MetricsListen,
+		LogDir:                        args.LogDir,
+		Logger:                        logger,
+		TLSConfig:                     tlsConfig,
+		SaveDir:                       args.SaveDir,
+		Research:                      resolved,
+		AdminMutating:                 args.AdminMutating,
+		AdminMutatingAllowNonLoopback: args.AdminMutatingAllowNonLoopback,
 	})
 	if err != nil {
 		logger.Error("rtid initialization failed", "err", err)
 		os.Exit(1)
 	}
 	if tlsConfig != nil {
-		logger.Info("rtid: TLS enabled (clients should dial grpcs://...)", "cert", tlsCert)
+		logger.Info("rtid: TLS enabled (clients should dial grpcs://...)", "cert", args.TLSCert)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -209,6 +277,31 @@ func runServerMain(logger *slog.Logger, listen, adminListen, metricsListen, logD
 		logger.Error("rtid serve exited with error", "err", serveErr)
 		os.Exit(1)
 	}
+}
+
+// isLoopbackBind reports whether addr (host:port) resolves to a
+// loopback address. Accepts the literal hosts "localhost", "127.0.0.1",
+// and "::1"; an unspecified host (":PORT" or "0.0.0.0:PORT") returns
+// false because it accepts non-loopback connections. Any host that
+// fails to parse falls back to false (safer to reject than accept).
+//
+// Only the literal forms are recognised — DNS resolution is
+// intentionally avoided because a name that today resolves to
+// loopback may resolve to something else after a config push, and we
+// want the safety gate to be byte-deterministic from the flag.
+func isLoopbackBind(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return false
 }
 
 // timedRunArgs bundles the flags for runTimedMain. Extracted so flags
@@ -427,6 +520,18 @@ type rtidConfig struct {
 	// Time.LBTS/Time.Grant/Ownership.Negotiation strategies thread
 	// into the corresponding Options fields at Manager construction.
 	Research research.Resolved
+
+	// AdminMutating, when true, registers the MutatingService
+	// (ForceResign / DestroyFederation) on the admin gRPC server.
+	// rtid-TUI Phase 5 — DANGEROUS; only set after the loopback safety
+	// gate has fired (see runServerMain).
+	AdminMutating bool
+
+	// AdminMutatingAllowNonLoopback is the "yes I really know what
+	// I'm doing" override for the loopback bind requirement. Surfaced
+	// here only so newRTID can log it; the gate logic lives in
+	// runServerMain so an early exit doesn't construct the runtime.
+	AdminMutatingAllowNonLoopback bool
 }
 
 // rtid is the composed runtime: gRPC server + metrics handler + the
@@ -678,6 +783,18 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			StartedAt: startedAt,
 		}); err != nil {
 			return nil, fmt.Errorf("rtid: admin service register: %w", err)
+		}
+
+		// rtid-TUI Phase 5: register MutatingService ONLY when the
+		// composition-root flag is set. AdminService stays read-only.
+		// See docs/rtid-tui.md §7.5 for the safety contract.
+		if cfg.AdminMutating {
+			if err := grpcsvc.RegisterMutatingService(adminGS, grpcsvc.MutatingOptions{
+				Federations: fedMgr,
+				Version:     rtidVersion(),
+			}); err != nil {
+				return nil, fmt.Errorf("rtid: mutating service register: %w", err)
+			}
 		}
 	}
 
