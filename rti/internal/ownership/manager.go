@@ -366,7 +366,7 @@ func (m *Manager) fanoutAssumption(
 		if h == owner {
 			continue
 		}
-		_ = m.opts.Outbox.Send(ctx, fed, h, assumptionEvent(obj, attrs, tagCopy))
+		_ = m.opts.Outbox.Send(ctx, fed, h, assumptionEvent(obj, attrs, tagCopy, owner))
 	}
 }
 
@@ -482,7 +482,7 @@ func (m *Manager) completeTransfer(
 	// Notify the prior owner — divestiture confirmed.
 	_ = m.opts.Outbox.Send(ctx, fed, oldOwner, divestNotificationEvent(obj, attrCopy))
 	// Notify the new owner — acquisition confirmed.
-	_ = m.opts.Outbox.Send(ctx, fed, newOwner, acquireNotificationEvent(obj, attrCopy))
+	_ = m.opts.Outbox.Send(ctx, fed, newOwner, acquireNotificationEvent(obj, attrCopy, newOwner))
 	return nil
 }
 

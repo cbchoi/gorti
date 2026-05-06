@@ -14,14 +14,13 @@ The ``fed.ownership`` accessor (see :class:`Federate.ownership` in
 federate, bound to the same gRPC channel + federation_name +
 federate_handle the federate already holds.
 
-Cut-3 wire limitation: the proto ``FederateEvent`` oneof does not yet
-carry ``RequestAttributeOwnershipAssumption`` /
-``AttributeOwnershipAcquisitionNotification`` variants, so the
-ownership-transfer callbacks are NOT delivered over the
-StreamService.Events stream in this cut. Tests observe the transfer
-via the (already-wire-exposed) :meth:`query_attribute_ownership` /
-:meth:`is_attribute_owned_by_federate` round-trip RPCs, which return
-the post-transfer owner directly.
+M12 W2 follow-up (deferral #1 closed): the proto ``FederateEvent`` oneof
+now carries ``RequestAttributeOwnershipAssumption`` (tag 30),
+``AttributeOwnershipAcquisitionNotification`` (tag 31), and
+``RequestDivestitureConfirmation`` (tag 32). The corresponding
+:mod:`rti1516e.events` dataclasses are yielded by ``Federate.events()``
+as the transfer progresses; tests may assert on callback delivery in
+addition to using Query.
 """
 
 from __future__ import annotations

@@ -70,21 +70,37 @@ func (e *eventRecord) Reset()                            { e.ensureProto().Reset
 func (e *eventRecord) String() string                    { return e.ensureProto().String() }
 func (e *eventRecord) ProtoReflect() protoreflect.Message { return e.ensureProto().ProtoReflect() }
 
-// announceOutbound is a placeholder OutboundEvent for
-// announceSynchronizationPoint until the proto FederateEvent oneof is
-// extended. The fakeOutbox in spec tests counts emissions; production
-// transport wiring is the M8 W2 follow-up.
+// announceOutbound is the OutboundEvent for announceSynchronizationPoint
+// (§4.6). The wire-side proto carries the typed
+// FederateEvent_SyncAnnounced oneof variant added in M12 W2 follow-up;
+// the in-package fields below mirror the proto for tests that want to
+// inspect without unwrapping.
 type announceOutbound struct {
-	pb    *rtiv1.FederateEvent
-	label string
-	tag   []byte
+	pb       *rtiv1.FederateEvent
+	label    string
+	tag      []byte
+	required []core.FederateHandle
 }
 
-func announceEvent(label string, tag []byte) *announceOutbound {
+func announceEvent(label string, tag []byte, required []core.FederateHandle) *announceOutbound {
+	pbReq := make([]uint64, 0, len(required))
+	for _, h := range required {
+		pbReq = append(pbReq, uint64(h))
+	}
+	pb := &rtiv1.FederateEvent{
+		Event: &rtiv1.FederateEvent_SyncAnnounced{
+			SyncAnnounced: &rtiv1.SynchronizationPointAnnounced{
+				Label:              label,
+				Tag:                append([]byte(nil), tag...),
+				RequiredFederates:  pbReq,
+			},
+		},
+	}
 	return &announceOutbound{
-		pb:    &rtiv1.FederateEvent{},
-		label: label,
-		tag:   tag,
+		pb:       pb,
+		label:    label,
+		tag:      tag,
+		required: append([]core.FederateHandle(nil), required...),
 	}
 }
 
@@ -96,13 +112,19 @@ func (o *announceOutbound) Seq() uint64 {
 	return o.pb.Seq
 }
 
-// Label / Tag expose the sync-point identifiers carried by the
-// announce envelope; used by tests + future gRPC handler wiring.
-func (o *announceOutbound) Label() string { return o.label }
-func (o *announceOutbound) Tag() []byte   { return o.tag }
+// Inner exposes the underlying proto for the gRPC stream multiplexer
+// (transport/grpc/stream.go's federateEventCarrier interface).
+func (o *announceOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
 
-// synchronizedOutbound is the symmetric placeholder for
-// federationSynchronized.
+// Label / Tag / Required expose the sync-point identifiers carried by
+// the announce envelope; used by tests that match on the in-package
+// fields rather than unwrapping the proto.
+func (o *announceOutbound) Label() string                   { return o.label }
+func (o *announceOutbound) Tag() []byte                     { return o.tag }
+func (o *announceOutbound) Required() []core.FederateHandle { return o.required }
+
+// synchronizedOutbound is the OutboundEvent for federationSynchronized
+// (§4.7). Carries the typed FederateEvent_SyncSynchronized variant.
 type synchronizedOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
@@ -110,7 +132,11 @@ type synchronizedOutbound struct {
 
 func synchronizedEvent(label string) *synchronizedOutbound {
 	return &synchronizedOutbound{
-		pb:    &rtiv1.FederateEvent{},
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_SyncSynchronized{
+				SyncSynchronized: &rtiv1.FederationSynchronized{Label: label},
+			},
+		},
 		label: label,
 	}
 }
@@ -121,4 +147,5 @@ func (o *synchronizedOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
-func (o *synchronizedOutbound) Label() string { return o.label }
+func (o *synchronizedOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *synchronizedOutbound) Label() string               { return o.label }

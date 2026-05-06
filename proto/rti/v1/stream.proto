@@ -19,6 +19,12 @@ message EventsRequest {
 }
 
 // FederateEvent is one server-initiated callback. Per-federation monotonic seq.
+//
+// Wire-version compatibility: oneof variants are APPEND-ONLY. Existing
+// federates connecting to a newer rtid see only the variants they know
+// about; new variants ride through proto3's open-set "unknown field"
+// path and are silently ignored. NEVER renumber or reorder existing
+// tags. The 99 tag is reserved for FederationHalted (terminal).
 message FederateEvent {
   uint64 seq = 1;
   oneof event {
@@ -27,6 +33,19 @@ message FederateEvent {
     RemoveObjectInstance remove = 12;
     ReceiveInteraction receive = 13;
     TimeAdvanceGrant grant = 14;
+    // Cut-2 service-group callbacks (M12 W2 deferral #1 close).
+    // Sync (§4.6 / §4.7).
+    SynchronizationPointAnnounced sync_announced = 20;
+    FederationSynchronized sync_synchronized = 21;
+    // Ownership (§7.3 / §7.4).
+    RequestAttributeOwnershipAssumption ownership_assumption = 30;
+    AttributeOwnershipAcquisitionNotification ownership_acquired = 31;
+    RequestDivestitureConfirmation ownership_divest_confirmed = 32;
+    // Save (§4.8 / §4.9). Restore variants are deferred — see
+    // proto comment on InitiateFederateSave below.
+    InitiateFederateSave save_initiate = 40;
+    FederationSaved save_completed = 41;
+    FederationNotSaved save_failed = 42;
     FederationHalted halted = 99;
   }
 }
@@ -62,4 +81,78 @@ message TimeAdvanceGrant {
 message FederationHalted {
   // Why the federation halted. e.g. "stall: federate=3", "fed=destroyed".
   string cause = 1;
+}
+
+// SynchronizationPointAnnounced — IEEE 1516.1-2010 §4.6
+// announceSynchronizationPoint. Fires on every joined federate when a
+// federate registers a sync point.
+message SynchronizationPointAnnounced {
+  string label = 1;
+  bytes tag = 2;
+  // Empty when the implicit "all joined federates" set was used at
+  // Register-time; non-empty when an explicit required set was passed.
+  // The Go-side sync.Manager populates this so federates can introspect
+  // who needs to achieve.
+  repeated uint64 required_federates = 3;
+}
+
+// FederationSynchronized — IEEE 1516.1-2010 §4.7
+// federationSynchronized. Fires on every required federate once the
+// last required achieve lands.
+message FederationSynchronized {
+  string label = 1;
+}
+
+// RequestAttributeOwnershipAssumption — IEEE 1516.1-2010 §7.3.
+// Fires on candidate federates (subscribers of the relevant attribute)
+// when an owner calls negotiatedAttributeOwnershipDivestiture.
+message RequestAttributeOwnershipAssumption {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  // The federate divesting these attributes; the receiving federate may
+  // call attributeOwnershipAcquisition to take over.
+  uint64 divesting_federate = 3;
+  // Opaque user data echoed from the divest call's tag.
+  bytes tag = 4;
+}
+
+// AttributeOwnershipAcquisitionNotification — IEEE 1516.1-2010 §7.4.
+// Fires on the new owner when a transfer completes.
+message AttributeOwnershipAcquisitionNotification {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  // The federate that just acquired ownership (i.e. the recipient of
+  // this callback). Echoed in the body so federates with multiple
+  // streams can correlate without consulting their own state.
+  uint64 owning_federate = 3;
+}
+
+// RequestDivestitureConfirmation — IEEE 1516.1-2010 §7.3 (divestee
+// half). Fires on the divesting federate when an acquirer takes over.
+message RequestDivestitureConfirmation {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// InitiateFederateSave — IEEE 1516.1-2010 §4.8 initiateFederateSave.
+// Fires on every joined federate when the federation save starts.
+//
+// The optional save_time pin is carried as a `oneof` to preserve the
+// nullability the Go-side core.LogicalTime pointer represents; absent
+// when the caller passed a nil saveTime ("save now").
+message InitiateFederateSave {
+  string label = 1;
+  optional double save_time = 2;
+}
+
+// FederationSaved — IEEE 1516.1-2010 §4.9 federationSaved. Fires on
+// every federate when all complete.
+message FederationSaved {
+  string label = 1;
+}
+
+// FederationNotSaved — IEEE 1516.1-2010 §4.9 federationNotSaved. Fires
+// on every federate when the save aborts.
+message FederationNotSaved {
+  string label = 1;
 }

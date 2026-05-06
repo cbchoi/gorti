@@ -16,14 +16,16 @@ The ``fed.savepoint`` accessor (see :class:`Federate.savepoint` in
 federate, bound to the same gRPC channel + federation_name +
 federate_handle the federate already holds.
 
-Cut-3 wire limitation: the proto ``FederateEvent`` oneof does not yet
-carry ``initiateFederateSave`` / ``federationSaved`` /
-``initiateFederateRestore`` / ``federationRestored`` variants, so the
-save/restore lifecycle callbacks are NOT delivered over the
-StreamService.Events stream in this cut. Tests observe state
-transitions via the (already-wire-exposed) :meth:`query_save_state` /
-:meth:`query_restore_state` round-trip RPCs, which return the post-
-transition state directly.
+M12 W2 follow-up (deferral #1 closed for save half): the proto
+``FederateEvent`` oneof now carries ``InitiateFederateSave`` (tag 40),
+``FederationSaved`` (tag 41), and ``FederationNotSaved`` (tag 42).
+Federates receive these callbacks over StreamService.Events as
+:class:`rti1516e.events.InitiateFederateSave`,
+:class:`rti1516e.events.FederationSaved`, and
+:class:`rti1516e.events.FederationNotSaved`. Restore lifecycle
+callbacks (``initiateFederateRestore`` / ``federationRestored``)
+remain Query-only at this cut — the SDK's M12 restore tests use Query
+observation and a future cut adds the matching variants.
 
 Save/restore aggregation (cut-3 production rtid wiring): the
 production server's savepoint manager runs in *dynamic* mode (no

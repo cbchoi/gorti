@@ -67,15 +67,19 @@ func (e *eventRecord) Reset()                             { e.ensureProto().Rese
 func (e *eventRecord) String() string                     { return e.ensureProto().String() }
 func (e *eventRecord) ProtoReflect() protoreflect.Message { return e.ensureProto().ProtoReflect() }
 
-// --- Outbound placeholder events -----------------------------------------
+// --- Outbound events -----------------------------------------------------
 //
-// Cut-1: the proto FederateEvent oneof does not yet carry save/restore
-// variants, so each emission is a placeholder envelope (empty
-// FederateEvent). Test fixtures' fakeOutbox simply count + inspect
-// these; production transport wiring (gRPC handler + proto extension)
-// is the M9 W2 follow-up.
+// M12 W2: the proto FederateEvent oneof now carries save callback
+// variants (InitiateFederateSave / FederationSaved / FederationNotSaved
+// at tags 40/41/42). Save outbound types populate the typed bodies and
+// expose Inner() so the gRPC stream multiplexer ships them through.
+// Restore-side variants (initiateFederateRestore, federationRestored)
+// remain placeholder envelopes — the SDK currently observes restore
+// transitions via Query and the cut-3 spec test for M12 also uses
+// Query; we ship the save half this cut and revisit restore once the
+// SDK callback path actually consumes it.
 
-// initiateFederateSaveOutbound is the placeholder for
+// initiateFederateSaveOutbound is the OutboundEvent for
 // initiateFederateSave (§4.8).
 type initiateFederateSaveOutbound struct {
 	pb       *rtiv1.FederateEvent
@@ -84,8 +88,15 @@ type initiateFederateSaveOutbound struct {
 }
 
 func initiateFederateSaveEvent(label string, saveTime *core.LogicalTime) *initiateFederateSaveOutbound {
+	body := &rtiv1.InitiateFederateSave{Label: label}
+	if saveTime != nil {
+		t := float64(*saveTime)
+		body.SaveTime = &t
+	}
 	return &initiateFederateSaveOutbound{
-		pb:       &rtiv1.FederateEvent{},
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_SaveInitiate{SaveInitiate: body},
+		},
 		label:    label,
 		saveTime: saveTime,
 	}
@@ -97,20 +108,28 @@ func (o *initiateFederateSaveOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
+func (o *initiateFederateSaveOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
 
-// Label / SaveTime expose the §4.8 callback identifiers; used by tests +
-// future gRPC handler wiring.
-func (o *initiateFederateSaveOutbound) Label() string                 { return o.label }
-func (o *initiateFederateSaveOutbound) SaveTime() *core.LogicalTime   { return o.saveTime }
+// Label / SaveTime expose the §4.8 callback identifiers; used by tests
+// that match on the in-package fields rather than unwrapping the proto.
+func (o *initiateFederateSaveOutbound) Label() string               { return o.label }
+func (o *initiateFederateSaveOutbound) SaveTime() *core.LogicalTime { return o.saveTime }
 
-// federationSavedOutbound is the placeholder for federationSaved (§4.9).
+// federationSavedOutbound — federationSaved (§4.9).
 type federationSavedOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
 }
 
 func federationSavedEvent(label string) *federationSavedOutbound {
-	return &federationSavedOutbound{pb: &rtiv1.FederateEvent{}, label: label}
+	return &federationSavedOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_SaveCompleted{
+				SaveCompleted: &rtiv1.FederationSaved{Label: label},
+			},
+		},
+		label: label,
+	}
 }
 
 func (o *federationSavedOutbound) Seq() uint64 {
@@ -119,16 +138,24 @@ func (o *federationSavedOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
-func (o *federationSavedOutbound) Label() string { return o.label }
+func (o *federationSavedOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *federationSavedOutbound) Label() string               { return o.label }
 
-// federationNotSavedOutbound is the symmetric failure callback (§4.9).
+// federationNotSavedOutbound — federationNotSaved (§4.9 failure half).
 type federationNotSavedOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
 }
 
 func federationNotSavedEvent(label string) *federationNotSavedOutbound {
-	return &federationNotSavedOutbound{pb: &rtiv1.FederateEvent{}, label: label}
+	return &federationNotSavedOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_SaveFailed{
+				SaveFailed: &rtiv1.FederationNotSaved{Label: label},
+			},
+		},
+		label: label,
+	}
 }
 
 func (o *federationNotSavedOutbound) Seq() uint64 {
@@ -137,10 +164,12 @@ func (o *federationNotSavedOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
-func (o *federationNotSavedOutbound) Label() string { return o.label }
+func (o *federationNotSavedOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *federationNotSavedOutbound) Label() string               { return o.label }
 
 // initiateFederateRestoreOutbound is the placeholder for
-// initiateFederateRestore (§4.10).
+// initiateFederateRestore (§4.10). Cut-2 ships save callback variants
+// only; restore proto extension is a follow-up.
 type initiateFederateRestoreOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
@@ -159,7 +188,7 @@ func (o *initiateFederateRestoreOutbound) Seq() uint64 {
 func (o *initiateFederateRestoreOutbound) Label() string { return o.label }
 
 // federationRestoredOutbound is the placeholder for federationRestored
-// (§4.12).
+// (§4.12). See initiateFederateRestoreOutbound deferral note.
 type federationRestoredOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
