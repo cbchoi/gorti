@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>pyjevsim-dashboard</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-05-03</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Reference FOM for the Sensor → Dashboard object-instance example. One object class (SensorReading) with one published attribute (value). Distinct from the interaction-based FOMs in pyjevsim/ and pyjevsim-relay/ — this exercises the OBJECT half of HLA (register_object_instance + update_attributes + reflect callback).</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>SensorReading</name>
+        <sharing>PublishSubscribe</sharing>
+        <semantics>An ambient sensor publishing one scalar reading. The Sensor federate registers an instance and updates the value attribute every tick; the Dashboard federate subscribes and accumulates the reflected sequence.</semantics>
+        <attribute>
+          <name>value</name>
+          <dataType>HLAinteger32BE</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>Monotonic-or-sine-wave scalar stamped by the sensor each tick. Decoded by the dashboard for verification.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>
