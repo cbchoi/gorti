@@ -366,3 +366,46 @@ func (m *Manager) QueryFederationAttributes(fed core.FederationName) (Federation
 	}
 	return st.snapshotFederation(), true
 }
+
+// QueryFederation is the core.ManagementObjectModel form of
+// QueryFederationAttributes (M12 W3 cut-3). The two methods return the
+// same data; QueryFederation copies into the package-free
+// core.MOMFederationAttributes shape so the gRPC handler can bind to
+// the interface (coordinator pattern) rather than the concrete
+// *mom.Manager. The pre-existing QueryFederationAttributes is kept
+// for backwards compatibility with rti/internal/mom unit tests that
+// already match on its return type.
+func (m *Manager) QueryFederation(fed core.FederationName) (core.MOMFederationAttributes, bool) {
+	attrs, ok := m.QueryFederationAttributes(fed)
+	if !ok {
+		return core.MOMFederationAttributes{}, false
+	}
+	return core.MOMFederationAttributes{
+		Name:            attrs.Name,
+		FederateHandles: attrs.FederateHandles,
+		FOMModuleNames:  attrs.FOMModuleNames,
+	}, true
+}
+
+// QueryFederate is the core.ManagementObjectModel form of
+// QueryFederateAttributes (M12 W3 cut-3). See QueryFederation for the
+// rationale on the parallel typed-method pair.
+func (m *Manager) QueryFederate(fed core.FederationName, h core.FederateHandle) (core.MOMFederateAttributes, bool) {
+	attrs, ok := m.QueryFederateAttributes(fed, h)
+	if !ok {
+		return core.MOMFederateAttributes{}, false
+	}
+	return core.MOMFederateAttributes{
+		Handle:               attrs.Handle,
+		Name:                 attrs.Name,
+		Type:                 attrs.Type,
+		TimeRegulating:       attrs.TimeRegulating,
+		TimeConstrained:      attrs.TimeConstrained,
+		Lookahead:            attrs.Lookahead,
+		LogicalTime:          attrs.LogicalTime,
+		InteractionsSent:     attrs.InteractionsSent,
+		InteractionsReceived: attrs.InteractionsReceived,
+		UpdatesSent:          attrs.UpdatesSent,
+		ReflectionsReceived:  attrs.ReflectionsReceived,
+	}, true
+}

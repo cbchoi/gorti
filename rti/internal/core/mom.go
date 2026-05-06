@@ -89,6 +89,62 @@ type ManagementObjectModel interface {
 	// Snapshot returns aggregate per-federate counters for the
 	// AdminService handler. Read-only; cheap.
 	Snapshot(fed FederationName) MOMSnapshot
+
+	// QueryFederation returns the HLAfederation MOM object's
+	// attribute snapshot for fed (M12 W3: cut-3 MomService gRPC
+	// exposure). The second return is false when the federation is
+	// not currently tracked (never created or already destroyed).
+	//
+	// This accessor was previously typed only on the concrete
+	// *mom.Manager (test-introspection); it is part of the interface
+	// from cut-3 onward so the gRPC handler's coordinator binding
+	// can call it through the abstraction.
+	QueryFederation(fed FederationName) (MOMFederationAttributes, bool)
+
+	// QueryFederate returns one HLAfederate MOM object's attribute
+	// snapshot for (fed, h). The second return is false when no
+	// HLAfederate instance for h exists (federate never joined or
+	// has resigned).
+	QueryFederate(fed FederationName, h FederateHandle) (MOMFederateAttributes, bool)
+}
+
+// MOMFederationAttributes is the wire-shape snapshot of one
+// HLAfederation MOM object's attributes (cut-3 MomService payload).
+// Fields populated in cut-3:
+//
+//   - Name: HLAfederationName
+//   - FederateHandles: HLAfederatesInFederation, sorted ascending
+//   - FOMModuleNames: HLAFOMmoduleDesignatorList
+//
+// Forward-compatible: cut-4 may add LastSaveName / LastSaveTime /
+// SyncPointsState / SaveState as the corresponding hook surfaces
+// land. The proto MomService response holds reserved field tags for
+// each.
+type MOMFederationAttributes struct {
+	Name            FederationName
+	FederateHandles []FederateHandle
+	FOMModuleNames  []string
+}
+
+// MOMFederateAttributes is the wire-shape snapshot of one HLAfederate
+// MOM object's attributes (cut-3 MomService payload).
+//
+// Counter fields mirror MOMFederateCounters; the accessor returns
+// counter values via atomic.LoadUint32 so concurrent IncrementX
+// callers cannot tear individual reads. The struct is a plain value
+// (not aliased to any internal state), safe to retain.
+type MOMFederateAttributes struct {
+	Handle               FederateHandle
+	Name                 string
+	Type                 string
+	TimeRegulating       bool
+	TimeConstrained      bool
+	Lookahead            LogicalTime
+	LogicalTime          LogicalTime
+	InteractionsSent     uint32
+	InteractionsReceived uint32
+	UpdatesSent          uint32
+	ReflectionsReceived  uint32
 }
 
 // MOMFederateCounters mirrors the per-federate counter set that

@@ -413,6 +413,123 @@ async def _run_savepoint() -> None:
                 # parity across save/restore is automatic.
 
 
+@pytest.mark.spec
+@pytest.mark.integration
+def test_spec_m12_mom_introspection_round_trip() -> None:
+    """SDK MOM exposure: federation + per-federate snapshot + enumerate.
+
+    Drives the protocol via ``fed.mom`` (M12 W3):
+      1. Two federates join the same federation; fed_a queries
+         QueryFederationAttributes and observes both federate handles
+         in the HLAfederation snapshot.
+      2. fed_a sends N interactions; fed_a queries QueryFederateAttributes
+         for itself and observes interactions_sent == N (per-federate
+         counter populated by the dispatcher's OnInteractionSent hook).
+      3. fed_a enumerates MOM instances and observes the federation
+         singleton + per-federate HLAfederate handles, in handle-sorted
+         order.
+
+    Read-only contract: no MOM RPC mutates state. The interactions
+    sent in step 2 drive the per-federate counters as a side effect
+    of the dispatcher fan-out; the MOM service surfaces the snapshot.
+    """
+    _go_or_skip()
+    asyncio.run(_run_mom())
+
+
+async def _run_mom() -> None:
+    from rti1516e.mom import CLASS_HLA_FEDERATE, CLASS_HLA_FEDERATION
+
+    fom_path = write_minimal_fom()
+    async with RtidProcess() as rtid, two_federates(
+        rtid.url, federation_name="m12-mom", fom_path=fom_path
+    ) as (fed_a, fed_b):
+        # publish so the subsequent send_interaction does not get
+        # ErrInteractionClassNotPublished. The HLAinteractionRoot
+        # base class is always available; subscribe so the receive
+        # path also lights up (counters on fed_b after dispatch).
+        await fed_a.publish_interaction_class("HLAinteractionRoot")
+        await fed_b.subscribe_interaction_class("HLAinteractionRoot")
+
+        # Step 1: federation snapshot reflects both federates joined.
+        fed_attrs = await fed_a.mom.query_federation_attributes()
+        assert fed_attrs.federation_name == "m12-mom", (
+            f"federation_name: got {fed_attrs.federation_name!r}, want 'm12-mom'"
+        )
+        assert fed_a.handle in fed_attrs.federate_handles, (
+            f"fed_a handle {fed_a.handle} should be in federation roster, "
+            f"got {fed_attrs.federate_handles}"
+        )
+        assert fed_b.handle in fed_attrs.federate_handles, (
+            f"fed_b handle {fed_b.handle} should be in federation roster, "
+            f"got {fed_attrs.federate_handles}"
+        )
+
+        # Step 2: drive a few interactions through fed_a; the
+        # dispatcher's OnInteractionSent hook bumps the MOM counter.
+        # send_interaction is wired to the real interaction RPC under
+        # M12 W2.
+        for _ in range(3):
+            await fed_a.send_interaction("HLAinteractionRoot", {})
+
+        # Per-federate snapshot for fed_a — the runtime applied 3
+        # OnInteractionSent calls to fed_a's HLAfederate record, so
+        # interactions_sent should be 3.
+        self_attrs = await fed_a.mom.query_federate_attributes(fed_a.handle)
+        assert self_attrs.found is True, (
+            f"fed_a should be tracked by MOM; got found={self_attrs.found}"
+        )
+        assert self_attrs.federate_handle == fed_a.handle, (
+            f"federate_handle: got {self_attrs.federate_handle}, want {fed_a.handle}"
+        )
+        assert self_attrs.federate_name == "fed-a", (
+            f"federate_name: got {self_attrs.federate_name!r}, want 'fed-a'"
+        )
+        assert self_attrs.interactions_sent == 3, (
+            f"interactions_sent: got {self_attrs.interactions_sent}, want 3 "
+            f"(after 3 send_interaction calls)"
+        )
+
+        # Unknown federate handle returns found=False, zero-valued.
+        unknown = await fed_a.mom.query_federate_attributes(99999)
+        assert unknown.found is False, (
+            f"unknown handle should report found=False, got {unknown}"
+        )
+
+        # Step 3: enumerate. The federation singleton appears first,
+        # followed by per-federate entries in handle-sorted order.
+        instances = await fed_a.mom.enumerate_mom_instances()
+        assert len(instances) >= 3, (
+            f"want federation + 2 federates = 3 instances, got {len(instances)}: "
+            f"{instances}"
+        )
+        # First entry: HLAfederation singleton.
+        assert instances[0].class_name == CLASS_HLA_FEDERATION, (
+            f"instances[0].class_name: got {instances[0].class_name!r}, "
+            f"want {CLASS_HLA_FEDERATION!r}"
+        )
+        assert instances[0].instance_name == "m12-mom"
+        assert instances[0].federate_handle == 0, (
+            "federation singleton should have federate_handle=0; "
+            f"got {instances[0].federate_handle}"
+        )
+        # Remaining entries: per-federate HLAfederate, ordered by handle.
+        federate_entries = [i for i in instances if i.class_name == CLASS_HLA_FEDERATE]
+        federate_handles_seen = [i.federate_handle for i in federate_entries]
+        assert fed_a.handle in federate_handles_seen, (
+            f"fed_a handle {fed_a.handle} should appear in MOM enumerate; "
+            f"got {federate_handles_seen}"
+        )
+        assert fed_b.handle in federate_handles_seen, (
+            f"fed_b handle {fed_b.handle} should appear in MOM enumerate; "
+            f"got {federate_handles_seen}"
+        )
+        # Sorted-by-handle ordering on the federate entries.
+        assert federate_handles_seen == sorted(federate_handles_seen), (
+            f"federate entries should be handle-sorted; got {federate_handles_seen}"
+        )
+
+
 # ruff: noqa: PLR0915 — protocol round-trips read clearer linearly than
 # split into helper-per-step; each test exercises a different RPC
 # surface and the linear structure documents the ordering.
