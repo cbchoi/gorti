@@ -237,23 +237,82 @@ of these required new RPCs; one proto FIELD landed
 
 ## Phase-3 deferrals
 
-The following remain unaddressed in Phase 3 and roll forward to
-Phase 4+:
-
-- **Rich event-log payloads.** `TailEventsResponse.payload` is
-  still empty in this cut — the server-side eventlog encoder
-  doesn't round-trip the proto-encoded `EventEntry`. When that
-  lands, `formatEvent` can decode the payload and render
-  `class + sender + seq` per the §3.5 mockup.
-- **Push streaming for events** — the `TailEvents` server-stream
-  is fine for one federation at a time, but a federation-list
-  watch would let the Federations view update in real time.
-  §5 of the design doc tags this as Phase 4 (optional).
-- **Mutating ops** — kill federation, force-resign, drain queue.
-  PINNED §7.5: read-only Phase 3. Phase 5+ at the earliest.
 - **Per-attribute ownership history**, **stall-risk indicators**,
   **last-activity timestamps** — explicitly out of scope per §3.2
   PINNED. Revisit only on operator demand.
+
+## Phase-4 added
+
+Phase 4 lands server-side improvements to the `TailEvents` stream
+that previously drowned the renderer on busy federations.
+
+- **Server-side filtering.** `TailEventsRequest` gains
+  `event_class_filter` (case-sensitive substring against the event
+  body's class name) and `federate_handle_filter` (whitelist of
+  attributable federate handles). The events view's `F` keybinding
+  now flows the substring into the next subscribe call, so the
+  wire only carries what the operator wants.
+- **Batched responses.** `TailEventsResponse` now carries
+  `repeated TailedEvent events` plus the new tuning knobs
+  `max_batch_events` (default 32, ceiling 1024) and
+  `max_batch_latency_ms` (default 10ms, ceiling 1s). The handler
+  flushes whichever bound trips first, mirroring the perf-pass
+  batched-channel pattern in `multiOutbox`.
+- **Backpressure-aware send.** When the gRPC server-stream's send
+  buffer is full, the handler folds dropped events into an
+  `overflow_skipped` counter that piggybacks on the next
+  successful batch. The events view surfaces the cumulative count
+  as a "renderer lag" status line — operators see exactly how many
+  events the daemon dropped instead of silently losing data.
+- **Richer event lines.** `TailedEvent` now carries `event_class`
+  (e.g. `FederateJoined`, `InteractionSent`) and the
+  attributable `federate_handle`, so `formatEvent` can render
+  `seq=N CLASS fed=H payload_bytes=B`.
+
+## Phase-5 added (opt-in mutating ops)
+
+Phase 5 introduces operator-initiated mutating ops as an EXPLICIT
+opt-in. Read-only mode is still the default: the daemon registers
+`MutatingService` only when `--admin-mutating=true`, and the TUI
+hides the X / D keybindings until the probe at startup succeeds.
+
+- **`MutatingService` proto** in
+  `proto/rti/v1/admin_mutating.proto` — separate service from
+  `AdminService` so the read-only contract is preserved by
+  construction. Three RPCs: `Probe`, `ForceResign`,
+  `DestroyFederation`.
+- **rtid composition root gate.** Two new flags: `--admin-mutating`
+  (default `false`) registers `MutatingService` on the admin
+  port; `--admin-mutating-allow-non-loopback` (default `false`) is
+  the explicit override for non-loopback admin binds. With
+  mutating enabled and a non-loopback bind without the override,
+  `rtid` refuses to start (exit 2). A prominent `WARN` is logged
+  at startup whenever mutating is enabled.
+- **Both RPCs reuse `federation.Manager` primitives.**
+  `ForceResign` calls `ResignFederation`; `DestroyFederation`
+  optionally walks the roster and force-resigns each federate
+  before calling `DestroyFederation`. Eventlog entries + MOM hooks
+  fire identically to the federate-initiated path — critical for
+  replay determinism + observability symmetry.
+- **TUI keybindings.** With `MutatingService` reachable, `X` on a
+  federate row opens a confirmation dialog (`y` proceeds), and
+  `D` on a federation opens a double-confirm dialog (`y` typed
+  twice). Both surface the result as a status line under the
+  header. Cancel via `n` / `Esc`.
+
+## Phase 5 deferrals (still unaddressed)
+
+- **Rich event-log payloads.** `TailedEvent.payload` carries the
+  proto-encoded `EventEntry` bytes but the renderer doesn't
+  decode the body — `formatEvent` shows the byte count, not the
+  per-event detail (sender, parameter values, ...). A future cut
+  decodes through the proto registry.
+- **Mutating-ops audit trail.** The handler logs at slog level via
+  the standard event-log + MOM hooks; a dedicated audit logger
+  (operator identity, source IP, RPC summary) is a follow-up.
+- **mTLS / RBAC for the admin endpoint.** The whole admin port is
+  plaintext; production deployments add their own ACL via mTLS or
+  a reverse proxy. cut-3 backlog item.
 
 ## Architecture
 

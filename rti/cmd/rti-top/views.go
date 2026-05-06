@@ -69,22 +69,41 @@ func (m *model) renderHeader() string {
 		m.refresh)
 	keys := " [F]ederations  [T]ime  [W]ire  [O]bjects  [I]nteractions  [Q]uit "
 	if m.lastErr != nil {
-		keys += "  " + styleErr.Render("⚠ "+m.lastErr.Error())
+		keys += "  " + styleErr.Render("! "+m.lastErr.Error())
 	}
-	return styleHeader.Width(m.width).Render(title) + "\n" + keys
+	out := styleHeader.Width(m.width).Render(title) + "\n" + keys
+	// Phase 5: surface the most recent mutating-op result as a status
+	// line below the header.
+	if m.statusMsg != "" {
+		out += "\n " + m.statusMsg
+	}
+	return out
 }
 
 // renderFooter draws the bottom keybinding hint row matching the
-// design-doc mockups (§3.1..§3.5 each show their own footer).
+// design-doc mockups (§3.1..§3.5 each show their own footer). Phase
+// 5 augments the federation / drilldown footers with X (force-resign)
+// and D (destroy federation) keybindings — but ONLY when the
+// MutatingService probe at startup succeeded. Read-only daemons keep
+// the footer unchanged.
 func (m *model) renderFooter() string {
 	var hint string
 	switch m.view {
 	case viewFederations:
 		hint = " ↑↓ select  Enter drill-down  R refresh-rate  / filter  Q quit "
+		if m.mutatingEnabled {
+			hint += " D destroy "
+		}
 	case viewDrilldown:
 		hint = " Esc back  ↑↓ select federate  Enter inspect  T time view  W wire view  I events "
+		if m.mutatingEnabled {
+			hint += " X force-resign  D destroy "
+		}
 	case viewFederateDetail:
 		hint = " Esc back  T time view  W wire view  I events  Q quit "
+		if m.mutatingEnabled {
+			hint += " X force-resign "
+		}
 	case viewTime:
 		hint = " Esc back  W wire view  R refresh-rate  Q quit "
 	case viewWire:
@@ -95,7 +114,41 @@ func (m *model) renderFooter() string {
 	if m.filtering {
 		hint = fmt.Sprintf(" filter: %s_  (Enter accept  Esc cancel) ", m.filter)
 	}
+	if m.confirmKind != confirmNone {
+		hint = m.renderConfirmHint()
+	}
 	return styleFooter.Width(m.width).Render(hint)
+}
+
+// renderConfirmHint renders the modal confirmation footer for Phase
+// 5 X / D keybindings. ForceResign accepts a single y; Destroy needs
+// y typed twice (the count is rendered so the operator sees their
+// progress).
+func (m *model) renderConfirmHint() string {
+	switch m.confirmKind {
+	case confirmForceResign:
+		return fmt.Sprintf(
+			" ForceResign federate handle=%d on federation %q? [y]es / [n]o ",
+			m.confirmTarget, m.selFed,
+		)
+	case confirmDestroyFederation:
+		return fmt.Sprintf(
+			" DestroyFederation %q (evicts %d federates)? type Y twice — confirmed %d/2  [n]o cancels ",
+			m.selFed, m.federationFederateCount(m.selFed), m.destroyFedConfirmCount,
+		)
+	}
+	return ""
+}
+
+// federationFederateCount returns the count of federates currently
+// joined to the named federation in the latest snapshot. Used to
+// surface the eviction count in the destroy-federation confirmation.
+func (m *model) federationFederateCount(name string) int {
+	fed := m.findFederation(name)
+	if fed == nil {
+		return 0
+	}
+	return len(fed.GetFederates())
 }
 
 // renderBody dispatches to the per-view body renderer.
@@ -638,9 +691,10 @@ func renderUtilizationBar(q, qmax uint32) string {
 
 // --- Events view (§3.5) -----------------------------------------------------
 
-// renderEventsView renders the live tail of TailEventsResponse lines
-// for the selected federation. Phase-1 limitation: payload is empty
-// in this cut, so the line surfaces only seq + timestamp.
+// renderEventsView renders the live tail of TailedEvent lines for the
+// selected federation. Phase 4 surfaces the active server-side
+// filter + a "renderer-lag" line whenever the server reported any
+// overflow_skipped events.
 func (m *model) renderEventsView() string {
 	if m.events == nil {
 		return styleDim.Render("  (events stream not running — press I to start)")
@@ -650,30 +704,33 @@ func (m *model) renderEventsView() string {
 	if m.events.paused {
 		pause = " [PAUSED]"
 	}
-	b.WriteString(fmt.Sprintf(" Event log — federation: %s — tail%s\n\n", m.events.fed, pause))
+	filterNote := ""
+	if m.filter != "" {
+		filterNote = fmt.Sprintf("  filter=%q (server-side)", m.filter)
+	}
+	b.WriteString(fmt.Sprintf(" Event log — federation: %s — tail%s%s\n",
+		m.events.fed, pause, filterNote))
 	m.events.mu.Lock()
 	defer m.events.mu.Unlock()
-	// Phase 3 — §5 filter polish: apply the `F`-key filter to the
-	// in-memory tail (case-insensitive substring on the rendered
-	// line). Empty filter → no-op.
-	lines := m.events.lines
-	if m.filter != "" {
-		needle := strings.ToLower(m.filter)
-		filtered := make([]string, 0, len(lines))
-		for _, ln := range lines {
-			if strings.Contains(strings.ToLower(ln), needle) {
-				filtered = append(filtered, ln)
-			}
-		}
-		lines = filtered
+	if m.events.dropped > 0 {
+		b.WriteString(styleErr.Render(fmt.Sprintf(
+			" %s events dropped due to renderer lag\n",
+			humanCount(m.events.dropped),
+		)))
 	}
+	b.WriteString("\n")
+	// Phase 4: server-side filter is now applied at the source, so the
+	// rti-top side just shows what arrived. We keep a thin client-side
+	// substring check as a fallback in case the server returned older
+	// events from before the filter was set.
+	lines := m.events.lines
 	if len(lines) == 0 {
 		b.WriteString(styleDim.Render("   (waiting for events …)\n"))
 	} else {
 		// Show the last N lines that fit in the body height. The body
 		// is height ~ m.height-6 (header 2 lines + footer 1 line + a bit).
 		// Use a conservative cap.
-		visible := m.height - 8
+		visible := m.height - 9
 		if visible < 5 {
 			visible = 5
 		}
@@ -689,9 +746,24 @@ func (m *model) renderEventsView() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(styleDim.Render(
-		"   Phase 2 limitation: TailEventsResponse.payload is empty in this cut;\n" +
-			"   the view shows seq + timestamp only. Richer event detail lands in Phase 3.\n"))
+		"   Phase 4: server-side class filter via F-key + batched delivery.\n"))
 	return b.String()
+}
+
+// humanCount formats large counts with K/M/G suffixes for the
+// renderer-lag status line ("3.2k events dropped …"). Picked over
+// raw integers so the line stays a fixed length on bursty federations.
+func humanCount(n uint64) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprintf("%d", n)
+	case n < 1_000_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	case n < 1_000_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	default:
+		return fmt.Sprintf("%.1fG", float64(n)/1_000_000_000)
+	}
 }
 
 // --- helpers ----------------------------------------------------------------

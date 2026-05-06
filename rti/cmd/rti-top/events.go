@@ -38,14 +38,22 @@ type eventsState struct {
 	scroll   int
 	paused   bool
 	finished bool
+	// dropped tracks the cumulative count of events the server
+	// reported as overflow_skipped (the renderer was too slow to keep
+	// up). Surfaced in the status line.
+	dropped uint64
 }
 
 // eventTailMsg is dispatched by the streaming goroutine on each
-// received TailEventsResponse (or stream end).
+// received TailEventsResponse (or stream end). Phase 4: a single
+// response may carry multiple lines (batched) plus an overflow
+// counter — the message therefore carries a slice of lines and the
+// per-batch dropped count.
 type eventTailMsg struct {
-	line string
-	end  bool
-	err  error
+	lines   []string
+	dropped uint64
+	end     bool
+	err     error
 }
 
 // programSender is the type of *tea.Program.Send injected from
@@ -108,10 +116,16 @@ func (m *model) enterEventsView() (tea.Model, tea.Cmd) {
 // startEventsCmd returns a tea.Cmd that opens the TailEvents stream
 // and launches the forwarding goroutine. The goroutine pushes
 // eventTailMsg into the program via the package-level senderHolder.
+//
+// Phase 4: the server-side TailEvents handler now batches events and
+// piggybacks an overflow counter when it had to drop frames due to
+// renderer lag. The forwarding goroutine forwards the entire batch
+// in one message + threads the counter into the status line.
 func (m *model) startEventsCmd(ctx context.Context, target string) tea.Cmd {
 	cli := m.cli
+	classFilter := m.filter // current filter substring is the server-side class filter
 	return func() tea.Msg {
-		stream, err := cli.TailEvents(ctx, target)
+		stream, err := cli.TailEventsFiltered(ctx, target, classFilter, nil)
 		if err != nil {
 			return eventTailMsg{err: err, end: true}
 		}
@@ -130,23 +144,40 @@ func (m *model) startEventsCmd(ctx context.Context, target string) tea.Cmd {
 					send(eventTailMsg{end: true, err: rerr})
 					return
 				}
-				send(eventTailMsg{line: formatEvent(resp)})
+				batch := resp.GetEvents()
+				lines := make([]string, 0, len(batch))
+				for _, e := range batch {
+					lines = append(lines, formatEvent(e))
+				}
+				send(eventTailMsg{
+					lines:   lines,
+					dropped: resp.GetOverflowSkipped(),
+				})
 			}
 		}()
 		return nil
 	}
 }
 
-// formatEvent renders one TailEventsResponse as a single TUI line.
-// Phase-2 limitation: payload is empty in this cut, so the line
-// surfaces only seq. The format leaves room for the richer event
-// detail to land in a follow-up.
-func formatEvent(resp *rtiv1.TailEventsResponse) string {
-	return fmt.Sprintf("seq=%d  ts=%d  payload_bytes=%d",
-		resp.GetSeq(), resp.GetUnixNanos(), len(resp.GetPayload()))
+// formatEvent renders one TailedEvent as a single TUI line. Phase 4
+// surfaces the event class + federate handle now that the server
+// classifies the body.
+func formatEvent(e *rtiv1.TailedEvent) string {
+	class := e.GetEventClass()
+	if class == "" {
+		class = "?"
+	}
+	if h := e.GetFederateHandle(); h != 0 {
+		return fmt.Sprintf("seq=%-6d %-22s fed=%d  payload_bytes=%d",
+			e.GetSeq(), class, h, len(e.GetPayload()))
+	}
+	return fmt.Sprintf("seq=%-6d %-22s         payload_bytes=%d",
+		e.GetSeq(), class, len(e.GetPayload()))
 }
 
-// handleEventMsg appends a streamed line to the events state.
+// handleEventMsg appends a streamed batch of lines to the events
+// state and folds the per-batch overflow counter into the running
+// dropped total surfaced in the status line.
 func (m *model) handleEventMsg(msg eventTailMsg) (tea.Model, tea.Cmd) {
 	if m.events == nil {
 		return m, nil
@@ -161,8 +192,13 @@ func (m *model) handleEventMsg(msg eventTailMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.events.lines = append(m.events.lines, "[stream ended]")
 		}
-	} else if !m.events.paused {
-		m.events.lines = append(m.events.lines, msg.line)
+		return m, nil
+	}
+	if msg.dropped > 0 {
+		m.events.dropped += msg.dropped
+	}
+	if !m.events.paused && len(msg.lines) > 0 {
+		m.events.lines = append(m.events.lines, msg.lines...)
 		if len(m.events.lines) > eventLineCap {
 			drop := len(m.events.lines) - eventLineCap
 			m.events.lines = m.events.lines[drop:]

@@ -204,19 +204,35 @@ enum SyncPointState {
 }
 
 // TailEventsRequest names a federation to follow. The handler opens
-// an eventlog.MultiplexWriter.OpenReader and emits TailedEvent
-// entries until the stream context is cancelled.
+// an eventlog.MultiplexWriter.OpenReader and emits batches of events
+// until the stream context is cancelled. Phase 4 adds optional
+// server-side filtering so high-rate federations don't drown
+// observers; both filters are AND-combined.
 message TailEventsRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
+  // event_class_filter, when non-empty, is matched as a
+  // case-sensitive substring against each event's class/type name.
+  // Events whose class name does not contain the substring are
+  // dropped before send. Empty (default) → no class filter.
+  string event_class_filter = 3;
+  // federate_handle_filter, when non-empty, restricts events to those
+  // attributable to one of the listed federate handles. Empty
+  // (default) → no handle filter. Events that are not federate-bound
+  // (federation-scope events) are passed through regardless.
+  repeated uint64 federate_handle_filter = 4;
+  // max_batch_events caps the per-batch event count. Zero → server
+  // default (32). Clamped to a server-side maximum.
+  uint32 max_batch_events = 5;
+  // max_batch_latency_ms caps the per-batch flush latency in
+  // milliseconds. Zero → server default (10 ms). Clamped to a
+  // server-side maximum.
+  uint32 max_batch_latency_ms = 6;
 }
 
-// TailEventsResponse is one event-log entry, opaque framing — the
-// body carries whatever the eventlog wrote (proto-encoded EventEntry
-// payload bytes plus a few demux fields). Phase 1 keeps this minimal;
-// future revisions may richen the payload once the TUI consumer
-// demands it.
-message TailEventsResponse {
+// TailedEvent is one event-log entry. Carried inside
+// TailEventsResponse.events (Phase 4: messages are batched).
+message TailedEvent {
   // seq is the event log's monotonic per-federation sequence number.
   uint64 seq = 1;
   // unix_nanos is the event's record timestamp in unix nanoseconds.
@@ -224,4 +240,29 @@ message TailEventsResponse {
   // payload is the raw event-log record bytes (proto-encoded
   // rti.v1.EventEntry).
   bytes payload = 3;
+  // event_class is the underlying event-record's class/type name. Used
+  // for client-side rendering and for the server's
+  // event_class_filter substring match.
+  string event_class = 4;
+  // federate_handle is the federate the event is attributed to, when
+  // applicable; zero for federation-scope events.
+  uint64 federate_handle = 5;
+}
+
+// TailEventsResponse is a batch of zero-or-more event-log entries
+// plus an overflow counter. Phase 4: the server collects events in a
+// small ring buffer and flushes either when the batch reaches
+// max_batch_events or after max_batch_latency_ms — mirrors the
+// perf-pass batched-channel pattern in multiOutbox. When the client
+// is too slow and the gRPC server-stream send buffer is full, events
+// are accumulated into overflow_skipped instead of blocking; the
+// next successful batch carries the cumulative skipped count for
+// the renderer to surface.
+message TailEventsResponse {
+  // events is the in-order batch of events for this flush.
+  repeated TailedEvent events = 1;
+  // overflow_skipped is the cumulative count of events the server
+  // dropped due to client lag since the last successful send. Zero
+  // on every batch except the first one after a lag episode.
+  uint64 overflow_skipped = 2;
 }

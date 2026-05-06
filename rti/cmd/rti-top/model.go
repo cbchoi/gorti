@@ -81,6 +81,22 @@ type model struct {
 	height    int
 	statusMsg string
 
+	// --- Phase 5: mutating ops (docs/rtid-tui.md §7.5) ---
+	// mutatingEnabled reports whether MutatingService is registered on
+	// the daemon (probed at startup). When false, the X / D
+	// keybindings stay hidden — read-only mode is the default.
+	mutatingEnabled bool
+	// confirmKind drives the confirmation overlay; 0 = no overlay
+	// active. confirmTarget is the federate handle (for ForceResign)
+	// or 0 (for DestroyFederation, target is the selected federation).
+	confirmKind   confirmKind
+	confirmTarget uint64
+	// destroyFedConfirmCount tracks the double-`y` for DestroyFederation.
+	// 0 = waiting for first `y`, 1 = waiting for second `y`. The state
+	// resets whenever the overlay opens or the user presses anything
+	// other than `y`.
+	destroyFedConfirmCount int
+
 	// --- selection state ---
 	fedIdx    int    // index into last.Federations for drill-down
 	selFed    string // pinned federation name once we drilled
@@ -112,14 +128,19 @@ type model struct {
 // initialModel builds a fresh model. The first Status response seeds
 // version + uptime so the header renders something on the very first
 // frame (before the first Snapshot returns).
-func initialModel(ctx context.Context, cli *client.Client, st *rtiv1.StatusResponse, refresh time.Duration) *model {
+//
+// mutatingEnabled is the result of the MutatingService probe at
+// startup; when false, the X / D keybindings stay hidden (Phase 5 of
+// docs/rtid-tui.md).
+func initialModel(ctx context.Context, cli *client.Client, st *rtiv1.StatusResponse, refresh time.Duration, mutatingEnabled bool) *model {
 	cctx, cancel := context.WithCancel(ctx)
 	return &model{
-		cli:      cli,
-		pollCtx:  cctx,
-		cancelFn: cancel,
-		refresh:  refresh,
-		view:     viewFederations,
+		cli:             cli,
+		pollCtx:         cctx,
+		cancelFn:        cancel,
+		refresh:         refresh,
+		view:            viewFederations,
+		mutatingEnabled: mutatingEnabled,
 		last: &rtiv1.SnapshotResponse{
 			RtidVersion:   st.GetRtidVersion(),
 			UptimeSeconds: st.GetUptimeSeconds(),
@@ -189,6 +210,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventTailMsg:
 		return m.handleEventMsg(v)
 
+	case mutatingResultMsg:
+		return m.handleMutatingResult(v)
+
 	case tea.KeyMsg:
 		return m.handleKey(v)
 	}
@@ -215,6 +239,14 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+
+	// Phase 5 — confirmation overlay captures every key while the
+	// dialog is open so the user can't accidentally trigger another
+	// keybinding before confirming. Esc / `n` cancels; `y` proceeds
+	// (DestroyFederation requires `y` typed twice).
+	if m.confirmKind != confirmNone {
+		return m.handleConfirmKey(k)
 	}
 
 	// Wire view's column-picker popup captures up/down/space/enter/esc
@@ -306,6 +338,16 @@ func (m *model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.moveSelection(+1)
 		return m, nil
+	case "x", "X":
+		// Phase 5: ForceResign on the selected federate. Only valid
+		// when MutatingService is registered AND we're on the
+		// drilldown view (where a federate is selected).
+		return m.startForceResign()
+	case "d", "D":
+		// Phase 5: DestroyFederation on the selected federation. Only
+		// valid when MutatingService is registered AND we're on a
+		// view where a federation is selected.
+		return m.startDestroyFederation()
 	}
 	return m, nil
 }
@@ -505,8 +547,11 @@ func (m *model) findFederation(name string) *rtiv1.FederationSnapshot {
 
 // runTUI installs the bubbletea Program and blocks until the user
 // quits or ctx is cancelled. Replaces the commit-1 stub.
-func runTUI(ctx context.Context, cli *client.Client, st *rtiv1.StatusResponse, refresh time.Duration) error {
-	m := initialModel(ctx, cli, st, refresh)
+//
+// mutatingEnabled threads the MutatingService probe result so the TUI
+// can decide whether to render the X / D keybindings.
+func runTUI(ctx context.Context, cli *client.Client, st *rtiv1.StatusResponse, refresh time.Duration, mutatingEnabled bool) error {
+	m := initialModel(ctx, cli, st, refresh, mutatingEnabled)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	// Install the program sender so the TailEvents goroutine can
 	// push eventTailMsg back into the MVU loop. setProgramSender is
