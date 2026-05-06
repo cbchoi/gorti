@@ -12,14 +12,27 @@ import (
 
 // Manifest is the JSON header at the front of every save bundle.
 //
-// Cut-1 scope (FR-SR-4): the manifest carries the federation identity,
-// the requested label + save-time, and the deterministic federate list.
-// Per-manager state snapshots (declarations, ownership, sync points,
-// MOM, DDM regions) are deferred to M9 W2 — see docs/reports/M9/agent-a.md
-// for the deferral rationale. The current cut relies on the event-log
-// slice (FR-SR-5) for byte-deterministic restore: replaying the slice
-// reconstructs every manager's state by running the same write-ahead
-// path the original federation took.
+// Cut-2 scope (FR-SR-4): the manifest carries the federation identity,
+// the requested label + save-time, the deterministic federate list,
+// and the per-manager state snapshots. M13 thread C
+// (docs/srs.md §10.4) extends the cut-1 design with
+// ManagerSnapshots — proto-encoded byte slices keyed by manager
+// name ("sync", "ownership", "mom", "ddm"). Snapshots are ADDITIVE
+// to the event-log slice: restore Unmarshals each snapshot on the
+// matching manager, then replays the event-log slice for full
+// replay-determinism on top.
+//
+// On-disk layout: ManagerSnapshots is JSON-serialized with each
+// value as a base64-encoded string. JSON encoding chosen so manifests
+// stay human-readable — the values are short proto bytes, base64 is
+// trivial, and we avoid a second framing layer for cut-2.
+//
+// Wire-version compatibility: old bundles that pre-date M13 omit
+// ManagerSnapshots entirely. ReadBundle silently treats absent /
+// nil maps as "no per-manager state to restore"; the restore flow
+// then falls back to the event-log replay path (the only path
+// available pre-M13). New bundles can therefore restore on a
+// pre-M13 reader without crashing on the new field.
 type Manifest struct {
 	// Version is the bundle format version. Bumped when the on-disk
 	// layout changes incompatibly. Cut-1 = 1.
@@ -44,7 +57,24 @@ type Manifest struct {
 	// follows the manifest in the bundle. Zero when no slice is
 	// captured (cut-1 default — see writeBundle in manager.go).
 	EventLogBytes uint64 `json:"event_log_bytes"`
+
+	// ManagerSnapshots holds proto-encoded per-manager state slices
+	// keyed by manager name. M13 thread C — restoring an old (pre-M13)
+	// bundle leaves this nil, which is the documented "no
+	// per-manager state to restore; fall back to event-log replay"
+	// signal.
+	ManagerSnapshots map[string][]byte `json:"manager_snapshots,omitempty"`
 }
+
+// Manager-snapshot key constants for the ManagerSnapshots map. M13
+// thread C (docs/srs.md §10.4): each Marshalable Manager is
+// identified by its package name.
+const (
+	ManagerSnapshotKeySync      = "sync"
+	ManagerSnapshotKeyOwnership = "ownership"
+	ManagerSnapshotKeyMOM       = "mom"
+	ManagerSnapshotKeyDDM       = "ddm"
+)
 
 // Bundle layout (cut-1):
 //

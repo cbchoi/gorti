@@ -194,7 +194,9 @@ class GrpcTransport:
             return await self._create_federation(kwargs["spec"])
         if method == "join_federation":
             return await self._join_federation(
-                kwargs["spec"], kwargs["federate_name"]
+                kwargs["spec"],
+                kwargs["federate_name"],
+                kwargs.get("federate_type", ""),
             )
         if method == "resign_federation":
             return await self._resign_federation(kwargs["federate_handle"])
@@ -289,7 +291,9 @@ class GrpcTransport:
             raise
         return
 
-    async def _join_federation(self, spec: Any, federate_name: str) -> int:
+    async def _join_federation(
+        self, spec: Any, federate_name: str, federate_type: str = ""
+    ) -> int:
         from rti.v1 import common_pb2, federation_pb2
 
         self._federation_name = spec.name
@@ -298,10 +302,15 @@ class GrpcTransport:
         if not self._interaction_handles and spec.fom_modules:
             self._populate_handle_tables(spec.fom_modules)
 
+        # M13 thread B (docs/srs.md §10.4): forward the optional
+        # federate_type. Old SDK callers that don't pass it land here
+        # with an empty string — the rtid treats absent as "no type
+        # declared", preserving cut-1 wire-version compatibility.
         req = federation_pb2.JoinFederationRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=spec.name,
             federate_name=federate_name,
+            federate_type=federate_type,
         )
         resp = await self.federation.JoinFederation(req)
         federate_handle = int(resp.federate_handle)

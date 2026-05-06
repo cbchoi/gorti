@@ -76,6 +76,25 @@ type MembersResolver func(core.FederationName) []core.FederateHandle
 // federationHalted). Optional; when nil, halt-state is not consulted.
 type HaltedResolver func(core.FederationName) bool
 
+// ManagerSnapshotter is implemented by per-service managers (sync,
+// ownership, mom, ddm) that participate in M13's structured save
+// manifest (docs/srs.md §10.4). On save, the savepoint Manager calls
+// Marshal(fed) and bundles the bytes into manifest.ManagerSnapshots
+// under the registered key. On restore, it calls Unmarshal(fed,
+// bytes) before kicking off the event-log slice replay so the
+// per-manager state is reconstructed from structured bytes rather
+// than (only) replay-derived events.
+//
+// Marshal MUST be byte-deterministic for a given in-memory state so
+// the same federation produces byte-identical bundles across replays
+// (NFR-DET-1). Unmarshal of nil/empty bytes MUST be a no-op so an
+// absent manifest entry restores cleanly (e.g. an old M9-era bundle
+// that pre-dates M13's per-manager snapshots).
+type ManagerSnapshotter interface {
+	Marshal(fed core.FederationName) ([]byte, error)
+	Unmarshal(fed core.FederationName, data []byte) error
+}
+
 // Options bundles Manager dependencies.
 type Options struct {
 	// Outbox delivers initiateFederateSave / federationSaved /
@@ -102,6 +121,15 @@ type Options struct {
 	// Manager refuses RequestFederationSave when this returns true.
 	// Optional.
 	Halted HaltedResolver
+
+	// ManagerSnapshots is the keyed set of per-manager Marshalers /
+	// Unmarshalers (M13 thread C). Production cmd/rtid wires the
+	// four cut-2 service-group managers (sync, ownership, mom, ddm)
+	// under the keys defined as ManagerSnapshotKey* in manifest.go.
+	// nil/empty map means "no structured snapshots" — the bundle
+	// reverts to the cut-1 event-log-only path (still functional,
+	// just less efficient on restore).
+	ManagerSnapshots map[string]ManagerSnapshotter
 }
 
 // Storage is the persistence interface for save bundles. Production
@@ -329,22 +357,38 @@ func (m *Manager) recordFederateSave(
 		return nil
 	}
 	if !failed {
-		manifest := Manifest{
-			Federation: fed,
-			Label:      label,
-			SaveTime:   saveTime,
-			Federates:  feds,
-		}
-		if err := m.writeBundle(ctx, fed, label, manifest); err != nil {
-			// Persistence failure flips the outcome to failed so
-			// federates see federationNotSaved instead of a phantom
-			// saved-state with no bundle on disk.
+		// M13 thread C: collect per-manager snapshots before sealing.
+		// Errors from any single manager flip the save outcome to
+		// failed (federationNotSaved) so federates do not believe the
+		// bundle is intact when it isn't.
+		snapshots, snapErr := m.collectManagerSnapshots(fed)
+		if snapErr != nil {
 			m.mu.Lock()
 			if as, busy := m.saves[fed]; busy {
 				as.state = StateNotSaved
 			}
 			m.mu.Unlock()
 			failed = true
+		}
+		if !failed {
+			manifest := Manifest{
+				Federation:       fed,
+				Label:            label,
+				SaveTime:         saveTime,
+				Federates:        feds,
+				ManagerSnapshots: snapshots,
+			}
+			if err := m.writeBundle(ctx, fed, label, manifest); err != nil {
+				// Persistence failure flips the outcome to failed so
+				// federates see federationNotSaved instead of a phantom
+				// saved-state with no bundle on disk.
+				m.mu.Lock()
+				if as, busy := m.saves[fed]; busy {
+					as.state = StateNotSaved
+				}
+				m.mu.Unlock()
+				failed = true
+			}
 		}
 	}
 	m.finalizeSave(fed, label, failed)
@@ -453,6 +497,75 @@ func (m *Manager) emitSaveOutcome(
 	}
 }
 
+// collectManagerSnapshots walks each registered ManagerSnapshotter
+// in deterministic key order, calling Marshal(fed) on each, and
+// returns the resulting key→bytes map. Any single Marshal error
+// aborts the collection and propagates up so the save can be flipped
+// to NotSaved. M13 thread C (docs/srs.md §10.4).
+//
+// Returns nil when no snapshotters are registered (cut-1 fallback —
+// the bundle then carries only the manifest header + event-log
+// slice, identical to a pre-M13 bundle).
+//
+// Empty marshal results (e.g. unknown federation, empty manager
+// state) are dropped from the map so the manifest stays minimal.
+func (m *Manager) collectManagerSnapshots(fed core.FederationName) (map[string][]byte, error) {
+	if len(m.opts.ManagerSnapshots) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(m.opts.ManagerSnapshots))
+	for k := range m.opts.ManagerSnapshots {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	out := map[string][]byte{}
+	for _, key := range keys {
+		snapper := m.opts.ManagerSnapshots[key]
+		if snapper == nil {
+			continue
+		}
+		bytes, err := snapper.Marshal(fed)
+		if err != nil {
+			return nil, fmt.Errorf("savepoint: %s.Marshal(%q): %w", key, fed, err)
+		}
+		if len(bytes) == 0 {
+			continue
+		}
+		out[key] = bytes
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+// applyManagerSnapshots reverses collectManagerSnapshots: for each
+// key in manifest.ManagerSnapshots, dispatches to the matching
+// registered ManagerSnapshotter's Unmarshal. Keys without a
+// registered handler are silently ignored — a future cut may add
+// new manager keys, and rolling restores against a partially-upgraded
+// rtid should not crash. M13 thread C (docs/srs.md §10.4).
+func (m *Manager) applyManagerSnapshots(fed core.FederationName, snapshots map[string][]byte) error {
+	if len(snapshots) == 0 || len(m.opts.ManagerSnapshots) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(snapshots))
+	for k := range snapshots {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		snapper, ok := m.opts.ManagerSnapshots[key]
+		if !ok || snapper == nil {
+			continue
+		}
+		if err := snapper.Unmarshal(fed, snapshots[key]); err != nil {
+			return fmt.Errorf("savepoint: %s.Unmarshal(%q): %w", key, fed, err)
+		}
+	}
+	return nil
+}
+
 // writeBundle serializes the manifest + event-log slice into the
 // configured Storage. The bundle layout is documented in
 // rti/internal/savepoint/manifest.go.
@@ -544,6 +657,19 @@ func (m *Manager) RequestFederationRestore(
 	_ = rdr.Close()
 	if err != nil {
 		return fmt.Errorf("savepoint: read bundle (%s/%s): %w", fed, label, err)
+	}
+
+	// M13 thread C: apply the per-manager state snapshots from the
+	// manifest BEFORE the event-log slice replay runs. The snapshots
+	// reconstruct the cut-2 service-group state (sync points,
+	// ownership, MOM, DDM regions) without requiring a full replay;
+	// the event-log slice is then replayed on top so any post-save
+	// cut-3 events that lack a snapshot representation still land.
+	// Old (pre-M13) bundles arrive with manifest.ManagerSnapshots
+	// nil — applyManagerSnapshots is then a no-op and the restore
+	// falls back to the cut-1 event-log-only path.
+	if err := m.applyManagerSnapshots(fed, manifest.ManagerSnapshots); err != nil {
+		return fmt.Errorf("savepoint: apply manager snapshots (%s/%s): %w", fed, label, err)
 	}
 
 	required := make(map[core.FederateHandle]struct{}, len(manifest.Federates))
