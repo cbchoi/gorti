@@ -6,6 +6,98 @@ Entries are most-recent first. Each entry: date, summary of decision, link to th
 
 ---
 
+## Release notes — curated by cut
+
+Skim-able summary of what each cut shipped. The append-only log below has the full milestone-by-milestone audit trail.
+
+### Cut 1 — MVP / walking skeleton (M0..M5; tag `mvp`)
+
+**Goal**: smallest end-to-end system that demonstrates a real HLA federation. Federation lifecycle, pub/sub, object/interaction exchange, time-managed advancement (NER), deterministic replay, one Python federate built on a DEVS coupled model.
+
+| Milestone | Deliverable |
+|---|---|
+| M0 | Repo skeleton; spec-test discipline; first orchestrator-frozen contract |
+| M1 | FOM parser + cross-language byte-identical encoding (94 conformance vectors) |
+| M2 | rtid Go server with federation/declaration/object/stream/eventlog services + gRPC handlers |
+| M3 | Time management (NER + LBTS + stall timeout); 3-federate go-timed example |
+| M4 | Python SDK with idiomatic asyncio API + pyjevsim bridge for DEVS↔HLA |
+| M5 | Cross-language Python+Go federation; verbose+best-effort modes; perf baseline at sizes 2/5/25/100 |
+
+### Cut 2 — Production-grade RTI service surface (M6..M11)
+
+**Goal**: complete the IEEE 1516.1-2010 service surface so gorti is a real alternative to commercial RTIs (Pitch, MAK, Portico) for non-DDS workloads.
+
+| Milestone | Deliverable |
+|---|---|
+| M6 | Hardening — cross-language handle alignment; gRPC TLS; EventLog Writer concurrency; real-pyjevsim structural adapter; in-process driver extraction |
+| M7 | Time-advance primitives — TAR, TARA, FQR, NMRA |
+| M8 | Synchronization points + 6-method ownership protocol (negotiated divest+acquire two-phase) |
+| M9 | Federation save/restore — manifest format + filesystem storage backend |
+| M10 | DDM — routing-space FOM parser, region lifecycle, overlap-driven SubscribersForUpdate, FR-DDM-6 zero-cost-when-empty |
+| M11 | MOM runtime — HLAfederation + HLAfederate registration; lifecycle hooks across managers |
+
+### Cut 3 — gRPC exposure, research platform, TUI, deeper polish (M12 + extensions)
+
+**Goal**: make every cut-2 service group reachable over the wire; turn gorti into a research platform where alternative algorithms can be plugged in via TOML config; ship a top-style TUI for live federation observability; extend with HLAfederateType, structured save manifests, and event callbacks for sync/ownership/save.
+
+#### M12 — Cut-2 service groups exposed via gRPC + Python SDK
+- gRPC handlers for SyncService / OwnershipService / DDMService / SavepointService
+- Python SDK Federate gains lazy `.sync` / `.ownership` / `.ddm` / `.savepoint` accessors
+- Cut-3 deferrals: callback delivery for these services (closed later by proto Event variants), MOM gRPC exposure (closed later)
+
+#### M12-close perf optimization pass
+- 1.6×–3.8× throughput improvement across federation sizes 5/25/100
+- Hoist inner proto + batched seq-alloc out of fanout loop
+- Atomic-snapshot subscriber map (replaces RWMutex+map) in both perfOutbox and production multiOutbox
+- Batched delivery (`chan []OutboundEvent` + per-recipient scratch + deferred-flush timer)
+
+#### Research platform refactor (Phases 0–4)
+- Phase 0 design doc; pinned: in-tree alternatives selected by TOML config; per-impl-opt-in determinism contract; time + ownership for Phase 2 focus
+- Phase 1 — `core.<Service>` interfaces extracted for the 6 concrete-only Managers (sync, ownership, mom, ddm, savepoint, declaration)
+- Phase 2 — algorithm-level strategies: `time.LBTSStrategy`, `time.GrantStrategy`, `ownership.NegotiationStrategy`
+- Phase 3 — `internal/research` strategy registry + TOML config + `--research-config` flag in cmd/rtid + determinism gate
+- Phase 4 — three reference alternative impls: `time.alt_maxprojected` (LBTS), `time.alt_eagergrant` (Grant), `ownership.alt_randomacquirer` (Negotiation, non-preserving — exercises the strict-mode rejection path)
+- Worked-example how-to at `docs/research-platform-howto.md`
+
+#### rtid TUI — top-style live federation observability (Phases 1–5)
+- Phase 1 — `AdminService` gRPC: `Snapshot` / `TailEvents` / `Status` + per-Manager `Snapshot()` methods + `--admin-listen localhost:8443` flag (separate from federate `:8442` and Prometheus `:9090`)
+- Phase 2 — `rti-top` binary using bubbletea + lipgloss + bubbles; five views (Federations / Drilldown / Federate-detail / Time / Wire / Events); 1Hz default refresh
+- Phase 3 — filter / sort / column toggle + Wire-view client-side rate windows + age column populated
+- Phase 4 — TailEvents server-side filter + batched response + backpressure overflow counter
+- Phase 5 (opt-in) — separate `MutatingService` for `ForceResign` / `DestroyFederation` gated by `--admin-mutating=true` (refuses non-loopback bind without explicit override; prominent WARN log when enabled)
+
+#### Federation-developer examples (in addition to the original go-pingpong / go-timed / pyjevsim producer-consumer)
+- `examples/pyjevsim-relay/` — 3-federate Generator → Buffer → Processor with drop-on-overflow accounting
+- `examples/pyjevsim-dashboard/` — Sensor + Dashboard (object instances + reflect callbacks; bypasses the bridge — Path A reference)
+- `examples/pyjevsim-dashboard-bridged/` — same example using the bridge (Path B); requires bridge object-class extension landed in the same arc
+- `examples/pyjevsim-time-advance/` — three regulators with different lookaheads; LBTS sparkline
+- `examples/pyjevsim-sync-points/` — canonical HLA bootstrap rendezvous
+- `examples/pyjevsim-relay-cross-process/` — production-shape: rtid subprocess + 3 separate Python federate processes
+
+#### Cut-3 backlog items closed
+- Proto `FederateEvent` variants for sync/ownership/save (M12 W2 deferral #1)
+- MOM gRPC exposure (`MomService.QueryFederationAttributes` / `QueryFederateAttributes` / `EnumerateMomInstances`)
+- M13 — three threads: `federation.Manager.MembersOf` accessor (closes save callback delivery in production), `HLAfederateType` plumbing through `JoinFederationRequest`, structured per-manager state snapshots in the save manifest (sync/ownership/mom/ddm Marshal+Unmarshal)
+- pyjevsim 1.3.1 → 2.0.1 dependency upgrade (API-compatible at every surface the bridge consumes)
+- Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
+- Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
+
+### Cut-3 backlog still open
+
+Future cuts (M14+) per `docs/srs.md` §10.4:
+
+- **M14** — mTLS + OIDC client authentication
+- **M15** — Distributed RTI: multi-process federation hosting
+- **M16** — Hot standby + replay-driven RTI failover
+- **M17** — C++ federate SDK
+- **M18** — Java federate SDK
+- **M19** — DDS/RTPS data plane adapter
+- **M20** — MOM-driven control services + optimistic time variants
+
+Plus smaller carryovers: restore callback variants on `FederateEvent` (mechanically symmetric to save variants), MOM-class subscription path through the standard `ObjectService`, suite-load timing flake on the synchronized-callback integration test.
+
+---
+
 ## 2026-05-03 (deps: pyjevsim 1.3.1 → 2.0.1 — pin bump, no bridge changes)
 
 **Upgraded the bridge's pyjevsim dependency from `==1.3.1` to `==2.0.1`.**
