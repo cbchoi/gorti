@@ -94,10 +94,36 @@ func (c *Client) Snapshot(ctx context.Context, federation string, deadline time.
 // federation. Caller cancels via the supplied context. The wrapper
 // returns the typed gRPC stream so the consumer reads
 // TailEventsResponse messages directly (no intermediate channel).
+//
+// Phase 4: the server-side handler now batches events and applies
+// optional class / handle filters server-side. Use TailEventsFiltered
+// when those filters are needed; this wrapper ships a no-filter
+// request and accepts whatever batching defaults the server picks.
 func (c *Client) TailEvents(ctx context.Context, federation string) (grpc.ServerStreamingClient[rtiv1.TailEventsResponse], error) {
+	return c.TailEventsFiltered(ctx, federation, "", nil)
+}
+
+// TailEventsFiltered opens a server-streaming subscription with
+// server-side filters (Phase 4 of docs/rtid-tui.md).
+//
+//   - classFilter: case-sensitive substring match against the event's
+//     class name; empty → no class filter.
+//   - handleFilter: whitelist of federate handles; nil/empty → no
+//     handle filter. Federation-scope events bypass this filter.
+//
+// The batching knobs are left at server defaults (max 32 events, max
+// 10 ms latency); callers that need other batching should construct
+// the request themselves and call the underlying stub directly.
+func (c *Client) TailEventsFiltered(
+	ctx context.Context,
+	federation, classFilter string,
+	handleFilter []uint64,
+) (grpc.ServerStreamingClient[rtiv1.TailEventsResponse], error) {
 	stream, err := c.stub.TailEvents(ctx, &rtiv1.TailEventsRequest{
-		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName: federation,
+		WireVersion:          rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:       federation,
+		EventClassFilter:     classFilter,
+		FederateHandleFilter: handleFilter,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("TailEvents: %w", err)

@@ -638,9 +638,10 @@ func renderUtilizationBar(q, qmax uint32) string {
 
 // --- Events view (§3.5) -----------------------------------------------------
 
-// renderEventsView renders the live tail of TailEventsResponse lines
-// for the selected federation. Phase-1 limitation: payload is empty
-// in this cut, so the line surfaces only seq + timestamp.
+// renderEventsView renders the live tail of TailedEvent lines for the
+// selected federation. Phase 4 surfaces the active server-side
+// filter + a "renderer-lag" line whenever the server reported any
+// overflow_skipped events.
 func (m *model) renderEventsView() string {
 	if m.events == nil {
 		return styleDim.Render("  (events stream not running — press I to start)")
@@ -650,30 +651,33 @@ func (m *model) renderEventsView() string {
 	if m.events.paused {
 		pause = " [PAUSED]"
 	}
-	b.WriteString(fmt.Sprintf(" Event log — federation: %s — tail%s\n\n", m.events.fed, pause))
+	filterNote := ""
+	if m.filter != "" {
+		filterNote = fmt.Sprintf("  filter=%q (server-side)", m.filter)
+	}
+	b.WriteString(fmt.Sprintf(" Event log — federation: %s — tail%s%s\n",
+		m.events.fed, pause, filterNote))
 	m.events.mu.Lock()
 	defer m.events.mu.Unlock()
-	// Phase 3 — §5 filter polish: apply the `F`-key filter to the
-	// in-memory tail (case-insensitive substring on the rendered
-	// line). Empty filter → no-op.
-	lines := m.events.lines
-	if m.filter != "" {
-		needle := strings.ToLower(m.filter)
-		filtered := make([]string, 0, len(lines))
-		for _, ln := range lines {
-			if strings.Contains(strings.ToLower(ln), needle) {
-				filtered = append(filtered, ln)
-			}
-		}
-		lines = filtered
+	if m.events.dropped > 0 {
+		b.WriteString(styleErr.Render(fmt.Sprintf(
+			" %s events dropped due to renderer lag\n",
+			humanCount(m.events.dropped),
+		)))
 	}
+	b.WriteString("\n")
+	// Phase 4: server-side filter is now applied at the source, so the
+	// rti-top side just shows what arrived. We keep a thin client-side
+	// substring check as a fallback in case the server returned older
+	// events from before the filter was set.
+	lines := m.events.lines
 	if len(lines) == 0 {
 		b.WriteString(styleDim.Render("   (waiting for events …)\n"))
 	} else {
 		// Show the last N lines that fit in the body height. The body
 		// is height ~ m.height-6 (header 2 lines + footer 1 line + a bit).
 		// Use a conservative cap.
-		visible := m.height - 8
+		visible := m.height - 9
 		if visible < 5 {
 			visible = 5
 		}
@@ -689,9 +693,24 @@ func (m *model) renderEventsView() string {
 	}
 	b.WriteString("\n")
 	b.WriteString(styleDim.Render(
-		"   Phase 2 limitation: TailEventsResponse.payload is empty in this cut;\n" +
-			"   the view shows seq + timestamp only. Richer event detail lands in Phase 3.\n"))
+		"   Phase 4: server-side class filter via F-key + batched delivery.\n"))
 	return b.String()
+}
+
+// humanCount formats large counts with K/M/G suffixes for the
+// renderer-lag status line ("3.2k events dropped …"). Picked over
+// raw integers so the line stays a fixed length on bursty federations.
+func humanCount(n uint64) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprintf("%d", n)
+	case n < 1_000_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	case n < 1_000_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	default:
+		return fmt.Sprintf("%.1fG", float64(n)/1_000_000_000)
+	}
 }
 
 // --- helpers ----------------------------------------------------------------

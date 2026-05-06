@@ -546,8 +546,13 @@ func TestFilter_WireViewFilters_AcrossFedAndFederate(t *testing.T) {
 	}
 }
 
-// TestFilter_EventsView verifies the F-key filter narrows the event
-// log tail by substring on the rendered line.
+// TestFilter_EventsView verifies the F-key filter is surfaced in
+// the events view header. Phase 4 moves the filter server-side so
+// in-buffer lines are NOT post-filtered; instead the renderer shows
+// the active substring + a "(server-side)" annotation so operators
+// know the filter applies to subsequent events. The substring
+// flowed into the next TailEventsFiltered request via
+// startEventsCmd.
 func TestFilter_EventsView(t *testing.T) {
 	m := newTestModel(t)
 	m.events = &eventsState{
@@ -557,11 +562,11 @@ func TestFilter_EventsView(t *testing.T) {
 	m.view = viewEvents
 	m.filter = "Receive"
 	out := m.renderEventsView()
-	if !strings.Contains(out, "ReceiveInteraction") {
-		t.Errorf("filter=Receive missing ReceiveInteraction:\n%s", out)
+	if !strings.Contains(out, "filter=\"Receive\"") {
+		t.Errorf("filter=Receive missing from header:\n%s", out)
 	}
-	if strings.Contains(out, "seq=1 InteractionSent") {
-		t.Errorf("filter=Receive shouldn't show seq=1:\n%s", out)
+	if !strings.Contains(out, "(server-side)") {
+		t.Errorf("filter=Receive missing (server-side) annotation:\n%s", out)
 	}
 }
 
@@ -653,7 +658,21 @@ func TestRender_EventsView_WithLines(t *testing.T) {
 	m.events = &eventsState{fed: "demo"}
 	m.events.lines = []string{"seq=1  ts=0  payload_bytes=0", "seq=2  ts=0  payload_bytes=0"}
 	out := m.renderEventsView()
-	for _, want := range []string{"Event log", "demo", "seq=1", "seq=2", "Phase 2 limitation"} {
+	for _, want := range []string{"Event log", "demo", "seq=1", "seq=2", "Phase 4"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("renderEventsView missing %q\n--- output ---\n%s", want, out)
+		}
+	}
+}
+
+// Phase 4: when the server reports overflow_skipped, the events view
+// surfaces the count as a "renderer lag" status line.
+func TestRender_EventsView_OverflowStatusLine(t *testing.T) {
+	m := newTestModel(t)
+	m.view = viewEvents
+	m.events = &eventsState{fed: "demo", dropped: 3200}
+	out := m.renderEventsView()
+	for _, want := range []string{"3.2k", "renderer lag"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("renderEventsView missing %q\n--- output ---\n%s", want, out)
 		}
@@ -663,11 +682,34 @@ func TestRender_EventsView_WithLines(t *testing.T) {
 func TestEventsState_PauseToggleAndCap(t *testing.T) {
 	m := newTestModel(t)
 	m.events = &eventsState{fed: "demo"}
+	// Phase 4: each batch may carry multiple lines; we still expect
+	// the running total to clamp at eventLineCap.
 	for i := 0; i < eventLineCap+50; i++ {
-		m.handleEventMsg(eventTailMsg{line: "x"})
+		m.handleEventMsg(eventTailMsg{lines: []string{"x"}})
 	}
 	if got := len(m.events.lines); got != eventLineCap {
 		t.Errorf("cap: got %d want %d", got, eventLineCap)
+	}
+}
+
+// Phase 4: a batch with multiple lines is appended atomically and the
+// dropped counter is folded into the running total.
+func TestEventsState_BatchAndOverflow(t *testing.T) {
+	m := newTestModel(t)
+	m.events = &eventsState{fed: "demo"}
+	m.handleEventMsg(eventTailMsg{
+		lines:   []string{"a", "b", "c"},
+		dropped: 7,
+	})
+	if got := len(m.events.lines); got != 3 {
+		t.Fatalf("batch lines: got %d want 3", got)
+	}
+	if got := m.events.dropped; got != 7 {
+		t.Fatalf("dropped: got %d want 7", got)
+	}
+	m.handleEventMsg(eventTailMsg{lines: []string{"d"}, dropped: 5})
+	if got := m.events.dropped; got != 12 {
+		t.Fatalf("dropped after second batch: got %d want 12", got)
 	}
 }
 
