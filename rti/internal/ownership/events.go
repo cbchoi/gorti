@@ -66,23 +66,47 @@ func (e *eventRecord) Reset()                            { e.ensureProto().Reset
 func (e *eventRecord) String() string                    { return e.ensureProto().String() }
 func (e *eventRecord) ProtoReflect() protoreflect.Message { return e.ensureProto().ProtoReflect() }
 
-// assumptionOutbound is a placeholder OutboundEvent for
-// requestAttributeOwnershipAssumption until the proto FederateEvent
-// oneof is extended. The fakeOutbox in spec tests counts emissions;
-// production transport wiring is M8 W2 follow-up.
-type assumptionOutbound struct {
-	pb    *rtiv1.FederateEvent
-	obj   core.ObjectHandle
-	attrs []core.AttributeHandle
-	tag   []byte
+// attrsToWire converts attribute handles to the proto's repeated
+// uint64 field; sorted-stable ordering is the caller's responsibility
+// (the manager already sorts before fan-out).
+func attrsToWire(attrs []core.AttributeHandle) []uint64 {
+	out := make([]uint64, 0, len(attrs))
+	for _, a := range attrs {
+		out = append(out, uint64(a))
+	}
+	return out
 }
 
-func assumptionEvent(obj core.ObjectHandle, attrs []core.AttributeHandle, tag []byte) *assumptionOutbound {
+// assumptionOutbound is the OutboundEvent for
+// requestAttributeOwnershipAssumption (§7.3). M12 W2: the proto
+// FederateEvent oneof now carries the typed
+// RequestAttributeOwnershipAssumption variant; the gRPC stream
+// multiplexer extracts the proto via Inner().
+type assumptionOutbound struct {
+	pb       *rtiv1.FederateEvent
+	obj      core.ObjectHandle
+	attrs    []core.AttributeHandle
+	tag      []byte
+	divester core.FederateHandle
+}
+
+func assumptionEvent(obj core.ObjectHandle, attrs []core.AttributeHandle, tag []byte, divester core.FederateHandle) *assumptionOutbound {
+	attrsCopy := append([]core.AttributeHandle(nil), attrs...)
 	return &assumptionOutbound{
-		pb:    &rtiv1.FederateEvent{},
-		obj:   obj,
-		attrs: append([]core.AttributeHandle(nil), attrs...),
-		tag:   tag,
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_OwnershipAssumption{
+				OwnershipAssumption: &rtiv1.RequestAttributeOwnershipAssumption{
+					ObjectHandle:       uint64(obj),
+					AttributeHandles:   attrsToWire(attrsCopy),
+					DivestingFederate:  uint64(divester),
+					Tag:                append([]byte(nil), tag...),
+				},
+			},
+		},
+		obj:      obj,
+		attrs:    attrsCopy,
+		tag:      tag,
+		divester: divester,
 	}
 }
 
@@ -92,8 +116,10 @@ func (o *assumptionOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
+func (o *assumptionOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
 
-// divestNotificationOutbound — attributeOwnershipDivestitureNotification placeholder.
+// divestNotificationOutbound — RequestDivestitureConfirmation. Fires on
+// the divesting federate when an acquirer completes the transfer.
 type divestNotificationOutbound struct {
 	pb    *rtiv1.FederateEvent
 	obj   core.ObjectHandle
@@ -101,10 +127,18 @@ type divestNotificationOutbound struct {
 }
 
 func divestNotificationEvent(obj core.ObjectHandle, attrs []core.AttributeHandle) *divestNotificationOutbound {
+	attrsCopy := append([]core.AttributeHandle(nil), attrs...)
 	return &divestNotificationOutbound{
-		pb:    &rtiv1.FederateEvent{},
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_OwnershipDivestConfirmed{
+				OwnershipDivestConfirmed: &rtiv1.RequestDivestitureConfirmation{
+					ObjectHandle:     uint64(obj),
+					AttributeHandles: attrsToWire(attrsCopy),
+				},
+			},
+		},
 		obj:   obj,
-		attrs: append([]core.AttributeHandle(nil), attrs...),
+		attrs: attrsCopy,
 	}
 }
 
@@ -114,19 +148,32 @@ func (o *divestNotificationOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
+func (o *divestNotificationOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
 
-// acquireNotificationOutbound — attributeOwnershipAcquisitionNotification placeholder.
+// acquireNotificationOutbound — AttributeOwnershipAcquisitionNotification.
+// Fires on the new owner when a transfer completes.
 type acquireNotificationOutbound struct {
-	pb    *rtiv1.FederateEvent
-	obj   core.ObjectHandle
-	attrs []core.AttributeHandle
+	pb       *rtiv1.FederateEvent
+	obj      core.ObjectHandle
+	attrs    []core.AttributeHandle
+	newOwner core.FederateHandle
 }
 
-func acquireNotificationEvent(obj core.ObjectHandle, attrs []core.AttributeHandle) *acquireNotificationOutbound {
+func acquireNotificationEvent(obj core.ObjectHandle, attrs []core.AttributeHandle, newOwner core.FederateHandle) *acquireNotificationOutbound {
+	attrsCopy := append([]core.AttributeHandle(nil), attrs...)
 	return &acquireNotificationOutbound{
-		pb:    &rtiv1.FederateEvent{},
-		obj:   obj,
-		attrs: append([]core.AttributeHandle(nil), attrs...),
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_OwnershipAcquired{
+				OwnershipAcquired: &rtiv1.AttributeOwnershipAcquisitionNotification{
+					ObjectHandle:     uint64(obj),
+					AttributeHandles: attrsToWire(attrsCopy),
+					OwningFederate:   uint64(newOwner),
+				},
+			},
+		},
+		obj:      obj,
+		attrs:    attrsCopy,
+		newOwner: newOwner,
 	}
 }
 
@@ -136,3 +183,4 @@ func (o *acquireNotificationOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
+func (o *acquireNotificationOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
