@@ -190,12 +190,19 @@ class RtiConnection:
         spec: FederationSpec,
         *,
         federate_name: str,
+        federate_type: str = "",
     ) -> _FederateContextManager:
         """Open the per-federate async context manager.
 
         Use as ``async with rti.join_federation(spec, federate_name="x") as fed``.
+
+        ``federate_type`` is the optional HLAfederateType designator for the
+        joining federate (M13 thread B — docs/srs.md §10.4); defaults to
+        empty string (cut-1 behavior). When set, the rtid records it on
+        the federation roster and surfaces it via the MOM HLAfederate
+        attribute set.
         """
-        return _FederateContextManager(self, spec, federate_name)
+        return _FederateContextManager(self, spec, federate_name, federate_type)
 
 
 class _FederateContextManager:
@@ -216,10 +223,12 @@ class _FederateContextManager:
         connection: RtiConnection,
         spec: FederationSpec,
         federate_name: str,
+        federate_type: str = "",
     ) -> None:
         self._connection = connection
         self._spec = spec
         self._federate_name = federate_name
+        self._federate_type = federate_type
         self._federate: Federate | None = None
 
     async def __aenter__(self) -> Federate:
@@ -234,6 +243,7 @@ class _FederateContextManager:
             "join_federation",
             spec=self._spec,
             federate_name=self._federate_name,
+            federate_type=self._federate_type,
         )
         # The real gRPC transport returns the federate handle from
         # JoinFederationResponse; the fake returns None and the SDK falls
