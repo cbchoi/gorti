@@ -201,13 +201,13 @@ func (m *Manager) Register(
 		_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{kind: evtRegistered, label: label})
 	}
 
-	// Fan out announceSynchronizationPoint. Cut-1: the proto
-	// FederateEvent oneof does not yet carry an announce variant, so
-	// every emission is a placeholder envelope. The test fixtures'
-	// fakeOutbox simply counts calls; production wiring (gRPC handler
-	// + proto extension) is M8 W2 follow-up.
+	// Fan out announceSynchronizationPoint. M12 W2: the proto
+	// FederateEvent oneof now carries the SynchronizationPointAnnounced
+	// variant; each emission carries the label, tag, and required-set
+	// snapshot so a federate's stream loop can dispatch directly off the
+	// callback without a Query round-trip.
 	for _, h := range recipients {
-		evt := announceEvent(label, tagCopy)
+		evt := announceEvent(label, tagCopy, recipients)
 		_ = m.opts.Outbox.Send(ctx, fed, h, evt)
 	}
 	return nil
