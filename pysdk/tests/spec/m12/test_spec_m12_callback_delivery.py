@@ -20,6 +20,8 @@ from __future__ import annotations
 import asyncio
 import shutil
 import sys
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -27,7 +29,6 @@ from rti1516e.events import (
     FederationSynchronized,
     SynchronizationPointAnnounced,
 )
-
 from tests.spec.m12._helpers import (
     RtidProcess,
     two_federates,
@@ -43,9 +44,14 @@ def _go_or_skip() -> None:
         pytest.skip("rtid subprocess harness is POSIX-only at this cut")
 
 
+# noqa: ASYNC109 — ``timeout`` is the deadline for the entire poll
+# loop, not a per-call I/O timeout. Same exemption as M5's _helpers.
 async def _drain_until(
-    fed: object, predicate, *, timeout: float = 5.0
-) -> object:
+    fed: Any,
+    predicate: Callable[[Any], bool],
+    *,
+    timeout: float = 5.0,  # noqa: ASYNC109
+) -> Any:
     """Pull events off ``fed.events()`` until ``predicate(event)`` is true.
 
     Returns the matching event. Raises ``asyncio.TimeoutError`` if the
@@ -55,7 +61,7 @@ async def _drain_until(
     """
     deadline = asyncio.get_event_loop().time() + timeout
 
-    async def _wait() -> object:
+    async def _wait() -> Any:
         async for ev in fed.events():
             if predicate(ev):
                 return ev
