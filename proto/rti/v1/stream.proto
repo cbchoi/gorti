@@ -19,6 +19,12 @@ message EventsRequest {
 }
 
 // FederateEvent is one server-initiated callback. Per-federation monotonic seq.
+//
+// Wire-version compatibility: oneof variants are APPEND-ONLY. Existing
+// federates connecting to a newer rtid see only the variants they know
+// about; new variants ride through proto3's open-set "unknown field"
+// path and are silently ignored. NEVER renumber or reorder existing
+// tags. The 99 tag is reserved for FederationHalted (terminal).
 message FederateEvent {
   uint64 seq = 1;
   oneof event {
@@ -27,6 +33,10 @@ message FederateEvent {
     RemoveObjectInstance remove = 12;
     ReceiveInteraction receive = 13;
     TimeAdvanceGrant grant = 14;
+    // Cut-2 service-group callbacks (M12 W2 deferral #1 close).
+    // Sync (§4.6 / §4.7).
+    SynchronizationPointAnnounced sync_announced = 20;
+    FederationSynchronized sync_synchronized = 21;
     FederationHalted halted = 99;
   }
 }
@@ -62,4 +72,24 @@ message TimeAdvanceGrant {
 message FederationHalted {
   // Why the federation halted. e.g. "stall: federate=3", "fed=destroyed".
   string cause = 1;
+}
+
+// SynchronizationPointAnnounced — IEEE 1516.1-2010 §4.6
+// announceSynchronizationPoint. Fires on every joined federate when a
+// federate registers a sync point.
+message SynchronizationPointAnnounced {
+  string label = 1;
+  bytes tag = 2;
+  // Empty when the implicit "all joined federates" set was used at
+  // Register-time; non-empty when an explicit required set was passed.
+  // The Go-side sync.Manager populates this so federates can introspect
+  // who needs to achieve.
+  repeated uint64 required_federates = 3;
+}
+
+// FederationSynchronized — IEEE 1516.1-2010 §4.7
+// federationSynchronized. Fires on every required federate once the
+// last required achieve lands.
+message FederationSynchronized {
+  string label = 1;
 }
