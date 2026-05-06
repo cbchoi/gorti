@@ -15,6 +15,28 @@ Per docs/agent-c-pysdk.md §4.4:
 
 This file is FROZEN-shape — public method names and run() signature are
 the contract.
+
+Object-class extension (M12 follow-up)
+--------------------------------------
+The bridge transparently grows an OBJECT-CLASS path when the coupled
+model implements any of the methods on
+``ObjectClassFederateProtocol`` (see ``_protocol.py``). Detection is
+duck-typed via ``hasattr`` so existing interaction-only models keep
+working without changes.
+
+  - On startup (lazy, in ``_ensure_federate``):
+      ``publish_object_class`` / ``subscribe_object_class`` per the
+      model's declarations, then ``register_object_instance`` for
+      each entry in ``register_instances``. Handles are stored in
+      ``self._instance_handles`` (local_name → handle).
+  - In ``_run_internal_cycle`` (in addition to ``output_handler`` →
+      ``send_interaction``): if the model has
+      ``attribute_update_handler``, drain it and call
+      ``update_attributes`` per (instance, attr-dict) pair.
+  - In ``_drain_pending_external`` (in addition to
+      ``ReceiveInteraction`` → ``external_transition``): dispatch
+      ``DiscoverObjectInstance`` to ``discover_handler`` and
+      ``ReflectAttributeValues`` to ``reflect_handler``.
 """
 
 from __future__ import annotations
@@ -25,7 +47,12 @@ from typing import Any
 from pyjevsim_bridge._protocol import CoupledModelProtocol
 from pyjevsim_bridge.port_mapping import PortMapping
 from rti1516e.connection import Federate, FederationSpec, RtiConnection
-from rti1516e.events import ReceiveInteraction, TimeAdvanceGrant
+from rti1516e.events import (
+    DiscoverObjectInstance,
+    ReceiveInteraction,
+    ReflectAttributeValues,
+    TimeAdvanceGrant,
+)
 
 
 class HLAFederate:
@@ -60,12 +87,33 @@ class HLAFederate:
         # name + the raw payload; ``step_once`` translates the class to
         # an input port via ``port_mapping.in_port_for_fom_class``.
         self._pending_external: deque[tuple[str, Any]] = deque()
+        # Queue of object-class events (DiscoverObjectInstance /
+        # ReflectAttributeValues) awaiting delivery to the model's
+        # ``discover_handler`` / ``reflect_handler``. Drained on the
+        # same cycle as ``_pending_external`` so external-first
+        # semantics apply uniformly.
+        self._pending_object_events: deque[
+            DiscoverObjectInstance | ReflectAttributeValues
+        ] = deque()
         # Lazy-initialized SDK objects when step_once is called outside
         # of run(). Held across calls so successive step_once invocations
         # reuse the same federate.
         self._owned_connection: RtiConnection | None = None
         self._owned_federate_cm: Any | None = None
         self._federate: Federate | None = None
+        # Object-class state. Populated lazily on first
+        # ``_ensure_federate`` call when the coupled model exposes
+        # ``ObjectClassFederateProtocol`` methods.
+        #   _instance_handles : local_name -> object handle (publisher
+        #     side; populated from ``register_instances``).
+        #   _subscribed_object_classes : set[str] of FOM class names
+        #     the model declared via ``object_class_subscriptions``.
+        #     Used to filter incoming Discover events.
+        #   _object_decls_initialized : guard so publish/subscribe RPCs
+        #     fire exactly once even if step_once is called many times.
+        self._instance_handles: dict[str, int] = {}
+        self._subscribed_object_classes: set[str] = set()
+        self._object_decls_initialized: bool = False
 
     async def run(self, *, ticks: int) -> None:
         """Run the bridge loop for ``ticks`` time-advance cycles.
@@ -130,8 +178,10 @@ class HLAFederate:
         # it without asking the RTI for a grant. Production traffic for
         # an external event would arrive via fed.events() as a
         # ReceiveInteraction; deliver_external is the test seam for
-        # injecting that without a real RTI roundtrip.
-        if self._pending_external:
+        # injecting that without a real RTI roundtrip. Object-class
+        # events queued via ``deliver_object_event`` participate in the
+        # same external-first short-circuit.
+        if self._pending_external or self._pending_object_events:
             self._drain_pending_external()
             return
 
@@ -144,7 +194,11 @@ class HLAFederate:
         # If we collected externals while waiting for the grant, deliver
         # them and skip the internal cycle (per §4.4 "external arrived
         # earlier"). Otherwise this is a clean internal cycle.
-        if self._pending_external or grant.time < t_request:
+        if (
+            self._pending_external
+            or self._pending_object_events
+            or grant.time < t_request
+        ):
             self._drain_pending_external()
         else:
             await self._run_internal_cycle(fed)
@@ -161,6 +215,20 @@ class HLAFederate:
         converge at ``_drain_pending_external``.
         """
         self._pending_external.append((fom_class_name, payload))
+
+    async def deliver_object_event(
+        self,
+        event: DiscoverObjectInstance | ReflectAttributeValues,
+    ) -> None:
+        """Test/integration hook: simulate an externally-arrived
+        object-class event (Discover or Reflect).
+
+        Sibling of ``deliver_external``. Production traffic delivers
+        these via ``fed.events()`` and ``_await_grant`` queues them
+        on the same per-instance pending queue this method writes
+        to; both paths converge at ``_drain_pending_external``.
+        """
+        self._pending_object_events.append(event)
 
     # --- internal helpers ---------------------------------------------------
 
@@ -194,7 +262,98 @@ class HLAFederate:
         self._owned_federate_cm = cm
         federate = await cm.__aenter__()
         self._federate = federate
+        # Object-class declarations + instance registrations happen
+        # exactly once on the first time we acquire a federate. The
+        # guard short-circuits subsequent ``_ensure_federate`` calls
+        # (no-op when the lazy init already ran).
+        await self._init_object_class_declarations(federate)
         return federate
+
+    async def _init_object_class_declarations(self, fed: Federate) -> None:
+        """Wire object-class publish/subscribe + instance registration.
+
+        Called exactly once per ``HLAFederate`` instance, lazily when
+        the underlying federate is first opened. Walks
+        ``ObjectClassFederateProtocol`` methods on ``coupled_model``
+        defensively (each is optional) and issues the corresponding
+        SDK calls.
+
+        Backward-compat: a model that exposes none of the methods
+        leaves ``_object_decls_initialized=True`` after this call and
+        every later cycle stays purely interaction-driven.
+        """
+        if self._object_decls_initialized:
+            return
+        self._object_decls_initialized = True
+        model = self.coupled_model
+
+        # Declaration — publication. {class_name: [attr_name, ...]}
+        publications = self._safe_call_dict(model, "object_class_publications")
+        for class_name in sorted(publications):
+            attrs = list(publications[class_name])
+            await fed.publish_object_class(class_name, attributes=attrs)
+
+        # Declaration — subscription. Same shape; remember class names so
+        # incoming DiscoverObjectInstance events can be filtered.
+        subscriptions = self._safe_call_dict(model, "object_class_subscriptions")
+        for class_name in sorted(subscriptions):
+            attrs = list(subscriptions[class_name])
+            await fed.subscribe_object_class(class_name, attributes=attrs)
+            self._subscribed_object_classes.add(class_name)
+
+        # Instance registration. {instance_local_name: class_name}.
+        # Stash the resulting object handle keyed by local name so the
+        # model can refer to its instances by friendly name in the
+        # attribute_update_handler return.
+        registrations = self._safe_call_dict(model, "register_instances")
+        for local_name in sorted(registrations):
+            class_name = registrations[local_name]
+            handle = await fed.register_object_instance(
+                class_name, instance_name=local_name
+            )
+            self._instance_handles[local_name] = handle
+
+    @staticmethod
+    def _safe_call_dict(model: Any, attr: str) -> dict[str, Any]:
+        """Call ``model.attr()`` if present and the return is a dict;
+        otherwise return ``{}``.
+
+        Duck-typed dispatch — keeps the interaction-only path working
+        when the model implements none of the object-class methods.
+        Returns an empty dict for any non-dict / falsy return so the
+        caller can iterate uniformly.
+        """
+        fn = getattr(model, attr, None)
+        if not callable(fn):
+            return {}
+        result = fn()
+        if not isinstance(result, dict):
+            return {}
+        return result
+
+    async def register_instance(
+        self,
+        class_name: str,
+        instance_local_name: str,
+    ) -> int:
+        """Runtime hook for registering an instance after startup.
+
+        Models that need to register instances dynamically (mid-run,
+        in response to some external trigger) can call this from
+        their ``external_transition`` or via a separate orchestration
+        pass. Stores the handle in the same local-name → handle map
+        used by ``attribute_update_handler`` dispatch.
+
+        Returns the new object handle (so the caller can use it
+        directly for raw ``Federate.update_attributes`` calls if
+        needed).
+        """
+        fed = await self._ensure_federate()
+        handle = await fed.register_object_instance(
+            class_name, instance_name=instance_local_name
+        )
+        self._instance_handles[instance_local_name] = handle
+        return handle
 
     async def _await_grant(
         self, fed: Federate, t_request: float
@@ -218,22 +377,49 @@ class HLAFederate:
             if isinstance(event, ReceiveInteraction):
                 self._pending_external.append((event.class_name, event.parameters))
                 continue
-            # Other event kinds (DiscoverObjectInstance,
-            # ReflectAttributeValues, FederationHalted) are not part of
-            # the W6 contract; drop them on the floor for now. W7 will
-            # decide how the bridge surfaces them to the coupled model.
+            if isinstance(event, (DiscoverObjectInstance, ReflectAttributeValues)):
+                # Object-class events are routed via the parallel
+                # _pending_object_events queue and drained alongside
+                # ReceiveInteraction events in _drain_pending_external.
+                self._pending_object_events.append(event)
+                continue
+            # Other event kinds (FederationHalted) remain dropped at
+            # this cut. W7+M9+ may surface them to the model.
         # The async-for can only exit via return inside the loop; the
         # explicit raise here is for type-checker coverage of the "loop
         # exited without yielding" branch.
         raise RuntimeError("HLAFederate: events() exhausted before grant")
 
     def _drain_pending_external(self) -> None:
-        """Hand every queued external event to ``external_transition``.
+        """Hand every queued external event to the matching handler.
 
-        Events whose FOM class is not present in the port mapping are
-        silently dropped — the bridge can subscribe to interactions the
-        coupled model hasn't bound a port to. A future revision may log
-        or surface this; cut-1 keeps it quiet.
+        Three event flavors flow through here:
+
+          * ReceiveInteraction (queued in ``_pending_external``) —
+            dispatched to ``coupled_model.external_transition(port,
+            payload)`` after resolving the input port from the FOM
+            class via ``port_mapping``. Events whose FOM class is not
+            present in the port mapping are silently dropped — the
+            bridge can subscribe to interactions the coupled model
+            hasn't bound a port to.
+
+          * DiscoverObjectInstance (queued in
+            ``_pending_object_events``) — dispatched to
+            ``coupled_model.discover_handler`` if present and the
+            event's class is in the model's
+            ``object_class_subscriptions`` declarations. Unsubscribed
+            classes are dropped on the same rationale.
+
+          * ReflectAttributeValues (queued in
+            ``_pending_object_events``) — dispatched to
+            ``coupled_model.reflect_handler`` if present. The handler
+            sees the raw attribute dict; decoding is the model's
+            responsibility (the bridge's
+            interaction path treats payloads as opaque too).
+
+        Order: interactions are drained first (preserving the cut-1
+        contract), then object-class events. Within each queue,
+        FIFO arrival order is preserved.
         """
         while self._pending_external:
             fom_class, payload = self._pending_external.popleft()
@@ -242,13 +428,60 @@ class HLAFederate:
                 continue
             self.coupled_model.external_transition(port, payload)
 
+        # Object-class events. Drained AFTER interactions so the
+        # interaction-only contract (which is the dominant case)
+        # observes no ordering change.
+        while self._pending_object_events:
+            event = self._pending_object_events.popleft()
+            self._dispatch_object_event(event)
+
+    def _dispatch_object_event(
+        self,
+        event: DiscoverObjectInstance | ReflectAttributeValues,
+    ) -> None:
+        """Route one object-class event to the coupled model.
+
+        Uses ``hasattr`` to check for the optional handler methods.
+        Models that opt into the subscription path but don't
+        implement a handler get the event dropped silently — same
+        as the interaction-class "unmapped class" case.
+        """
+        model = self.coupled_model
+        if isinstance(event, DiscoverObjectInstance):
+            # Only dispatch discovers for classes the model declared
+            # a subscription for. This mirrors the interaction-side
+            # filter (unmapped FOM class → drop) and prevents leakage
+            # when a single transport hosts multiple federates that
+            # happen to share an event queue (the InProcessTransport
+            # is per-handle so this is defensive in practice).
+            if event.class_name not in self._subscribed_object_classes:
+                return
+            handler = getattr(model, "discover_handler", None)
+            if callable(handler):
+                handler(event.object_handle, event.class_name, event.instance_name)
+            return
+        if isinstance(event, ReflectAttributeValues):
+            handler = getattr(model, "reflect_handler", None)
+            if callable(handler):
+                handler(event.object_handle, dict(event.values))
+            return
+
     async def _run_internal_cycle(self, fed: Federate) -> None:
-        """Output → send_interaction → internal_transition.
+        """Output → send_interaction (+ optional update_attributes) →
+        internal_transition.
 
         Outputs whose port is not bound to a FOM class in the mapping
         are skipped — same rationale as ``_drain_pending_external``.
         Payloads are passed through opaquely under a ``_payload`` key;
         full FOM-driven encoding is W7's territory.
+
+        Object-class extension: if the model exposes
+        ``attribute_update_handler``, drain it after the interaction
+        path (deterministic order: interactions first, then attribute
+        updates) and call ``Federate.update_attributes`` for each
+        ``{instance_local_name: {attr: payload}}`` pair. Instances
+        not in the bridge's local-name → handle map are silently
+        skipped (matches the unmapped-port convention).
         """
         outputs = self.coupled_model.output_handler()
         # Sort port names before iterating so the wire-visible
@@ -264,7 +497,38 @@ class HLAFederate:
                 class_name,
                 parameters={"_payload": payload},
             )
+
+        # Object-class outgoing path. Optional — the call is no-op for
+        # models that don't expose ``attribute_update_handler``.
+        await self._run_attribute_update_cycle(fed)
+
         self.coupled_model.internal_transition()
+
+    async def _run_attribute_update_cycle(self, fed: Federate) -> None:
+        """Drain ``attribute_update_handler`` and dispatch
+        ``update_attributes`` calls.
+
+        Sibling to the interaction-output path in ``_run_internal_cycle``.
+        Iterates instances and attribute names in sorted order for
+        wire-determinism (mirrors the
+        ``sort-before-iterate-over-maps`` discipline). Unknown
+        instance names are silently dropped — same convention as
+        unmapped output ports.
+        """
+        updates = self._safe_call_dict(self.coupled_model, "attribute_update_handler")
+        if not updates:
+            return
+        for local_name in sorted(updates):
+            attrs = updates[local_name]
+            if not isinstance(attrs, dict) or not attrs:
+                continue
+            handle = self._instance_handles.get(local_name)
+            if handle is None:
+                continue
+            # Sort attribute names too so update_attributes payloads are
+            # iterable in deterministic order downstream.
+            ordered_attrs = {k: attrs[k] for k in sorted(attrs)}
+            await fed.update_attributes(handle, ordered_attrs)
 
     async def aclose(self) -> None:
         """Tear down lazily-acquired connection/federate. Safe to call

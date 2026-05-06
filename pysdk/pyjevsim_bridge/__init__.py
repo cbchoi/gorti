@@ -15,13 +15,29 @@ Public API:
     )
     await federate.run(ticks=100)
 
+Object-class extension: a coupled model may also implement methods on
+:class:`ObjectClassFederateProtocol` to participate in HLA OBJECT-CLASS
+pub/sub (``register_object_instance`` / ``update_attributes`` /
+``ReflectAttributeValues``). Detection is duck-typed via ``hasattr``;
+existing interaction-only models keep working unchanged. See
+``examples/pyjevsim-dashboard-bridged/`` for a worked example.
+
 Implementation lives across TASK-069..072. See docs/agent-c-pysdk.md §6
 for the DEVS↔HLA mapping reference.
 """
 
 from __future__ import annotations
 
+from pyjevsim_bridge._protocol import (
+    CoupledModelProtocol,
+    ObjectClassFederateProtocol,
+)
 from pyjevsim_bridge.port_mapping import PortMapping
 from pyjevsim_bridge.time_advance import HLAFederate
 
-__all__ = ["HLAFederate", "PortMapping"]
+__all__ = [
+    "CoupledModelProtocol",
+    "HLAFederate",
+    "ObjectClassFederateProtocol",
+    "PortMapping",
+]
