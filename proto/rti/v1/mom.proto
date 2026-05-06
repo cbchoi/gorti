@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// MomService — Management Object Model introspection per IEEE 1516.1-2010 §10.
+//
+// Cut-3 (M12) gRPC exposure of cut-2 mom.Manager. The MOM tracks the
+// HLAfederation + per-federate HLAfederate object instances and their
+// attributes (counters, time-state, names, FOM module list). This
+// service is READ-ONLY: federates introspect MOM-tracked state but
+// cannot mutate it. Mutations are the runtime's job (federation +
+// object lifecycle hooks; per-federate counter increments off the
+// dispatcher).
+//
+// Wire surface design:
+//
+//   - QueryFederationAttributes returns the HLAfederation snapshot
+//     (name, FOM module names, current federate handles).
+//   - QueryFederateAttributes   returns one HLAfederate snapshot
+//     (handle, name, type, regulating, constrained, counters).
+//   - EnumerateMomInstances     returns the list of MOM object
+//     handles (federation + per-federate) so federates can subscribe
+//     via the standard ObjectService once cut-4 wires the MOM
+//     classes as subscribable.
+//
+// Deferred (cut-4): no streaming "watch" RPC. Federates poll the
+// Query RPCs at whatever cadence suits their use case; the manager
+// is goroutine-safe and the snapshot accessors are O(federates).
+service MomService {
+  // QueryFederationAttributes returns a snapshot of the HLAfederation
+  // MOM object instance for the given federation.
+  rpc QueryFederationAttributes(QueryFederationAttributesRequest)
+      returns (QueryFederationAttributesResponse);
+
+  // QueryFederateAttributes returns a snapshot of the HLAfederate
+  // MOM object instance for the given (federation, federate handle).
+  rpc QueryFederateAttributes(QueryFederateAttributesRequest)
+      returns (QueryFederateAttributesResponse);
+
+  // EnumerateMomInstances returns the federation + per-federate MOM
+  // object handles that the runtime is currently maintaining.
+  rpc EnumerateMomInstances(EnumerateMomInstancesRequest)
+      returns (EnumerateMomInstancesResponse);
+}
+
+// =============================================================================
+// QueryFederationAttributes
+// =============================================================================
+
+message QueryFederationAttributesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+// FederationAttributes is the wire-format snapshot of the
+// HLAfederation MOM object's attributes per IEEE 1516.1-2010 §10.2.
+//
+// Cut-3 fields populated:
+//   - federation_name (HLAfederationName)
+//   - federate_handles (HLAfederatesInFederation, list of federate
+//     handles currently joined)
+//   - fom_module_names (HLAFOMmoduleDesignatorList)
+//
+// Cut-3 fields placeholdered for forward-compat (nil/unset):
+//   - last_save_name / last_save_time — populated when the
+//     savepoint manager fires its "saved" hook; empty until then.
+//   - sync_points_state / save_state — currently absent because
+//     the cut-2 MOM manager does not subscribe to SyncCoordinator /
+//     SavepointCoordinator state. A cut-4 hook composition adds
+//     these without proto changes (new field tags reserved).
+message QueryFederationAttributesResponse {
+  string federation_name = 1;
+  repeated uint64 federate_handles = 2;
+  repeated string fom_module_names = 3;
+  // Reserved for cut-4 expansion:
+  //   string last_save_name = 4;
+  //   double last_save_time = 5;
+  //   string sync_points_state = 6;
+  //   string save_state = 7;
+}
+
+// =============================================================================
+// QueryFederateAttributes
+// =============================================================================
+
+message QueryFederateAttributesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+// FederateAttributes is the wire-format snapshot of one HLAfederate
+// MOM object's attributes per IEEE 1516.1-2010 §10.3.
+//
+// Cut-3 fields populated:
+//   - federate_handle, federate_name, federate_type
+//   - time_regulating, time_constrained
+//   - logical_time, lookahead (when TimeStateChanged hook has
+//     fired — cut-3 wires this from time.Manager state transitions
+//     in a future patch; cut-2 leaves these zero until then)
+//   - per-federate counters: interactions_sent / interactions_received /
+//     updates_sent / reflections_received
+message QueryFederateAttributesResponse {
+  // True iff the runtime is currently tracking this (federation,
+  // federate_handle). False indicates the federate has resigned or
+  // never joined; remaining fields are zero-valued.
+  bool found = 1;
+
+  uint64 federate_handle = 2;
+  string federate_name = 3;
+  string federate_type = 4;
+
+  // Time state.
+  bool time_regulating = 10;
+  bool time_constrained = 11;
+  LogicalTime logical_time = 12;
+  LogicalTime lookahead = 13;
+
+  // Per-federate counters (FR-MOM-1).
+  uint32 interactions_sent = 20;
+  uint32 interactions_received = 21;
+  uint32 updates_sent = 22;
+  uint32 reflections_received = 23;
+}
+
+// =============================================================================
+// EnumerateMomInstances
+// =============================================================================
+
+message EnumerateMomInstancesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+// MomInstance describes one MOM-tracked object instance: either the
+// HLAfederation singleton or one HLAfederate per joined federate.
+message MomInstance {
+  // Class name per IEEE 1516.1-2010 §10:
+  //   "HLAobjectRoot.HLAmanager.HLAfederation"  — singleton per fed
+  //   "HLAobjectRoot.HLAmanager.HLAfederate"    — one per joined federate
+  string class_name = 1;
+
+  // For HLAfederate, the federate handle this instance refers to.
+  // For HLAfederation, zero (the federation singleton has no
+  // federate-handle).
+  uint64 federate_handle = 2;
+
+  // Human-readable instance name. For HLAfederate this is the
+  // federate name (passed at join time); for HLAfederation it is
+  // the federation name.
+  string instance_name = 3;
+}
+
+message EnumerateMomInstancesResponse {
+  repeated MomInstance instances = 1;
+}
