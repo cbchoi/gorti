@@ -105,7 +105,7 @@ func TestIntegration_SpawnRtidAndRenderEmptySnapshot(t *testing.T) {
 	}
 
 	// Drive the model with the live snapshot and verify rendering.
-	m := initialModel(ctx, cli, st, 1*time.Second)
+	m := initialModel(ctx, cli, st, 1*time.Second, false)
 	m.last = resp
 	m.width = 100
 	m.height = 30

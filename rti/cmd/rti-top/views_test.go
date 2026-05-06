@@ -105,7 +105,7 @@ func newTestModel(t *testing.T) *model {
 	t.Helper()
 	ctx := context.Background()
 	st := &rtiv1.StatusResponse{RtidVersion: "rtid-cut2", UptimeSeconds: 1}
-	m := initialModel(ctx, nil, st, 1*time.Second)
+	m := initialModel(ctx, nil, st, 1*time.Second, false)
 	m.last = fixtureSnapshot()
 	m.recordTimeHistory(m.last)
 	m.width = 120

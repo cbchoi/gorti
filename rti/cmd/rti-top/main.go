@@ -64,13 +64,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Phase 5 (docs/rtid-tui.md §7.5): probe MutatingService at
+	// startup so the TUI can decide whether to render the X / D
+	// keybindings. On Unimplemented (the read-only-daemon default)
+	// we keep the keybindings hidden — read-only mode is still the
+	// default, regardless of the daemon flag.
+	mutating, mutErr := cli.ProbeMutating(ctx)
+	if mutErr != nil {
+		fmt.Fprintf(os.Stderr, "rti-top: WARN: MutatingService probe failed: %v (mutating ops will stay hidden)\n", mutErr)
+		mutating = false
+	}
+
 	if *smoke {
-		fmt.Printf("rti-top smoke OK: rtid_version=%s uptime=%ds (admin=%s)\n",
-			st.GetRtidVersion(), st.GetUptimeSeconds(), cli.Target())
+		fmt.Printf("rti-top smoke OK: rtid_version=%s uptime=%ds (admin=%s) mutating=%v\n",
+			st.GetRtidVersion(), st.GetUptimeSeconds(), cli.Target(), mutating)
 		return
 	}
 
-	if err := runTUI(ctx, cli, st, *refresh); err != nil {
+	if err := runTUI(ctx, cli, st, *refresh, mutating); err != nil {
 		fmt.Fprintf(os.Stderr, "rti-top: %v\n", err)
 		os.Exit(1)
 	}

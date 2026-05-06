@@ -69,22 +69,41 @@ func (m *model) renderHeader() string {
 		m.refresh)
 	keys := " [F]ederations  [T]ime  [W]ire  [O]bjects  [I]nteractions  [Q]uit "
 	if m.lastErr != nil {
-		keys += "  " + styleErr.Render("⚠ "+m.lastErr.Error())
+		keys += "  " + styleErr.Render("! "+m.lastErr.Error())
 	}
-	return styleHeader.Width(m.width).Render(title) + "\n" + keys
+	out := styleHeader.Width(m.width).Render(title) + "\n" + keys
+	// Phase 5: surface the most recent mutating-op result as a status
+	// line below the header.
+	if m.statusMsg != "" {
+		out += "\n " + m.statusMsg
+	}
+	return out
 }
 
 // renderFooter draws the bottom keybinding hint row matching the
-// design-doc mockups (§3.1..§3.5 each show their own footer).
+// design-doc mockups (§3.1..§3.5 each show their own footer). Phase
+// 5 augments the federation / drilldown footers with X (force-resign)
+// and D (destroy federation) keybindings — but ONLY when the
+// MutatingService probe at startup succeeded. Read-only daemons keep
+// the footer unchanged.
 func (m *model) renderFooter() string {
 	var hint string
 	switch m.view {
 	case viewFederations:
 		hint = " ↑↓ select  Enter drill-down  R refresh-rate  / filter  Q quit "
+		if m.mutatingEnabled {
+			hint += " D destroy "
+		}
 	case viewDrilldown:
 		hint = " Esc back  ↑↓ select federate  Enter inspect  T time view  W wire view  I events "
+		if m.mutatingEnabled {
+			hint += " X force-resign  D destroy "
+		}
 	case viewFederateDetail:
 		hint = " Esc back  T time view  W wire view  I events  Q quit "
+		if m.mutatingEnabled {
+			hint += " X force-resign "
+		}
 	case viewTime:
 		hint = " Esc back  W wire view  R refresh-rate  Q quit "
 	case viewWire:
@@ -95,7 +114,41 @@ func (m *model) renderFooter() string {
 	if m.filtering {
 		hint = fmt.Sprintf(" filter: %s_  (Enter accept  Esc cancel) ", m.filter)
 	}
+	if m.confirmKind != confirmNone {
+		hint = m.renderConfirmHint()
+	}
 	return styleFooter.Width(m.width).Render(hint)
+}
+
+// renderConfirmHint renders the modal confirmation footer for Phase
+// 5 X / D keybindings. ForceResign accepts a single y; Destroy needs
+// y typed twice (the count is rendered so the operator sees their
+// progress).
+func (m *model) renderConfirmHint() string {
+	switch m.confirmKind {
+	case confirmForceResign:
+		return fmt.Sprintf(
+			" ForceResign federate handle=%d on federation %q? [y]es / [n]o ",
+			m.confirmTarget, m.selFed,
+		)
+	case confirmDestroyFederation:
+		return fmt.Sprintf(
+			" DestroyFederation %q (evicts %d federates)? type Y twice — confirmed %d/2  [n]o cancels ",
+			m.selFed, m.federationFederateCount(m.selFed), m.destroyFedConfirmCount,
+		)
+	}
+	return ""
+}
+
+// federationFederateCount returns the count of federates currently
+// joined to the named federation in the latest snapshot. Used to
+// surface the eviction count in the destroy-federation confirmation.
+func (m *model) federationFederateCount(name string) int {
+	fed := m.findFederation(name)
+	if fed == nil {
+		return 0
+	}
+	return len(fed.GetFederates())
 }
 
 // renderBody dispatches to the per-view body renderer.
