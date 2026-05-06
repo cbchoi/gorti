@@ -158,3 +158,39 @@ message MomInstance {
 message EnumerateMomInstancesResponse {
   repeated MomInstance instances = 1;
 }
+
+// =============================================================================
+// MOMManagerState — save manifest snapshot
+// =============================================================================
+
+// MOMFederateRecord is one HLAfederate live attribute snapshot used
+// inside MOMManagerState. M13 thread C (docs/srs.md §10.4).
+message MOMFederateRecord {
+  uint64 handle = 1;
+  string name = 2;
+  string federate_type = 3;
+  bool time_regulating = 4;
+  bool time_constrained = 5;
+  double lookahead = 6;
+  double logical_time = 7;
+  uint32 interactions_sent = 10;
+  uint32 interactions_received = 11;
+  uint32 updates_sent = 12;
+  uint32 reflections_received = 13;
+}
+
+// MOMFederationRecord is the HLAfederation singleton's live attribute
+// snapshot — name + sorted handles + FOM module names.
+message MOMFederationRecord {
+  string name = 1;
+  repeated uint64 federate_handles = 2;  // sorted ascending
+  repeated string fom_module_names = 3;
+}
+
+// MOMManagerState is the per-federation snapshot persisted into the
+// save manifest under key "mom". M13 thread C (docs/srs.md §10.4).
+// On Marshal, federates are sorted by handle ascending.
+message MOMManagerState {
+  MOMFederationRecord federation = 1;
+  repeated MOMFederateRecord federates = 2;
+}
