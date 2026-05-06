@@ -135,10 +135,32 @@ func TestRender_DrilldownView(t *testing.T) {
 		"FEDERATE", "HANDLE", "TIME", "LOOKAHEAD", "ROLE", "TPS", "DROP", "AGE",
 		"generator", "buffer", "processor",
 		"LBTS:", "Sync points:", "Save state:", "Region count:",
+		// M19 Phase 1a: drilldown header now surfaces the data-plane
+		// transport. The "demo" fixture has UNSPECIFIED transport
+		// (cut-2 path), which the renderer collapses to "gRPC".
+		"transport: gRPC",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("renderDrilldownView missing %q\n--- output ---\n%s", want, out)
 		}
+	}
+}
+
+// TestRender_DrilldownView_DDSMode asserts the drilldown header
+// surfaces "transport: DDS (domain N)" when the federation's
+// FederationSnapshot reports DDS. Lock against accidental
+// regressions where the column gets dropped or the formatting drifts.
+// M19 Phase 1a.
+func TestRender_DrilldownView_DDSMode(t *testing.T) {
+	m := newTestModel(t)
+	// Patch the demo federation into DDS mode for this test only.
+	m.last.Federations[0].TransportMode = rtiv1.TransportMode_TRANSPORT_MODE_DDS
+	m.last.Federations[0].DdsDomainId = 42
+	m.selFed = "demo"
+	m.view = viewDrilldown
+	out := m.renderDrilldownView()
+	if !strings.Contains(out, "transport: DDS (domain 42)") {
+		t.Errorf("DDS-mode drilldown should render 'transport: DDS (domain 42)'\n--- output ---\n%s", out)
 	}
 }
 

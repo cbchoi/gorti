@@ -92,6 +92,23 @@ func main() {
 	tlsKey := flag.String("tls-key", "", "path to TLS server key PEM. Required when --tls-cert is set.")
 	saveDir := flag.String("save-dir", "./gorti-saves", "directory under which federation save bundles are written + read (M9: FR-SR-1..5)")
 	researchConfig := flag.String("research-config", "", "path to a TOML research-config file (Phase 3 of docs/research-platform.md). Server mode only; absent → default strategies + per-impl-opt-in determinism. Honors GORTI_RESEARCH_CONFIG as fallback when flag is empty; GORTI_DETERMINISM overrides the determinism field if set.")
+	// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): DDS data-plane
+	// opt-in flags. These flags exist in EVERY rtid build — both the
+	// default CGo-free build and the build-tag-gated `rtid-dds`
+	// variant — so the CLI surface stays uniform. Their EFFECTIVE
+	// behavior depends on whether the binary was built with
+	// `-tags=dds`:
+	//   - default build: --enable-dds=true is accepted by flag
+	//     parsing but the rti/internal/transport/dds package's
+	//     stubs return errors.ErrUnsupported on every primitive,
+	//     so even with the flag set, CreateFederation with
+	//     transport_mode=DDS will eventually fail when the
+	//     federation tries to instantiate a DomainParticipant.
+	//   - dds-tagged build: --enable-dds=true unlocks DDS-mode
+	//     federations end-to-end (Phase 1b).
+	// Default false keeps the cut-2 wire path untouched.
+	enableDDS := flag.Bool("enable-dds", false, "accept CreateFederation requests with transport_mode=DDS. Requires the rtid binary to have been built with -tags=dds; the default CGo-free build rejects DDS even when this flag is set. See docs/m19-dds-adapter.md.")
+	ddsDomainID := flag.Int("dds-domain-id", 0, "default DDS domain ID for federations created in DDS mode. Only meaningful when --enable-dds=true. Zero is the DDS default domain.")
 	flag.Parse()
 
 	logger := buildLogger(*logLevel, *logFormat)
@@ -134,6 +151,8 @@ func main() {
 			ResearchConfigPath:                *researchConfig,
 			AdminMutating:                     *adminMutating,
 			AdminMutatingAllowNonLoopback:     *adminMutatingAllowNonLoopback,
+			EnableDDS:                         *enableDDS,
+			DDSDomainID:                       int32(*ddsDomainID),
 		})
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
@@ -193,6 +212,12 @@ type serverMainArgs struct {
 	ResearchConfigPath            string
 	AdminMutating                 bool
 	AdminMutatingAllowNonLoopback bool
+	// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): plumbed all the
+	// way down to the transport/grpc handler so CreateFederation
+	// requests with transport_mode=DDS are accepted only when both
+	// the build tag and the operator have opted in.
+	EnableDDS   bool
+	DDSDomainID int32
 }
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
@@ -261,6 +286,8 @@ func runServerMain(logger *slog.Logger, args serverMainArgs) {
 		Research:                      resolved,
 		AdminMutating:                 args.AdminMutating,
 		AdminMutatingAllowNonLoopback: args.AdminMutatingAllowNonLoopback,
+		EnableDDS:                     args.EnableDDS,
+		DDSDomainID:                   args.DDSDomainID,
 	})
 	if err != nil {
 		logger.Error("rtid initialization failed", "err", err)
@@ -532,6 +559,21 @@ type rtidConfig struct {
 	// here only so newRTID can log it; the gate logic lives in
 	// runServerMain so an early exit doesn't construct the runtime.
 	AdminMutatingAllowNonLoopback bool
+
+	// EnableDDS, when true, accepts CreateFederation requests with
+	// transport_mode=DDS. M19 Phase 1a (docs/m19-dds-adapter.md §4.4).
+	// In the default CGo-free build, the transport/dds package's
+	// stubs return errors.ErrUnsupported on every primitive — so the
+	// flag exists in every build but is effectively a no-op without
+	// the dds build tag. The dds-tagged build (Phase 1b) wires real
+	// CGo-backed implementations.
+	EnableDDS bool
+
+	// DDSDomainID is the default DDS domain ID stamped into a
+	// federation when CreateFederation is accepted in DDS mode.
+	// Zero is the DDS default domain. Only meaningful when
+	// EnableDDS=true.
+	DDSDomainID int32
 }
 
 // rtid is the composed runtime: gRPC server + metrics handler + the
@@ -758,6 +800,15 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// port (this --listen) since it is federate-facing
 		// introspection, not operator-facing observability.
 		MOM: momMgr,
+		// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): wire the
+		// DDS opt-in flags into the federation handler so
+		// CreateFederation rejects transport_mode=DDS unless the
+		// operator opted in. TransportLookup feeds the manager's
+		// recorded mode back to JoinFederationResponse so federates
+		// pick the right wire path.
+		DDSEnabled:         cfg.EnableDDS,
+		DDSDefaultDomainID: cfg.DDSDomainID,
+		TransportLookup:    fedMgr.TransportFor,
 	})
 	if err != nil {
 		return nil, err

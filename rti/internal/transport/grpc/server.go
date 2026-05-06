@@ -130,6 +130,20 @@ type Options struct {
 	// §5.3): typed as core.ManagementObjectModel so alternative
 	// implementations may be wired here.
 	MOM core.ManagementObjectModel
+
+	// DDSEnabled, DDSDefaultDomainID, and TransportLookup are M19
+	// Phase 1a (docs/m19-dds-adapter.md §4.4). DDSEnabled gates
+	// whether CreateFederation will accept TRANSPORT_MODE_DDS; in the
+	// default CGo-free build it MUST stay false (a DDS request is
+	// rejected with FailedPrecondition + a clear "not built with DDS
+	// support" message). DDSDefaultDomainID is the domain ID stamped
+	// into a DDS-mode federation at create time when the request
+	// itself does not pin a domain. TransportLookup is the manager's
+	// federation.Manager.TransportFor; nil leaves the join response
+	// at UNSPECIFIED (collapses to GRPC at the wire layer).
+	DDSEnabled         bool
+	DDSDefaultDomainID int32
+	TransportLookup    func(core.FederationName) (core.TransportMode, int32, bool)
 }
 
 // NewServer constructs a Server. Validates that all required Options
@@ -150,6 +164,9 @@ func NewServer(opts Options) (*Server, error) {
 	fedSvc := newFederationService(opts.Federations)
 	fedSvc.onCreateFederationSuccess = opts.OnCreateFederationSuccess
 	fedSvc.onDestroyFederationSuccess = opts.OnDestroyFederationSuccess
+	fedSvc.ddsEnabled = opts.DDSEnabled
+	fedSvc.ddsDefaultDomainID = opts.DDSDefaultDomainID
+	fedSvc.transportLookup = opts.TransportLookup
 	srv := &Server{
 		fedService:    fedSvc,
 		declService:   newDeclarationService(opts.Declarations),

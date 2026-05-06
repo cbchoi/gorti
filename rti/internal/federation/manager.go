@@ -46,6 +46,16 @@ type federationState struct {
 	seed         uint64
 	fom          core.FOMHandle
 
+	// M19 Phase 1a (docs/m19-dds-adapter.md §4.2): data-plane
+	// transport selection recorded at CreateFederation time. The
+	// gRPC handler resolves UNSPECIFIED → GRPC before the manager
+	// sees it, so a federationState always carries a definite mode
+	// once persisted. ddsDomainID is only meaningful when
+	// transportMode == TransportModeDDS — it's stamped into
+	// JoinFederationResponse.dds_domain_id by the transport layer.
+	transportMode core.TransportMode
+	ddsDomainID   int32
+
 	// nameToHandle and handleToName are kept consistent. Handles are
 	// assigned by a per-federation monotonic counter (nextFederateHandle):
 	// every successful Join increments the counter and assigns the new
@@ -198,6 +208,16 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		mode = core.ModeVerbose
 	}
 
+	// M19 Phase 1a: normalize TransportModeUnspecified → GRPC so
+	// the persisted federation always exposes a definite transport.
+	// The transport/grpc handler MAY also normalize before the
+	// manager sees the request; doing it again here is harmless and
+	// keeps direct in-process callers safe.
+	tm := req.TransportMode
+	if tm == core.TransportModeUnspecified {
+		tm = core.TransportModeGRPC
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.federations[req.Name]; exists {
@@ -209,6 +229,8 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		stallTimeout:       stall,
 		seed:               req.Seed,
 		fom:                fom,
+		transportMode:      tm,
+		ddsDomainID:        req.DDSDomainID,
 		nextFederateHandle: 0, // first Join produces handle 1
 		nameToHandle:       map[string]core.FederateHandle{},
 		handleToName:       map[core.FederateHandle]string{},
@@ -216,6 +238,24 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		federateType:       map[core.FederateHandle]string{},
 	}
 	return nil
+}
+
+// TransportFor returns the data-plane transport mode + DDS domain ID
+// recorded at CreateFederation time. Returns (TransportModeUnspecified,
+// 0, false) when no such federation exists. The transport layer's
+// JoinFederation handler consults this to populate
+// JoinFederationResponse.transport_mode + dds_domain_id so federates
+// can pick the right wire path.
+func (m *Manager) TransportFor(fed core.FederationName) (core.TransportMode, int32, bool) {
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return core.TransportModeUnspecified, 0, false
+	}
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+	return fs.transportMode, fs.ddsDomainID, true
 }
 
 // ModeFor returns the operating mode of a federation. Returns
@@ -532,9 +572,11 @@ func (m *Manager) Snapshot() []core.FederationRoster {
 		}
 		fs.mu.RLock()
 		roster := core.FederationRoster{
-			Name:      fs.name,
-			Mode:      fs.mode,
-			Federates: make([]core.FederateInfo, 0, len(fs.handleToName)),
+			Name:          fs.name,
+			Mode:          fs.mode,
+			Federates:     make([]core.FederateInfo, 0, len(fs.handleToName)),
+			TransportMode: fs.transportMode,
+			DDSDomainID:   fs.ddsDomainID,
 		}
 		for h, fname := range fs.handleToName {
 			roster.Federates = append(roster.Federates, core.FederateInfo{

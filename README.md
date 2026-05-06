@@ -44,6 +44,16 @@ go build -o bin/rtid ./rti/cmd/rtid
 
 Federate connects with `grpc://localhost:8442`. (TLS: `--tls-cert/--tls-key` pinned for production; M6 hardening track.)
 
+### DDS data plane (opt-in, M19)
+
+The default `rtid` binary uses gRPC for both control + data planes.
+A build-tag-gated DDS data plane is opt-in for federations that need
+DDS's discovery / multicast properties — see
+[`docs/m19-dds-adapter.md`](docs/m19-dds-adapter.md) for the design
+and `make build-dds` for the DDS-capable variant. M19 is a multi-phase
+deliverable; Phase 1a (foundation, no CGo) has landed; Phase 1b adds
+the actual Cyclone DDS interop.
+
 ## Performance
 
 Reference baseline ([`docs/reports/M5/agent-a.md`](docs/reports/M5/agent-a.md), 12th Gen i7-12700, 20 cores, 10s/size, in-process):

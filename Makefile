@@ -1,4 +1,4 @@
-.PHONY: verify fmt lint typecheck test determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps clean ci-all help
+.PHONY: verify fmt lint typecheck test determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps clean ci-all help build build-dds test-dds
 
 GO_PKGS := ./...
 PY_DIR := pysdk
@@ -11,6 +11,9 @@ help:
 	@echo "  typecheck    mypy --strict (Python)"
 	@echo "  test         go test + pytest"
 	@echo "  determinism  10x determinism harness on core packages"
+	@echo "  build        compile bin/rtid (default — CGo-free, DDS-free)"
+	@echo "  build-dds    compile bin/rtid-dds (DDS-capable; requires libcyclonedds-dev)"
+	@echo "  test-dds     go test under -tags=dds (M19 Phase 1a stub-contract tests)"
 	@echo "  proto        regenerate gRPC bindings via buf"
 	@echo "  py-codegen   regenerate Python gRPC bindings into pysdk/rti1516e/_generated/"
 	@echo "  py-test      pytest pysdk/ (M4)"
@@ -21,6 +24,15 @@ help:
 	@echo "  docs-serve   live-reload docs at http://127.0.0.1:8000/"
 	@echo "  clean        remove generated artifacts"
 	@echo "  ci-all       full CI gate including coverage"
+	@echo ""
+	@echo "DDS data-plane (M19 — docs/m19-dds-adapter.md):"
+	@echo "  - Default 'make build' produces a CGo-free + DDS-free rtid."
+	@echo "  - 'make build-dds' produces rtid-dds, the DDS-capable variant."
+	@echo "    Phase 1a: stubs return errors.ErrUnsupported (no Cyclone DDS"
+	@echo "    runtime needed yet — the package compiles without the C library)."
+	@echo "    Phase 1b: requires Cyclone DDS C library + headers:"
+	@echo "      Linux:  apt-get install libcyclonedds-dev"
+	@echo "      macOS:  brew install cyclonedds"
 
 verify: fmt lint test determinism
 
@@ -50,6 +62,29 @@ test:
 	else \
 		echo "pytest or $(PY_DIR) not present; skipping"; \
 	fi
+
+# build is the default rtid binary — CGo-free, DDS-free. Identical to
+# every cut-2 release; the M19 work does not change its dependency
+# surface or output bytes.
+build:
+	mkdir -p bin
+	go build -o bin/rtid ./rti/cmd/rtid
+
+# build-dds compiles the DDS-capable rtid variant. M19 Phase 1a — see
+# docs/m19-dds-adapter.md §3.5 PINNED. The dds-tagged build links the
+# rti/internal/transport/dds/ package; in Phase 1a every primitive
+# returns errors.ErrUnsupported so the build succeeds even without
+# Cyclone DDS installed. Phase 1b adds the cgo_dds.go interop, which
+# DOES require libcyclonedds-dev (apt) or cyclonedds (brew).
+build-dds:
+	mkdir -p bin
+	go build -tags=dds -o bin/rtid-dds ./rti/cmd/rtid
+
+# test-dds exercises the dds-tagged unit tests — Phase 1a stub-contract
+# tests under rti/internal/transport/dds/. Phase 1b adds end-to-end
+# tests under -tags=dds_e2e that require a running Cyclone DDS install.
+test-dds:
+	go test -race -tags=dds ./rti/internal/transport/dds/...
 
 determinism:
 	go test -tags=determinism -count=10 -race -run=Determinism $(GO_PKGS)

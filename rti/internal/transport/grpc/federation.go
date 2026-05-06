@@ -25,11 +25,23 @@ import (
 // Repo.Get(fed) returns ErrFederationNotFound). Nil hook is a no-op,
 // preserving the prior contract for tests that construct the service
 // without a hook.
+//
+// ddsEnabled + ddsDefaultDomainID + transportLookup are M19 Phase 1a
+// (docs/m19-dds-adapter.md §4.4): when a federate requests
+// CreateFederation with TRANSPORT_MODE_DDS, the handler refuses unless
+// ddsEnabled is true (set when rtid was started with --enable-dds=true,
+// implicitly false in the default CGo-free build). transportLookup
+// reads back the federation's recorded transport so JoinFederation can
+// echo it. nil transportLookup gracefully degrades to GRPC (used by
+// older test fixtures that pre-date the M19 wiring).
 type federationService struct {
 	rtiv1.UnimplementedFederationServiceServer
 	fed                        core.FederationStore
 	onCreateFederationSuccess  func(ctx context.Context, name core.FederationName, modules []core.FOMModule)
 	onDestroyFederationSuccess func(ctx context.Context, name core.FederationName)
+	ddsEnabled                 bool
+	ddsDefaultDomainID         int32
+	transportLookup            func(core.FederationName) (core.TransportMode, int32, bool)
 }
 
 func newFederationService(fed core.FederationStore) *federationService {
@@ -44,12 +56,29 @@ func (s *federationService) CreateFederation(ctx context.Context, req *rtiv1.Cre
 	if err := requireWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
+
+	// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): translate the wire
+	// transport_mode into the core enum and reject DDS when the rtid
+	// build/runtime cannot serve it. UNSPECIFIED collapses to GRPC.
+	tm := protoTransportToCore(req.GetTransportMode())
+	if tm == core.TransportModeDDS && !s.ddsEnabled {
+		return nil, status.Error(codes.FailedPrecondition,
+			"transport_mode=DDS requires rtid to be built with -tags=dds "+
+				"and started with --enable-dds=true; this rtid was built without DDS support")
+	}
+	domainID := int32(0)
+	if tm == core.TransportModeDDS {
+		domainID = s.ddsDefaultDomainID
+	}
+
 	coreReq := core.CreateFederationRequest{
-		Name:         core.FederationName(req.GetFederationName()),
-		FOMModules:   convertFOMModules(req.GetFomModules()),
-		Mode:         protoModeToCore(req.GetMode()),
-		StallTimeout: time.Duration(req.GetStallTimeoutSeconds() * float64(time.Second)),
-		Seed:         req.GetSeed(),
+		Name:          core.FederationName(req.GetFederationName()),
+		FOMModules:    convertFOMModules(req.GetFomModules()),
+		Mode:          protoModeToCore(req.GetMode()),
+		StallTimeout:  time.Duration(req.GetStallTimeoutSeconds() * float64(time.Second)),
+		Seed:          req.GetSeed(),
+		TransportMode: tm,
+		DDSDomainID:   domainID,
 	}
 	if err := s.fed.CreateFederation(ctx, coreReq); err != nil {
 		return nil, errToStatus(err)
@@ -88,8 +117,9 @@ func (s *federationService) JoinFederation(ctx context.Context, req *rtiv1.JoinF
 	if err := requireWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
+	fedName := core.FederationName(req.GetFederationName())
 	h, err := s.fed.JoinFederation(ctx, core.JoinFederationRequest{
-		Federation:   core.FederationName(req.GetFederationName()),
+		Federation:   fedName,
 		FederateName: req.GetFederateName(),
 		// M13 thread B (docs/srs.md §10.4): forward the optional
 		// federate type from the wire. Old clients that omit the
@@ -100,7 +130,19 @@ func (s *federationService) JoinFederation(ctx context.Context, req *rtiv1.JoinF
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &rtiv1.JoinFederationResponse{FederateHandle: uint64(h)}, nil
+
+	// M19 Phase 1a: echo the federation's recorded transport mode
+	// (and DDS domain ID when DDS) so the federate's SDK picks the
+	// right wire path. nil transportLookup keeps cut-2 callers
+	// working — they get UNSPECIFIED + 0 which the SDK treats as GRPC.
+	resp := &rtiv1.JoinFederationResponse{FederateHandle: uint64(h)}
+	if s.transportLookup != nil {
+		if tm, dom, ok := s.transportLookup(fedName); ok {
+			resp.TransportMode = coreTransportToProto(tm)
+			resp.DdsDomainId = dom
+		}
+	}
+	return resp, nil
 }
 
 // ResignFederation implements rti.v1.FederationService.ResignFederation.
@@ -193,6 +235,33 @@ func coreModeToProto(m core.Mode) rtiv1.Mode {
 		return rtiv1.Mode_MODE_BEST_EFFORT
 	default:
 		return rtiv1.Mode_MODE_UNSPECIFIED
+	}
+}
+
+// protoTransportToCore maps the proto TransportMode enum to the core
+// equivalent. UNSPECIFIED collapses to GRPC for the append-only
+// backward-compat contract (docs/m19-dds-adapter.md §4.1).
+func protoTransportToCore(t rtiv1.TransportMode) core.TransportMode {
+	switch t {
+	case rtiv1.TransportMode_TRANSPORT_MODE_GRPC:
+		return core.TransportModeGRPC
+	case rtiv1.TransportMode_TRANSPORT_MODE_DDS:
+		return core.TransportModeDDS
+	default:
+		return core.TransportModeGRPC
+	}
+}
+
+// coreTransportToProto is the inverse of protoTransportToCore for
+// JoinFederationResponse. The "UNSPECIFIED → GRPC" collapse is
+// applied here too so the wire response always carries a definite
+// mode for new clients.
+func coreTransportToProto(t core.TransportMode) rtiv1.TransportMode {
+	switch t {
+	case core.TransportModeDDS:
+		return rtiv1.TransportMode_TRANSPORT_MODE_DDS
+	default:
+		return rtiv1.TransportMode_TRANSPORT_MODE_GRPC
 	}
 }
 
