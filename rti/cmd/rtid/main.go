@@ -625,6 +625,16 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	syncMgr, err := syncpkg.New(syncpkg.Options{
 		Outbox:   outbox,
 		EventLog: multi,
+		// M13 thread A (docs/srs.md §10.4): wire the federation
+		// manager's joined-federate snapshot as the sync-point
+		// required-set resolver. Register calls with nil
+		// requiredFederates now materialize the implicit "all
+		// joined federates" set at request-time instead of falling
+		// back to dynamic-mode aggregation. Unknown federation
+		// returns an empty slice (no joined federates) which leaves
+		// the sync point announced-but-never-achieved — same as the
+		// caller-supplied empty list.
+		Members: fedMgr.MembersOf,
 	})
 	if err != nil {
 		return nil, err
@@ -661,14 +671,17 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			Outbox:      outbox,
 			EventLog:    multi,
 			BundleStore: fsStore,
-			// MembersResolver is wired as nil at cut-1 because the
-			// federation.Manager does not yet expose a stable
-			// "joined federate handles for fed" accessor; the
-			// dynamic-mode aggregation (any federate that responds
-			// counts) still satisfies FR-SR-2's correctness contract
-			// in the absence of an explicit membership snapshot. A
-			// follow-up patch in M9 W2 wires a MembersResolver once
-			// federation.Manager exposes the accessor.
+			// M13 thread A (docs/srs.md §10.4): wire
+			// federation.Manager.MembersOf as the joined-federate
+			// snapshot resolver. Closes the M26 deferral —
+			// RequestFederationSave now fans out
+			// initiateFederateSave to every joined federate via a
+			// concrete recipient list instead of emitting a single
+			// broadcast envelope addressed to InvalidFederateHandle
+			// (which multiOutbox.Send drops). Federates therefore
+			// receive the save-callback delivery that the M12 W2
+			// proto FederateEvent variants made possible.
+			Members: fedMgr.MembersOf,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("rtid: savepoint manager init: %w", err)
