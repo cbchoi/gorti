@@ -682,6 +682,21 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			// receive the save-callback delivery that the M12 W2
 			// proto FederateEvent variants made possible.
 			Members: fedMgr.MembersOf,
+			// M13 thread C (docs/srs.md §10.4): wire the four
+			// service-group managers as snapshot participants. On
+			// save, each Marshal(fed) result is bundled into the
+			// manifest under its registered key; on restore, the
+			// matching Unmarshal runs before the event-log replay
+			// so state lands from structured bytes without sole
+			// reliance on replay determinism. Old bundles that
+			// pre-date M13 omit manager_snapshots — the restore
+			// path is nil-safe and falls back to event-log replay.
+			ManagerSnapshots: map[string]savepoint.ManagerSnapshotter{
+				savepoint.ManagerSnapshotKeySync:      syncMgr,
+				savepoint.ManagerSnapshotKeyOwnership: ownMgr,
+				savepoint.ManagerSnapshotKeyMOM:       momMgr,
+				savepoint.ManagerSnapshotKeyDDM:       ddmMgr,
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("rtid: savepoint manager init: %w", err)
