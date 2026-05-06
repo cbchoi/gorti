@@ -298,39 +298,36 @@ whether to invest in Phase 2.
 
 ---
 
-## 6. Open decisions
+## 6. Decisions
 
-The following must be pinned before Phase 1 dispatches. Defaults
-proposed inline; the agent that executes Phase 1 will fail loudly
-on unpinned items.
-
-1. **DDS library (§3.1)**: Cyclone DDS / OpenDDS / Fast-DDS /
-   RTI Connext. Default: **Cyclone DDS**.
-2. **Go binding strategy (§3.2)**: hand-rolled CGo / external
-   wrapper / abandoned upstream binding. Default: **hand-rolled
-   minimal CGo**.
-3. **Python binding (§3.3)**: `cyclonedds-python` (only viable
-   choice if §3.1 = Cyclone DDS).
-4. **Mixed federations (§3.4)**: pure-mode / mixed-mode allowed.
-   Default: **pure-mode Phase 1**, mixed-mode Phase 4+ if needed.
-5. **Build / distribution (§3.5)**: build-tag-gated subpackage with
-   two binaries vs. always-on CGo. Default: **build-tag gated**;
-   default `rtid` stays CGo-free.
-6. **Topic naming (§2.3)**: handle-based names + opaque-proto-bytes
-   payload vs. IDL types. Default: **handle-based + proto-bytes**.
-7. **Determinism contract**: DDS introduces non-deterministic
-   ordering across federates. The replay-determinism guarantee from
-   cut-1 (M3/M4 byte-identical event logs) is gRPC-mode-only by
-   construction. DDS-mode federations use the same determinism flag
-   the research platform did — `DeterminismPreserving() == false`
-   for the DDS transport. Replay tests skip in DDS-mode. Default:
-   **per-impl opt-in** (matching research-platform §3.2).
+1. **DDS library (§3.1)**: PINNED 2026-05-06 — **Cyclone DDS**.
+   Eclipse Foundation; mainstream Python bindings; standard
+   `apt-get install libcyclonedds-dev`; EPL-2.0 license.
+2. **Go binding strategy (§3.2)**: PINNED 2026-05-06 — **hand-rolled
+   minimal CGo** for the four primitives (DomainParticipant +
+   Topic + DataWriter/DataReader create + write/take). ~500 LoC of
+   C interop; insulated from upstream binding churn.
+3. **Python binding (§3.3)**: PINNED 2026-05-06 (consequential on
+   §6.1) — **`cyclonedds-python`**.
+4. **Mixed federations (§3.4)**: OPEN. Default: **pure-mode
+   Phase 1**, mixed-mode Phase 4+ if needed. Phase-2/3 setting.
+5. **Build / distribution (§3.5)**: PINNED 2026-05-06 —
+   **build-tag-gated subpackage**. Default `rtid` binary stays
+   CGo-free + DDS-free; `rtid-dds` is the DDS-capable variant.
+   `make build` (no DDS toolchain needed) produces today's binary
+   unchanged; `make build-dds` opts in.
+6. **Topic naming (§2.3)**: OPEN. Default: **handle-based +
+   proto-bytes**. Phase-2/3 setting (Phase 1 ships one topic of
+   either shape).
+7. **Determinism contract**: OPEN. Default: **per-impl opt-in**
+   matching research-platform §3.2. Replay tests SKIP in DDS-mode
+   with clear reason.
 8. **Federation transport mode at create time** vs. **at federate
-   join time**: federate-side toggle, or federation-wide?
-   Default: **federation-wide** — pinned at create time, federates
-   inherit. Cleaner mental model.
+   join time**: OPEN. Default: **federation-wide** — pinned at
+   create time, federates inherit.
 
-Once §6.1 + §6.2 + §6.5 are pinned, Phase 1 is dispatchable.
+§6.1 + §6.2 + §6.5 are now pinned. Phase 1 is dispatchable. §6.4 /
+§6.6 / §6.7 / §6.8 affect Phase 2-3 and can be pinned later.
 
 ---
 
