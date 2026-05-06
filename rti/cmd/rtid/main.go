@@ -724,6 +724,12 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		Ownership: ownMgr,
 		DDM:       ddmMgr,
 		Savepoint: saveMgr,
+		// M12 W3: MomService — federates introspect MOM-tracked
+		// state (HLAfederation / HLAfederate object snapshots +
+		// per-federate counters). Read-only; lives on the federate
+		// port (this --listen) since it is federate-facing
+		// introspection, not operator-facing observability.
+		MOM: momMgr,
 	})
 	if err != nil {
 		return nil, err
