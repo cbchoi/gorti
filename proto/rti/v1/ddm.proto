@@ -137,3 +137,71 @@ message RegisterObjectWithRegionsResponse {
   uint64 object_handle = 1;
   string object_name = 2;
 }
+
+// =============================================================================
+// DDMManagerState — save manifest snapshot
+// =============================================================================
+
+// DDMRangeEntry maps one dimension to a (lower, upper) Range. Used
+// inside DDMRegionEntry's committed + pending maps.
+message DDMRangeEntry {
+  uint64 dimension_handle = 1;
+  uint64 lower = 2;
+  uint64 upper = 3;
+}
+
+// DDMRegionEntry is one region's runtime state.
+message DDMRegionEntry {
+  uint64 region_handle = 1;
+  uint64 owner_federate = 2;
+  uint64 routing_space_handle = 3;
+  repeated uint64 dimension_handles = 4;
+  // Sorted by dimension_handle ascending for determinism.
+  repeated DDMRangeEntry committed = 5;
+  repeated DDMRangeEntry pending = 6;
+}
+
+// DDMSubscriptionEntry is one (class, attribute, subscriber) entry.
+message DDMSubscriptionEntry {
+  uint64 object_class_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 subscriber_federate = 3;
+  repeated uint64 region_handles = 4;
+}
+
+// DDMInteractionSubscriptionEntry is one (interaction_class, subscriber).
+message DDMInteractionSubscriptionEntry {
+  uint64 interaction_class_handle = 1;
+  uint64 subscriber_federate = 2;
+  repeated uint64 region_handles = 3;
+}
+
+// DDMObjectPublicationEntry is one (object, attribute) → regions
+// publisher association.
+message DDMObjectPublicationEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  repeated uint64 region_handles = 3;
+}
+
+// DDMManagerState is the per-federation snapshot persisted into the
+// save manifest under key "ddm". M13 thread C (docs/srs.md §10.4).
+//
+// Setup-time configuration (routing-space + dimension declarations,
+// per-dimension upper bounds, permissive flag) is intentionally NOT
+// captured here — those are FOM-derived and are reconstructed at
+// restore-time when the federation is re-created against the same
+// FOM. Only runtime state (regions, subscriptions, publications)
+// changes during a federation's lifetime; the snapshot captures
+// exactly that.
+message DDMManagerState {
+  uint64 next_region_handle = 1;
+  // Sorted by region_handle ascending.
+  repeated DDMRegionEntry regions = 2;
+  // Sorted by (object_class, attribute, subscriber) ascending.
+  repeated DDMSubscriptionEntry object_subscriptions = 3;
+  // Sorted by (interaction_class, subscriber) ascending.
+  repeated DDMInteractionSubscriptionEntry interaction_subscriptions = 4;
+  // Sorted by (object, attribute) ascending.
+  repeated DDMObjectPublicationEntry object_publications = 5;
+}
