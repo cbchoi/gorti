@@ -280,7 +280,8 @@ class Federate:
     M12 W2 added cut-3 service-group accessors (:meth:`sync`,
     :meth:`ownership`, :meth:`ddm`, :meth:`savepoint`) that lazily
     construct dedicated client wrappers around the same underlying
-    gRPC channel.
+    gRPC channel. M12 W3 adds :meth:`mom` for the read-only
+    Management Object Model introspection surface.
     """
 
     name: str
@@ -298,6 +299,7 @@ class Federate:
         self._ownership_client: Any | None = None
         self._ddm_client: Any | None = None
         self._savepoint_client: Any | None = None
+        self._mom_client: Any | None = None
 
     # --- Declaration management (TASK-064) ---
 
@@ -493,6 +495,26 @@ class Federate:
             )
         return self._savepoint_client
 
+    @property
+    def mom(self) -> Any:
+        """Cut-3 MomService client for §10 MOM introspection.
+
+        Read-only surface for HLAfederation / HLAfederate object
+        snapshots and the per-federate counter set. Federates poll
+        these accessors at whatever cadence suits their use case;
+        the runtime is goroutine-safe and the snapshot RPCs are
+        O(federates).
+        """
+        if self._mom_client is None:
+            from rti1516e.mom import MomClient
+
+            self._mom_client = MomClient(
+                self._require_channel(),
+                federation_name=self._require_federation_name(),
+                federate_handle=self.handle,
+            )
+        return self._mom_client
+
     def _require_channel(self) -> Any:
         """Return the underlying ``grpc.aio.Channel`` or raise RuntimeError.
 
@@ -504,8 +526,8 @@ class Federate:
         channel = getattr(self._transport, "channel", None)
         if channel is None:
             raise RuntimeError(
-                "Federate.{sync,ownership,ddm,savepoint} require a real "
-                "gRPC transport (grpc:// or grpcs://); the in-process "
+                "Federate.{sync,ownership,ddm,savepoint,mom} require a "
+                "real gRPC transport (grpc:// or grpcs://); the in-process "
                 "memory:// transport does not expose a channel"
             )
         return channel
