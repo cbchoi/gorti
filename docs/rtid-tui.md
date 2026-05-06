@@ -303,8 +303,8 @@ the research-platform refactor extracted.
 | 1 | `proto/rti/v1/admin.proto` + AdminService handler in `transport/grpc` + per-Manager `Snapshot()` methods | low — additive | medium |
 | 2 | `rti/cmd/rti-top/` binary: bubbletea TUI with the 5 views (federations, drill-down, time, wire, events) | medium — new TUI codebase | medium-large |
 | 3 | Filter / search / sort / column toggle | low | small |
-| 4 | (Optional) Event-log push streaming as a perf optimization for noisy federations | medium | medium |
-| 5 | (Optional) Mutating ops — force-resign federate, kill federation. **Out of scope unless explicitly requested.** | high (correctness implications) | medium |
+| 4 | High-rate event streaming improvements: server-side filter + batched response + backpressure-aware overflow counter. DONE. | medium | medium |
+| 5 | Mutating ops — force-resign federate, destroy federation. Opt-in via `--admin-mutating=true` + loopback-bind safety gate. DONE. | high (correctness implications) | medium |
 
 Each Phase-1 commit is independently revertable: one commit adds the
 proto + handler stub returning empty snapshots, then one commit per
@@ -342,11 +342,25 @@ Manager fills in its share of the snapshot.
 4. **Default refresh rate (§2.4)**: PINNED 2026-05-05 — 1Hz default,
    configurable via key in [100ms, 60s] range. Familiar `top`-style
    ergonomics; tail values cover both fast-debug and remote-WAN.
-5. **Out-of-scope reaffirmation**: PINNED 2026-05-05 — read-only
-   Phase 1. AdminService exposes Snapshot / TailEvents / Status
-   only; no `KillFederate`, no `ForceResign`, no `DrainOutbox`,
-   nothing that mutates federation state. Mutating ops become a
-   separately-scoped Phase 5+.
+5. **Out-of-scope reaffirmation**: PINNED 2026-05-05; UPDATED
+   2026-05-06 — read-only Phase 1 — 4. AdminService exposes only
+   Snapshot / TailEvents / Status; no `KillFederate`, no
+   `ForceResign`, no `DrainOutbox`, nothing that mutates federation
+   state.
+
+   Phase 5 (UNBLOCKED 2026-05-06): a SEPARATE `MutatingService`
+   proto introduces `Probe`, `ForceResign`, and `DestroyFederation`
+   — but the daemon registers it ONLY when started with
+   `--admin-mutating=true`. AdminService remains read-only by
+   construction. The composition root REFUSES to enable mutating
+   ops on a non-loopback bind unless the operator explicitly opts
+   past with `--admin-mutating-allow-non-loopback=true`; a
+   prominent WARN is logged at startup either way. Both mutating
+   RPCs delegate to the existing `federation.Manager` primitives
+   (`ResignFederation` / `DestroyFederation`) so eventlog entries
+   and MOM hooks fire identically to the federate-initiated path.
+   `rti-top` probes `MutatingService` at startup; the X / D
+   keybindings stay hidden against a read-only daemon.
 6. **Federate column set (§3.2)**: PINNED 2026-05-05 — default
    columns (`name`, `handle`, `current_time`, `lookahead`, `role`,
    `tps`, `queue_depth`, `drops_total`, `age`) and the expanded view
@@ -368,13 +382,88 @@ and can be pinned later.
 
 - A web dashboard (Prometheus + Grafana cover that with the existing
   metrics endpoint at `:9090`)
-- Mutating control plane operations (kill / force-resign / drain)
+- ~~Mutating control plane operations (kill / force-resign / drain)~~
+  — Phase 5 (2026-05-06) shipped `ForceResign` + `DestroyFederation`
+  on a separate, opt-in `MutatingService`. AdminService remains
+  read-only by construction.
 - Authentication / RBAC for the admin endpoint (binds to localhost
   by default; production deployments add their own ACL via mTLS or a
-  reverse proxy)
+  reverse proxy). Phase 5's mutating-ops opt-in REQUIRES a loopback
+  bind unless the operator explicitly waives the gate with
+  `--admin-mutating-allow-non-loopback=true`.
 - Remote-attach against rtid running on a different host without a
   network path — bring your own VPN / SSH tunnel
 - An IDE plugin or GUI app — TUI only
 - Replacing the Prometheus metrics endpoint — that stays for
   alerting / Grafana dashboards. The TUI is for **live development**,
   Prometheus is for **production observability**.
+
+---
+
+## 9. Phase 4 + Phase 5 deliverables — landed 2026-05-06
+
+### 9.1 Phase 4: high-rate event streaming improvements
+
+The Phase-1 `TailEvents` shipped one event per server-stream message
+with no filter — every event of every class to every subscribing
+client. For high-rate federations this drowns the wire and the
+renderer. Phase 4 closes that gap:
+
+- **Server-side filtering.** `TailEventsRequest` gains
+  `event_class_filter` (case-sensitive substring) and
+  `federate_handle_filter` (handle whitelist; federation-scope events
+  bypass it). The server filters before send.
+- **Batched responses.** `TailEventsResponse` is now `repeated
+  TailedEvent events` plus `overflow_skipped`. Batching knobs
+  `max_batch_events` (default 32, ceiling 1024) and
+  `max_batch_latency_ms` (default 10ms, ceiling 1s) flush at
+  whichever bound trips first. The classifier extracts the event's
+  class name + attributable federate handle from the proto body.
+- **Backpressure-aware send.** When the gRPC server-stream's send
+  buffer is full, the handler folds dropped events into the
+  `overflow_skipped` counter on the next batch. The TUI surfaces
+  this as `"3.2k events dropped due to renderer lag"` in the events
+  view header.
+
+### 9.2 Phase 5: opt-in mutating ops
+
+A new `MutatingService` proto (separate from `AdminService`) lives in
+`proto/rti/v1/admin_mutating.proto`. The daemon registers it ONLY
+when `--admin-mutating=true`. AdminService stays read-only.
+
+- **`Probe`** is a discovery RPC the TUI calls at startup; on
+  Unimplemented (the read-only-daemon default) the X / D
+  keybindings stay hidden.
+- **`ForceResign`** delegates to
+  `FederationStore.ResignFederation` with
+  `ResignActionUnconditionallyDivestAttributes`. Returns
+  `already_resigned=true` when the federate had already left
+  between the operator's confirmation and the RPC arriving (idempotent
+  success).
+- **`DestroyFederation`** delegates to
+  `FederationStore.DestroyFederation`. With
+  `evict_joined_federates=true` the handler first walks the roster
+  and force-resigns each member, returning `evicted_handles` so the
+  operator can confirm; without evict, the FR-FM-5 contract (refuse
+  on joined federates) is preserved.
+- **Loopback safety gate.** `--admin-mutating=true` requires
+  `--admin-listen` to resolve to a loopback address (`127.0.0.1`,
+  `::1`, `localhost`). On a non-loopback bind the daemon refuses
+  to start (exit 2) unless
+  `--admin-mutating-allow-non-loopback=true` is also set. A
+  prominent `WARN` is logged at startup whenever mutating is
+  enabled — even on loopback, anyone with shell access can resign
+  federates and destroy federations.
+- **Event-log + MOM symmetry.** Both RPCs reuse the existing
+  `federation.Manager` primitives, so the eventlog entries + MOM
+  hooks fire identically to the federate-initiated path. Replay
+  determinism is preserved.
+- **TUI confirmations.** `X` on a selected federate opens a
+  single-`y` confirmation; `D` on a selected federation opens a
+  double-`y` confirmation. Both surface the operator-facing
+  summary (e.g. `"ForceResign(demo, 1): evicted"`) as a status
+  line under the header.
+
+Federate-facing services (federation / declaration / object /
+stream / sync / ownership / ddm / savepoint) are FROZEN — no proto
+changes outside `admin.proto` and `admin_mutating.proto`.
