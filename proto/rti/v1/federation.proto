@@ -25,6 +25,26 @@ message CreateFederationRequest {
   double stall_timeout_seconds = 5;
   // Optional deterministic seed override. 0 = derive from name + creation time.
   uint64 seed = 6;
+
+  // M19 Phase 1a (docs/m19-dds-adapter.md §4.1): optional data-plane
+  // transport mode. Absent / TRANSPORT_MODE_UNSPECIFIED → GRPC for
+  // backward-compat (the cut-2 wire path). DDS requires the rtid
+  // binary to have been built with `-tags=dds` AND the operator to
+  // have started rtid with `--enable-dds=true`; otherwise the gRPC
+  // handler rejects the create with FailedPrecondition + a clear
+  // "this rtid was not built with DDS support" message. Append-only:
+  // old federates that omit this field are treated as GRPC.
+  TransportMode transport_mode = 7;
+}
+
+// TransportMode selects the data-plane wire path for a federation.
+// M19 Phase 1a — see docs/m19-dds-adapter.md §2.1 (two modes side by
+// side) and §4.1 (proto changes). UNSPECIFIED is treated as GRPC for
+// backward-compat with cut-2 wire clients.
+enum TransportMode {
+  TRANSPORT_MODE_UNSPECIFIED = 0;
+  TRANSPORT_MODE_GRPC = 1;
+  TRANSPORT_MODE_DDS = 2;
 }
 
 message CreateFederationResponse {
@@ -53,6 +73,18 @@ message JoinFederationRequest {
 message JoinFederationResponse {
   // Federate handle assigned deterministically by join order.
   uint64 federate_handle = 1;
+
+  // M19 Phase 1a (docs/m19-dds-adapter.md §4.1): the federation's
+  // data-plane transport mode. Echoes whatever was recorded at
+  // CreateFederation time. UNSPECIFIED on responses from cut-2 rtid
+  // binaries that pre-date this field — federates handle that as GRPC.
+  TransportMode transport_mode = 2;
+
+  // M19 Phase 1a: DDS domain ID for the federation. Only meaningful
+  // when transport_mode == TRANSPORT_MODE_DDS; ignored otherwise.
+  // Federates joining a DDS-mode federation use this to construct
+  // their DomainParticipant. Zero is the DDS default domain.
+  int32 dds_domain_id = 3;
 }
 
 message ResignFederationRequest {
