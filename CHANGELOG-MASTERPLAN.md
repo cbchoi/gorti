@@ -82,16 +82,30 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
+#### M19 — DDS / RTPS data plane adapter (Phase 0 + Phase 1a; halted clean)
+- Phase 0 design doc at `docs/m19-dds-adapter.md` — architecture, library + binding choices, QoS mapping, distribution model, phasing
+- §6.1 / §6.2 / §6.3 / §6.5 PINNED: Cyclone DDS / hand-rolled minimal CGo / `cyclonedds-python` / build-tag-gated split (default `rtid` stays CGo-free + DDS-free)
+- Phase 1a foundation:
+  - Proto extensions (append-only): `TransportMode` enum + `transport_mode` field on `CreateFederation`/`JoinFederation` + `dds_domain_id`
+  - Federation manager records mode + domain id; surfaces via Snapshot
+  - `cmd/rtid` `--enable-dds` + `--dds-domain-id` flags; default rtid rejects DDS-mode federations cleanly
+  - `rti/internal/transport/dds/` build-tag-gated package: stub Participant/Topic/Writer/Reader returning `errors.ErrUnsupported` + pure-Go QoS mapping for the four core HLA combos
+  - Makefile `make build-dds` / `make test-dds`
+  - rti-top federation drilldown shows transport mode
+  - 5 spec-test files under `rti/spec/M19/` documenting the contract; `dds_smoke_test.go` skips with Phase 1b reason
+- **Default `bin/rtid` byte-identical to pre-M19** (no CGo, no DDS imports in the default code path)
+- Phase 1b–5 NOT in flight — halted at Phase 1a per the design doc §12 (mission halt state, 2026-05-07). Next session needs Cyclone DDS available in the build environment to unblock Phase 1b's CGo implementation; from there Phases 2–5 unlock in turn
+
 ### Cut-3 backlog still open
 
-Future cuts (M14+) per `docs/srs.md` §10.4:
+Future cuts per `docs/srs.md` §10.4:
 
 - **M14** — mTLS + OIDC client authentication
 - **M15** — Distributed RTI: multi-process federation hosting
 - **M16** — Hot standby + replay-driven RTI failover
 - **M17** — C++ federate SDK
 - **M18** — Java federate SDK
-- **M19** — DDS/RTPS data plane adapter
+- **M19** — DDS/RTPS data plane adapter — **Phase 1b onwards** (Phase 0 + Phase 1a foundation already on main; resumes when build env has Cyclone DDS — see `docs/m19-dds-adapter.md` §11.2 for the concrete pickup steps)
 - **M20** — MOM-driven control services + optimistic time variants
 
 Plus smaller carryovers: restore callback variants on `FederateEvent` (mechanically symmetric to save variants), MOM-class subscription path through the standard `ObjectService`, suite-load timing flake on the synchronized-callback integration test.

@@ -521,3 +521,52 @@ to succeed:
 
 Estimated effort: 60–80 hours (the bulk of Phase 1's original
 ~80–120 hour budget; Phase 1a chipped the cheap parts off the top).
+
+---
+
+## 12. Mission halt state (2026-05-07)
+
+The M19 arc was paused at end-of-Phase-1a per user direction
+(Option B — clean handoff). Phases 2–5 are NOT in flight; they're
+blocked on Phase 1b which is itself blocked on Cyclone DDS being
+available in the build environment.
+
+**State on `origin/main`** at halt:
+
+- §6.1 / §6.2 / §6.5 PINNED 2026-05-06 (Cyclone DDS / hand-rolled
+  CGo / build-tag-gated)
+- §6.3 PINNED by consequence (`cyclonedds-python`)
+- §6.4 / §6.6 / §6.7 / §6.8 OPEN (Phase-2/3 settings; not on the
+  Phase-1b critical path)
+- Phase 0 doc landed in commit `4d525a4`
+- Phase 1a foundation landed in commit `47c9ece`:
+  proto extensions, federation manager fields, `--enable-dds`
+  flag, build-tag-gated package skeleton with stub
+  Participant/Topic/Writer/Reader returning ErrUnsupported,
+  pure-Go QoS mapping, Makefile `build-dds` / `test-dds` targets,
+  rti-top transport-mode column
+
+**To resume** (next session):
+
+1. Provide a build environment with Cyclone DDS — `apt install
+   libcyclonedds-dev` (Debian/Ubuntu) or `brew install cyclonedds`
+   (macOS), OR a Docker layer that bundles it.
+2. Read §11.2 ("Phase 1b — CGo implementation") for the concrete
+   per-step pickup. Every interface contract Phase 1b must satisfy
+   is already locked by Phase 1a's stub-contract tests under
+   `//go:build dds` and the QoS mapping test under `qos_test.go`.
+3. Dispatch Phase 1b. Once the smoke test
+   (`rti/spec/M19/dds_smoke_test.go`, currently SKIPped under
+   `dds_e2e`) flips to PASSING with two federates exchanging an
+   interaction over a DDS topic without rtid in the data path,
+   Phase 1b is done.
+4. After Phase 1b: Phase 2 (Python adapter), Phase 3 (cross-
+   language conformance), Phase 4 (mixed-mode, optional), Phase
+   5 (tunable QoS, optional) become unblocked in turn.
+
+No half-implemented Python or skip-test scaffolding was shipped —
+the codebase is in a clean state where the only DDS-related code
+that exists either compiles cleanly without the DDS toolchain
+(default build) or compiles to a stub that returns
+`errors.ErrUnsupported` (under `-tags=dds`). Future sessions don't
+have to untangle partial work.
