@@ -85,4 +85,3 @@ func TestRTIDServe_RejectsBadListen(t *testing.T) {
 		t.Errorf("Serve with bad listen returned nil error")
 	}
 }
-

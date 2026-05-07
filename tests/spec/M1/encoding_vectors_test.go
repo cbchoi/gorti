@@ -16,7 +16,7 @@ const vectorFile = "tests/conformance/encoding_vectors.json"
 
 type vector struct {
 	ID    string `json:"id"`
-	Type  any    `json:"type"`  // string for primitives; object {kind, ...} for composites
+	Type  any    `json:"type"` // string for primitives; object {kind, ...} for composites
 	Value any    `json:"value"`
 	Bytes string `json:"bytes"` // hex
 	Notes string `json:"notes,omitempty"`

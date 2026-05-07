@@ -112,4 +112,3 @@ func DecodeHeader(buf []byte) (core.EventLogHeader, error) {
 	hdr.Mode = core.Mode(buf[offMode])
 	return hdr, nil
 }
-

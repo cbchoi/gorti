@@ -66,8 +66,8 @@ func (e *eventRecord) Federate() core.FederateHandle { return e.federate }
 
 // proto.Message implementation — delegates to a lazily-allocated empty
 // proto so the eventlog Writer's proto.Marshal path succeeds.
-func (e *eventRecord) Reset()                            { e.ensureProto().Reset() }
-func (e *eventRecord) String() string                    { return e.ensureProto().String() }
+func (e *eventRecord) Reset()                             { e.ensureProto().Reset() }
+func (e *eventRecord) String() string                     { return e.ensureProto().String() }
 func (e *eventRecord) ProtoReflect() protoreflect.Message { return e.ensureProto().ProtoReflect() }
 
 // announceOutbound is the OutboundEvent for announceSynchronizationPoint
@@ -90,9 +90,9 @@ func announceEvent(label string, tag []byte, required []core.FederateHandle) *an
 	pb := &rtiv1.FederateEvent{
 		Event: &rtiv1.FederateEvent_SyncAnnounced{
 			SyncAnnounced: &rtiv1.SynchronizationPointAnnounced{
-				Label:              label,
-				Tag:                append([]byte(nil), tag...),
-				RequiredFederates:  pbReq,
+				Label:             label,
+				Tag:               append([]byte(nil), tag...),
+				RequiredFederates: pbReq,
 			},
 		},
 	}

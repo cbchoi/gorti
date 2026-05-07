@@ -120,7 +120,7 @@ type OwnershipCoordinator interface {
 // per-attribute history (the design doc §3.2 explicitly excludes
 // per-attribute ownership history from the snapshot).
 type OwnershipSnapshot struct {
-	OwnedAttributesCount    uint32
-	PendingDivestsCount     uint32
-	PendingAcquiresCount    uint32
+	OwnedAttributesCount uint32
+	PendingDivestsCount  uint32
+	PendingAcquiresCount uint32
 }

@@ -58,10 +58,10 @@ func (s *stubFederation) Snapshot() []core.FederationRoster { return nil }
 // stubObjects is a minimal core.ObjectRegistry. Records every call;
 // returns a configurable next ObjectHandle.
 type stubObjects struct {
-	mu              sync.Mutex
-	registerCalls   []registerCall
-	updateCalls     []updateCall
-	interactCalls   []interactCall
+	mu               sync.Mutex
+	registerCalls    []registerCall
+	updateCalls      []updateCall
+	interactCalls    []interactCall
 	nextObjectHandle core.ObjectHandle
 }
 

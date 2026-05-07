@@ -75,7 +75,7 @@ func DefaultLBTSStrategy() LBTSStrategy { return defaultLBTS{} }
 //   - Requested    : the t parameter of the outstanding request.
 //   - LBTS         : the current LBTS over the regulating set.
 //   - SolePending  : true when this is the only pending request in the
-//                    federation (relevant only for NER/NMRA forced grant).
+//     federation (relevant only for NER/NMRA forced grant).
 type GrantContext struct {
 	Mode        AdvanceMode
 	CurrentTime core.LogicalTime

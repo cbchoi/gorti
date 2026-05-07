@@ -22,8 +22,8 @@ func (stubFOMRepo) Get(_ context.Context, _ core.FederationName) (core.FOMHandle
 
 type stubFOMHandle struct{}
 
-func (stubFOMHandle) IsValid() bool                                                  { return true }
-func (stubFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool)        { return 1, true }
+func (stubFOMHandle) IsValid() bool                                           { return true }
+func (stubFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool) { return 1, true }
 func (stubFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool) {
 	return 1, true
 }

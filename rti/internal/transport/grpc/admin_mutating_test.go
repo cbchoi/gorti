@@ -211,9 +211,9 @@ func TestMutatingService_DestroyFederation_EvictsThenDestroys(t *testing.T) {
 	}
 	svc := newMutatingService(MutatingOptions{Federations: store})
 	resp, err := svc.DestroyFederation(context.Background(), &rtiv1.AdminDestroyFederationRequest{
-		WireVersion:           rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:        "demo",
-		EvictJoinedFederates:  true,
+		WireVersion:          rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:       "demo",
+		EvictJoinedFederates: true,
 	})
 	if err != nil {
 		t.Fatalf("DestroyFederation: %v", err)

@@ -54,8 +54,8 @@ type defaultTopic struct {
 	qos  QoS
 }
 
-func (t *defaultTopic) Name() string                  { return t.name }
-func (t *defaultTopic) QoS() QoS                      { return t.qos }
-func (*defaultTopic) CreateWriter() (Writer, error)   { return nil, errors.ErrUnsupported }
-func (*defaultTopic) CreateReader() (Reader, error)   { return nil, errors.ErrUnsupported }
-func (*defaultTopic) Close() error                    { return errors.ErrUnsupported }
+func (t *defaultTopic) Name() string                { return t.name }
+func (t *defaultTopic) QoS() QoS                    { return t.qos }
+func (*defaultTopic) CreateWriter() (Writer, error) { return nil, errors.ErrUnsupported }
+func (*defaultTopic) CreateReader() (Reader, error) { return nil, errors.ErrUnsupported }
+func (*defaultTopic) Close() error                  { return errors.ErrUnsupported }

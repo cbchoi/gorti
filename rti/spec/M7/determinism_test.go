@@ -45,7 +45,7 @@ func TestSpec_M7_Determinism_20RandomizedScenarios(t *testing.T) {
 		scenarios[i] = m7DetScenario{
 			Name:    "scenario-" + strconv.Itoa(i),
 			Seed:    rng.Int63(),
-			NumFeds: 2 + rng.Intn(4),  // 2-5 regulating federates
+			NumFeds: 2 + rng.Intn(4),   // 2-5 regulating federates
 			NumOps:  10 + rng.Intn(21), // 10-30 advance ops
 		}
 	}

@@ -31,12 +31,12 @@ func BenchmarkSubscribersForUpdate_ZeroCost(b *testing.B) {
 //     FR-DDM-6 zero-cost-when-empty contract by direct comparison.
 func BenchmarkSubscribersForUpdate_Size25_100Regions(b *testing.B) {
 	const (
-		fed         core.FederationName = "perf"
-		publisher   core.FederateHandle = 1
+		fed         core.FederationName    = "perf"
+		publisher   core.FederateHandle    = 1
 		cls         core.ObjectClassHandle = 1
-		attr        core.AttributeHandle = 1
-		nFederates                      = 25
-		nRegionsPer                     = 4 // 25 * 4 = 100 subscriber regions total
+		attr        core.AttributeHandle   = 1
+		nFederates                         = 25
+		nRegionsPer                        = 4 // 25 * 4 = 100 subscriber regions total
 	)
 	mgr := newPermissiveManagerB(b)
 	ctx := context.Background()

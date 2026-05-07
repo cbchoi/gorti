@@ -20,7 +20,7 @@ func TestSpec_M5_ModeFlag_VerboseDefault(t *testing.T) {
 	ctx := context.Background()
 
 	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{
-		Name:    "default-mode",
+		Name:       "default-mode",
 		FOMModules: []core.FOMModule{{Path: "test", XML: minimalFOMXML()}},
 		// Mode left zero — should default to ModeVerbose.
 	}); err != nil {
@@ -63,9 +63,9 @@ func TestSpec_M5_ModeFlag_BestEffortPersists(t *testing.T) {
 	ctx := context.Background()
 
 	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{
-		Name:    "be-fed",
+		Name:       "be-fed",
 		FOMModules: []core.FOMModule{{Path: "test", XML: minimalFOMXML()}},
-		Mode:    core.ModeBestEffort,
+		Mode:       core.ModeBestEffort,
 	}); err != nil {
 		t.Fatalf("CreateFederation: %v", err)
 	}

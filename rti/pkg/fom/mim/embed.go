@@ -246,10 +246,10 @@ type mimXMLVariantRecTypes struct {
 }
 
 type mimXMLVariantRecordData struct {
-	Name             string            `xml:"name"`
-	Encoding         string            `xml:"encoding"`
-	DiscriminantName string            `xml:"discriminant"`
-	DataType         string            `xml:"dataType"`
+	Name             string             `xml:"name"`
+	Encoding         string             `xml:"encoding"`
+	DiscriminantName string             `xml:"discriminant"`
+	DataType         string             `xml:"dataType"`
 	Alternative      []mimXMLVariantAlt `xml:"alternative"`
 }
 

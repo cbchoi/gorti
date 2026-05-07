@@ -49,9 +49,11 @@ func (r *fakeFOMRepo) Get(_ context.Context, fed core.FederationName) (core.FOMH
 // M2 tests that don't exercise FOM resolution.
 type fakeFOMHandle struct{}
 
-func (*fakeFOMHandle) IsValid() bool                                                       { return true }
-func (*fakeFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool)             { return 1, true }
-func (*fakeFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool)   { return 1, true }
+func (*fakeFOMHandle) IsValid() bool                                           { return true }
+func (*fakeFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool) { return 1, true }
+func (*fakeFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool) {
+	return 1, true
+}
 func (*fakeFOMHandle) LookupAttribute(core.ObjectClassHandle, string) (core.AttributeHandle, bool) {
 	return 1, true
 }
@@ -114,9 +116,9 @@ var errCanned = errors.New("canned test error")
 // ===========================================================================
 
 type permissiveEventLog struct {
-	mu        sync.Mutex
-	nextSeq   uint64
-	appended  []permissiveAppend
+	mu       sync.Mutex
+	nextSeq  uint64
+	appended []permissiveAppend
 }
 
 type permissiveAppend struct {

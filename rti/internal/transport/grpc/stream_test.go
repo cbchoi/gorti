@@ -30,8 +30,8 @@ func (pushOnlyOutbox) Send(_ context.Context, _ core.FederationName, _ core.Fede
 // is sufficient for handler tests that don't exercise multi-federate
 // fanout.
 type fakeSubscribableOutbox struct {
-	mu          sync.Mutex
-	ch          chan []core.OutboundEvent
+	mu           sync.Mutex
+	ch           chan []core.OutboundEvent
 	subscribeErr error
 	cancelErr    error
 	subscribed   int
@@ -99,9 +99,9 @@ func (s *fakeStream) Send(evt *rtiv1.FederateEvent) error {
 
 func (s *fakeStream) SetHeader(metadata.MD) error  { return nil }
 func (s *fakeStream) SendHeader(metadata.MD) error { return nil }
-func (s *fakeStream) SetTrailer(metadata.MD)      {}
-func (s *fakeStream) SendMsg(_ interface{}) error { return nil }
-func (s *fakeStream) RecvMsg(_ interface{}) error { return nil }
+func (s *fakeStream) SetTrailer(metadata.MD)       {}
+func (s *fakeStream) SendMsg(_ interface{}) error  { return nil }
+func (s *fakeStream) RecvMsg(_ interface{}) error  { return nil }
 
 // fakeOutboundEvent satisfies core.OutboundEvent and exposes Inner() so the
 // handler's toFederateEvent can recover the proto.

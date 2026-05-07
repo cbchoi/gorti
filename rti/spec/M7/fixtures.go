@@ -84,7 +84,10 @@ func (*permissiveEventLog) OpenReader(_ context.Context, _ string) (core.EventLo
 }
 
 // newTestTimeManager builds a Manager with FakeClock + fixtures.
-func newTestTimeManager(t interface{ Helper(); Logf(string, ...any) }) (*timepkg.Manager, *fakeOutbox, *permissiveEventLog) {
+func newTestTimeManager(t interface {
+	Helper()
+	Logf(string, ...any)
+}) (*timepkg.Manager, *fakeOutbox, *permissiveEventLog) {
 	t.Helper()
 	outbox := newFakeOutbox()
 	log := newPermissiveEventLog()

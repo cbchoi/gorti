@@ -62,8 +62,8 @@ func (e *eventRecord) SetSeq(seq uint64) { e.ensureProto().Seq = seq }
 func (e *eventRecord) Kind() eventKind { return e.kind }
 
 // proto.Message implementation — delegates to the lazily-allocated empty proto.
-func (e *eventRecord) Reset()                            { e.ensureProto().Reset() }
-func (e *eventRecord) String() string                    { return e.ensureProto().String() }
+func (e *eventRecord) Reset()                             { e.ensureProto().Reset() }
+func (e *eventRecord) String() string                     { return e.ensureProto().String() }
 func (e *eventRecord) ProtoReflect() protoreflect.Message { return e.ensureProto().ProtoReflect() }
 
 // attrsToWire converts attribute handles to the proto's repeated
@@ -96,10 +96,10 @@ func assumptionEvent(obj core.ObjectHandle, attrs []core.AttributeHandle, tag []
 		pb: &rtiv1.FederateEvent{
 			Event: &rtiv1.FederateEvent_OwnershipAssumption{
 				OwnershipAssumption: &rtiv1.RequestAttributeOwnershipAssumption{
-					ObjectHandle:       uint64(obj),
-					AttributeHandles:   attrsToWire(attrsCopy),
-					DivestingFederate:  uint64(divester),
-					Tag:                append([]byte(nil), tag...),
+					ObjectHandle:      uint64(obj),
+					AttributeHandles:  attrsToWire(attrsCopy),
+					DivestingFederate: uint64(divester),
+					Tag:               append([]byte(nil), tag...),
 				},
 			},
 		},

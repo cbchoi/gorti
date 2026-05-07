@@ -197,17 +197,24 @@ func (r *Replayer) dispatch(ctx context.Context, rec core.EventRecord) error {
 // # Cut-1 dispatch table
 //
 // FederateJoined    -> Federation.JoinFederation; assigned handle MUST
-//                       equal recorded handle, else ErrReplayDivergence.
+//
+//	equal recorded handle, else ErrReplayDivergence.
+//
 // FederateResigned  -> Federation.ResignFederation with recorded handle.
 // ObjectRegistered  -> Objects.Register; assigned handle MUST equal
-//                       recorded handle, else ErrReplayDivergence.
+//
+//	recorded handle, else ErrReplayDivergence.
+//
 // AttributeUpdated  -> Objects.UpdateAttributes (ts may be nil for RO).
 // InteractionSent   -> Objects.SendInteraction.
 // ObjectDeleted     -> cut-2 deferred (passthrough; a future delete
-//                       handler will re-emit the event).
+//
+//	handler will re-emit the event).
+//
 // TimeAdvance*      -> M3 (passthrough — the time manager is M3 work).
 // EventFederationHalted -> terminal; dispatch returns the halted
-//                       sentinel so the replay loop exits cleanly.
+//
+//	sentinel so the replay loop exits cleanly.
 //
 // When dispatch is impossible (nil components) we fall back to
 // passthrough, preserving the determinism contract for tests that

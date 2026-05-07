@@ -25,14 +25,14 @@
 //
 // Three invariants drive replay determinism:
 //
-//   1. Object handle assignment is monotonic per federation, derived from
-//      a single counter incremented at Register time. Replay re-reads the
-//      counter from the event log so handles match.
-//   2. Discover/Reflect/Receive fanout iterates subscribers in
-//      declaration.Manager's deterministic order.
-//   3. EventLog.Append for the operation MUST complete before any
-//      observable state mutation or fanout — this is the write-ahead
-//      contract that makes replay possible.
+//  1. Object handle assignment is monotonic per federation, derived from
+//     a single counter incremented at Register time. Replay re-reads the
+//     counter from the event log so handles match.
+//  2. Discover/Reflect/Receive fanout iterates subscribers in
+//     declaration.Manager's deterministic order.
+//  3. EventLog.Append for the operation MUST complete before any
+//     observable state mutation or fanout — this is the write-ahead
+//     contract that makes replay possible.
 //
 // # Test seams
 //

@@ -7,30 +7,30 @@ import "errors"
 
 var (
 	// Federation
-	ErrFederationNotFound          = errors.New("federation not found")
-	ErrFederationAlreadyExists     = errors.New("federation already exists")
+	ErrFederationNotFound           = errors.New("federation not found")
+	ErrFederationAlreadyExists      = errors.New("federation already exists")
 	ErrFederationHasFederatesJoined = errors.New("federation has federates joined")
-	ErrFederateNotJoined           = errors.New("federate not joined")
-	ErrFederateAlreadyJoined       = errors.New("federate already joined")
-	ErrFederationHalted            = errors.New("federation halted")
-	ErrFederationInvalidName       = errors.New("federation name is invalid")
+	ErrFederateNotJoined            = errors.New("federate not joined")
+	ErrFederateAlreadyJoined        = errors.New("federate already joined")
+	ErrFederationHalted             = errors.New("federation halted")
+	ErrFederationInvalidName        = errors.New("federation name is invalid")
 
 	// Object
-	ErrObjectNotFound             = errors.New("object not found")
-	ErrObjectClassNotPublished    = errors.New("object class not published by federate")
-	ErrAttributeNotOwned          = errors.New("attribute not owned by federate")
-	ErrObjectHandleInvalid        = errors.New("object handle is invalid")
+	ErrObjectNotFound               = errors.New("object not found")
+	ErrObjectClassNotPublished      = errors.New("object class not published by federate")
+	ErrAttributeNotOwned            = errors.New("attribute not owned by federate")
+	ErrObjectHandleInvalid          = errors.New("object handle is invalid")
 	ErrInteractionClassNotPublished = errors.New("interaction class not published")
-	ErrObjectClassNotFound        = errors.New("object class not found in FOM")
-	ErrAttributeNotFound          = errors.New("attribute not found in FOM")
+	ErrObjectClassNotFound          = errors.New("object class not found in FOM")
+	ErrAttributeNotFound            = errors.New("attribute not found in FOM")
 
 	// Time
-	ErrTimeNotRegulating       = errors.New("federate is not time-regulating")
-	ErrTimeNotConstrained      = errors.New("federate is not time-constrained")
-	ErrTimeInvalidLookahead    = errors.New("lookahead must be non-negative and finite")
-	ErrTimeRequestInPast       = errors.New("requested time is not greater than current logical time")
-	ErrTimeAlreadyRegulating   = errors.New("federate is already time-regulating")
-	ErrTimeAlreadyConstrained  = errors.New("federate is already time-constrained")
+	ErrTimeNotRegulating      = errors.New("federate is not time-regulating")
+	ErrTimeNotConstrained     = errors.New("federate is not time-constrained")
+	ErrTimeInvalidLookahead   = errors.New("lookahead must be non-negative and finite")
+	ErrTimeRequestInPast      = errors.New("requested time is not greater than current logical time")
+	ErrTimeAlreadyRegulating  = errors.New("federate is already time-regulating")
+	ErrTimeAlreadyConstrained = errors.New("federate is already time-constrained")
 
 	// Encoding
 	ErrEncInsufficientBytes = errors.New("insufficient bytes for type")
@@ -47,16 +47,16 @@ var (
 	ErrSyncPointAlreadyAchieved   = errors.New("federate has already achieved this synchronization point")
 
 	// Ownership (M8 — FR-OWN-*)
-	ErrOwnershipDivestPending     = errors.New("attribute already has a pending negotiated divest")
-	ErrOwnershipAcquirePending    = errors.New("attribute already has a pending acquire")
-	ErrOwnershipNotInTransfer     = errors.New("ownership transfer is not in progress for this attribute")
+	ErrOwnershipDivestPending  = errors.New("attribute already has a pending negotiated divest")
+	ErrOwnershipAcquirePending = errors.New("attribute already has a pending acquire")
+	ErrOwnershipNotInTransfer  = errors.New("ownership transfer is not in progress for this attribute")
 
 	// DDM (M10 — FR-DDM-*)
-	ErrRoutingSpaceNotFound       = errors.New("routing space not declared in FOM")
-	ErrDimensionNotFound          = errors.New("dimension not part of routing space")
-	ErrRegionNotFound             = errors.New("region not found in federation")
-	ErrRegionNotOwnedByFederate   = errors.New("region is not owned by this federate")
-	ErrRegionInUse                = errors.New("region is in use by an active subscription or instance")
+	ErrRoutingSpaceNotFound     = errors.New("routing space not declared in FOM")
+	ErrDimensionNotFound        = errors.New("dimension not part of routing space")
+	ErrRegionNotFound           = errors.New("region not found in federation")
+	ErrRegionNotOwnedByFederate = errors.New("region is not owned by this federate")
+	ErrRegionInUse              = errors.New("region is in use by an active subscription or instance")
 
 	// Save/Restore (M9 — FR-SR-*)
 	ErrSaveAlreadyInProgress    = errors.New("federation save is already in progress")

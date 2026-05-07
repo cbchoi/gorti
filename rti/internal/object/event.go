@@ -33,8 +33,8 @@ func (e *eventRecord) Inner() *rtiv1.Event { return e.pb }
 
 // proto.Message implementation — delegates to the embedded proto so the
 // real eventlog Writer marshals the adapter correctly.
-func (e *eventRecord) Reset()                          { e.pb.Reset() }
-func (e *eventRecord) String() string                  { return e.pb.String() }
+func (e *eventRecord) Reset()                             { e.pb.Reset() }
+func (e *eventRecord) String() string                     { return e.pb.String() }
 func (e *eventRecord) ProtoReflect() protoreflect.Message { return e.pb.ProtoReflect() }
 
 // outboundEvent adapts *rtiv1.FederateEvent to core.OutboundEvent. The

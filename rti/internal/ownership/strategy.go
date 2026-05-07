@@ -100,12 +100,12 @@ const (
 //   - Object     : the object instance whose attribute is being negotiated.
 //   - Attribute  : the attribute under negotiation.
 //   - Owner      : the current (or prior) owner; for PhaseAcquire this
-//                  is the federate that recorded the pendingDivest.
+//     is the federate that recorded the pendingDivest.
 //   - Candidates : ascending-handle list of candidate acquirers. Never
-//                  contains Owner. May be a singleton (PhaseAcquire).
-//                  Empty list is possible for PhaseDivestIfWanted (no
-//                  queued acquirers); the default returns
-//                  InvalidFederateHandle in that case.
+//     contains Owner. May be a singleton (PhaseAcquire).
+//     Empty list is possible for PhaseDivestIfWanted (no
+//     queued acquirers); the default returns
+//     InvalidFederateHandle in that case.
 type SelectAcquirerContext struct {
 	Phase      SelectAcquirerPhase
 	Federation core.FederationName

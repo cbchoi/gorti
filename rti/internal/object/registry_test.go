@@ -110,9 +110,11 @@ func (l *recordingEventLog) Records() []recordedAppend {
 // routing + write-ahead rather than FOM resolution.
 type stubFOMHandle struct{}
 
-func (*stubFOMHandle) IsValid() bool                                                       { return true }
-func (*stubFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool)             { return 1, true }
-func (*stubFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool)   { return 1, true }
+func (*stubFOMHandle) IsValid() bool                                           { return true }
+func (*stubFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool) { return 1, true }
+func (*stubFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool) {
+	return 1, true
+}
 func (*stubFOMHandle) LookupAttribute(core.ObjectClassHandle, string) (core.AttributeHandle, bool) {
 	return 1, true
 }

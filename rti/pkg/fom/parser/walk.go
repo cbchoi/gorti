@@ -146,12 +146,12 @@ func convertParameters(in []xmlParameter) []model.Parameter {
 // the current diagnostic passes are parsed; future tasks (encoder M1) add
 // more.
 type xmlDataTypes struct {
-	BasicDataRepresentations *xmlBasicDataReps    `xml:"basicDataRepresentations"`
-	SimpleDataTypes          *xmlSimpleDataTypes  `xml:"simpleDataTypes"`
-	EnumeratedDataTypes      *xmlEnumDataTypes    `xml:"enumeratedDataTypes"`
-	ArrayDataTypes           *xmlArrayDataTypes   `xml:"arrayDataTypes"`
-	FixedRecordDataTypes     *xmlFixedRecTypes    `xml:"fixedRecordDataTypes"`
-	VariantRecordDataTypes   *xmlVariantRecTypes  `xml:"variantRecordDataTypes"`
+	BasicDataRepresentations *xmlBasicDataReps   `xml:"basicDataRepresentations"`
+	SimpleDataTypes          *xmlSimpleDataTypes `xml:"simpleDataTypes"`
+	EnumeratedDataTypes      *xmlEnumDataTypes   `xml:"enumeratedDataTypes"`
+	ArrayDataTypes           *xmlArrayDataTypes  `xml:"arrayDataTypes"`
+	FixedRecordDataTypes     *xmlFixedRecTypes   `xml:"fixedRecordDataTypes"`
+	VariantRecordDataTypes   *xmlVariantRecTypes `xml:"variantRecordDataTypes"`
 }
 
 type xmlBasicDataReps struct {
@@ -183,8 +183,8 @@ type xmlEnumDataTypes struct {
 }
 
 type xmlEnumeratedData struct {
-	Name           string         `xml:"name"`
-	Representation string         `xml:"representation"`
+	Name           string          `xml:"name"`
+	Representation string          `xml:"representation"`
 	Enumerator     []xmlEnumerator `xml:"enumerator"`
 }
 
@@ -209,9 +209,9 @@ type xmlFixedRecTypes struct {
 }
 
 type xmlFixedRecordData struct {
-	Name     string         `xml:"name"`
-	Encoding string         `xml:"encoding"`
-	Field    []xmlRecField  `xml:"field"`
+	Name     string        `xml:"name"`
+	Encoding string        `xml:"encoding"`
+	Field    []xmlRecField `xml:"field"`
 }
 
 type xmlRecField struct {
@@ -224,11 +224,11 @@ type xmlVariantRecTypes struct {
 }
 
 type xmlVariantRecordData struct {
-	Name             string             `xml:"name"`
-	Encoding         string             `xml:"encoding"`
-	DiscriminantName string             `xml:"discriminant"`
-	DataType         string             `xml:"dataType"`
-	Alternative      []xmlVariantAlt    `xml:"alternative"`
+	Name             string          `xml:"name"`
+	Encoding         string          `xml:"encoding"`
+	DiscriminantName string          `xml:"discriminant"`
+	DataType         string          `xml:"dataType"`
+	Alternative      []xmlVariantAlt `xml:"alternative"`
 }
 
 type xmlVariantAlt struct {

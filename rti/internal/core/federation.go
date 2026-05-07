@@ -105,9 +105,9 @@ type JoinFederationRequest struct {
 
 // FederationSummary is what ListFederations returns per federation.
 type FederationSummary struct {
-	Name             FederationName
-	Mode             Mode
-	FederatesJoined  uint32
+	Name            FederationName
+	Mode            Mode
+	FederatesJoined uint32
 }
 
 // FederationStore is the entry point for federation lifecycle services.

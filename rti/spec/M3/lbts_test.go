@@ -45,17 +45,17 @@ func TestSpec_M3_LBTS_MinAcrossFederates(t *testing.T) {
 		{
 			"two regulators, second wins",
 			[]timepkg.RegulatingFederate{
-				{Handle: 1, Time: 5.0, Lookahead: 4.0},  // 9.0
-				{Handle: 2, Time: 7.0, Lookahead: 1.0},  // 8.0
+				{Handle: 1, Time: 5.0, Lookahead: 4.0}, // 9.0
+				{Handle: 2, Time: 7.0, Lookahead: 1.0}, // 8.0
 			},
 			8.0,
 		},
 		{
 			"three regulators, mixed lookaheads",
 			[]timepkg.RegulatingFederate{
-				{Handle: 1, Time: 0.0, Lookahead: 1.0},  // 1.0
-				{Handle: 2, Time: 0.5, Lookahead: 2.0},  // 2.5
-				{Handle: 3, Time: 0.0, Lookahead: 0.5},  // 0.5  ← min
+				{Handle: 1, Time: 0.0, Lookahead: 1.0}, // 1.0
+				{Handle: 2, Time: 0.5, Lookahead: 2.0}, // 2.5
+				{Handle: 3, Time: 0.0, Lookahead: 0.5}, // 0.5  ← min
 			},
 			0.5,
 		},

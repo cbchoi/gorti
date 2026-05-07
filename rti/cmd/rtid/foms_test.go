@@ -493,4 +493,3 @@ func TestFOMRepository_RememberAndGet(t *testing.T) {
 		t.Errorf("Get(alpha): got different handle; remembered handle wasn't returned")
 	}
 }
-

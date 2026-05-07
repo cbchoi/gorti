@@ -65,8 +65,8 @@ type classifiedEvent struct {
 	ev  *rtiv1.Event
 }
 
-func (c *classifiedEvent) Seq() uint64               { return c.seq }
-func (c *classifiedEvent) ProtoEvent() *rtiv1.Event  { return c.ev }
+func (c *classifiedEvent) Seq() uint64              { return c.seq }
+func (c *classifiedEvent) ProtoEvent() *rtiv1.Event { return c.ev }
 
 // tailFakeStream captures Send() calls for assertion. Implements
 // rtiv1.AdminService_TailEventsServer.
@@ -282,9 +282,9 @@ func TestPhase4_TailEvents_BatchSize(t *testing.T) {
 	defer cancel()
 	stream := newTailFakeStream(ctx)
 	if err := svc.TailEvents(&rtiv1.TailEventsRequest{
-		WireVersion:     rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:  "demo",
-		MaxBatchEvents:  2,
+		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName: "demo",
+		MaxBatchEvents: 2,
 	}, stream); err != nil {
 		t.Fatalf("TailEvents: %v", err)
 	}

@@ -24,9 +24,9 @@
 // Handler tests use small inline fakes of core.FederationStore etc. —
 // not mocking frameworks. Each handler test asserts:
 //
-//   1. Happy path produces the expected proto response.
-//   2. Each documented error code is reachable from a defined input.
-//   3. Idempotency where defined (e.g. resign of already-resigned).
+//  1. Happy path produces the expected proto response.
+//  2. Each documented error code is reachable from a defined input.
+//  3. Idempotency where defined (e.g. resign of already-resigned).
 //
 // Integration tests under tests/spec/M2/grpc_test.go drive the real
 // composed server.

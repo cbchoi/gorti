@@ -173,10 +173,10 @@ func (m *Manager) RunBaseline(ctx context.Context) (Result, error) {
 	defer cancelRun()
 
 	var (
-		sentCount    atomic.Int64
-		latNanos     []int64
-		latNanosMu   sync.Mutex
-		wg           sync.WaitGroup
+		sentCount  atomic.Int64
+		latNanos   []int64
+		latNanosMu sync.Mutex
+		wg         sync.WaitGroup
 	)
 
 	// Receivers: drain each federate's channel, compute latency vs the
@@ -479,4 +479,3 @@ func percentileIndex(n int, p float64) int {
 func nsToMs(ns int64) float64 {
 	return float64(ns) / 1_000_000.0
 }
-

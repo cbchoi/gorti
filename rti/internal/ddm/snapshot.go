@@ -34,11 +34,11 @@ func (m *Manager) Marshal(fed core.FederationName) ([]byte, error) {
 		return nil, nil
 	}
 	out := &rtiv1.DDMManagerState{
-		NextRegionHandle:        uint64(st.nextRegionHandle),
-		Regions:                 ddmRegionsToProto(st.regions),
-		ObjectSubscriptions:     ddmObjSubsToProto(st.objSubs),
+		NextRegionHandle:         uint64(st.nextRegionHandle),
+		Regions:                  ddmRegionsToProto(st.regions),
+		ObjectSubscriptions:      ddmObjSubsToProto(st.objSubs),
 		InteractionSubscriptions: ddmIntSubsToProto(st.intSubs),
-		ObjectPublications:      ddmObjPubsToProto(st.objPubs),
+		ObjectPublications:       ddmObjPubsToProto(st.objPubs),
 	}
 	return proto.Marshal(out)
 }

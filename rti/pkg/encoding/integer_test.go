@@ -18,8 +18,8 @@ func TestSpec_IntegerCodec_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name    string
-		typ     string
+		name     string
+		typ      string
 		boundary int
 		// encodeIn is what we hand to Encode (native Go integer width).
 		encodeIn any

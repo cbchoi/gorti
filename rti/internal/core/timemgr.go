@@ -55,13 +55,13 @@ type TimeManager interface {
 // to populate FederateSnapshot.{current_time, pending_request_time,
 // lookahead, regulating, constrained}.
 type TimeFederateState struct {
-	Handle              FederateHandle
-	CurrentTime         LogicalTime
-	HasPendingRequest   bool
-	PendingRequestTime  LogicalTime
-	Lookahead           LogicalTime
-	Regulating          bool
-	Constrained         bool
+	Handle             FederateHandle
+	CurrentTime        LogicalTime
+	HasPendingRequest  bool
+	PendingRequestTime LogicalTime
+	Lookahead          LogicalTime
+	Regulating         bool
+	Constrained        bool
 }
 
 // TimeSnapshot is the federation-wide time view for the AdminService

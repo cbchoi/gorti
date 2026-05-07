@@ -375,10 +375,10 @@ func buildFederationSnapshot(
 // at the smaller of N events / max-latency). The clamps protect the
 // server from clients setting either knob to a degenerate value.
 const (
-	tailEventsDefaultMaxBatch    = 32
-	tailEventsMaxBatchCeiling    = 1024
-	tailEventsDefaultMaxLatency  = 10 * time.Millisecond
-	tailEventsMaxLatencyCeiling  = 1 * time.Second
+	tailEventsDefaultMaxBatch   = 32
+	tailEventsMaxBatchCeiling   = 1024
+	tailEventsDefaultMaxLatency = 10 * time.Millisecond
+	tailEventsMaxLatencyCeiling = 1 * time.Second
 )
 
 // TailEvents implements rtiv1.AdminServiceServer.TailEvents. Phase 4

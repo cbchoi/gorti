@@ -12,18 +12,18 @@ import (
 // per-mode grant conditions:
 //
 //   - ModeNER  (§8.10 NextMessageRequest)         — full grant requires LBTS > t;
-//                                                   sole-pending forced grant at LBTS keeps pending.
+//     sole-pending forced grant at LBTS keeps pending.
 //   - ModeNMRA (§8.12 NextMessageRequestAvailable) — full grant requires LBTS >= t;
-//                                                   sole-pending forced grant at LBTS keeps pending.
+//     sole-pending forced grant at LBTS keeps pending.
 //   - ModeTAR  (§8.10 TimeAdvanceRequest)         — grant fires at min(t, LBTS) whenever
-//                                                   it produces forward progress (LBTS != t case).
-//                                                   No "sole-pending" gate: incremental grants are
-//                                                   the standard TAR behaviour.
+//     it produces forward progress (LBTS != t case).
+//     No "sole-pending" gate: incremental grants are
+//     the standard TAR behaviour.
 //   - ModeTARA (§8.11 TimeAdvanceRequestAvailable) — like TAR but allows LBTS == t (grant at t).
 //   - ModeFQR  (§8.13 FlushQueueRequest)          — cut-1 simplification: behaves like TAR
-//                                                   (drain-queue semantics deferred to cut-3 when
-//                                                   the TSO queue ships). Always grants when LBTS
-//                                                   produces progress.
+//     (drain-queue semantics deferred to cut-3 when
+//     the TSO queue ships). Always grants when LBTS
+//     produces progress.
 //
 // The semantic divergence between the strict / inclusive and the NER /
 // TAR families is captured in two predicates evaluated against LBTS,
@@ -125,7 +125,7 @@ type grantDecision struct {
 //   - requested    : the t parameter of the outstanding request.
 //   - lbts         : current LBTS over the regulating set.
 //   - solePending  : true when this is the only pending request in the
-//                    federation (relevant only for NER/NMRA forced grant).
+//     federation (relevant only for NER/NMRA forced grant).
 //
 // Returns a grantDecision; when fire is false the request stays pending
 // untouched.

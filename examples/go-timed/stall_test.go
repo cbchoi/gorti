@@ -178,4 +178,3 @@ func TestSpec_M3_Stall_LogFileCapturesHalt(t *testing.T) {
 		t.Errorf("stall log size = %d, want > header (%d)", fi.Size(), stallTestHeaderSize)
 	}
 }
-

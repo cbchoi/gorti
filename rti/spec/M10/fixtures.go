@@ -56,8 +56,8 @@ func (r *permissiveFOMRepo) Get(_ context.Context, _ core.FederationName) (core.
 
 type permissiveFOMHandle struct{}
 
-func (*permissiveFOMHandle) IsValid() bool                                                  { return true }
-func (*permissiveFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool)        { return 1, true }
+func (*permissiveFOMHandle) IsValid() bool                                           { return true }
+func (*permissiveFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool) { return 1, true }
 func (*permissiveFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool) {
 	return 1, true
 }

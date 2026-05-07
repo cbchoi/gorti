@@ -460,9 +460,9 @@ func TestSpec_CodecFor_JSON_FixedArray_MissingFields(t *testing.T) {
 	t.Parallel()
 
 	cases := []map[string]any{
-		{"kind": "HLAfixedArray", "cardinality": float64(3)}, // missing element
-		{"kind": "HLAfixedArray", "element": "HLAinteger32BE"}, // missing cardinality
-		{"kind": "HLAfixedArray", "element": "HLAinteger32BE", "cardinality": "three"}, // non-numeric
+		{"kind": "HLAfixedArray", "cardinality": float64(3)},                            // missing element
+		{"kind": "HLAfixedArray", "element": "HLAinteger32BE"},                          // missing cardinality
+		{"kind": "HLAfixedArray", "element": "HLAinteger32BE", "cardinality": "three"},  // non-numeric
 		{"kind": "HLAfixedArray", "element": "HLAimaginary", "cardinality": float64(3)}, // unknown elem
 	}
 	for i, desc := range cases {
@@ -735,9 +735,9 @@ func TestSpec_CodecFor_JSON_VariantRecord_BadDescriptors(t *testing.T) {
 	t.Parallel()
 
 	cases := []map[string]any{
-		{"kind": "HLAvariantRecord"},                                   // missing discriminator
-		{"kind": "HLAvariantRecord", "discriminator": 1},               // discriminator not a string
-		{"kind": "HLAvariantRecord", "discriminator": "HLAimaginary"},  // unknown discriminator primitive
+		{"kind": "HLAvariantRecord"},                                  // missing discriminator
+		{"kind": "HLAvariantRecord", "discriminator": 1},              // discriminator not a string
+		{"kind": "HLAvariantRecord", "discriminator": "HLAimaginary"}, // unknown discriminator primitive
 		{
 			"kind":          "HLAvariantRecord",
 			"discriminator": "HLAinteger32BE",
