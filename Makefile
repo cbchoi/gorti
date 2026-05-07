@@ -37,8 +37,8 @@ help:
 verify: fmt lint test determinism
 
 fmt:
-	gofmt -w -s .
-	@if command -v goimports >/dev/null; then goimports -w .; fi
+	git ls-files '*.go' | xargs gofmt -w -s
+	@if command -v goimports >/dev/null; then git ls-files '*.go' | xargs goimports -w; fi
 	@if command -v black >/dev/null && [ -d "$(PY_DIR)" ]; then black $(PY_DIR); fi
 	@if command -v ruff   >/dev/null && [ -d "$(PY_DIR)" ]; then ruff check --fix $(PY_DIR); fi
 
