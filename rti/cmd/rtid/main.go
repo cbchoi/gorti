@@ -38,6 +38,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cbchoi/gorti/rti/internal/auth/oidc"
 	"github.com/cbchoi/gorti/rti/internal/buildinfo"
 	"github.com/cbchoi/gorti/rti/internal/core"
 	"github.com/cbchoi/gorti/rti/internal/ddm"
@@ -261,6 +262,19 @@ func runServerMain(logger *slog.Logger, args serverMainArgs) {
 		os.Exit(2)
 	}
 
+	// M14 W4 — OIDC bearer-token verifier. Built at startup; if any
+	// flag misconfigures the verifier (bad PEM, unreachable issuer),
+	// fail fast.
+	oidcVerifier, err := buildOIDCVerifier(args.OIDCJWKSPem, args.OIDCAudience, args.OIDCIssuer)
+	if err != nil {
+		logger.Error("rtid OIDC configuration failed", "err", err)
+		os.Exit(2)
+	}
+	if oidcVerifier != nil {
+		logger.Info("rtid: OIDC bearer-token authentication enabled",
+			"audience", args.OIDCAudience, "issuer", args.OIDCIssuer)
+	}
+
 	// Phase 3 research-platform: resolve the research-config (if any)
 	// before constructing the runtime so any error halts startup with
 	// exit 2 (config error) rather than a half-started rtid. Path
@@ -310,6 +324,7 @@ func runServerMain(logger *slog.Logger, args serverMainArgs) {
 		LogDir:                        args.LogDir,
 		Logger:                        logger,
 		TLSConfig:                     tlsConfig,
+		OIDCVerifier:                  oidcVerifier,
 		SaveDir:                       args.SaveDir,
 		Research:                      resolved,
 		AdminMutating:                 args.AdminMutating,
@@ -552,10 +567,18 @@ type rtidConfig struct {
 
 	// TLSConfig, when non-nil, enables server-side TLS on the gRPC
 	// listener. nil keeps the listener insecure (the default for
-	// local/dev workloads). Construct via buildServerTLS or by hand
-	// in tests; the M6 W1B cut supports the static-cert path only —
-	// mTLS / cert rotation are M7 follow-ups.
+	// local/dev workloads). Construct via buildServerTLSWithMTLS or
+	// by hand in tests; M14 W1 added mTLS support via the
+	// --tls-client-ca flag.
 	TLSConfig *tls.Config
+
+	// OIDCVerifier, when non-nil, installs a bearer-token gRPC
+	// interceptor that validates `authorization: Bearer <jwt>` on
+	// every RPC. M14 W4 — supports RS256 against a pre-pinned PEM
+	// public key (--oidc-jwks-pem); JWKS HTTP discovery is a future
+	// cut. Stackable with TLSConfig (mTLS + OIDC both required when
+	// both configured).
+	OIDCVerifier *oidc.Verifier
 
 	// SaveDir is the directory under which the savepoint.Manager
 	// writes + reads federation save bundles (M9: FR-SR-1..5). Empty
@@ -944,6 +967,16 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// is built from --tls-cert/--tls-key and not reloaded.
 		serverOpts = append(serverOpts, stdgrpc.Creds(credentials.NewTLS(cfg.TLSConfig)))
 	}
+	if cfg.OIDCVerifier != nil {
+		// M14 W4 — OIDC bearer-token interceptor. Validates the
+		// `authorization: Bearer <jwt>` metadata before any service
+		// handler runs. Stackable with mTLS: a deployment configured
+		// with both must satisfy both.
+		serverOpts = append(serverOpts,
+			stdgrpc.UnaryInterceptor(oidc.UnaryServerInterceptor(cfg.OIDCVerifier)),
+			stdgrpc.StreamInterceptor(oidc.StreamServerInterceptor(cfg.OIDCVerifier)),
+		)
+	}
 	gs := stdgrpc.NewServer(serverOpts...)
 	if err := grpcSrv.Register(gs); err != nil {
 		return nil, err
@@ -1247,6 +1280,24 @@ func resolveResearchConfig(flagPath, envPath, determinismOverride string) (resea
 // trusted CA bundle (or system roots when the cert chains to one).
 func buildServerTLS(certPath, keyPath string) (*tls.Config, error) {
 	return buildServerTLSWithMTLS(certPath, keyPath, "", "")
+}
+
+// buildOIDCVerifier builds an *oidc.Verifier from the M14 W4 flags.
+// Returns (nil, nil) when no OIDC flags are set (i.e., OIDC is
+// disabled, the default). Returns an error when --oidc-issuer is set
+// but --oidc-jwks-pem isn't (M14 doesn't yet implement OIDC discovery).
+func buildOIDCVerifier(jwksPemPath, audience, issuer string) (*oidc.Verifier, error) {
+	if jwksPemPath == "" && issuer == "" && audience == "" {
+		return nil, nil
+	}
+	if jwksPemPath == "" {
+		return nil, fmt.Errorf("rtid: --oidc-jwks-pem is required (M14: OIDC discovery via --oidc-issuer is a future cut)")
+	}
+	pemBytes, err := os.ReadFile(jwksPemPath)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: read --oidc-jwks-pem: %w", err)
+	}
+	return oidc.NewFromPEM(pemBytes, audience, issuer)
 }
 
 // buildServerTLSWithMTLS extends buildServerTLS with optional mTLS
