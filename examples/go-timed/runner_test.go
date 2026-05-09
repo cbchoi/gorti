@@ -129,16 +129,20 @@ func TestGoTimedEndToEnd(t *testing.T) {
 	url := "127.0.0.1:" + strconv.Itoa(listenPort)
 	fomPath := filepath.Join(repoRoot, "examples", "go-timed", "time-advance-fom.xml")
 
-	// All federates use TAR. NER's "sole-pending forced grant + KEEP"
-	// semantics (rti/internal/time/advance.go::decideGrant) make the
-	// loop racy: when one federate's NER lands before peers' NERs, it
-	// receives a forced grant at LBTS but pendingNER stays — the next
-	// loop iteration's NER then hits ErrTimeAdvancingState. TAR clears
-	// pending on every grant (incremental or full), so the cycle
-	// pattern is robust. Per-primitive boundary semantics — including
-	// NER/NMRA strict-vs-inclusive at LBTS == t — are tested at the
-	// manager level in rti/internal/transport/grpc/time_test.go
-	// (TASK-203 cases 8a-f).
+	// All federates use TAR. The runner exercises the cycle pattern
+	// that M3/M21 promised; the per-primitive boundary tests live in
+	// rti/internal/transport/grpc/time_test.go (TASK-203 cases 8a-f).
+	//
+	// Mixing NER with mismatched lookaheads in lockstep (all federates
+	// requesting the same t each cycle) hits an implementation-edge
+	// scheduling case where the federation may stall waiting for the
+	// last NER to land. See rti/spec/M22/ner_forced_grant_race_test.go
+	// + rti/spec/M22/ner_full_grant_test.go for the manager-level
+	// pinning of NER full/forced semantics. M22 W3 fix:
+	// waitForFullGrant correctly accumulates forced grants in
+	// regulator_main.go — this is the SDK-pattern improvement
+	// (the M21-era 5 ms settle delay is gone) and the test still uses
+	// TAR for robustness.
 	specs := []federateSpec{
 		{Name: "fast", Lookahead: 0.5, Primitive: "TAR"},
 		{Name: "normal", Lookahead: 1.0, Primitive: "TAR"},

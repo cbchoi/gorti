@@ -92,7 +92,9 @@ func mainErr() error {
 	r := &regulator{name: args.name, lookahead: args.lookahead}
 
 	// Cycle loop. Each iteration issues an advance primitive, waits
-	// for a grant, then emits a Tick at the granted time.
+	// for a *full* grant (M22 W3 — see waitForFullGrant for why
+	// forced grants don't end the cycle), then emits a Tick at the
+	// granted time.
 	for i := 1; i <= args.cycles; i++ {
 		t := float64(i) * args.tickStep
 		switch args.primitive {
@@ -107,20 +109,17 @@ func mainErr() error {
 			return fmt.Errorf("cycle %d %s(%v): %w", i, args.primitive, t, err)
 		}
 
-		// Wait for grant.
-		grantT, err := waitForGrant(fed, 30*time.Second)
+		// Wait for full grant. NER may produce intermediate forced
+		// grants when this federate is sole-pending and LBTS < t;
+		// per IEEE 1516.1 those are advisory ("messages with ts <=
+		// LBTS are deliverable now") and the federate stays in
+		// time-advancing-state until the full grant arrives. TAR
+		// produces a single grant per request and finishes the cycle.
+		grantT, err := waitForFullGrant(fed, t, args.primitive, 30*time.Second)
 		if err != nil {
 			return fmt.Errorf("cycle %d wait grant: %w", i, err)
 		}
 		r.grants = append(r.grants, grantT)
-
-		// Settle delay: the manager's emitGrant emits the grant on
-		// the wire BEFORE clearing pendingNER (rti/internal/time/ner.go
-		// emitGrant order: EventLog → Outbox → state mutation). Without
-		// this delay, the next request can race the state-clear and
-		// hit ErrTimeAdvancingState. 5 ms is well above the typical
-		// in-process round-trip and keeps the cycle loop tight.
-		time.Sleep(5 * time.Millisecond)
 
 		// Emit a Tick on the grant.
 		payload := r.nextTickPayload()
@@ -135,10 +134,20 @@ func mainErr() error {
 	return writeResult(args.resultPath, r, args)
 }
 
-// waitForGrant drains f.Events() until a TimeAdvanceGrant is observed,
-// or the deadline expires. Other event types are ignored (Tick
-// interactions from peers — we don't process them in this demo).
-func waitForGrant(f *federate.Federate, timeout time.Duration) (float64, error) {
+// waitForFullGrant drains f.Events() until a *full* TimeAdvanceGrant
+// is observed (grant.Time >= requested), accumulating any
+// intermediate forced grants (NER/NMRA only — TAR/TARA/FQR clear
+// pending on every grant per advance.go::decideGrant). For TAR the
+// loop returns on the first grant since one-grant-per-request is
+// TAR's contract.
+//
+// M22 W3: this replaces the M21-era waitForGrant + 5ms settle delay.
+// The settle delay was masking the SDK-side semantic gap, not a
+// server race. Per spec a federate stays in time-advancing-state
+// across forced grants; reissuing an advance primitive at that point
+// correctly returns ErrTimeAdvancingState.
+func waitForFullGrant(f *federate.Federate, requested float64, primitive string, timeout time.Duration) (float64, error) {
+	tarLike := primitive == "TAR" || primitive == "TARA" || primitive == "FQR"
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	for {
@@ -147,12 +156,19 @@ func waitForGrant(f *federate.Federate, timeout time.Duration) (float64, error) 
 			if !ok {
 				return 0, fmt.Errorf("events channel closed before grant")
 			}
-			if g, ok := ev.(federate.TimeAdvanceGrant); ok {
+			g, ok := ev.(federate.TimeAdvanceGrant)
+			if !ok {
+				// ReceiveInteraction etc.: ignore.
+				continue
+			}
+			if tarLike || g.Time >= requested {
 				return g.Time, nil
 			}
-			// ReceiveInteraction or FederationHalted: ignore for grants.
+			// NER/NMRA forced grant (g.Time < requested) — accumulate
+			// and keep waiting.
+			fmt.Fprintf(os.Stderr, "regulator: forced grant @ %v < requested %v; waiting for full\n", g.Time, requested)
 		case <-deadline.C:
-			return 0, fmt.Errorf("deadline waiting for grant")
+			return 0, fmt.Errorf("deadline waiting for full grant (requested=%v)", requested)
 		}
 	}
 }

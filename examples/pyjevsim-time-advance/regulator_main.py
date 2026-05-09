@@ -6,12 +6,17 @@ Cycles:
   3. (optional) enable_time_constrained.
   4. For --cycles iterations:
      - issue next_message_request(i * tick-step)
-     - wait for TimeAdvanceGrant on events()
+     - wait for *full* TimeAdvanceGrant on events() — accumulating
+       any forced (partial) grants per IEEE 1516.1
   5. Write result JSON: name, lookahead, list of grant times.
 
-Note: the pysdk currently exposes only NER (not TAR/TARA/NMRA/FQR);
-W3B (TASK-208) flipped NER from no-op to real but the API extension
-to other primitives is post-M21 follow-up. This example uses NER.
+M22 W3: the M21-era retry-on-TimeAdvancingState backoff loop is
+gone. The symptom it worked around was an SDK-side semantics gap,
+not a server race: forced grants (clearPending=false in
+advance.go::decideGrant) leave the federate in time-advancing
+state, and the federate must keep waiting on the same NER until
+a full grant arrives. ``wait_for_full_grant`` accumulates forced
+grants and returns only on the full grant.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from typing import Any
 from _federate_common import (  # type: ignore[import-not-found]
     common_parser,
     federation_spec,
-    wait_for_grant,
+    wait_for_full_grant,
     write_result,
 )
 from rti1516e.connection import RtiConnection  # type: ignore[import-not-found]
@@ -52,34 +57,11 @@ async def run(
             if constrained:
                 await fed.enable_time_constrained()
 
-            from rti1516e._grpc_errors import TimeAdvancingState
-
             for i in range(1, cycles + 1):
                 t = i * tick_step
-                # NER + multi-federate cycle pattern hits a race: a
-                # sole-pending forced grant fires (clearPending=False)
-                # while the local Events channel sees the grant first.
-                # Next NER server-side observes pendingNER=true and
-                # rejects with ErrTimeAdvancingState. Retry with
-                # backoff lets the state-mutation in the manager catch
-                # up. The Go SDK works around this by switching to TAR
-                # (which clears pending on every grant); pysdk only
-                # wires NER today (W3B TASK-208 scope).
-                last_err: Exception | None = None
-                for attempt in range(8):
-                    try:
-                        await fed.next_message_request(t)
-                        last_err = None
-                        break
-                    except TimeAdvancingState as exc:
-                        last_err = exc
-                        await asyncio.sleep(0.05 * (attempt + 1))
-                if last_err is not None:
-                    raise last_err
-
-                grant_t = await wait_for_grant(fed, grant_timeout)
+                await fed.next_message_request(t)
+                grant_t = await wait_for_full_grant(fed, t, grant_timeout)
                 grants.append(grant_t)
-                await asyncio.sleep(0.02)
 
             print(f"regulator_main[{name}]: done — {len(grants)} grants",
                   file=sys.stderr, flush=True)

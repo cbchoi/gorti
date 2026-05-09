@@ -60,6 +60,10 @@ def federation_spec() -> FederationSpec:
 async def wait_for_grant(fed: Any, timeout: float) -> float:
     """Drain fed.events() until a TimeAdvanceGrant arrives.
     Other event types (Tick interactions etc.) are ignored.
+
+    Note: returns on the FIRST grant — accepts forced (partial) grants
+    as cycle completion. Use ``wait_for_full_grant`` for NER cycles
+    that must hold out for full advance.
     """
     deadline = asyncio.get_event_loop().time() + timeout
     async for evt in fed.events():
@@ -68,6 +72,33 @@ async def wait_for_grant(fed: Any, timeout: float) -> float:
         if asyncio.get_event_loop().time() > deadline:
             break
     raise TimeoutError(f"no TimeAdvanceGrant within {timeout}s")
+
+
+async def wait_for_full_grant(fed: Any, requested: float, timeout: float) -> float:
+    """Drain fed.events() until a *full* TimeAdvanceGrant (grant.time >=
+    requested) arrives, accumulating any forced (partial) grants.
+
+    M22 W3: forced grants from advance.go::decideGrant's NER/NMRA
+    sole-pending escape hatch leave the federate in time-advancing
+    state per IEEE 1516.1. Reissuing an advance primitive at that
+    point correctly returns ErrTimeAdvancingState. The federate must
+    keep waiting on the SAME NER until a full grant arrives.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout
+    async for evt in fed.events():
+        if isinstance(evt, TimeAdvanceGrant):
+            t = float(evt.time)
+            if t >= requested:
+                return t
+            print(
+                f"regulator: forced grant @ {t} < requested {requested}; "
+                f"waiting for full",
+                flush=True,
+            )
+            # accumulate; loop on
+        if asyncio.get_event_loop().time() > deadline:
+            break
+    raise TimeoutError(f"no full TimeAdvanceGrant within {timeout}s (requested={requested})")
 
 
 def write_result(path: str, payload: dict[str, Any]) -> None:
