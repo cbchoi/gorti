@@ -131,7 +131,7 @@ server-side:
 ```bash
 cd examples/pyjevsim-relay-cross-process
 
-# Terminal 1
+# Terminal 1 (keep running)
 ./rtid_run.sh
 
 # Terminal 2 -- consumers first
@@ -142,7 +142,25 @@ cd examples/pyjevsim-relay-cross-process
 
 # Terminal 4 -- generator last
 ./generator_run.sh
+
+# Terminal 5 -- after all three federates exit (~6s)
+./verify_run.sh
 ```
+
+Each federate script prints a final `DONE` or `FAILED` line when its
+python exits, with the result counts -- so you don't have to read the
+JSON to know whether the federate did its job:
+
+```text
+generator_run: DONE — published=50  result=/tmp/.../generator-result.json
+buffer_run:    DONE — forwarded=29 dropped=21 queue_residual=0  result=...
+processor_run: DONE — received=29  result=...
+```
+
+`verify_run.sh` then checks the conservation law across all three
+result files and prints `PASS` / `FAIL` for each invariant; on FAIL
+it lists the first few unaccounted seqs so you can correlate with
+the federate logs.
 
 Result JSON files land at `/tmp/pyjevsim-relay-cross/{generator,
 buffer,processor}-result.json` by default. Override with
@@ -150,22 +168,6 @@ buffer,processor}-result.json` by default. Override with
 `SERVICE_PERIOD`, `DRAIN_TICKS`, `TICK_PERIOD`,
 `BUFFER_TAIL_TICKS`, `PROCESSOR_TAIL_TICKS`) are env-overridable too;
 see `_run_common.sh` for the full list.
-
-The shell scripts do **not** verify the conservation law -- they
-just run the federates. To check accounting after a manual run:
-
-```bash
-python3 -c "
-import json, pathlib
-d = pathlib.Path('/tmp/pyjevsim-relay-cross')
-g = json.loads((d/'generator-result.json').read_text())
-b = json.loads((d/'buffer-result.json').read_text())
-p = json.loads((d/'processor-result.json').read_text())
-pub, fwd, drp, res = set(g['published']), set(b['forwarded']), set(b['dropped']), set(b['queue_residual'])
-print('published =', len(pub), ' forwarded|dropped|residual =', len(fwd|drp|res), ' match =', pub == fwd|drp|res)
-print('received  =', len(p['received']), ' forwarded =', len(fwd), ' match =', set(p['received']) == fwd)
-"
-```
 
 ## Files
 
@@ -179,9 +181,10 @@ print('received  =', len(p['received']), ' forwarded =', len(fwd), ' match =', s
 | `generator.py` `buffer.py` `processor.py` | model files (`CoupledModelProtocol` shape; near-copy of `pyjevsim-relay/`) |
 | `relay-fom.xml` | FOM (verbatim copy of `pyjevsim-relay/relay-fom.xml`) |
 | `test_relay_cross_process.py` | end-to-end pytest suite |
-| `_run_common.sh` | sourced by the four shell scripts; defaults for ports, URL, tunables, result/log dirs, rtid binary path |
+| `_run_common.sh` | sourced by all shell scripts; holds defaults for ports, URL, tunables, result/log dirs, rtid binary path, and the `report_result` helper used by federate scripts |
 | `rtid_run.sh` | launches the rtid daemon at fixed ports for manual federate runs |
-| `generator_run.sh` `buffer_run.sh` `processor_run.sh` | launch the corresponding federate against an already-running rtid (use `rtid_run.sh` first) |
+| `generator_run.sh` `buffer_run.sh` `processor_run.sh` | launch the corresponding federate against an already-running rtid (use `rtid_run.sh` first); prints a `DONE`/`FAILED` summary on exit |
+| `verify_run.sh` | cross-result conservation check after a manual run; exits 0 on PASS, 1 on FAIL with diagnostic |
 
 ## Why we don't use `HLAFederate.step_once` here
 

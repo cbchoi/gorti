@@ -45,3 +45,41 @@ mkdir -p "${RESULT_DIR}"
 
 # Python interpreter.
 : "${PYTHON:=python3}"
+
+# report_result — print a DONE/FAILED summary after a federate's
+# python exits. Each federate script calls this with its python exit
+# code, the result JSON path, the script name, and the keys it
+# expects to find in the result. Exits the shell on failure so the
+# user sees a clear non-zero return in the terminal.
+#
+# Usage:
+#   "${PYTHON}" generator_main.py ... || RC=$?
+#   report_result "${RC:-0}" "${RESULT_PATH}" generator_run published
+report_result() {
+    local rc=$1
+    local result_path=$2
+    local script=$3
+    shift 3
+
+    if [[ ${rc} -ne 0 ]]; then
+        echo "${script}: FAILED — python exited with ${rc}" >&2
+        exit "${rc}"
+    fi
+    if [[ ! -f "${result_path}" ]]; then
+        echo "${script}: FAILED — no result file at ${result_path}" >&2
+        echo "${script}                (federate likely crashed before writing)" >&2
+        exit 1
+    fi
+
+    local report
+    report=$("${PYTHON}" -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+out = []
+for k in sys.argv[2:]:
+    v = d.get(k)
+    out.append(f'{k}={len(v)}' if isinstance(v, list) else f'{k}=?')
+print(' '.join(out))
+" "${result_path}" "$@" 2>/dev/null) || report="(parse error)"
+    echo "${script}: DONE — ${report}  result=${result_path}" >&2
+}

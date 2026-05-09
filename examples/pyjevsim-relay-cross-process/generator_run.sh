@@ -18,7 +18,8 @@ source "${_HERE}/_run_common.sh"
 RESULT_PATH="${RESULT_DIR}/generator-result.json"
 
 echo "generator_run: dialing ${RTID_URL}, writing ${RESULT_PATH}" >&2
-exec "${PYTHON}" "${_HERE}/generator_main.py" \
+RC=0
+"${PYTHON}" "${_HERE}/generator_main.py" \
     --url "${RTID_URL}" \
     --result "${RESULT_PATH}" \
     --gen-messages "${GEN_MESSAGES}" \
@@ -27,4 +28,5 @@ exec "${PYTHON}" "${_HERE}/generator_main.py" \
     --drain-ticks "${DRAIN_TICKS}" \
     --tail-ticks 0 \
     --tick-period "${TICK_PERIOD}" \
-    --startup-delay 0.0
+    --startup-delay 0.0 || RC=$?
+report_result "${RC}" "${RESULT_PATH}" generator_run published
