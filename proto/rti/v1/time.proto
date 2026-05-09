@@ -46,6 +46,19 @@ service TimeService {
   rpc QueryLogicalTime(QueryFederateTimeRequest) returns (QueryFederateTimeResponse);
   rpc QueryLookahead(QueryFederateTimeRequest) returns (QueryLookaheadResponse);
   rpc QueryLBTS(QueryLBTSRequest) returns (QueryLBTSResponse);
+
+  // Asynchronous-delivery toggle (M22). Per IEEE 1516.1 §8.16-8.17.
+  // Default per spec is DISABLED — TSO messages with timestamp t are
+  // buffered server-side until the federate's currentTime >= t (or it
+  // has a pending advance request whose requested time covers t).
+  // RO messages are unaffected.
+  //
+  // Existing federations that produce TSO without time-advance must
+  // call EnableAsynchronousDelivery on join to preserve gorti's pre-M22
+  // "always async" behavior; see docs/M22_DISPATCH_PLAN.md §8 for the
+  // migration audit.
+  rpc EnableAsynchronousDelivery(EnableAsynchronousDeliveryRequest) returns (Empty);
+  rpc DisableAsynchronousDelivery(DisableAsynchronousDeliveryRequest) returns (Empty);
 }
 
 message EnableRegulationRequest {
@@ -167,4 +180,22 @@ message QueryLBTSResponse {
   // PositiveInfinity internally; the wrapper translates so clients
   // don't have to handle +Inf in language-specific ways).
   bool finite = 2;
+}
+
+// EnableAsynchronousDelivery — opt into IEEE 1516.1 §8.16 async TSO
+// delivery semantics. Idempotent: re-invoking when already async
+// returns FailedPrecondition + time_already_asynchronous.
+message EnableAsynchronousDeliveryRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+// DisableAsynchronousDelivery — opt into IEEE 1516.1 §8.17 buffered
+// TSO delivery semantics (the spec default). Idempotent: re-invoking
+// when already off returns FailedPrecondition + time_not_asynchronous.
+message DisableAsynchronousDeliveryRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
 }

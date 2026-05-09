@@ -231,7 +231,20 @@ func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, s
 			Event: &rtiv1.FederateEvent_Reflect{Reflect: pb},
 		}}
 		seq++
-		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		// M22 TASK-237 — gate TSO delivery. If the federation has a
+		// TSOGate configured AND this delivery carries a timestamp
+		// (TSO), consult the gate. Async-on or currentTime-caught-up
+		// → direct Send; otherwise BufferTSO holds the event until
+		// advance grant releases it. RO delivery (ts == nil) bypasses.
+		if ts != nil && r.opts.TSOGate != nil {
+			if r.opts.TSOGate.ShouldDeliverNow(fed, sub, *ts) {
+				_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+			} else {
+				_ = r.opts.TSOGate.BufferTSO(ctx, fed, sub, *ts, evt)
+			}
+		} else {
+			_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		}
 		if r.opts.OnReflectDelivered != nil {
 			r.opts.OnReflectDelivered(fed, sub)
 		}

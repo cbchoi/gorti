@@ -323,3 +323,43 @@ func (s *timeService) QueryLBTS(
 	}
 	return &rtiv1.QueryLBTSResponse{Lbts: lbts, Finite: true}, nil
 }
+
+// --- M22 W2: Asynchronous-delivery toggle ---
+
+func (s *timeService) EnableAsynchronousDelivery(
+	ctx context.Context, req *rtiv1.EnableAsynchronousDeliveryRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "nil request")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.EnableAsynchronousDelivery(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+func (s *timeService) DisableAsynchronousDelivery(
+	ctx context.Context, req *rtiv1.DisableAsynchronousDeliveryRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "nil request")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.DisableAsynchronousDelivery(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}

@@ -108,6 +108,18 @@ type Options struct {
 	// RO delivery to engage; missing either means TSO-only behavior.
 	Orders AttributeOrderLookup
 
+	// TSOGate gates TSO outbound events (M22 W2 / TASK-236). When
+	// non-nil, fanoutReflect / fanoutReceive consult the gate before
+	// each TSO Send: ShouldDeliverNow=true → direct Send; false →
+	// BufferTSO holds the event until the recipient's advance grant
+	// or async-on toggle releases it. RO events bypass the gate.
+	//
+	// OPTIONAL: when nil, the registry falls back to direct Send for
+	// every event, preserving the pre-M22 always-async behavior. This
+	// keeps test fixtures + in-process drivers that do not wire a
+	// time manager working unchanged.
+	TSOGate core.TSODeliveryGate
+
 	// OnRegister is an OPTIONAL post-Register hook invoked after
 	// a successful object registration AND after the Discover
 	// fan-out completes. The cut-1 ownership.Manager wiring uses

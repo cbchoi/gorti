@@ -178,3 +178,27 @@ func (f *Federate) QueryLBTS(ctx context.Context) (lbts float64, finite bool, er
 	}
 	return v, true, nil
 }
+
+// EnableAsynchronousDelivery — M22. See IEEE 1516.1-2010 §8.16.
+// Default at federate join is OFF per spec; calling this opts into
+// gorti's pre-M22 immediate-TSO-delivery behavior. Returns
+// ErrTimeAlreadyAsynchronous if already on.
+func (f *Federate) EnableAsynchronousDelivery(ctx context.Context) error {
+	_, err := f.conn.tm.EnableAsynchronousDelivery(ctx, &rtiv1.EnableAsynchronousDeliveryRequest{
+		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName: f.federationName,
+		FederateHandle: f.federateHandle,
+	})
+	return wrapStatusErr(err)
+}
+
+// DisableAsynchronousDelivery — M22. See IEEE 1516.1-2010 §8.17.
+// Returns ErrTimeNotAsynchronous if already off.
+func (f *Federate) DisableAsynchronousDelivery(ctx context.Context) error {
+	_, err := f.conn.tm.DisableAsynchronousDelivery(ctx, &rtiv1.DisableAsynchronousDeliveryRequest{
+		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName: f.federationName,
+		FederateHandle: f.federateHandle,
+	})
+	return wrapStatusErr(err)
+}

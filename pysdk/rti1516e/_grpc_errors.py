@@ -165,6 +165,18 @@ class FederationHaltedError(RtiError):
     error_code = 707
 
 
+class TimeAlreadyAsynchronous(RtiError):
+    """Federate has already enabled asynchronous TSO delivery (M22)."""
+
+    error_code = 708
+
+
+class TimeNotAsynchronous(RtiError):
+    """Federate has not enabled asynchronous TSO delivery (M22)."""
+
+    error_code = 709
+
+
 # --- Translation entry point --------------------------------------------------
 
 
@@ -228,6 +240,10 @@ def _time_class_for(detail: str) -> type[RtiError] | None:
         return TimeAdvancingState
     if "federation halted" in detail:
         return FederationHaltedError
+    if "already enabled asynchronous" in detail:
+        return TimeAlreadyAsynchronous
+    if "not enabled asynchronous" in detail:
+        return TimeNotAsynchronous
     return None
 
 

@@ -49,6 +49,18 @@ type TimeManager interface {
 	// ErrTimeInvalidLookahead on negative / NaN / +Inf input.
 	ModifyLookahead(ctx context.Context, fed FederationName, h FederateHandle, lookahead LogicalTime) error
 
+	// EnableAsynchronousDelivery — IEEE 1516.1-2010 §8.17. M22.
+	// Federate opts into immediate TSO delivery (gorti's pre-M22
+	// behavior). Default is OFF per spec; without this call the time
+	// manager buffers TSO events whose timestamp exceeds the federate's
+	// currentTime. Returns ErrTimeAlreadyAsynchronous on re-invocation.
+	EnableAsynchronousDelivery(ctx context.Context, fed FederationName, h FederateHandle) error
+
+	// DisableAsynchronousDelivery — IEEE 1516.1-2010 §8.18. M22.
+	// Returns to spec-default buffered TSO delivery. Returns
+	// ErrTimeNotAsynchronous if already off.
+	DisableAsynchronousDelivery(ctx context.Context, fed FederationName, h FederateHandle) error
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns the per-federation time-management view for

@@ -36,6 +36,9 @@ var (
 	// (errs.go matches via errors.Is). M21 TASK-202b.
 	// time.ErrDuplicateNER aliases this so existing call sites keep working.
 	ErrTimeAdvancingState = errors.New("federate has an outstanding advance request")
+	// M22 — async-delivery toggle errors. Per IEEE 1516.1 §8.16-8.17.
+	ErrTimeAlreadyAsynchronous = errors.New("federate has already enabled asynchronous delivery")
+	ErrTimeNotAsynchronous     = errors.New("federate has not enabled asynchronous delivery")
 
 	// Encoding
 	ErrEncInsufficientBytes = errors.New("insufficient bytes for type")

@@ -805,6 +805,12 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// ddm.Manager into the object.DDMFilter shape (see
 		// ddmFilterAdapter below for the handle-conversion glue).
 		DDM: ddmFilterAdapter{m: ddmMgr},
+		// M22 W2 — TSO delivery gate. The time manager satisfies
+		// core.TSODeliveryGate; when nil the registry falls back to
+		// pre-M22 always-async behavior. Wiring it here makes the
+		// IEEE 1516.1 §8.16-8.17 default (async OFF) observable
+		// cross-process.
+		TSOGate: timeMgr,
 	})
 	if err != nil {
 		return nil, err

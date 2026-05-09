@@ -59,6 +59,19 @@ type nerState struct {
 	requestedTime core.LogicalTime
 	mode          AdvanceMode
 	pendingSince  stdtime.Time
+
+	// asyncDelivery: M22 — whether TSO messages with timestamp t are
+	// delivered immediately (true; gorti's pre-M22 behavior) or
+	// buffered server-side until federate's currentTime >= t (false;
+	// the IEEE 1516.1 §8.17 default). Toggled via Manager.Enable/
+	// DisableAsynchronousDelivery.
+	asyncDelivery bool
+
+	// tsoBuffer: M22 — TSO events held back when asyncDelivery=false
+	// and event.timestamp > currentTime. Drained on advance grant
+	// (emitGrant calls releaseBufferedTSO) or on toggle to async on
+	// (Manager.EnableAsynchronousDelivery).
+	tsoBuffer []bufferedTSOEvent
 }
 
 // nerStore is the goroutine-safe table from federateKey to nerState.
@@ -358,6 +371,12 @@ func (m *Manager) emitGrant(ctx context.Context, fed core.FederationName, h core
 		ns.pendingSince = stdtime.Time{}
 	}
 	ext.mu.Unlock()
+
+	// (d) M22 — release any buffered TSO events with timestamp <= t.
+	// Federates with async delivery off accumulate events in the
+	// per-federate buffer; advance grants are the natural release
+	// point. Drain in FIFO order outside the lock.
+	m.releaseBufferedTSO(ctx, fed, h, t)
 	return nil
 }
 

@@ -68,6 +68,8 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrTimeAlreadyRegulating),
 		errors.Is(err, core.ErrTimeAlreadyConstrained),
 		errors.Is(err, core.ErrTimeAdvancingState), // M21 TASK-202c: re-export of time.ErrDuplicateNER
+		errors.Is(err, core.ErrTimeAlreadyAsynchronous), // M22 TASK-235
+		errors.Is(err, core.ErrTimeNotAsynchronous),     // M22 TASK-235
 		errors.Is(err, core.ErrWireVersionMismatch),
 		errors.Is(err, core.ErrSyncPointAlreadyAchieved),
 		errors.Is(err, core.ErrOwnershipDivestPending),

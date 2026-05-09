@@ -43,6 +43,12 @@ var (
 	// ErrFederationHalted — detail string: federation_halted.
 	// Maps to core.ErrFederationHalted; the federation is in terminal halted state.
 	ErrFederationHalted = errors.New("federate: federation is halted")
+
+	// ErrTimeAlreadyAsynchronous — M22 — async delivery already enabled.
+	ErrTimeAlreadyAsynchronous = errors.New("federate: asynchronous delivery already enabled")
+
+	// ErrTimeNotAsynchronous — M22 — async delivery already disabled.
+	ErrTimeNotAsynchronous = errors.New("federate: asynchronous delivery is not enabled")
 )
 
 // SDK-foundation errors (not from TimeService).
@@ -86,6 +92,10 @@ func wrapStatusErr(err error) error {
 		return ErrTimeAdvancingState
 	case contains(msg, "federation halted"):
 		return ErrFederationHalted
+	case contains(msg, "already enabled asynchronous"):
+		return ErrTimeAlreadyAsynchronous
+	case contains(msg, "not enabled asynchronous"):
+		return ErrTimeNotAsynchronous
 	}
 	return err
 }

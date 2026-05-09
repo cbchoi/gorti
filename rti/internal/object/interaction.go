@@ -128,7 +128,17 @@ func (r *Registry) fanoutReceive(ctx context.Context, fed core.FederationName, s
 			Event: &rtiv1.FederateEvent_Receive{Receive: pb},
 		}}
 		seq++
-		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		// M22 TASK-237 — gate TSO delivery (see fanoutReflect for the
+		// matching logic). RO delivery (ts == nil) bypasses.
+		if ts != nil && r.opts.TSOGate != nil {
+			if r.opts.TSOGate.ShouldDeliverNow(fed, sub, *ts) {
+				_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+			} else {
+				_ = r.opts.TSOGate.BufferTSO(ctx, fed, sub, *ts, evt)
+			}
+		} else {
+			_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		}
 		if r.opts.OnInteractionDelivered != nil {
 			r.opts.OnInteractionDelivered(fed, sub)
 		}

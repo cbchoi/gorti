@@ -75,6 +75,10 @@ async def run(
     async with RtiConnection.connect(url) as rti:
         async with rti.join_federation(spec, federate_name="dashboard") as fed:
             print("dashboard_main: joined; subscribing", file=sys.stderr, flush=True)
+            # M22 — sensor sends TSO updates (timestamp=tick), but the
+            # dashboard does not advance time. Without async delivery
+            # the rtid would buffer reflects indefinitely.
+            await fed.enable_asynchronous_delivery()
             await fed.subscribe_object_class("SensorReading", attributes=["value"])
             if startup_delay > 0:
                 await asyncio.sleep(startup_delay)

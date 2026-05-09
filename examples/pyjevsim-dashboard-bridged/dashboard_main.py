@@ -72,6 +72,9 @@ async def run(
                 "dashboard_main: joined; honoring model subscriptions",
                 file=sys.stderr, flush=True,
             )
+            # M22 — sensor sends TSO updates; dashboard doesn't time-advance.
+            # Required for cross-process reflect delivery.
+            await fed.enable_asynchronous_delivery()
             for class_name, attrs in model.object_class_subscriptions().items():
                 await fed.subscribe_object_class(class_name, attributes=attrs)
             if startup_delay > 0:
