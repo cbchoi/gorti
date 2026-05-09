@@ -33,6 +33,7 @@ type Connection struct {
 	obj    rtiv1.ObjectServiceClient
 	stream rtiv1.StreamServiceClient
 	tm     rtiv1.TimeServiceClient // wired here so time.go (TASK-206) can use it
+	ddm    rtiv1.DDMServiceClient  // M23 W4 — Go SDK DDM coverage
 }
 
 // FederationSpec describes a federation to create-or-join.
@@ -96,6 +97,7 @@ func Connect(ctx context.Context, addr string) (*Connection, error) {
 		obj:    rtiv1.NewObjectServiceClient(cc),
 		stream: rtiv1.NewStreamServiceClient(cc),
 		tm:     rtiv1.NewTimeServiceClient(cc),
+		ddm:    rtiv1.NewDDMServiceClient(cc),
 	}, nil
 }
 

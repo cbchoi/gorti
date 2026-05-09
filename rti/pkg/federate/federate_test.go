@@ -130,6 +130,7 @@ func (r *testRtid) connect(t *testing.T) *Connection {
 		obj:    rtiv1.NewObjectServiceClient(cc),
 		stream: rtiv1.NewStreamServiceClient(cc),
 		tm:     rtiv1.NewTimeServiceClient(cc),
+		ddm:    rtiv1.NewDDMServiceClient(cc),
 	}
 }
 
