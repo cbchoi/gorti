@@ -533,11 +533,115 @@ check_m21() {
   else set_status M21 NOT_STARTED; printf "${DIM}M21: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M22 (cut 3 cross-cutting: TimeService completion) ----------
+check_m22() {
+  section "M22 — TimeService completion (Owner: agent-a + agent-c)"
+  echo "Exit (srs.md §10.4): pysdk surface parity + async-delivery toggle + NER race fixed + M21 workarounds removed"
+  local pass=0 total=8
+
+  # 1. Async-delivery RPCs declared in proto
+  if grep -q 'rpc EnableAsynchronousDelivery' proto/rti/v1/time.proto 2>/dev/null \
+     && grep -q 'rpc DisableAsynchronousDelivery' proto/rti/v1/time.proto 2>/dev/null; then
+    present "proto/rti/v1/time.proto: async-delivery RPCs declared"; pass=$((pass+1))
+  else
+    pending "proto/rti/v1/time.proto missing async-delivery RPCs"
+  fi
+
+  # 2. core.TSODeliveryGate interface present
+  if [ -f rti/internal/core/tso_gate.go ] \
+     && grep -q 'type TSODeliveryGate interface' rti/internal/core/tso_gate.go 2>/dev/null; then
+    present "core.TSODeliveryGate interface defined"; pass=$((pass+1))
+  else
+    missing "core.TSODeliveryGate missing"
+  fi
+
+  # 3. Async-delivery manager methods + buffer machinery
+  if [ -f rti/internal/time/asyncdelivery.go ] \
+     && grep -q 'func (m \*Manager) EnableAsynchronousDelivery' rti/internal/time/asyncdelivery.go 2>/dev/null \
+     && grep -q 'releaseBufferedTSO' rti/internal/time/asyncdelivery.go 2>/dev/null; then
+    present "Manager async-delivery methods + buffer release path"; pass=$((pass+1))
+  else
+    pending "Manager async-delivery machinery incomplete"
+  fi
+
+  # 4. object.Registry consults TSOGate (literal-string check on the
+  # update.go + interaction.go gate-check pattern)
+  if grep -q 'r.opts.TSOGate.ShouldDeliverNow' rti/internal/object/update.go 2>/dev/null \
+     && grep -q 'r.opts.TSOGate.ShouldDeliverNow' rti/internal/object/interaction.go 2>/dev/null; then
+    present "object.Registry consults TSOGate on TSO sends"; pass=$((pass+1))
+  else
+    pending "object.Registry TSOGate consultation missing"
+  fi
+
+  # 5. Pysdk surface parity — 15 methods on Federate
+  if [ -f pysdk/rti1516e/connection.py ]; then
+    local missing_count=0
+    for m in disable_time_regulation disable_time_constrained modify_lookahead \
+             time_advance_request time_advance_request_available \
+             next_message_request_available flush_queue_request \
+             query_logical_time query_lookahead query_lbts \
+             enable_asynchronous_delivery disable_asynchronous_delivery; do
+      if ! grep -q "async def $m" pysdk/rti1516e/connection.py 2>/dev/null; then
+        missing_count=$((missing_count + 1))
+      fi
+    done
+    if [ "$missing_count" -eq 0 ]; then
+      present "pysdk Federate exposes 12 added methods (W1+W2)"; pass=$((pass+1))
+    else
+      pending "pysdk Federate missing $missing_count of 12 added methods"
+    fi
+  fi
+
+  # 6. M22 spec test files in place
+  if [ -f rti/spec/M22/async_delivery_test.go ] \
+     && [ -f rti/spec/M22/ner_forced_grant_race_test.go ] \
+     && [ -f rti/spec/M22/time_service_completion_test.go ] \
+     && [ -f pysdk/tests/spec/m22/test_pysdk_time_surface.py ]; then
+    present "rti/spec/M22/ + pysdk/tests/spec/m22/ committed"; pass=$((pass+1))
+  else
+    pending "M22 spec test files incomplete"
+  fi
+
+  # 7. M21-era workarounds removed from regulator examples
+  local stale=0
+  if [ -f examples/pyjevsim-time-advance/regulator_main.py ] \
+     && grep -q 'for attempt in range(8)' examples/pyjevsim-time-advance/regulator_main.py 2>/dev/null; then
+    stale=$((stale + 1))
+  fi
+  if [ -f examples/go-timed/regulator_main.go ] \
+     && grep -q 'time.Sleep(5 \* time.Millisecond)' examples/go-timed/regulator_main.go 2>/dev/null; then
+    stale=$((stale + 1))
+  fi
+  if [ "$stale" -eq 0 ]; then
+    present "M21-era NER workarounds (retry-backoff + settle delay) removed"; pass=$((pass+1))
+  else
+    missing "$stale M21 workaround(s) still present in regulator examples"
+  fi
+
+  # 8. Migration audit — dashboard examples call enable_asynchronous_delivery
+  local audit_done=0
+  for f in examples/pyjevsim-dashboard/dashboard_main.py \
+           examples/pyjevsim-dashboard-bridged/dashboard_main.py; do
+    if [ -f "$f" ] && grep -q 'enable_asynchronous_delivery' "$f" 2>/dev/null; then
+      audit_done=$((audit_done + 1))
+    fi
+  done
+  if [ "$audit_done" -eq 2 ]; then
+    present "Migration audit: dashboard examples opt into async delivery"; pass=$((pass+1))
+  else
+    pending "Migration audit incomplete: $audit_done/2 dashboards updated"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M22 DONE; printf "${GRN}M22: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M22 IN_PROGRESS; printf "${YLW}M22: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M22 NOT_STARTED; printf "${DIM}M22: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21 M22; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -572,6 +676,7 @@ check_m9
 check_m10
 check_m11
 check_m21
+check_m22
 print_summary
 
 exit "$REGRESSED"

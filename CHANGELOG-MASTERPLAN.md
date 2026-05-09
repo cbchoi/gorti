@@ -82,6 +82,17 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
+#### M22 — TimeService completion (closed 2026-05-09)
+- Closes the four documented M21 carryovers in one milestone:
+  1. Pysdk surface parity — Federate gains 12 time methods (TAR, TARA, NMRA, FQR, ModifyLookahead, 3 queries, async-delivery pair, plus the disable variants); Rti1516eAmbassador exposes 15 corresponding camelCase methods. M21 W3B had only flipped NER from no-op to real; the rest were wire-reachable but absent from the Python surface.
+  2. `enable/disableAsynchronousDelivery` per IEEE 1516.1 §8.16-8.17 — proto extension (W2: 2 RPCs, append-only), manager state (`asyncDelivery bool` + per-federate `tsoBuffer` on nerState), wire handlers, both SDKs, typed pysdk exceptions (codes 708/709). Default = false per spec; existing examples that produce TSO without time-advance call `enable_asynchronous_delivery` on join (migration audit at plan §8 — the dashboard examples are the only ones affected).
+  3. NER+forced-grant race — diagnosed as SDK-side semantics, not a server bug. Forced grants (`clearPending=false` in `advance.go::decideGrant`) leave the federate in time-advancing state per spec; reissuing an advance primitive correctly returns `ErrTimeAdvancingState`. M21 examples treated forced grants as cycle completion, then worked around the symptom (Go: TAR + 5 ms settle delay; Python: retry-on-TimeAdvancingState backoff). M22 W3 lands `waitForFullGrant`/`wait_for_full_grant` that accumulates forced grants and returns only on the full grant; both M21 workarounds are gone.
+  4. Spec-test parity — `rti/spec/M22/` (8 tests across async_delivery + ner_forced_grant_race + ner_full_grant + time_service_completion) and `pysdk/tests/spec/m22/` (72 tests).
+- New `core.TSODeliveryGate` interface; `*time.Manager` satisfies it. `object.Registry.Options.TSOGate` consults the gate before TSO `Outbox.Send` for both `fanoutReflect` (object updates) and `fanoutReceive` (interactions); RO events bypass. `cmd/rtid/main.go` wires `timeMgr` as the gate. When TSOGate is nil (test fixtures), behavior is pre-M22 always-async — backwards-compatible.
+- Buffer is per-federate, FIFO, unbounded. Buffer cap + persistence are M23 follow-ups.
+- Frozen plan + 25 tasks (TASK-221..245) at `docs/M22_DISPATCH_PLAN.md`.
+- Runner config trade-off: examples/go-timed/ kept all-TAR for the multi-federate runner (NER with mismatched lookaheads in lockstep hits a scheduling-edge stall not in scope for M22). The SDK fix (`waitForFullGrant`) is the correct generalization for any NER/NMRA federate; TAR remains the right default for synchronized cycles.
+
 #### M21 — Complete TimeService gRPC wiring (closed 2026-05-07)
 - Closes the cut-1 / cut-2 time-service gap: NER was the only advance primitive with a wire path; TAR / TARA / NMRA / FQR / queries returned `Unimplemented`. Pysdk's time RPCs short-circuited as no-ops because of this.
 - Proto extension (W1, append-only): `proto/rti/v1/time.proto` gains TAR / TARA / NMRA / FQR / ModifyLookahead + 3 query RPCs (QueryLogicalTime / QueryLookahead / QueryLBTS), plus 10 new message types
