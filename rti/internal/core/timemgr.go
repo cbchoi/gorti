@@ -43,6 +43,12 @@ type TimeManager interface {
 	// Drains the federate's TSO queue up to t and emits a grant when complete.
 	FlushQueueRequest(ctx context.Context, fed FederationName, h FederateHandle, t LogicalTime) error
 
+	// ModifyLookahead — IEEE 1516.1-2010 §8.16. M21 (TASK-202b).
+	// Mutates the regulating federate's lookahead in place. Returns
+	// ErrTimeNotRegulating if the federate is not currently regulating;
+	// ErrTimeInvalidLookahead on negative / NaN / +Inf input.
+	ModifyLookahead(ctx context.Context, fed FederationName, h FederateHandle, lookahead LogicalTime) error
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns the per-federation time-management view for

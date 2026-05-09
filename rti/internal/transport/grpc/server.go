@@ -172,7 +172,12 @@ func NewServer(opts Options) (*Server, error) {
 		declService:   newDeclarationService(opts.Declarations),
 		objService:    newObjectService(opts.Objects),
 		streamService: newStreamService(opts.Outbox),
-		timeService:   nil, // M3 — Time RPCs return Unimplemented when nil.
+		timeService:   nil, // composed below when opts.Time != nil (M21 TASK-204).
+	}
+	// M21 TASK-204: TimeService is wired the same way as the cut-3
+	// service-group entries below — register only when composed.
+	if opts.Time != nil {
+		srv.timeService = newTimeService(opts.Time)
 	}
 	// M12 W1: cut-3 gRPC services. Each is optional at construction
 	// time so existing callers (older test harnesses, M3 / M4 cmd/rtid
