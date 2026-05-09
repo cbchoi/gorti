@@ -266,12 +266,23 @@ func coreTransportToProto(t core.TransportMode) rtiv1.TransportMode {
 }
 
 // protoResignActionToCore maps the proto ResignAction enum to the core
-// equivalent. Cut 1 supports only UnconditionallyDivestAttributes; other
-// values surface as ResignActionUnspecified and the manager rejects.
+// equivalent. M24 W2: all 6 spec values accepted (was 1). UNSPECIFIED
+// at the wire surfaces as core.ResignActionUnspecified — the manager
+// rejects with InvalidArgument + ErrResignActionUnsupported.
 func protoResignActionToCore(a rtiv1.ResignAction) core.ResignAction {
 	switch a {
 	case rtiv1.ResignAction_RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES:
 		return core.ResignActionUnconditionallyDivestAttributes
+	case rtiv1.ResignAction_RESIGN_ACTION_DELETE_THEN_DIVEST:
+		return core.ResignActionDeleteThenDivest
+	case rtiv1.ResignAction_RESIGN_ACTION_CANCEL_THEN_DELETE:
+		return core.ResignActionCancelThenDelete
+	case rtiv1.ResignAction_RESIGN_ACTION_CANCEL_PENDING_OWNERSHIP:
+		return core.ResignActionCancelPendingOwnership
+	case rtiv1.ResignAction_RESIGN_ACTION_NO_ACTION:
+		return core.ResignActionNoAction
+	case rtiv1.ResignAction_RESIGN_ACTION_DELETE_OBJECTS:
+		return core.ResignActionDeleteObjects
 	default:
 		return core.ResignActionUnspecified
 	}

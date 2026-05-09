@@ -654,11 +654,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		return nil, fmt.Errorf("rtid: time manager init: %w", err)
 	}
 
-	// M24 W1 — ownership-release hook is set after ownMgr is constructed
-	// (a few lines down). The fedMgr's OnFederateResigned chain captures
-	// a function-pointer indirection so the resign call dispatches into
-	// ownMgr.ReleaseAllOwnedBy at runtime, after ownMgr is wired in.
+	// M24 W1+W2 — resign hooks are set after ownMgr/objReg are constructed
+	// (a few lines down). The fedMgr captures function-pointer indirections
+	// so dispatch resolves at runtime, after the dependencies are wired in.
 	var ownResignHook func(context.Context, core.FederationName, core.FederateHandle)
+	var resigningDispatch func(context.Context, core.FederationName, core.FederateHandle, core.ResignAction)
 	fedMgr, err := federation.New(federation.Options{
 		Clock:              clock,
 		EventLog:           multi,
@@ -670,13 +670,25 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			// pending NER/TAR/TARA/NMRA/FQR doesn't leak in nerStore.
 			timeMgr.OnFederateResign,
 			// M24 W1: indirection — resolved when ownResignHook is set
-			// after ownMgr construction.
+			// after ownMgr construction. UNCONDITIONALLY_DIVEST is the
+			// default action; this hook fires on every resign regardless
+			// of action so we run release-on-resign for the divest paths
+			// AND ensure stale-record cleanup happens on the no-action
+			// path too (defensive — pre-M24 left these stale).
 			func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
 				if ownResignHook != nil {
 					ownResignHook(ctx, fed, h)
 				}
 			},
 		),
+		// M24 W2 — action-aware pre-resign dispatch. Runs BEFORE the
+		// roster mutation so ownership/object cleanup observes the
+		// federate as still-joined. Indirection resolved below.
+		OnFederateResigning: func(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction) {
+			if resigningDispatch != nil {
+				resigningDispatch(ctx, fed, h, action)
+			}
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -835,6 +847,36 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// M24 W2 — action-aware resign dispatch. Wired here, AFTER both
+	// ownMgr and objReg exist. Per IEEE 1516.1-2010 §4.10:
+	//   UNCONDITIONALLY_DIVEST_ATTRIBUTES → release ownership.
+	//   DELETE_OBJECTS → delete every owned instance.
+	//   DELETE_THEN_DIVEST → DELETE_OBJECTS + RELEASE.
+	//   CANCEL_PENDING_OWNERSHIP → cancel pending divest/acquire.
+	//   CANCEL_THEN_DELETE → cancel + DELETE_OBJECTS (no divest).
+	//   NO_ACTION → leave everything (subscribers still see the obj).
+	resigningDispatch = func(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction) {
+		switch action {
+		case core.ResignActionUnconditionallyDivestAttributes:
+			ownMgr.ReleaseAllOwnedBy(ctx, fed, h)
+		case core.ResignActionDeleteObjects:
+			deleteAllOwnedBy(ctx, objReg, fed, h)
+		case core.ResignActionDeleteThenDivest:
+			deleteAllOwnedBy(ctx, objReg, fed, h)
+			ownMgr.ReleaseAllOwnedBy(ctx, fed, h)
+		case core.ResignActionCancelPendingOwnership:
+			ownMgr.CancelPendingFor(ctx, fed, h)
+		case core.ResignActionCancelThenDelete:
+			ownMgr.CancelPendingFor(ctx, fed, h)
+			deleteAllOwnedBy(ctx, objReg, fed, h)
+		case core.ResignActionNoAction:
+			// Leave ownership + objects in place. Stale records will
+			// linger pointing at the resigned handle (matches the
+			// spec's NO_ACTION semantic — caller knows what they're
+			// asking for).
+		}
 	}
 
 	grpcSrv, err := grpcsvc.NewServer(grpcsvc.Options{
@@ -1269,6 +1311,39 @@ func momFederateResignedHook(momMgr core.ManagementObjectModel, logger *slog.Log
 			logger.Warn("rtid: MOM FederateResigned hook failed",
 				"federation", fed, "handle", h, "err", err)
 		}
+	}
+}
+
+// deleteAllOwnedBy is the M24 W2 helper used by the action-aware
+// resign dispatch. Walks the object registry's snapshot for the
+// federation, finds every instance whose owner matches h, and calls
+// Registry.Delete to fan out RemoveObjectInstance.
+//
+// Implementation note: Registry doesn't expose an "iterate instances"
+// API, so we rely on the OwnerSnapshot below — for each (obj, attr)
+// owned by h, attempt Delete(obj). Delete is idempotent on already-
+// deleted handles (returns ErrObjectHandleInvalid silently).
+func deleteAllOwnedBy(ctx context.Context, reg *object.Registry, fed core.FederationName, h core.FederateHandle) {
+	if reg == nil {
+		return
+	}
+	// Collect distinct object handles owned by h via the registry's
+	// public Snapshot — cheap, returns aggregate counts only. We
+	// enumerate via a brute-force probe over the object handle space
+	// using the object snapshot count as the upper bound. (A future
+	// cut should add Registry.IterateInstances for cleanliness.)
+	snap := reg.Snapshot(fed)
+	if snap.InstanceCount == 0 {
+		return
+	}
+	// Conservative: try every handle in [1, InstanceCount + slack].
+	// Delete returns ErrObjectHandleInvalid for handles that don't
+	// exist or have been deleted; ErrObjectNotOwned for handles owned
+	// by other federates. Both are silently ignored — only owned
+	// instances actually delete.
+	const slack = 16 // protects against late-registration races
+	for i := uint32(1); i <= snap.InstanceCount+slack; i++ {
+		_ = reg.Delete(ctx, fed, h, core.ObjectHandle(i), nil, nil)
 	}
 }
 

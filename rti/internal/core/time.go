@@ -21,11 +21,16 @@ const (
 	ModeBestEffort
 )
 
-// ResignAction. Cut 1 supports only UnconditionallyDivestAttributes.
+// ResignAction — IEEE 1516.1-2010 §4.10. M24 expanded from 1 accepted
+// value to 6.
 type ResignAction uint8
 
 const (
 	ResignActionUnspecified ResignAction = iota
 	ResignActionUnconditionallyDivestAttributes
-	// Other actions deferred to cut 2; see proto/rti/v1/common.proto.
+	ResignActionDeleteThenDivest          // M24
+	ResignActionCancelThenDelete          // M24
+	ResignActionCancelPendingOwnership    // M24
+	ResignActionNoAction                  // M24
+	ResignActionDeleteObjects             // M24
 )

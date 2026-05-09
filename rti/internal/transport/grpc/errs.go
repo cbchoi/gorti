@@ -81,7 +81,9 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrRegionInUse),
 		errors.Is(err, core.ErrSaveAlreadyInProgress),
 		errors.Is(err, core.ErrRestoreAlreadyInProgress),
-		errors.Is(err, core.ErrSaveBundleCorrupt):
+		errors.Is(err, core.ErrSaveBundleCorrupt),
+		errors.Is(err, core.ErrSaveNotInProgress),    // M24
+		errors.Is(err, core.ErrRestoreNotInProgress): // M24
 		return status.Error(codes.FailedPrecondition, err.Error())
 
 	// InvalidArgument — caller-supplied value violates the contract.
@@ -93,6 +95,7 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrTimeInvalidLookahead),
 		errors.Is(err, core.ErrTimeRequestInPast),
 		errors.Is(err, core.ErrTransportTypeUnspecified), // M23
+		errors.Is(err, core.ErrResignActionUnsupported),  // M24
 		errors.Is(err, core.ErrEncInsufficientBytes),
 		errors.Is(err, core.ErrEncTypeMismatch),
 		errors.Is(err, core.ErrEncPaddingViolation),

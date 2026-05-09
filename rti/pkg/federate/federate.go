@@ -198,10 +198,49 @@ func (f *Federate) Name() string { return f.federateName }
 // channel closes when Resign() completes or rtid drops the stream.
 func (f *Federate) Events() <-chan Event { return f.eventCh }
 
-// Resign sends ResignFederation to rtid, cancels the events-drain
-// goroutine, and waits for it to exit. Idempotent — second call is
-// a no-op.
+// ResignAction — IEEE 1516.1-2010 §4.10. M24 expanded the accepted
+// set from 1 to 6.
+type ResignAction uint8
+
+const (
+	ResignActionUnspecified ResignAction = iota
+	ResignActionUnconditionallyDivestAttributes
+	ResignActionDeleteThenDivest
+	ResignActionCancelThenDelete
+	ResignActionCancelPendingOwnership
+	ResignActionNoAction
+	ResignActionDeleteObjects
+)
+
+func (a ResignAction) wire() rtiv1.ResignAction {
+	switch a {
+	case ResignActionUnconditionallyDivestAttributes:
+		return rtiv1.ResignAction_RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES
+	case ResignActionDeleteThenDivest:
+		return rtiv1.ResignAction_RESIGN_ACTION_DELETE_THEN_DIVEST
+	case ResignActionCancelThenDelete:
+		return rtiv1.ResignAction_RESIGN_ACTION_CANCEL_THEN_DELETE
+	case ResignActionCancelPendingOwnership:
+		return rtiv1.ResignAction_RESIGN_ACTION_CANCEL_PENDING_OWNERSHIP
+	case ResignActionNoAction:
+		return rtiv1.ResignAction_RESIGN_ACTION_NO_ACTION
+	case ResignActionDeleteObjects:
+		return rtiv1.ResignAction_RESIGN_ACTION_DELETE_OBJECTS
+	default:
+		return rtiv1.ResignAction_RESIGN_ACTION_UNSPECIFIED
+	}
+}
+
+// Resign sends ResignFederation to rtid with the default action
+// (UnconditionallyDivestAttributes). Use ResignWithAction to pass a
+// different action. Idempotent — second call is a no-op.
 func (f *Federate) Resign(ctx context.Context) error {
+	return f.ResignWithAction(ctx, ResignActionUnconditionallyDivestAttributes)
+}
+
+// ResignWithAction sends ResignFederation with an explicit action.
+// IEEE 1516.1-2010 §4.10. M24 W2.
+func (f *Federate) ResignWithAction(ctx context.Context, action ResignAction) error {
 	var resignErr error
 	f.resignOnce.Do(func() {
 		// Best-effort wire-level resign. We tolerate failure here
@@ -212,7 +251,7 @@ func (f *Federate) Resign(ctx context.Context) error {
 			WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 			FederationName: f.federationName,
 			FederateHandle: f.federateHandle,
-			Action:         rtiv1.ResignAction_RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES,
+			Action:         action.wire(),
 		})
 		// NotFound is fine — federation may have been destroyed by a peer.
 		if err != nil && status.Code(err) != codes.NotFound {

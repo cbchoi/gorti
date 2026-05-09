@@ -30,13 +30,16 @@ message LogicalTime {
   double value = 1;
 }
 
-// ResignAction. Cut 1 supports only UNCONDITIONALLY_DIVEST_ATTRIBUTES.
+// ResignAction — IEEE 1516.1-2010 §4.10. M24 expanded the accepted
+// set from 1 (UNCONDITIONALLY_DIVEST_ATTRIBUTES) to all 6 spec values.
 enum ResignAction {
   RESIGN_ACTION_UNSPECIFIED = 0;
   RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES = 1;
-  // RESIGN_ACTION_DELETE_THEN_DIVEST                = 2;  // cut 2
-  // RESIGN_ACTION_CANCEL_THEN_DELETE                = 3;  // cut 2
-  // RESIGN_ACTION_CANCEL_PENDING_OWNERSHIP          = 4;  // cut 2
+  RESIGN_ACTION_DELETE_THEN_DIVEST                = 2;  // M24
+  RESIGN_ACTION_CANCEL_THEN_DELETE                = 3;  // M24 — cancel pending acquires + delete owned objects
+  RESIGN_ACTION_CANCEL_PENDING_OWNERSHIP          = 4;  // M24
+  RESIGN_ACTION_NO_ACTION                         = 5;  // M24 — leave ownership/objects in place
+  RESIGN_ACTION_DELETE_OBJECTS                    = 6;  // M24 — delete owned objects without divest
 }
 
 // TransportationType — IEEE 1516.1-2010 §6.20-6.22 (M23). Per-instance

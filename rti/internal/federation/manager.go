@@ -126,6 +126,15 @@ type Options struct {
 	// to MOM.FederateResigned. Fires after the eventlog append + roster
 	// mutation. MUST NOT block.
 	OnFederateResigned func(ctx context.Context, fed core.FederationName, h core.FederateHandle)
+
+	// OnFederateResigning — M24 W2. Fires BEFORE the roster mutation
+	// (after action validation) so cmd/rtid can dispatch action-aware
+	// cleanup (release ownership, delete owned objects, cancel pending
+	// acquires) before the federate disappears from the roster.
+	// OPTIONAL: when nil, ResignFederation skips action-aware cleanup
+	// and falls back to the legacy "remove from roster + run
+	// OnFederateResigned" path. MUST NOT block.
+	OnFederateResigning func(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction)
 }
 
 // New constructs a Manager. Returns an error if any required dependency in
@@ -409,8 +418,13 @@ func (e federateResignedEvent) Seq() uint64 { return e.seq }
 
 // ResignFederation implements core.FederationStore. See SRS §FR-FM-3.
 //
-// Cut 1: only ResignActionUnconditionallyDivestAttributes is supported.
-// Other actions return a "not supported in cut 1" error.
+// M24 W2: all 6 IEEE 1516.1-2010 §4.10 ResignAction values accepted
+// (was 1). UNSPECIFIED returns ErrResignActionUnsupported
+// (InvalidArgument at the wire). Per-action cleanup (release
+// ownership, delete owned objects, cancel pending acquires) is
+// dispatched via the OnFederateResigning hook BEFORE the roster
+// mutation so subsequent reads against ownership / object see the
+// resigned-federate-gone state consistently.
 //
 // Idempotency: resign of an already-resigned (or never-joined) federate
 // returns core.ErrFederateNotJoined. Resign on an unknown federation
@@ -420,9 +434,8 @@ func (e federateResignedEvent) Seq() uint64 { return e.seq }
 // (write-ahead): on Append failure the resign is rejected and the roster
 // is unchanged so the eventlog and in-memory state stay consistent.
 func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction) error {
-	if action != core.ResignActionUnconditionallyDivestAttributes {
-		return fmt.Errorf("federation %q resign handle %d: action %d not supported in cut 1 "+
-			"(only UnconditionallyDivestAttributes)", fed, h, action)
+	if action == core.ResignActionUnspecified {
+		return core.ErrResignActionUnsupported
 	}
 
 	m.mu.RLock()
@@ -437,6 +450,11 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 	name, joined := fs.handleToName[h]
 	if !joined {
 		return core.ErrFederateNotJoined
+	}
+
+	// M24 W2 — action-aware cleanup runs BEFORE the roster mutation.
+	if m.opts.OnFederateResigning != nil {
+		m.opts.OnFederateResigning(ctx, fed, h, action)
 	}
 
 	if m.opts.EventLog != nil {

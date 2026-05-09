@@ -46,6 +46,11 @@ var (
 	ErrObjectAlreadyDeleted              = errors.New("object instance already deleted")
 	ErrTransportTypeUnspecified          = errors.New("transport type must be Reliable or BestEffort")
 
+	// M24 — federation-management additions per IEEE 1516.1 §4.
+	ErrResignActionUnsupported = errors.New("resign action not supported")
+	ErrSaveNotInProgress       = errors.New("no save in progress to abort")
+	ErrRestoreNotInProgress    = errors.New("no restore in progress to abort")
+
 	// Encoding
 	ErrEncInsufficientBytes = errors.New("insufficient bytes for type")
 	ErrEncTypeMismatch      = errors.New("value does not match codec type")

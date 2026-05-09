@@ -204,7 +204,9 @@ class GrpcTransport:
                 kwargs.get("federate_type", ""),
             )
         if method == "resign_federation":
-            return await self._resign_federation(kwargs["federate_handle"])
+            return await self._resign_federation(
+                kwargs["federate_handle"], kwargs.get("action"),
+            )
         if method == "publish_interaction_class":
             return await self._publish_interaction(
                 kwargs["federate_handle"], kwargs["class_name"]
@@ -399,7 +401,9 @@ class GrpcTransport:
         self._start_event_stream(federate_handle)
         return federate_handle
 
-    async def _resign_federation(self, federate_handle: int) -> None:
+    async def _resign_federation(
+        self, federate_handle: int, action: int | None = None,
+    ) -> None:
         from rti.v1 import common_pb2, federation_pb2
 
         if self._federation_name is None:
@@ -413,11 +417,15 @@ class GrpcTransport:
             task.cancel()
             with contextlib.suppress(BaseException):
                 await task
+        # M24 W2 — caller may pass an explicit ResignAction value.
+        # Default = UNCONDITIONALLY_DIVEST_ATTRIBUTES (matches pre-M24).
+        if action is None:
+            action = common_pb2.ResignAction.RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES
         req = federation_pb2.ResignFederationRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name,
             federate_handle=federate_handle,
-            action=common_pb2.ResignAction.RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES,
+            action=action,
         )
         with contextlib.suppress(Exception):
             await self.federation.ResignFederation(req)
