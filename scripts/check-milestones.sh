@@ -733,11 +733,82 @@ check_m23() {
   else set_status M23 NOT_STARTED; printf "${DIM}M23: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M24 (FederationManagement §4 completion + Resign correctness) ----------
+check_m24() {
+  section "M24 — FederationManagement (§4) completion + Resign correctness (Owner: agent-a + agent-c)"
+  echo "Exit (srs.md §10.4): all 6 ResignActions accepted, ownership.ReleaseAllOwnedBy chained, listMembers + abort save/restore wired"
+  local pass=0 total=7
+
+  # 1. ResignAction enum expansion (5 new values uncommented in common.proto)
+  if grep -q 'RESIGN_ACTION_DELETE_THEN_DIVEST\s*=\s*2' proto/rti/v1/common.proto 2>/dev/null \
+     && grep -q 'RESIGN_ACTION_NO_ACTION' proto/rti/v1/common.proto 2>/dev/null \
+     && grep -q 'RESIGN_ACTION_DELETE_OBJECTS' proto/rti/v1/common.proto 2>/dev/null; then
+    present "common.proto: ResignAction enum has all 6 spec values"; pass=$((pass+1))
+  else
+    pending "ResignAction enum incomplete"
+  fi
+
+  # 2. ownership.Manager.ReleaseAllOwnedBy + CancelPendingFor
+  if [ -f rti/internal/ownership/release.go ] \
+     && grep -q 'func (m \*Manager) ReleaseAllOwnedBy' rti/internal/ownership/release.go 2>/dev/null \
+     && grep -q 'func (m \*Manager) CancelPendingFor' rti/internal/ownership/release.go 2>/dev/null; then
+    present "ownership.Manager.ReleaseAllOwnedBy + CancelPendingFor"; pass=$((pass+1))
+  else
+    missing "rti/internal/ownership/release.go missing or incomplete"
+  fi
+
+  # 3. federation.Manager accepts new ResignAction values (no longer
+  # rejects with "not supported in cut 1")
+  if ! grep -q 'not supported in cut 1' rti/internal/federation/manager.go 2>/dev/null; then
+    present "federation.Manager.ResignFederation accepts all spec actions"; pass=$((pass+1))
+  else
+    missing "federation.Manager still rejects with 'not supported in cut 1'"
+  fi
+
+  # 4. OnFederateResigning hook present
+  if grep -q 'OnFederateResigning func' rti/internal/federation/manager.go 2>/dev/null; then
+    present "OnFederateResigning hook (action-aware) declared"; pass=$((pass+1))
+  else
+    missing "OnFederateResigning hook missing"
+  fi
+
+  # 5. cmd/rtid resigning-dispatch wires per-action cleanup
+  if grep -q 'resigningDispatch' rti/cmd/rtid/main.go 2>/dev/null \
+     && grep -q 'deleteAllOwnedBy' rti/cmd/rtid/main.go 2>/dev/null; then
+    present "cmd/rtid: resigning-dispatch + deleteAllOwnedBy wired"; pass=$((pass+1))
+  else
+    missing "cmd/rtid resigning-dispatch missing"
+  fi
+
+  # 6. ListFederationMembers + Abort save/restore RPCs
+  if grep -q 'rpc ListFederationMembers' proto/rti/v1/federation.proto 2>/dev/null \
+     && grep -q 'rpc AbortFederationSave' proto/rti/v1/savepoint.proto 2>/dev/null \
+     && grep -q 'rpc AbortFederationRestore' proto/rti/v1/savepoint.proto 2>/dev/null; then
+    present "Proto: ListFederationMembers + AbortFederationSave/Restore"; pass=$((pass+1))
+  else
+    pending "Proto missing W3 RPCs"
+  fi
+
+  # 7. M24 spec test files
+  if [ -f rti/spec/M24/release_test.go ] \
+     && [ -f rti/spec/M24/resign_actions_test.go ] \
+     && [ -f rti/spec/M24/list_members_test.go ] \
+     && [ -f rti/spec/M24/m24_completion_test.go ]; then
+    present "rti/spec/M24/ + pysdk/tests/spec/m24/ committed"; pass=$((pass+1))
+  else
+    pending "M24 spec test files incomplete"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M24 DONE; printf "${GRN}M24: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M24 IN_PROGRESS; printf "${YLW}M24: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M24 NOT_STARTED; printf "${DIM}M24: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21 M22 M23; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21 M22 M23 M24; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -774,6 +845,7 @@ check_m11
 check_m21
 check_m22
 check_m23
+check_m24
 print_summary
 
 exit "$REGRESSED"

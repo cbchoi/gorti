@@ -82,6 +82,42 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
+#### M24 — FederationManagement (§4) completion + Resign correctness (closed 2026-05-09)
+- Closes the most surprising correctness gap left in cut-3. Pre-M24 the federation manager rejected every `ResignAction` except `UNCONDITIONALLY_DIVEST_ATTRIBUTES` — and **even the accepted action did not actually divest**. The manager removed the federate from the roster; ownership records stayed pointing at a non-existent handle.
+
+§4.10 ResignAction (W1 + W2):
+- New `ownership.Manager.ReleaseAllOwnedBy` (rti/internal/ownership/release.go, NEW). Drops every record where `owner == h`. Returns the released set in (object, attribute) sort order. Idempotent.
+- New `ownership.Manager.CancelPendingFor` — drops pending divests / acquires keyed by federate. Used by `CANCEL_PENDING_OWNERSHIP` + `CANCEL_THEN_DELETE_THEN_DIVEST`.
+- Federation manager: `OnFederateResigning` hook (NEW, action-aware, fires BEFORE roster mutation). Existing `OnFederateResigned` (action-less) preserved for M21+MOM hooks.
+- `cmd/rtid` resigning-dispatch closure wires per-action work, depending on the M23 `delete_object_instance` machinery for the DELETE_* actions:
+  - `UNCONDITIONALLY_DIVEST` → `ownMgr.ReleaseAllOwnedBy`
+  - `DELETE_OBJECTS` → `deleteAllOwnedBy(objReg)` (probe over object-handle range)
+  - `DELETE_THEN_DIVEST` → both, in order
+  - `CANCEL_PENDING_OWNERSHIP` → `ownMgr.CancelPendingFor`
+  - `CANCEL_THEN_DELETE` → cancel + delete (no divest)
+  - `NO_ACTION` → no-op (matches IEEE 1516.1's leave-everything semantic)
+- proto/rti/v1/common.proto ResignAction enum: 5 values uncommented + extended (was 1 accepted, now 6 + UNSPECIFIED rejected). UNSPECIFIED at the wire returns `core.ErrResignActionUnsupported` (InvalidArgument).
+- Go SDK: `ResignAction` enum constants + `Federate.ResignWithAction(ctx, action)` (default `Resign` keeps `UnconditionallyDivestAttributes` for backwards compat).
+- Pysdk: `_resign_federation` gains optional `action` parameter.
+
+§4.8 ListFederationMembers + §4.28/§4.30 Abort save/restore (W3):
+- proto: `ListFederationMembers` RPC + `FederationMember` message (handle, name, type).
+- proto: `AbortFederationSave` + `AbortFederationRestore` RPCs.
+- `core.FederationStore.ListMembers` + `core.FederationMember` (NEW).
+- `core.SavepointCoordinator.AbortSave` + `AbortRestore` (NEW). New sentinels `ErrSaveNotInProgress` + `ErrRestoreNotInProgress`.
+- `federation.Manager.ListMembers` (NEW) combines existing `MembersOf` + `handleToName` + `federateType`.
+- `savepoint.Manager.AbortSave` / `AbortRestore`: drop in-progress entries; record label as `StateNotSaved` / `RestoreFailed`.
+- Wire handlers + Go SDK methods. Pysdk surface deferred to a future cut (proto stubs land here; SDK wrapper is mechanical).
+
+Frozen plan + 4 waves (TASK-274..290) at `docs/M24_DISPATCH_PLAN.md`.
+
+Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
+
+Out of scope (deferred to M25+):
+- §4.2 connect / §4.4 disconnect — gRPC channel handles implicitly.
+- Wider §7 ownership — only the resign-related releases land in M24.
+- M15+ distributed federation lifecycle.
+
 #### M23 — ObjectManagement (§6) + DDM (§9) completion (closed 2026-05-09)
 - Two distinct gap closures in one milestone, identified by post-M22 audits.
 
