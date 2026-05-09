@@ -36,6 +36,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cbchoi/gorti/rti/internal/buildinfo"
 	"github.com/cbchoi/gorti/rti/internal/core"
 	"github.com/cbchoi/gorti/rti/internal/ddm"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
@@ -55,6 +56,7 @@ import (
 )
 
 func main() {
+	showVersion := flag.Bool("version", false, "print rtid version and exit")
 	listen := flag.String("listen", ":8442", "gRPC listen address")
 	metricsListen := flag.String("metrics-listen", ":9090", "Prometheus HTTP listen")
 	// rtid-TUI Phase 1 (docs/rtid-tui.md §2.5 PINNED): a SEPARATE gRPC
@@ -110,6 +112,11 @@ func main() {
 	enableDDS := flag.Bool("enable-dds", false, "accept CreateFederation requests with transport_mode=DDS. Requires the rtid binary to have been built with -tags=dds; the default CGo-free build rejects DDS even when this flag is set. See docs/m19-dds-adapter.md.")
 	ddsDomainID := flag.Int("dds-domain-id", 0, "default DDS domain ID for federations created in DDS mode. Only meaningful when --enable-dds=true. Zero is the DDS default domain.")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("rtid", buildinfo.String())
+		return
+	}
 
 	logger := buildLogger(*logLevel, *logFormat)
 	slog.SetDefault(logger)
@@ -634,12 +641,30 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		return nil, err
 	}
 
+	// M21 TASK-204: time.Manager is composed BEFORE federation.Manager
+	// so the federation's OnFederateResigned hook can call into
+	// timeMgr.OnFederateResign (TASK-204c) — pending NER/TAR/TARA/
+	// NMRA/FQR state must drop when the federate leaves.
+	timeMgr, err := timepkg.New(timepkg.Options{
+		Clock:    clock,
+		Outbox:   outbox,
+		EventLog: multi,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("rtid: time manager init: %w", err)
+	}
+
 	fedMgr, err := federation.New(federation.Options{
 		Clock:              clock,
 		EventLog:           multi,
 		FOMs:               foms,
-		OnFederateJoined:   momFederateJoinedHook(momMgr, cfg.Logger),
-		OnFederateResigned: momFederateResignedHook(momMgr, cfg.Logger),
+		OnFederateJoined: momFederateJoinedHook(momMgr, cfg.Logger),
+		OnFederateResigned: chainOnFederateResigned(
+			momFederateResignedHook(momMgr, cfg.Logger),
+			// M21 TASK-204c: drop time-mgr pending state on resign so a
+			// pending NER/TAR/TARA/NMRA/FQR doesn't leak in nerStore.
+			timeMgr.OnFederateResign,
+		),
 	})
 	if err != nil {
 		return nil, err
@@ -681,6 +706,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// M21 TASK-204: timeMgr is constructed earlier (above the federation
+	// manager) so the OnFederateResigned chain can call into it; see
+	// the construction site above for rationale.
 
 	// M10 W1: Data Distribution Management. The Manager is composed
 	// here so the object.Registry can consult it on every update;
@@ -788,6 +817,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		Outbox:                     outbox,
 		OnCreateFederationSuccess:  createFederationHook(foms, momMgr, cfg.Logger),
 		OnDestroyFederationSuccess: destroyFederationHook(momMgr, cfg.Logger),
+		// M21 TASK-204: TimeService gRPC. Composed unconditionally
+		// in server mode (vs cut-1's nil placeholder) so federates
+		// can drive HLA time advance cross-process.
+		Time: timeMgr,
 		// M12 W1: cut-3 gRPC services. Save manager is optional —
 		// only wired when --save-dir is set (saveMgr == nil otherwise).
 		Sync:      syncMgr,
@@ -852,15 +885,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			DDM:          ddmMgr,
 			Savepoint:    saveMgr,
 			MOM:          momMgr,
-			// Time manager is composed inside the federation runtime
-			// today via cmd/rtid only when timed-demo / pingpong-demo
-			// modes run. Server mode currently does not stand up a
-			// time.Manager — the TimeService is exposed when wired,
-			// otherwise nil. The AdminService handler is nil-safe so
-			// the time section is simply elided. A follow-up patch
-			// composing time.Manager in server mode (out of scope for
-			// Phase 1) will thread it here.
-			Time:      nil,
+			// M21 TASK-204: time manager is composed in server mode
+			// (the same instance the TimeServiceServer wraps), so the
+			// AdminService Snapshot includes per-federation time state.
+			Time:      timeMgr,
 			Objects:   objReg,
 			Outbox:    outbox,
 			EventLog:  multi,
@@ -895,6 +923,7 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		momMgr:    momMgr,
 		ddmMgr:    ddmMgr,
 		saveMgr:   saveMgr,
+		timeMgr:   timeMgr,
 		multi:     multi,
 		outbox:    outbox,
 		grpcS:     gs,
@@ -905,10 +934,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 }
 
 // rtidVersion returns the build version used in the AdminService
-// Status / Snapshot responses. Cut-1 returns a static literal; a
-// future build flow can override via -ldflags injection.
+// Status / Snapshot responses. Defaults to the buildinfo "dev"
+// sentinel; release builds override via -ldflags injection (see
+// .goreleaser.yaml).
 func rtidVersion() string {
-	return "rtid-cut2"
+	return buildinfo.String()
 }
 
 // ddmFilterAdapter bridges the core.DataDistributionManagement API
@@ -1211,6 +1241,22 @@ func momFederateResignedHook(momMgr core.ManagementObjectModel, logger *slog.Log
 		if err := momMgr.FederateResigned(ctx, fed, h); err != nil {
 			logger.Warn("rtid: MOM FederateResigned hook failed",
 				"federation", fed, "handle", h, "err", err)
+		}
+	}
+}
+
+// chainOnFederateResigned composes multiple OnFederateResigned hooks
+// into one. M21 TASK-204c: the federation.Manager exposes a single
+// hook field, so cmd/rtid chains MOM's resign-side hook with the
+// time-manager's pending-state cleanup.
+func chainOnFederateResigned(
+	hs ...func(context.Context, core.FederationName, core.FederateHandle),
+) func(context.Context, core.FederationName, core.FederateHandle) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+		for _, h2 := range hs {
+			if h2 != nil {
+				h2(ctx, fed, h)
+			}
 		}
 	}
 }

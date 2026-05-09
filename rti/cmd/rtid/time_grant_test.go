@@ -1,64 +1,183 @@
-// Scaffold owned by TASK-205 (M21) — see docs/M21_DISPATCH_PLAN.md §6.
+// TASK-205 (M21) — see docs/M21_DISPATCH_PLAN.md §6.
 //
-// Verifies grant emission + stall→FederationHalted on the wire.
-// Depends on TASK-204 (rtid wiring), TASK-204b (stream conversion),
-// TASK-204c (resign hook).
+// Verifies the W2B wiring: rtid composes timeMgr (TASK-204), stream
+// conversion handles time events (TASK-204b — tested in
+// rti/internal/transport/grpc/stream_test.go), and the OnFederateResign
+// hook drops pending state (TASK-204c).
+//
+// The "grant arrives on the wire" end-to-end cases (205.1-205.5,
+// 205.9, 205.10) are deferred to the W4A go-timed runner test
+// (TASK-211) — those need a full bufconn-rtid + federate-loop
+// fixture that's better expressed at the example level than at
+// cmd/rtid's package-private layer.
 
 package main
 
-import "testing"
+import (
+	"context"
+	"io"
+	"log/slog"
+	"runtime"
+	"testing"
+	stdtime "time"
 
-// 205.1 — 2 federates, both regulating+constrained, both NER(10).
-// Both receive TimeAdvanceGrant{0.5} on their wire streams.
-func TestNERTwoFederatesGrant(t *testing.T) {
-	t.Skip("TODO: TASK-205")
+	"github.com/cbchoi/gorti/rti/internal/core"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
+)
+
+// 205.composes — newRTID composes a non-nil time manager and threads
+// it through both the gRPC server and the AdminService chain.
+func TestRTIDComposesTimeManager(t *testing.T) {
+	srv, err := newRTID(rtidConfig{
+		ListenAddr:        ":0",
+		MetricsListenAddr: ":0",
+		LogDir:            "",
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatalf("newRTID: %v", err)
+	}
+	if srv.timeMgr == nil {
+		t.Fatalf("rtid composed without a time manager (M21 TASK-204 regression)")
+	}
 }
 
-// 205.2 — Same setup, A TAR(10).
-func TestTARTwoFederates(t *testing.T) {
-	t.Skip("TODO: TASK-205")
+// 205.6 — OnFederateResign drops pending NER state.
+func TestOnFederateResign_ClearsPendingNER(t *testing.T) {
+	mgr := newTimeMgrForTest(t)
+	ctx := context.Background()
+	if err := mgr.EnableRegulation(ctx, "fed", 1, 0); err != nil {
+		t.Fatalf("EnableRegulation: %v", err)
+	}
+	if err := mgr.EnableRegulation(ctx, "fed", 2, 0); err != nil {
+		t.Fatalf("EnableRegulation 2: %v", err)
+	}
+	// Two regulators with lookahead=0 → fed 1's NER stays pending
+	// (no sole-pending forced grant; LBTS = 0 = currentTime).
+	if err := mgr.NextMessageRequest(ctx, "fed", 1, 10); err != nil {
+		t.Fatalf("NER: %v", err)
+	}
+	// Verify pending state is recorded.
+	snap := mgr.Snapshot("fed")
+	var preFed1Pending bool
+	for _, fst := range snap.Federates {
+		if fst.Handle == 1 && fst.HasPendingRequest {
+			preFed1Pending = true
+		}
+	}
+	if !preFed1Pending {
+		t.Fatalf("expected fed 1 to have pending request before resign; snapshot=%+v", snap.Federates)
+	}
+	// Resign fed 1.
+	mgr.OnFederateResign(ctx, "fed", 1)
+	snap = mgr.Snapshot("fed")
+	for _, fst := range snap.Federates {
+		if fst.Handle == 1 {
+			t.Errorf("fed 1 still in snapshot after OnFederateResign: %+v", fst)
+		}
+	}
 }
 
-// 205.3 — NMRA(10) — NMRA inclusive boundary visible via wire.
-func TestNMRATwoFederates(t *testing.T) {
-	t.Skip("TODO: TASK-205")
+// 205.7 — OnFederateResign drops pending TAR state.
+func TestOnFederateResign_ClearsPendingTAR(t *testing.T) {
+	mgr := newTimeMgrForTest(t)
+	ctx := context.Background()
+	_ = mgr.EnableRegulation(ctx, "fed", 1, 0)
+	_ = mgr.EnableRegulation(ctx, "fed", 2, 0)
+	if err := mgr.TimeAdvanceRequest(ctx, "fed", 1, 10); err != nil {
+		t.Fatalf("TAR: %v", err)
+	}
+	mgr.OnFederateResign(ctx, "fed", 1)
+	snap := mgr.Snapshot("fed")
+	for _, fst := range snap.Federates {
+		if fst.Handle == 1 {
+			t.Errorf("fed 1 still in snapshot after OnFederateResign: %+v", fst)
+		}
+	}
 }
 
-// 205.4 — TARA(10).
-func TestTARATwoFederates(t *testing.T) {
-	t.Skip("TODO: TASK-205")
+// 205.8 — OnFederateResign drops pending NMRA, TARA, FQR — sub-tests.
+func TestOnFederateResign_ClearsPendingOtherPrimitives(t *testing.T) {
+	cases := map[string]func(*timepkg.Manager) error{
+		"NMRA": func(m *timepkg.Manager) error {
+			return m.NextMessageRequestAvailable(context.Background(), "fed", 1, 10)
+		},
+		"TARA": func(m *timepkg.Manager) error {
+			return m.TimeAdvanceRequestAvailable(context.Background(), "fed", 1, 10)
+		},
+		"FQR": func(m *timepkg.Manager) error {
+			return m.FlushQueueRequest(context.Background(), "fed", 1, 10)
+		},
+	}
+	for name, fn := range cases {
+		t.Run(name, func(t *testing.T) {
+			mgr := newTimeMgrForTest(t)
+			ctx := context.Background()
+			_ = mgr.EnableRegulation(ctx, "fed", 1, 0)
+			_ = mgr.EnableRegulation(ctx, "fed", 2, 0)
+			if err := fn(mgr); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			mgr.OnFederateResign(ctx, "fed", 1)
+			snap := mgr.Snapshot("fed")
+			for _, fst := range snap.Federates {
+				if fst.Handle == 1 {
+					t.Errorf("[%s] fed 1 still in snapshot after OnFederateResign: %+v", name, fst)
+				}
+			}
+		})
+	}
 }
 
-// 205.5 — Subscriber-only FQR(5) with 3 receive-events queued.
-// Wire stream delivers 3 receives FIRST, then TimeAdvanceGrant.
-func TestFQRDrainsBeforeGrant(t *testing.T) {
-	t.Skip("TODO: TASK-205")
+// 205.leak — Repeated NER + OnFederateResign cycles do not leak goroutines.
+// Rough leak detector: snapshot goroutine count, run 100 cycles, snapshot
+// again. The manager's stall ticker is a known constant background
+// goroutine; otherwise the count should be stable.
+func TestOnFederateResign_NoGoroutineLeak(t *testing.T) {
+	mgr := newTimeMgrForTest(t)
+	ctx := context.Background()
+	// Establish baseline after a single round-trip so any lazy goroutine
+	// (event-log writer etc.) is already spawned.
+	_ = mgr.EnableRegulation(ctx, "fed", 1, 0)
+	_ = mgr.EnableRegulation(ctx, "fed", 2, 0)
+	_ = mgr.NextMessageRequest(ctx, "fed", 1, 10)
+	mgr.OnFederateResign(ctx, "fed", 1)
+	stdtime.Sleep(20 * stdtime.Millisecond) // let any deferred work settle
+	baseline := runtime.NumGoroutine()
+
+	for i := 0; i < 100; i++ {
+		_ = mgr.EnableRegulation(ctx, "fed", core.FederateHandle(100+i), 0)
+		_ = mgr.NextMessageRequest(ctx, "fed", core.FederateHandle(100+i), 10)
+		mgr.OnFederateResign(ctx, "fed", core.FederateHandle(100+i))
+	}
+	stdtime.Sleep(20 * stdtime.Millisecond)
+	final := runtime.NumGoroutine()
+
+	// Allow ±2 slack — runtime.NumGoroutine includes test infra
+	// goroutines that may flicker.
+	if final > baseline+2 {
+		t.Errorf("goroutine leak suspected: baseline=%d final=%d delta=%d",
+			baseline, final, final-baseline)
+	}
 }
 
-// 205.6 — Federate calls NER(5), then resigns before grant fires.
-// No grant on closed stream; goroutine count stable across -race -count=10.
-func TestResignDuringPendingNER(t *testing.T) {
-	t.Skip("TODO: TASK-205")
+// newTimeMgrForTest builds a real *time.Manager with a fake clock and
+// no-op outbox. Mirrors the regulation_test fixture pattern.
+func newTimeMgrForTest(t *testing.T) *timepkg.Manager {
+	t.Helper()
+	mgr, err := timepkg.New(timepkg.Options{
+		Clock:  core.NewFakeClock(stdtime.Unix(0, 0)),
+		Outbox: nopOutbox{},
+	})
+	if err != nil {
+		t.Fatalf("time.New: %v", err)
+	}
+	return mgr
 }
 
-// 205.7 — Resign during pending TAR.
-func TestResignDuringPendingTAR(t *testing.T) {
-	t.Skip("TODO: TASK-205")
-}
+// nopOutbox satisfies core.Outbox without recording.
+type nopOutbox struct{}
 
-// 205.8 — Resign during pending NMRA / TARA / FQR (sub-tests for each).
-func TestResignDuringPendingOtherPrimitives(t *testing.T) {
-	t.Skip("TODO: TASK-205 — sub-tests for NMRA, TARA, FQR")
-}
-
-// 205.9 — Federate's events stream drops mid-flight (client cancel).
-// Manager's grant callback does NOT block; OTHER federates still receive.
-func TestEventsStreamCancelDoesNotBlock(t *testing.T) {
-	t.Skip("TODO: TASK-205")
-}
-
-// 205.10 — Stall → FederationHalted: A NER(10), B never advances.
-// After StallTimeout (1s for the test), both receive FederationHalted on wire.
-func TestStallEmitsFederationHalted(t *testing.T) {
-	t.Skip("TODO: TASK-205 — requires StallTimeout flag override on cmd/rtid")
+func (nopOutbox) Send(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.OutboundEvent) error {
+	return nil
 }

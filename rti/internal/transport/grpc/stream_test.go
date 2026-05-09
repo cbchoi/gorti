@@ -9,6 +9,7 @@ import (
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -298,3 +299,42 @@ func TestStreamService_Events_NonInnerOutboundEvent_ReturnsInternal(t *testing.T
 type seqOnlyEvent uint64
 
 func (s seqOnlyEvent) Seq() uint64 { return uint64(s) }
+
+// ----------------------------------------------------------------------------
+// M21 TASK-204b — toFederateEvent translates time-mgr events
+// ----------------------------------------------------------------------------
+
+// 204b.1 — toFederateEvent(*time.TimeAdvanceGrant) → FederateEvent_Grant.
+func TestToFederateEvent_TimeAdvanceGrant(t *testing.T) {
+	g := &timepkg.TimeAdvanceGrant{Time: 5.0}
+	fe, err := toFederateEvent(g)
+	if err != nil {
+		t.Fatalf("toFederateEvent: %v", err)
+	}
+	if fe == nil {
+		t.Fatal("got nil FederateEvent")
+	}
+	gv := fe.GetGrant()
+	if gv == nil {
+		t.Fatalf("oneof is not Grant: %+v", fe.GetEvent())
+	}
+	if gv.GetLogicalTime() != 5.0 {
+		t.Errorf("LogicalTime = %v, want 5.0", gv.GetLogicalTime())
+	}
+}
+
+// 204b.2 — toFederateEvent(*time.FederationHalted) → FederateEvent_Halted (oneof tag 99).
+func TestToFederateEvent_FederationHalted(t *testing.T) {
+	h := &timepkg.FederationHalted{Cause: "stall"}
+	fe, err := toFederateEvent(h)
+	if err != nil {
+		t.Fatalf("toFederateEvent: %v", err)
+	}
+	hv := fe.GetHalted()
+	if hv == nil {
+		t.Fatalf("oneof is not Halted: %+v", fe.GetEvent())
+	}
+	if hv.GetCause() != "stall" {
+		t.Errorf("Cause = %q, want %q", hv.GetCause(), "stall")
+	}
+}

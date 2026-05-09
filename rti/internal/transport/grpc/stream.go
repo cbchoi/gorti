@@ -5,6 +5,7 @@ import (
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -95,9 +96,34 @@ type federateEventCarrier interface {
 // directly (Seq is a field, not a method). Producers wrap it in an
 // adapter that satisfies federateEventCarrier; the registry's
 // outboundEvent in rti/internal/object is the canonical example.
+//
+// M21 TASK-204b: time-management events (*time.TimeAdvanceGrant,
+// *time.FederationHalted) do NOT implement federateEventCarrier —
+// the time package must not import the generated proto (layering).
+// They are translated here via type-switch instead.
 func toFederateEvent(evt core.OutboundEvent) (*rtiv1.FederateEvent, error) {
 	if c, ok := evt.(federateEventCarrier); ok {
 		return c.Inner(), nil
+	}
+	switch v := evt.(type) {
+	case *timepkg.TimeAdvanceGrant:
+		return &rtiv1.FederateEvent{
+			Seq: v.Seq(),
+			Event: &rtiv1.FederateEvent_Grant{
+				Grant: &rtiv1.TimeAdvanceGrant{
+					LogicalTime: float64(v.Time),
+				},
+			},
+		}, nil
+	case *timepkg.FederationHalted:
+		return &rtiv1.FederateEvent{
+			Seq: v.Seq(),
+			Event: &rtiv1.FederateEvent_Halted{
+				Halted: &rtiv1.FederationHalted{
+					Cause: v.Cause,
+				},
+			},
+		}, nil
 	}
 	return nil, errOutboundEventNotConvertible
 }

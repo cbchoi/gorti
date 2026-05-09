@@ -173,6 +173,28 @@ func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName
 	return nil
 }
 
+// OnFederateResign drops any pending advance-request state for the
+// resigning federate. M21 TASK-204c — see docs/M21_DISPATCH_PLAN.md §2.4.2.
+//
+// Wired from federation.Manager's OnFederateResigned hook so the time
+// manager's nerStore stays consistent with the federation roster: a
+// resigned federate's pending NER/TAR/TARA/NMRA/FQR is cleared, plus
+// its regulating/constrained/lookahead state in the stateStore.
+//
+// Safe to call for federates that never registered any time state —
+// the cleanup is idempotent (delete on map miss is a no-op).
+func (m *Manager) OnFederateResign(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+	// Drop nerStore entry (pending request + currentTime).
+	ext := extOf(m)
+	ext.mu.Lock()
+	delete(ext.states, federateKey{fed: fed, h: h})
+	ext.mu.Unlock()
+	// Drop stateStore entry (regulating/constrained/lookahead).
+	m.states.mu.Lock()
+	delete(m.states.states, federateKey{fed: fed, h: h})
+	m.states.mu.Unlock()
+}
+
 // ModifyLookahead updates the lookahead of an already-regulating federate
 // in place, without round-tripping through Disable + Enable.
 // M21 TASK-202b — see docs/M21_DISPATCH_PLAN.md §1 (non-goals exception)
