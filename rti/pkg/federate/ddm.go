@@ -215,3 +215,114 @@ func (f *Federate) RegisterObjectInstanceWithRegions(
 	}
 	return objHandle, nil
 }
+
+// --- M23 W5 — §9 missing services ----------------------------------
+
+func (f *Federate) attrRegionsToWire(bindings []AttributeRegions) []*rtiv1.AttributeRegions {
+	out := make([]*rtiv1.AttributeRegions, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, &rtiv1.AttributeRegions{
+			AttributeHandle: b.AttributeHandle,
+			RegionHandles:   append([]uint64(nil), b.RegionHandles...),
+		})
+	}
+	return out
+}
+
+// AssociateRegionsForUpdates — IEEE 1516.1-2010 §9.6 (M23 W5).
+func (f *Federate) AssociateRegionsForUpdates(ctx context.Context, obj uint64, bindings []AttributeRegions) error {
+	_, err := f.conn.ddm.AssociateRegionsForUpdates(ctx, &rtiv1.AssociateRegionsForUpdatesRequest{
+		WireVersion:      rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:   f.federationName,
+		FederateHandle:   f.federateHandle,
+		ObjectHandle:     obj,
+		AttributeRegions: f.attrRegionsToWire(bindings),
+	})
+	return wrapStatusErr(err)
+}
+
+// UnassociateRegionsForUpdates — IEEE 1516.1-2010 §9.7 (M23 W5).
+// Empty bindings drops ALL associations for the object.
+func (f *Federate) UnassociateRegionsForUpdates(ctx context.Context, obj uint64, bindings []AttributeRegions) error {
+	_, err := f.conn.ddm.UnassociateRegionsForUpdates(ctx, &rtiv1.UnassociateRegionsForUpdatesRequest{
+		WireVersion:      rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:   f.federationName,
+		FederateHandle:   f.federateHandle,
+		ObjectHandle:     obj,
+		AttributeRegions: f.attrRegionsToWire(bindings),
+	})
+	return wrapStatusErr(err)
+}
+
+// UnsubscribeObjectClassAttributesWithRegions — IEEE 1516.1-2010 §9.9 (M23 W5).
+func (f *Federate) UnsubscribeObjectClassAttributesWithRegions(
+	ctx context.Context, cls uint64, attributes, regions []uint64,
+) error {
+	_, err := f.conn.ddm.UnsubscribeObjectClassAttributesWithRegions(ctx, &rtiv1.UnsubscribeOCAWithRegionsRequest{
+		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:    f.federationName,
+		FederateHandle:    f.federateHandle,
+		ObjectClassHandle: cls,
+		AttributeHandles:  attributes,
+		RegionHandles:     regions,
+	})
+	return wrapStatusErr(err)
+}
+
+// UnsubscribeInteractionClassWithRegions — IEEE 1516.1-2010 §9.11 (M23 W5).
+func (f *Federate) UnsubscribeInteractionClassWithRegions(ctx context.Context, cls uint64, regions []uint64) error {
+	_, err := f.conn.ddm.UnsubscribeInteractionClassWithRegions(ctx, &rtiv1.UnsubscribeICWithRegionsRequest{
+		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:         f.federationName,
+		FederateHandle:         f.federateHandle,
+		InteractionClassHandle: cls,
+		RegionHandles:          regions,
+	})
+	return wrapStatusErr(err)
+}
+
+// SendInteractionWithRegions — IEEE 1516.1-2010 §9.12 (M23 W5).
+// M23 simplification: regions are recorded on the wire but the existing
+// DDM filter (M10) applies via object.Registry; per-call region filter
+// is a follow-up.
+func (f *Federate) SendInteractionWithRegions(
+	ctx context.Context,
+	cls uint64,
+	parameters map[uint64][]byte,
+	regions []uint64,
+	timestamp *float64,
+) error {
+	req := &rtiv1.SendInteractionWithRegionsRequest{
+		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:         f.federationName,
+		FederateHandle:         f.federateHandle,
+		InteractionClassHandle: cls,
+		Parameters:             parameters,
+		RegionHandles:          regions,
+	}
+	if timestamp != nil {
+		v := *timestamp
+		req.LogicalTime = &v
+	}
+	_, err := f.conn.ddm.SendInteractionWithRegions(ctx, req)
+	return wrapStatusErr(err)
+}
+
+// RequestAttributeValueUpdateWithRegions — IEEE 1516.1-2010 §9.13 (M23 W5).
+func (f *Federate) RequestAttributeValueUpdateWithRegions(
+	ctx context.Context,
+	cls uint64,
+	attributes, regions []uint64,
+	tag []byte,
+) error {
+	_, err := f.conn.ddm.RequestAttributeValueUpdateWithRegions(ctx, &rtiv1.RequestAttributeValueUpdateWithRegionsRequest{
+		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:    f.federationName,
+		FederateHandle:    f.federateHandle,
+		ObjectClassHandle: cls,
+		AttributeHandles:  attributes,
+		RegionHandles:     regions,
+		UserSuppliedTag:   append([]byte(nil), tag...),
+	})
+	return wrapStatusErr(err)
+}

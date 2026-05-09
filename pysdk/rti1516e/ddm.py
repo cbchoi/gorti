@@ -318,3 +318,143 @@ class DDMClient:
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
         return object_handle
+
+    # --- M23 W5 — §9 missing services -----------------------------------
+
+    async def associate_regions_for_updates(
+        self, object_handle: int, bindings: list[AttributeRegions],
+    ) -> None:
+        """§9.6 — record per-attribute region associations on an existing instance."""
+        from rti.v1 import common_pb2, ddm_pb2
+
+        req = ddm_pb2.AssociateRegionsForUpdatesRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            object_handle=int(object_handle),
+            attribute_regions=[
+                ddm_pb2.AttributeRegions(
+                    attribute_handle=int(b.attribute_handle),
+                    region_handles=[int(r) for r in b.region_handles],
+                )
+                for b in bindings
+            ],
+        )
+        try:
+            await self._stub.AssociateRegionsForUpdates(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def unassociate_regions_for_updates(
+        self, object_handle: int, bindings: list[AttributeRegions] | None = None,
+    ) -> None:
+        """§9.7 — drop matching attr-region pairs. None or empty drops ALL."""
+        from rti.v1 import common_pb2, ddm_pb2
+
+        pairs = bindings or []
+        req = ddm_pb2.UnassociateRegionsForUpdatesRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            object_handle=int(object_handle),
+            attribute_regions=[
+                ddm_pb2.AttributeRegions(
+                    attribute_handle=int(b.attribute_handle),
+                    region_handles=[int(r) for r in b.region_handles],
+                )
+                for b in pairs
+            ],
+        )
+        try:
+            await self._stub.UnassociateRegionsForUpdates(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def unsubscribe_object_class_attributes_with_regions(
+        self,
+        object_class_handle: int,
+        attribute_handles: list[int],
+        region_handles: list[int],
+    ) -> None:
+        """§9.9 — drop the region-scoped subscription on (cls, attr)."""
+        from rti.v1 import common_pb2, ddm_pb2
+
+        req = ddm_pb2.UnsubscribeOCAWithRegionsRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            object_class_handle=int(object_class_handle),
+            attribute_handles=[int(h) for h in attribute_handles],
+            region_handles=[int(h) for h in region_handles],
+        )
+        try:
+            await self._stub.UnsubscribeObjectClassAttributesWithRegions(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def unsubscribe_interaction_class_with_regions(
+        self, interaction_class_handle: int, region_handles: list[int],
+    ) -> None:
+        """§9.11 — drop the region-scoped interaction subscription."""
+        from rti.v1 import common_pb2, ddm_pb2
+
+        req = ddm_pb2.UnsubscribeICWithRegionsRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            interaction_class_handle=int(interaction_class_handle),
+            region_handles=[int(h) for h in region_handles],
+        )
+        try:
+            await self._stub.UnsubscribeInteractionClassWithRegions(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def send_interaction_with_regions(
+        self,
+        interaction_class_handle: int,
+        parameters: dict[int, bytes],
+        region_handles: list[int],
+        timestamp: float | None = None,
+    ) -> None:
+        """§9.12 — region-scoped interaction send."""
+        from rti.v1 import common_pb2, ddm_pb2
+
+        req = ddm_pb2.SendInteractionWithRegionsRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            interaction_class_handle=int(interaction_class_handle),
+            parameters={int(k): bytes(v) for k, v in parameters.items()},
+            region_handles=[int(h) for h in region_handles],
+        )
+        if timestamp is not None:
+            req.logical_time = float(timestamp)
+        try:
+            await self._stub.SendInteractionWithRegions(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def request_attribute_value_update_with_regions(
+        self,
+        object_class_handle: int,
+        attribute_handles: list[int],
+        region_handles: list[int],
+        tag: bytes = b"",
+    ) -> None:
+        """§9.13 — class-scoped pull filtered by region overlap."""
+        from rti.v1 import common_pb2, ddm_pb2
+
+        req = ddm_pb2.RequestAttributeValueUpdateWithRegionsRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            object_class_handle=int(object_class_handle),
+            attribute_handles=[int(h) for h in attribute_handles],
+            region_handles=[int(h) for h in region_handles],
+            user_supplied_tag=tag,
+        )
+        try:
+            await self._stub.RequestAttributeValueUpdateWithRegions(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)

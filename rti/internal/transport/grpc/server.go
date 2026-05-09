@@ -190,7 +190,7 @@ func NewServer(opts Options) (*Server, error) {
 		srv.ownershipService = newOwnershipService(opts.Ownership)
 	}
 	if opts.DDM != nil {
-		srv.ddmService = newDDMService(opts.DDM)
+		srv.ddmService = newDDMService(opts.DDM, opts.Objects)
 	}
 	if opts.Savepoint != nil {
 		srv.savepointService = newSavepointService(opts.Savepoint)

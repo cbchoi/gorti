@@ -23,6 +23,14 @@ service DDMService {
   rpc SubscribeObjectClassAttributesWithRegions(SubscribeOCAWithRegionsRequest) returns (Empty);
   rpc SubscribeInteractionClassWithRegions(SubscribeICWithRegionsRequest) returns (Empty);
   rpc RegisterObjectInstanceWithRegions(RegisterObjectWithRegionsRequest) returns (RegisterObjectWithRegionsResponse);
+
+  // M23 W5 — IEEE 1516.1-2010 §9 additions (append-only).
+  rpc AssociateRegionsForUpdates(AssociateRegionsForUpdatesRequest) returns (Empty);
+  rpc UnassociateRegionsForUpdates(UnassociateRegionsForUpdatesRequest) returns (Empty);
+  rpc UnsubscribeObjectClassAttributesWithRegions(UnsubscribeOCAWithRegionsRequest) returns (Empty);
+  rpc UnsubscribeInteractionClassWithRegions(UnsubscribeICWithRegionsRequest) returns (Empty);
+  rpc SendInteractionWithRegions(SendInteractionWithRegionsRequest) returns (Empty);
+  rpc RequestAttributeValueUpdateWithRegions(RequestAttributeValueUpdateWithRegionsRequest) returns (Empty);
 }
 
 message LookupRoutingSpaceRequest {
@@ -136,6 +144,70 @@ message RegisterObjectWithRegionsRequest {
 message RegisterObjectWithRegionsResponse {
   uint64 object_handle = 1;
   string object_name = 2;
+}
+
+// AssociateRegionsForUpdates — IEEE 1516.1-2010 §9.6 (M23).
+// Wires the existing manager method AssociateRegionsWithObjectInstance.
+message AssociateRegionsForUpdatesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated AttributeRegions attribute_regions = 5;
+}
+
+// UnassociateRegionsForUpdates — IEEE 1516.1-2010 §9.7 (M23).
+// Drops associations matching the supplied (attr, regions) pairs.
+// Empty attribute_regions drops ALL associations for the object.
+message UnassociateRegionsForUpdatesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated AttributeRegions attribute_regions = 5;
+}
+
+// UnsubscribeObjectClassAttributesWithRegions — §9.9 (M23).
+message UnsubscribeOCAWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  repeated uint64 region_handles = 6;
+}
+
+// UnsubscribeInteractionClassWithRegions — §9.11 (M23).
+message UnsubscribeICWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+  repeated uint64 region_handles = 5;
+}
+
+// SendInteractionWithRegions — §9.12 (M23). Same shape as
+// SendInteractionRequest plus region filter.
+message SendInteractionWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+  map<uint64, bytes> parameters = 5;
+  optional double logical_time = 6;
+  repeated uint64 region_handles = 7;
+}
+
+// RequestAttributeValueUpdateWithRegions — §9.13 (M23). Class-scoped
+// pull filtered by region overlap.
+message RequestAttributeValueUpdateWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  repeated uint64 region_handles = 6;
+  bytes user_supplied_tag = 7;
 }
 
 // =============================================================================

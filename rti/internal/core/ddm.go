@@ -137,6 +137,48 @@ type DataDistributionManagement interface {
 		regions []DDMRegionHandleCore,
 	) error
 
+	// AssociateRegionsForUpdates — IEEE 1516.1-2010 §9.6 (M23 W5).
+	// Records the publisher's per-attribute region associations for an
+	// existing object instance.
+	AssociateRegionsForUpdates(
+		ctx context.Context,
+		fed FederationName,
+		owner FederateHandle,
+		obj ObjectHandle,
+		attrToRegions map[AttributeHandle][]DDMRegionHandleCore,
+	) error
+
+	// UnassociateRegionsForUpdates — IEEE 1516.1-2010 §9.7 (M23 W5).
+	// Drops associations matching the supplied pairs. Empty map drops
+	// ALL associations for the object.
+	UnassociateRegionsForUpdates(
+		ctx context.Context,
+		fed FederationName,
+		owner FederateHandle,
+		obj ObjectHandle,
+		attrToRegions map[AttributeHandle][]DDMRegionHandleCore,
+	) error
+
+	// UnsubscribeObjectClassAttributesWithRegions — §9.9 (M23 W5).
+	// Drops the subscriber's region-scoped subscription.
+	UnsubscribeObjectClassAttributesWithRegions(
+		ctx context.Context,
+		fed FederationName,
+		subscriber FederateHandle,
+		cls ObjectClassHandle,
+		attrs []AttributeHandle,
+		regions []DDMRegionHandleCore,
+	) error
+
+	// UnsubscribeInteractionClassWithRegions — §9.11 (M23 W5).
+	UnsubscribeInteractionClassWithRegions(
+		ctx context.Context,
+		fed FederationName,
+		subscriber FederateHandle,
+		cls InteractionClassHandle,
+		regions []DDMRegionHandleCore,
+	) error
+
 	// --- Region-scoped publishing / fan-out (FR-DDM-4..6) -----------------
 
 	// HasObjectAssociations reports whether any DDM region

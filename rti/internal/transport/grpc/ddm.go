@@ -25,10 +25,16 @@ import (
 type ddmService struct {
 	rtiv1.UnimplementedDDMServiceServer
 	mgr core.DataDistributionManagement
+	// M23 W5 — objs is consulted for SendInteractionWithRegions +
+	// RequestAttributeValueUpdateWithRegions which forward to the
+	// equivalent ObjectService methods (no separate DDM-side fanout
+	// path at the manager level; the existing DDM filter applies via
+	// object.Registry.opts.DDM).
+	objs core.ObjectRegistry
 }
 
-func newDDMService(mgr core.DataDistributionManagement) *ddmService {
-	return &ddmService{mgr: mgr}
+func newDDMService(mgr core.DataDistributionManagement, objs core.ObjectRegistry) *ddmService {
+	return &ddmService{mgr: mgr, objs: objs}
 }
 
 // regionHandlesFromUint64s converts a slice of uint64 region handles
@@ -321,4 +327,184 @@ func (s *ddmService) RegisterObjectInstanceWithRegions(
 	_ = ctx
 	_ = attrToRegions
 	return resp, nil
+}
+
+// --- M23 W5: §9 missing services -----------------------------------
+
+func attrToRegionsFromPb(pairs []*rtiv1.AttributeRegions) map[core.AttributeHandle][]ddm.RegionHandle {
+	out := map[core.AttributeHandle][]ddm.RegionHandle{}
+	for _, ar := range pairs {
+		if ar == nil {
+			continue
+		}
+		out[core.AttributeHandle(ar.GetAttributeHandle())] = regionHandlesFromUint64s(ar.GetRegionHandles())
+	}
+	return out
+}
+
+// AssociateRegionsForUpdates — §9.6.
+func (s *ddmService) AssociateRegionsForUpdates(
+	ctx context.Context,
+	req *rtiv1.AssociateRegionsForUpdatesRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("AssociateRegionsForUpdates")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.AssociateRegionsForUpdates(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectHandle(req.GetObjectHandle()),
+		attrToRegionsFromPb(req.GetAttributeRegions()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// UnassociateRegionsForUpdates — §9.7.
+func (s *ddmService) UnassociateRegionsForUpdates(
+	ctx context.Context,
+	req *rtiv1.UnassociateRegionsForUpdatesRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("UnassociateRegionsForUpdates")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.UnassociateRegionsForUpdates(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectHandle(req.GetObjectHandle()),
+		attrToRegionsFromPb(req.GetAttributeRegions()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// UnsubscribeObjectClassAttributesWithRegions — §9.9.
+func (s *ddmService) UnsubscribeObjectClassAttributesWithRegions(
+	ctx context.Context,
+	req *rtiv1.UnsubscribeOCAWithRegionsRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("UnsubscribeObjectClassAttributesWithRegions")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.UnsubscribeObjectClassAttributesWithRegions(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectClassHandle(req.GetObjectClassHandle()),
+		attrHandles(req.GetAttributeHandles()),
+		regionHandlesFromUint64s(req.GetRegionHandles()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// UnsubscribeInteractionClassWithRegions — §9.11.
+func (s *ddmService) UnsubscribeInteractionClassWithRegions(
+	ctx context.Context,
+	req *rtiv1.UnsubscribeICWithRegionsRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("UnsubscribeInteractionClassWithRegions")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.UnsubscribeInteractionClassWithRegions(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.InteractionClassHandle(req.GetInteractionClassHandle()),
+		regionHandlesFromUint64s(req.GetRegionHandles()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// SendInteractionWithRegions — §9.12.
+//
+// M23 simplification: forwards to the existing ObjectService.SendInteraction
+// path. Region filtering is already applied by the cut-2 DDM filter
+// (object.Registry consults DDM.InteractionSubscribersForSend on every
+// send) — the regions on this RPC are therefore advisory in M23.
+// Strict per-call region filtering on send is a follow-up.
+func (s *ddmService) SendInteractionWithRegions(
+	ctx context.Context,
+	req *rtiv1.SendInteractionWithRegionsRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("SendInteractionWithRegions")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	params := make(map[core.ParameterHandle][]byte, len(req.GetParameters()))
+	for h, v := range req.GetParameters() {
+		params[core.ParameterHandle(h)] = v
+	}
+	var ts *core.LogicalTime
+	if req.LogicalTime != nil {
+		v := core.LogicalTime(req.GetLogicalTime())
+		ts = &v
+	}
+	if err := s.objs.SendInteraction(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.InteractionClassHandle(req.GetInteractionClassHandle()),
+		params,
+		ts,
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	_ = req.GetRegionHandles() // recorded for future strict per-call filtering
+	return &rtiv1.Empty{}, nil
+}
+
+// RequestAttributeValueUpdateWithRegions — §9.13.
+//
+// M23 simplification: forwards to RequestClassAttributeValueUpdate;
+// region filtering on the owner set is a follow-up (the existing
+// DDM filter already applies during the resulting UpdateAttributeValues
+// fanout when the owner responds, so the practical impact is minimal).
+func (s *ddmService) RequestAttributeValueUpdateWithRegions(
+	ctx context.Context,
+	req *rtiv1.RequestAttributeValueUpdateWithRegionsRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("RequestAttributeValueUpdateWithRegions")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	attrs := make([]core.AttributeHandle, 0, len(req.GetAttributeHandles()))
+	for _, h := range req.GetAttributeHandles() {
+		attrs = append(attrs, core.AttributeHandle(h))
+	}
+	if err := s.objs.RequestClassAttributeValueUpdate(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectClassHandle(req.GetObjectClassHandle()),
+		attrs,
+		req.GetUserSuppliedTag(),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	_ = req.GetRegionHandles() // recorded for future filtering
+	return &rtiv1.Empty{}, nil
 }
