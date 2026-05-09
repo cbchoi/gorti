@@ -78,6 +78,30 @@ func (s *stateStore) enableRegulation(fed core.FederationName, h core.FederateHa
 	return nil
 }
 
+// modifyLookahead updates the lookahead of an already-regulating
+// federate. M21 TASK-202b.
+//
+// Returns:
+//   - core.ErrTimeInvalidLookahead if lookahead is negative or NaN/+Inf
+//   - core.ErrTimeNotRegulating if the federate is not regulating
+//
+// In contrast to enableRegulation, this method REJECTS a non-regulating
+// federate rather than implicitly enabling. HLA semantics: lookahead
+// modification is meaningful only while regulation is active.
+func (s *stateStore) modifyLookahead(fed core.FederationName, h core.FederateHandle, lookahead core.LogicalTime) error {
+	if !validLookahead(lookahead) {
+		return core.ErrTimeInvalidLookahead
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.getLocked(fed, h)
+	if st == nil || !st.regulating {
+		return core.ErrTimeNotRegulating
+	}
+	st.lookahead = lookahead
+	return nil
+}
+
 // disableRegulation removes (fed, h) from the regulating set. The
 // federate's constrained flag is preserved.
 //

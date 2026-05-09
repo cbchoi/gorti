@@ -2,7 +2,6 @@ package time
 
 import (
 	"context"
-	"errors"
 	"sort"
 	"sync"
 	stdtime "time"
@@ -10,13 +9,19 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
 
-// ErrDuplicateNER is returned by NextMessageRequest when the federate
-// already has an outstanding NER for which no grant has been emitted.
-// The acceptance contract (rti/spec/M3/ner_test.go
-// TestSpec_M3_NER_DuplicateRequestRejected) accepts ANY non-nil error
-// here; this dedicated sentinel makes the failure mode explicit so
-// federate-side code can branch on it.
-var ErrDuplicateNER = errors.New("time: federate has an outstanding NER request")
+// ErrDuplicateNER is the package-local alias for core.ErrTimeAdvancingState
+// (M21 TASK-202b — see docs/M21_DISPATCH_PLAN.md §2.3.1). It is returned
+// by every advance primitive (NER/NMRA/TAR/TARA/FQR via dispatchAdvance)
+// when the federate already has an outstanding advance for which no
+// grant has been emitted.
+//
+// The acceptance contract (rti/spec/M3/ner_test.go) accepts ANY non-nil
+// error here; aliasing to the core sentinel lets the gRPC wire layer
+// (errs.go) match via errors.Is without importing the time package.
+// Existing call sites that compare to time.ErrDuplicateNER continue to
+// work because errors.Is(time.ErrDuplicateNER, core.ErrTimeAdvancingState)
+// is true (identity).
+var ErrDuplicateNER = core.ErrTimeAdvancingState
 
 // nerState is the per-federate time-advance bookkeeping side-table. It
 // lives alongside (and not inside) federateState because federateState

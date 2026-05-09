@@ -31,6 +31,11 @@ var (
 	ErrTimeRequestInPast      = errors.New("requested time is not greater than current logical time")
 	ErrTimeAlreadyRegulating  = errors.New("federate is already time-regulating")
 	ErrTimeAlreadyConstrained = errors.New("federate is already time-constrained")
+	// ErrTimeAdvancingState — federate has an outstanding advance request
+	// (NER, NMRA, TAR, TARA, or FQR). Re-export for the wire layer
+	// (errs.go matches via errors.Is). M21 TASK-202b.
+	// time.ErrDuplicateNER aliases this so existing call sites keep working.
+	ErrTimeAdvancingState = errors.New("federate has an outstanding advance request")
 
 	// Encoding
 	ErrEncInsufficientBytes = errors.New("insufficient bytes for type")

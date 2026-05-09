@@ -173,6 +173,31 @@ func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName
 	return nil
 }
 
+// ModifyLookahead updates the lookahead of an already-regulating federate
+// in place, without round-tripping through Disable + Enable.
+// M21 TASK-202b — see docs/M21_DISPATCH_PLAN.md §1 (non-goals exception)
+// and §2.7.1.
+//
+// The mutation does not affect the grant gate of any pending advance
+// request: pendingNER captured the lookahead at the moment NER/TAR/etc
+// landed; subsequent ModifyLookahead changes only future requests.
+//
+// Errors:
+//   - core.ErrFederationHalted if the federation is in the halted
+//     terminal state
+//   - core.ErrTimeInvalidLookahead if lookahead is negative or NaN/+Inf
+//   - core.ErrTimeNotRegulating if the federate is not currently regulating
+func (m *Manager) ModifyLookahead(ctx context.Context, fed core.FederationName, h core.FederateHandle, lookahead core.LogicalTime) error {
+	if extOf(m).isHalted(fed) {
+		return core.ErrFederationHalted
+	}
+	if err := m.states.modifyLookahead(fed, h, lookahead); err != nil {
+		return err
+	}
+	m.fireTimeStateChanged(ctx, fed, h)
+	return nil
+}
+
 // EnableConstrained implements core.TimeManager. Constrained federates
 // receive TimeAdvanceGrant only when LBTS reaches their requested time.
 //

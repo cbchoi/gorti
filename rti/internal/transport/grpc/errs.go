@@ -67,7 +67,7 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrTimeNotConstrained),
 		errors.Is(err, core.ErrTimeAlreadyRegulating),
 		errors.Is(err, core.ErrTimeAlreadyConstrained),
-		errors.Is(err, core.ErrTimeRequestInPast),
+		errors.Is(err, core.ErrTimeAdvancingState), // M21 TASK-202c: re-export of time.ErrDuplicateNER
 		errors.Is(err, core.ErrWireVersionMismatch),
 		errors.Is(err, core.ErrSyncPointAlreadyAchieved),
 		errors.Is(err, core.ErrOwnershipDivestPending),
@@ -80,9 +80,13 @@ func errToStatus(err error) error {
 		return status.Error(codes.FailedPrecondition, err.Error())
 
 	// InvalidArgument — caller-supplied value violates the contract.
+	// M21 TASK-202c: ErrTimeRequestInPast moved here from FailedPrecondition.
+	// Rationale: the manager fires this when t < currentTime + lookahead,
+	// which the caller controls — bad input, not bad state.
 	case errors.Is(err, core.ErrFederationInvalidName),
 		errors.Is(err, core.ErrObjectHandleInvalid),
 		errors.Is(err, core.ErrTimeInvalidLookahead),
+		errors.Is(err, core.ErrTimeRequestInPast),
 		errors.Is(err, core.ErrEncInsufficientBytes),
 		errors.Is(err, core.ErrEncTypeMismatch),
 		errors.Is(err, core.ErrEncPaddingViolation),
