@@ -36,7 +36,51 @@ runbook will look like.
 | Practicing operator runbook (start/kill/inspect rtid) | yes | |
 | Studying drop counts deterministically | | yes (in-process fan-out is lockstep) |
 
-## Run it
+## Prerequisites
+
+The federate processes (and the runner) import `rti1516e.connection`,
+which in turn imports `grpc` -- a real PyPI package that has to be
+installed in your Python environment. The `sys.path` bootstrapping in
+`_federate_common.py` makes the `rti1516e` package itself importable
+without an install, but it cannot fabricate `grpc`.
+
+The pysdk's gRPC bindings under `pysdk/rti1516e/_generated/` are
+also gitignored -- every contributor regenerates them locally from
+`proto/`. A stale or missing `_generated/` surfaces as a runtime
+`Protocol message X has no "Y" field` AttributeError, not a clean
+import error, which makes the symptom misleading until you know to
+look for it.
+
+One-time setup, **run from the repo root** (not from this example
+directory -- there is no `pysdk/` here):
+
+```bash
+pip install -e './pysdk[dev]'    # grpcio + protobuf + grpcio-tools (codegen)
+make py-codegen                  # regenerate pysdk/rti1516e/_generated/
+```
+
+If you only want the runtime deps and have already regenerated the
+stubs (e.g. on a CI image where codegen is a separate step):
+
+```bash
+pip install 'grpcio>=1.60' 'protobuf>=7.34'
+```
+
+Symptom-to-fix table:
+
+| Error at federate startup | Missing step |
+|---|---|
+| `ModuleNotFoundError: No module named 'grpc'` | `pip install -e ./pysdk` |
+| `No module named 'grpc_tools'` (during `make py-codegen`) | install with the `[dev]` extra |
+| `Protocol message JoinFederationRequest has no "federate_type" field` | `make py-codegen` (bindings stale vs `proto/`) |
+
+The Go toolchain also needs to be on `PATH` -- the runner and the
+shell scripts both build `bin/rtid` on first run.
+
+## Run it -- orchestrated (runner.py)
+
+The default workflow. One process spawns rtid, the three federates,
+and tears them all down at the end.
 
 ```bash
 # From the repo root
@@ -68,6 +112,61 @@ verification asserts the conservation law:
 3. `received == forwarded` -- every seq the buffer released arrived
    at the processor.
 
+## Run it -- manually (shell scripts)
+
+For when you want to launch each federate in its own terminal so you
+can watch its stdout, kill it with Ctrl-C, restart it, etc. The
+runner.py path is better for repeated batch runs; the shell scripts
+are better for operator-style debugging and as a runbook reference.
+
+The scripts use **fixed ports** (8442 listen, 8443 admin, 9090
+metrics) instead of the runner's free-port discovery, so each
+federate knows exactly where to dial without a registry. Override any
+port via env: `RTID_LISTEN_PORT=9000 ./rtid_run.sh`.
+
+Required launch order -- consumers must subscribe before the
+generator publishes, otherwise pre-subscription publishes are dropped
+server-side:
+
+```bash
+cd examples/pyjevsim-relay-cross-process
+
+# Terminal 1
+./rtid_run.sh
+
+# Terminal 2 -- consumers first
+./processor_run.sh
+
+# Terminal 3
+./buffer_run.sh
+
+# Terminal 4 -- generator last
+./generator_run.sh
+```
+
+Result JSON files land at `/tmp/pyjevsim-relay-cross/{generator,
+buffer,processor}-result.json` by default. Override with
+`RESULT_DIR=/path/to/dir`. Tunables (`GEN_MESSAGES`, `CAPACITY`,
+`SERVICE_PERIOD`, `DRAIN_TICKS`, `TICK_PERIOD`,
+`BUFFER_TAIL_TICKS`, `PROCESSOR_TAIL_TICKS`) are env-overridable too;
+see `_run_common.sh` for the full list.
+
+The shell scripts do **not** verify the conservation law -- they
+just run the federates. To check accounting after a manual run:
+
+```bash
+python3 -c "
+import json, pathlib
+d = pathlib.Path('/tmp/pyjevsim-relay-cross')
+g = json.loads((d/'generator-result.json').read_text())
+b = json.loads((d/'buffer-result.json').read_text())
+p = json.loads((d/'processor-result.json').read_text())
+pub, fwd, drp, res = set(g['published']), set(b['forwarded']), set(b['dropped']), set(b['queue_residual'])
+print('published =', len(pub), ' forwarded|dropped|residual =', len(fwd|drp|res), ' match =', pub == fwd|drp|res)
+print('received  =', len(p['received']), ' forwarded =', len(fwd), ' match =', set(p['received']) == fwd)
+"
+```
+
 ## Files
 
 | File | Role |
@@ -80,6 +179,9 @@ verification asserts the conservation law:
 | `generator.py` `buffer.py` `processor.py` | model files (`CoupledModelProtocol` shape; near-copy of `pyjevsim-relay/`) |
 | `relay-fom.xml` | FOM (verbatim copy of `pyjevsim-relay/relay-fom.xml`) |
 | `test_relay_cross_process.py` | end-to-end pytest suite |
+| `_run_common.sh` | sourced by the four shell scripts; defaults for ports, URL, tunables, result/log dirs, rtid binary path |
+| `rtid_run.sh` | launches the rtid daemon at fixed ports for manual federate runs |
+| `generator_run.sh` `buffer_run.sh` `processor_run.sh` | launch the corresponding federate against an already-running rtid (use `rtid_run.sh` first) |
 
 ## Why we don't use `HLAFederate.step_once` here
 
