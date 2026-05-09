@@ -82,6 +82,32 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
+#### M23 — ObjectManagement (§6) + DDM (§9) completion (closed 2026-05-09)
+- Two distinct gap closures in one milestone, identified by post-M22 audits.
+
+§6 Object Management (W1-W3):
+- `delete_object_instance` + `RemoveObjectInstance` callback wired end-to-end. The proto slot at `stream.proto:33` (FederateEvent.remove tag 12) had been declared since M0 but had ZERO consumers — no manager method emitted it, no wire conversion built it, no SDK delivered it. Object instances could never be deleted. M23 W1 closes this with `Registry.Delete` (rti/internal/object/delete.go, NEW), wire handler, both SDKs, and event delivery.
+- `local_delete_object_instance` (§6.18) — federate-local cleanup; cut-1 simplification keeps global state intact.
+- `request_attribute_value_update` (§6.24) + `request_class_attribute_value_update` (§6.25) + `ProvideAttributeValueUpdate` callback (FederateEvent oneof tag 15, NEW). The standard HLA "late joiner pulls initial state" pattern.
+- `change_attribute_transportation_type` (§6.20) + `change_interaction_transportation_type` (§6.22) — per-instance / per-publisher transport overrides. Recorded in `transportStore` (rti/internal/object/transport.go, NEW); wire-level transport switching deferred to a later cut (the multi-Outbox path doesn't yet route per-message transport).
+
+§9 DDM (W4-W5):
+- Go SDK DDM coverage — `rti/pkg/federate/ddm.go` (NEW). Pre-M23 the Go SDK had ZERO DDM methods while pysdk had 10; W4 mirrors all 10 onto the Go SDK so cross-language feature parity is restored.
+- 5 missing §9 services + the wire for the existing manager method: `AssociateRegionsForUpdates`, `UnassociateRegionsForUpdates`, `UnsubscribeObjectClassAttributesWithRegions`, `UnsubscribeInteractionClassWithRegions`, `SendInteractionWithRegions`, `RequestAttributeValueUpdateWithRegions`. Manager additions in `rti/internal/ddm/missing_services.go` (NEW).
+
+Errors:
+- 4 new `core.Err*` sentinels: `ErrObjectNotOwned`, `ErrAttributeNotPublishedByFederation`, `ErrObjectAlreadyDeleted`, `ErrTransportTypeUnspecified`. Pysdk typed exceptions at codes 710-713 continuing M22's 700-709 range.
+
+Out of scope (deferred to M24+):
+- §6 name reservation (`reserveObjectInstanceName` family — §6.2-§6.8).
+- §6 order-type changes (`change_*_order_type` — §6.27, §6.28). Distinct from transport-type.
+- §6 `attributes_in_scope` / `attributes_out_of_scope` callbacks.
+- §7 ownership-resign correctness (`releaseAllOwnedBy`); enables proper resign actions.
+
+Spec tests: 14 in `rti/spec/M23/` + 19 in `pysdk/tests/spec/m23/`. All green.
+
+Frozen plan + 28 tasks (TASK-246..273) at `docs/M23_DISPATCH_PLAN.md`.
+
 #### M22 — TimeService completion (closed 2026-05-09)
 - Closes the four documented M21 carryovers in one milestone:
   1. Pysdk surface parity — Federate gains 12 time methods (TAR, TARA, NMRA, FQR, ModifyLookahead, 3 queries, async-delivery pair, plus the disable variants); Rti1516eAmbassador exposes 15 corresponding camelCase methods. M21 W3B had only flipped NER from no-op to real; the rest were wire-reachable but absent from the Python surface.

@@ -637,11 +637,107 @@ check_m22() {
   else set_status M22 NOT_STARTED; printf "${DIM}M22: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M23 (ObjectManagement §6 + DDM §9 completion) ----------
+check_m23() {
+  section "M23 — ObjectManagement (§6) + DDM (§9) completion (Owner: agent-a + agent-c)"
+  echo "Exit (srs.md §10.4): §6 lifecycle/pull/transport + §9 Go SDK + §9 missing services"
+  local pass=0 total=8
+
+  # 1. §6 Object proto extensions
+  if grep -q 'rpc DeleteObjectInstance' proto/rti/v1/object.proto 2>/dev/null \
+     && grep -q 'rpc LocalDeleteObjectInstance' proto/rti/v1/object.proto 2>/dev/null \
+     && grep -q 'rpc RequestAttributeValueUpdate' proto/rti/v1/object.proto 2>/dev/null \
+     && grep -q 'rpc ChangeAttributeTransportationType' proto/rti/v1/object.proto 2>/dev/null; then
+    present "object.proto: 6 §6 RPCs declared"; pass=$((pass+1))
+  else
+    pending "object.proto missing §6 RPC declarations"
+  fi
+
+  # 2. RemoveObjectInstance no longer orphan; ProvideAttributeValueUpdate added
+  if grep -q 'ProvideAttributeValueUpdate provide_update' proto/rti/v1/stream.proto 2>/dev/null; then
+    present "stream.proto: ProvideAttributeValueUpdate event declared"; pass=$((pass+1))
+  else
+    missing "stream.proto missing ProvideAttributeValueUpdate"
+  fi
+
+  # 3. §6 manager files present
+  if [ -f rti/internal/object/delete.go ] \
+     && [ -f rti/internal/object/request_update.go ] \
+     && [ -f rti/internal/object/transport.go ]; then
+    present "Object manager: delete + request_update + transport"; pass=$((pass+1))
+  else
+    pending "§6 manager files incomplete"
+  fi
+
+  # 4. §9 DDM proto extensions
+  if grep -q 'rpc AssociateRegionsForUpdates' proto/rti/v1/ddm.proto 2>/dev/null \
+     && grep -q 'rpc UnassociateRegionsForUpdates' proto/rti/v1/ddm.proto 2>/dev/null \
+     && grep -q 'rpc SendInteractionWithRegions' proto/rti/v1/ddm.proto 2>/dev/null \
+     && grep -q 'rpc RequestAttributeValueUpdateWithRegions' proto/rti/v1/ddm.proto 2>/dev/null; then
+    present "ddm.proto: 6 §9 RPCs declared"; pass=$((pass+1))
+  else
+    pending "ddm.proto missing §9 RPC declarations"
+  fi
+
+  # 5. §9 manager additions
+  if [ -f rti/internal/ddm/missing_services.go ]; then
+    present "DDM manager: missing_services.go"; pass=$((pass+1))
+  else
+    missing "rti/internal/ddm/missing_services.go absent"
+  fi
+
+  # 6. Go SDK DDM coverage (was zero pre-M23)
+  if [ -f rti/pkg/federate/ddm.go ]; then
+    local missing_count=0
+    for m in LookupRoutingSpace CreateRegion DeleteRegion \
+             SubscribeObjectClassAttributesWithRegions \
+             RegisterObjectInstanceWithRegions \
+             AssociateRegionsForUpdates \
+             UnassociateRegionsForUpdates \
+             UnsubscribeObjectClassAttributesWithRegions \
+             SendInteractionWithRegions \
+             RequestAttributeValueUpdateWithRegions; do
+      if ! grep -q "func (f \*Federate) $m" rti/pkg/federate/ddm.go 2>/dev/null; then
+        missing_count=$((missing_count + 1))
+      fi
+    done
+    if [ "$missing_count" -eq 0 ]; then
+      present "Go SDK DDM: 16 methods covered (W4 + W5)"; pass=$((pass+1))
+    else
+      pending "Go SDK DDM missing $missing_count methods"
+    fi
+  fi
+
+  # 7. M23 spec test files
+  if [ -f rti/spec/M23/delete_test.go ] \
+     && [ -f rti/spec/M23/request_update_test.go ] \
+     && [ -f rti/spec/M23/transport_test.go ] \
+     && [ -f rti/spec/M23/ddm_go_sdk_test.go ] \
+     && [ -f rti/spec/M23/ddm_missing_test.go ] \
+     && [ -f rti/spec/M23/m23_completion_test.go ]; then
+    present "rti/spec/M23/ + pysdk/tests/spec/m23/ committed"; pass=$((pass+1))
+  else
+    pending "M23 spec test files incomplete"
+  fi
+
+  # 8. RemoveObjectInstance no longer orphan: a consumer exists
+  if grep -q 'RemoveObjectInstance' rti/pkg/federate/events.go 2>/dev/null \
+     && grep -q 'FederateEvent_Remove' rti/pkg/federate/federate.go 2>/dev/null; then
+    present "RemoveObjectInstance proto slot now has SDK consumers"; pass=$((pass+1))
+  else
+    missing "RemoveObjectInstance still orphan"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M23 DONE; printf "${GRN}M23: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M23 IN_PROGRESS; printf "${YLW}M23: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M23 NOT_STARTED; printf "${DIM}M23: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21 M22; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21 M22 M23; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -677,6 +773,7 @@ check_m10
 check_m11
 check_m21
 check_m22
+check_m23
 print_summary
 
 exit "$REGRESSED"
