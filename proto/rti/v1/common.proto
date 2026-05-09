@@ -39,6 +39,15 @@ enum ResignAction {
   // RESIGN_ACTION_CANCEL_PENDING_OWNERSHIP          = 4;  // cut 2
 }
 
+// TransportationType — IEEE 1516.1-2010 §6.20-6.22 (M23). Per-instance
+// or per-class transport selection. Default (unspecified at the wire
+// level) inherits the FOM-declared transport.
+enum TransportationType {
+  TRANSPORTATION_TYPE_UNSPECIFIED = 0;
+  TRANSPORTATION_TYPE_RELIABLE = 1;
+  TRANSPORTATION_TYPE_BEST_EFFORT = 2;
+}
+
 // FOMModule represents one FOM XML module submitted at federation create.
 message FOMModule {
   // Optional: source path or filename, for diagnostics. Not used for parsing.

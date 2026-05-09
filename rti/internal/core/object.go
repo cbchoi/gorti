@@ -79,6 +79,34 @@ type ObjectRegistry interface {
 		tag []byte,
 	) error
 
+	// ChangeAttributeTransportType — IEEE 1516.1-2010 §6.20. M23.
+	// Per-instance per-attribute transport override. Owner-only.
+	// Cut-1 simplification: records the override; wire-level transport
+	// switching is deferred (the multi-Outbox path doesn't yet route
+	// per-message transport).
+	// Errors: ErrObjectHandleInvalid, ErrObjectNotOwned,
+	// ErrTransportTypeUnspecified.
+	ChangeAttributeTransportType(
+		ctx context.Context,
+		fed FederationName,
+		owner FederateHandle,
+		obj ObjectHandle,
+		attrs []AttributeHandle,
+		tt TransportType,
+	) error
+
+	// ChangeInteractionTransportType — IEEE 1516.1-2010 §6.22. M23.
+	// Per-publisher per-class transport override. Same record-only
+	// semantic as ChangeAttributeTransportType.
+	// Errors: ErrTransportTypeUnspecified.
+	ChangeInteractionTransportType(
+		ctx context.Context,
+		fed FederationName,
+		publisher FederateHandle,
+		cls InteractionClassHandle,
+		tt TransportType,
+	) error
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns aggregate object-instance counts for the
@@ -91,3 +119,14 @@ type ObjectRegistry interface {
 type ObjectSnapshot struct {
 	InstanceCount uint32
 }
+
+// TransportType — IEEE 1516.1-2010 §6.20-6.22 (M23). Wire enum
+// (rtiv1.TransportationType) maps to this core type via the
+// transport adapter in the gRPC handler.
+type TransportType uint8
+
+const (
+	TransportTypeUnspecified TransportType = iota
+	TransportTypeReliable
+	TransportTypeBestEffort
+)

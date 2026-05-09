@@ -248,6 +248,16 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(self._fed().request_class_attribute_value_update(object_class_handle, attribute_handles, tag))
 
+    def changeAttributeTransportationType(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int], transport: int,
+    ) -> None:
+        self._run(self._fed().change_attribute_transportation_type(object_handle, attribute_handles, transport))
+
+    def changeInteractionTransportationType(  # noqa: N802
+        self, interaction_class_handle: int, transport: int,
+    ) -> None:
+        self._run(self._fed().change_interaction_transportation_type(interaction_class_handle, transport))
+
     # --- Callbacks: subclass overrides these ---
 
     def discoverObjectInstance(  # noqa: N802

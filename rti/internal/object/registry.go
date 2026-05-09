@@ -37,6 +37,12 @@ type Registry struct {
 
 	mu          sync.RWMutex
 	federations map[core.FederationName]*federationState
+
+	// M23 W3 — per-instance / per-(publisher,class) transport-type
+	// overrides. Recorded by ChangeAttributeTransportType /
+	// ChangeInteractionTransportType; read-only via the AttributeTransportType
+	// / InteractionTransportType accessors.
+	transports *transportStore
 }
 
 // federationState is the per-federation in-memory record.
@@ -245,6 +251,7 @@ func New(opts Options) (*Registry, error) {
 	return &Registry{
 		opts:        opts,
 		federations: map[core.FederationName]*federationState{},
+		transports:  newTransportStore(),
 	}, nil
 }
 

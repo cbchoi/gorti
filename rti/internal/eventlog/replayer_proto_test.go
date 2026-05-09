@@ -120,6 +120,12 @@ func (s *stubObjects) RequestAttributeValueUpdate(_ context.Context, _ core.Fede
 func (s *stubObjects) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
 	return nil
 }
+func (s *stubObjects) ChangeAttributeTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ core.TransportType) error {
+	return nil
+}
+func (s *stubObjects) ChangeInteractionTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ core.TransportType) error {
+	return nil
+}
 func (s *stubObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
@@ -840,6 +846,12 @@ func (e *errorObjects) RequestAttributeValueUpdate(_ context.Context, _ core.Fed
 	return e.err
 }
 func (e *errorObjects) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
+	return e.err
+}
+func (e *errorObjects) ChangeAttributeTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ core.TransportType) error {
+	return e.err
+}
+func (e *errorObjects) ChangeInteractionTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ core.TransportType) error {
 	return e.err
 }
 func (e *errorObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {

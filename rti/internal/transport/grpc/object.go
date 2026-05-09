@@ -165,6 +165,59 @@ func (s *objectService) RequestClassAttributeValueUpdate(ctx context.Context, re
 	return &rtiv1.Empty{}, nil
 }
 
+// ChangeAttributeTransportationType — IEEE 1516.1-2010 §6.20 (M23 W3).
+func (s *objectService) ChangeAttributeTransportationType(ctx context.Context, req *rtiv1.ChangeAttributeTransportRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	attrs := make([]core.AttributeHandle, 0, len(req.GetAttributeHandles()))
+	for _, h := range req.GetAttributeHandles() {
+		attrs = append(attrs, core.AttributeHandle(h))
+	}
+	if err := s.obj.ChangeAttributeTransportType(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectHandle(req.GetObjectHandle()),
+		attrs,
+		protoTransportTypeToCore(req.GetTransportType()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// ChangeInteractionTransportationType — IEEE 1516.1-2010 §6.22 (M23 W3).
+func (s *objectService) ChangeInteractionTransportationType(ctx context.Context, req *rtiv1.ChangeInteractionTransportRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	if err := s.obj.ChangeInteractionTransportType(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.InteractionClassHandle(req.GetInteractionClassHandle()),
+		protoTransportTypeToCore(req.GetTransportType()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// protoTransportTypeToCore maps the wire enum to the core type.
+// Unspecified at the wire surfaces as core.TransportTypeUnspecified
+// (which the manager rejects with ErrTransportTypeUnspecified).
+func protoTransportTypeToCore(t rtiv1.TransportationType) core.TransportType {
+	switch t {
+	case rtiv1.TransportationType_TRANSPORTATION_TYPE_RELIABLE:
+		return core.TransportTypeReliable
+	case rtiv1.TransportationType_TRANSPORTATION_TYPE_BEST_EFFORT:
+		return core.TransportTypeBestEffort
+	default:
+		return core.TransportTypeUnspecified
+	}
+}
+
 // validWireVersion returns true when the wire version on a request is one
 // the server understands. WIRE_VERSION_UNSPECIFIED is rejected: clients
 // must opt into a versioned dialect.

@@ -86,3 +86,55 @@ func (f *Federate) RequestClassAttributeValueUpdate(ctx context.Context, cls uin
 	})
 	return wrapStatusErr(err)
 }
+
+// TransportType — M23 W3. Mirrors rti.v1.TransportationType. Use
+// TransportTypeReliable / TransportTypeBestEffort with the Change*
+// methods. TransportTypeUnspecified (the zero value) is rejected.
+type TransportType uint8
+
+const (
+	// TransportTypeUnspecified — zero value; rejected by the manager.
+	TransportTypeUnspecified TransportType = iota
+	TransportTypeReliable
+	TransportTypeBestEffort
+)
+
+func (t TransportType) wire() rtiv1.TransportationType {
+	switch t {
+	case TransportTypeReliable:
+		return rtiv1.TransportationType_TRANSPORTATION_TYPE_RELIABLE
+	case TransportTypeBestEffort:
+		return rtiv1.TransportationType_TRANSPORTATION_TYPE_BEST_EFFORT
+	default:
+		return rtiv1.TransportationType_TRANSPORTATION_TYPE_UNSPECIFIED
+	}
+}
+
+// ChangeAttributeTransportationType — IEEE 1516.1-2010 §6.20 (M23 W3).
+// Per-instance per-attribute transport override. Owner-only; recorded
+// at the manager but the wire path doesn't yet route per-message
+// transport (record-only in M23, per the dispatch plan).
+func (f *Federate) ChangeAttributeTransportationType(ctx context.Context, obj uint64, attrs []uint64, tt TransportType) error {
+	_, err := f.conn.obj.ChangeAttributeTransportationType(ctx, &rtiv1.ChangeAttributeTransportRequest{
+		WireVersion:      rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:   f.federationName,
+		FederateHandle:   f.federateHandle,
+		ObjectHandle:     obj,
+		AttributeHandles: append([]uint64(nil), attrs...),
+		TransportType:    tt.wire(),
+	})
+	return wrapStatusErr(err)
+}
+
+// ChangeInteractionTransportationType — IEEE 1516.1-2010 §6.22 (M23 W3).
+// Per-publisher per-class transport override.
+func (f *Federate) ChangeInteractionTransportationType(ctx context.Context, cls uint64, tt TransportType) error {
+	_, err := f.conn.obj.ChangeInteractionTransportationType(ctx, &rtiv1.ChangeInteractionTransportRequest{
+		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:         f.federationName,
+		FederateHandle:         f.federateHandle,
+		InteractionClassHandle: cls,
+		TransportType:          tt.wire(),
+	})
+	return wrapStatusErr(err)
+}

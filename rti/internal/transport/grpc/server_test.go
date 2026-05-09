@@ -56,6 +56,12 @@ func (stubObjRegistryForServerTest) RequestAttributeValueUpdate(_ context.Contex
 func (stubObjRegistryForServerTest) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
 	return errors.New("stub")
 }
+func (stubObjRegistryForServerTest) ChangeAttributeTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ core.TransportType) error {
+	return errors.New("stub")
+}
+func (stubObjRegistryForServerTest) ChangeInteractionTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ core.TransportType) error {
+	return errors.New("stub")
+}
 func (stubObjRegistryForServerTest) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }

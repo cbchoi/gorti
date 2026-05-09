@@ -316,6 +316,19 @@ class GrpcTransport:
                 list(kwargs.get("attribute_handles") or []),
                 kwargs.get("tag") or b"",
             )
+        if method == "change_attribute_transportation_type":
+            return await self._change_attribute_transportation_type(
+                kwargs["federate_handle"],
+                kwargs["object_handle"],
+                list(kwargs.get("attribute_handles") or []),
+                int(kwargs["transport_type"]),
+            )
+        if method == "change_interaction_transportation_type":
+            return await self._change_interaction_transportation_type(
+                kwargs["federate_handle"],
+                kwargs["interaction_class_handle"],
+                int(kwargs["transport_type"]),
+            )
         # Unknown method — surface a clear error rather than a silent
         # drop; better the test fails loudly than passes by omission.
         raise NotImplementedError(
@@ -827,6 +840,52 @@ class GrpcTransport:
         )
         try:
             await self.objects.RequestClassAttributeValueUpdate(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _change_attribute_transportation_type(
+        self,
+        federate_handle: int,
+        object_handle: int,
+        attribute_handles: list[int],
+        transport_type: int,
+    ) -> None:
+        from rti.v1 import common_pb2, object_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = object_pb2.ChangeAttributeTransportRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_handle=object_handle,
+            attribute_handles=[int(h) for h in attribute_handles],
+            transport_type=transport_type,
+        )
+        try:
+            await self.objects.ChangeAttributeTransportationType(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _change_interaction_transportation_type(
+        self,
+        federate_handle: int,
+        interaction_class_handle: int,
+        transport_type: int,
+    ) -> None:
+        from rti.v1 import common_pb2, object_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = object_pb2.ChangeInteractionTransportRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            interaction_class_handle=interaction_class_handle,
+            transport_type=transport_type,
+        )
+        try:
+            await self.objects.ChangeInteractionTransportationType(req)
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 

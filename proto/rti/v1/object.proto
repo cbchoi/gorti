@@ -18,6 +18,8 @@ service ObjectService {
   rpc LocalDeleteObjectInstance(LocalDeleteObjectInstanceRequest) returns (Empty);
   rpc RequestAttributeValueUpdate(RequestAttributeValueUpdateRequest) returns (Empty);
   rpc RequestClassAttributeValueUpdate(RequestClassAttributeValueUpdateRequest) returns (Empty);
+  rpc ChangeAttributeTransportationType(ChangeAttributeTransportRequest) returns (Empty);
+  rpc ChangeInteractionTransportationType(ChangeInteractionTransportRequest) returns (Empty);
 }
 
 message RegisterObjectRequest {
@@ -107,4 +109,29 @@ message RequestClassAttributeValueUpdateRequest {
   uint64 object_class_handle = 4;
   repeated uint64 attribute_handles = 5;
   bytes user_supplied_tag = 6;
+}
+
+// ChangeAttributeTransportationType — IEEE 1516.1-2010 §6.20 (M23).
+// Per-instance per-attribute transport override. M23 records the
+// override in object.Registry; wire-level transport switching is
+// deferred to a later cut (the multi-Outbox path doesn't yet route
+// per-message transport).
+message ChangeAttributeTransportRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  TransportationType transport_type = 6;
+}
+
+// ChangeInteractionTransportationType — IEEE 1516.1-2010 §6.22 (M23).
+// Per-publisher per-class transport override. Same recording-only
+// semantic as ChangeAttributeTransportationType.
+message ChangeInteractionTransportRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+  TransportationType transport_type = 5;
 }

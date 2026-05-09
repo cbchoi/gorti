@@ -82,6 +82,12 @@ func (s *stubObjectRegistry) RequestAttributeValueUpdate(_ context.Context, _ co
 func (s *stubObjectRegistry) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
 	return nil
 }
+func (s *stubObjectRegistry) ChangeAttributeTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ core.TransportType) error {
+	return nil
+}
+func (s *stubObjectRegistry) ChangeInteractionTransportType(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ core.TransportType) error {
+	return nil
+}
 func (s *stubObjectRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }

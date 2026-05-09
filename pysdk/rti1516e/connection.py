@@ -616,6 +616,36 @@ class Federate:
             tag=tag,
         )
 
+    async def change_attribute_transportation_type(
+        self, object_handle: int, attribute_handles: list[int], transport: int,
+    ) -> None:
+        """Per-instance per-attribute transport override (§6.20, M23).
+
+        ``transport`` is one of the ``TRANSPORTATION_TYPE_*`` enum values
+        from ``rti.v1.common_pb2.TransportationType``. M23 ships record-
+        only — the wire path doesn't yet route per-message transport.
+        """
+        await _dispatch(
+            self._transport,
+            "change_attribute_transportation_type",
+            federate_handle=self.handle,
+            object_handle=object_handle,
+            attribute_handles=attribute_handles,
+            transport_type=transport,
+        )
+
+    async def change_interaction_transportation_type(
+        self, interaction_class_handle: int, transport: int,
+    ) -> None:
+        """Per-publisher per-class transport override (§6.22, M23)."""
+        await _dispatch(
+            self._transport,
+            "change_interaction_transportation_type",
+            federate_handle=self.handle,
+            interaction_class_handle=interaction_class_handle,
+            transport_type=transport,
+        )
+
     # --- Cut-3 service-group accessors (M12 W2) ---
     #
     # Each property lazily constructs a dedicated thin client wrapper
