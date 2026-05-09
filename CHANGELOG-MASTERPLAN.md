@@ -82,6 +82,19 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
+#### M21 — Complete TimeService gRPC wiring (closed 2026-05-07)
+- Closes the cut-1 / cut-2 time-service gap: NER was the only advance primitive with a wire path; TAR / TARA / NMRA / FQR / queries returned `Unimplemented`. Pysdk's time RPCs short-circuited as no-ops because of this.
+- Proto extension (W1, append-only): `proto/rti/v1/time.proto` gains TAR / TARA / NMRA / FQR / ModifyLookahead + 3 query RPCs (QueryLogicalTime / QueryLookahead / QueryLBTS), plus 10 new message types
+- Wire adapter (W2A): `rti/internal/transport/grpc/time.go` registered in rtid composition; 13 RPC handlers wrap `*time.Manager`. `Manager.ModifyLookahead` added (the one new manager mutator — append, no semantic change)
+- Grant/halt event delivery (W2B): `toFederateEvent` extended to type-switch on `*timepkg.TimeAdvanceGrant` and `*timepkg.FederationHalted`; `Manager.OnFederateResign` chained via federation manager so resign-during-pending cleans up cleanly
+- Go SDK time surface (W2½ + W3A): `rti/pkg/federate/` (Connection / Federate / events) + `time.go` exposes 13 time-management methods; bufconn-driven test fixture for SDK tests with no rtid subprocess
+- Pysdk flip (W3B): `pysdk/rti1516e/_transport.py`'s 3 NER methods flip from no-op to real dispatch; `TimeServiceStub` wired; 8 typed exceptions added at codes 700-707 (`TimeRegulationAlreadyEnabled`, ..., `TimeAdvancingState`, `FederationHaltedError`)
+- Showcase examples restored (W4A + W4B): `examples/go-timed/` (3 Go federates, lookaheads {0.5, 1.0, 2.0}, all-TAR after the NER+forced-grant race surfaced) and `examples/pyjevsim-time-advance/` (3 Python regulators with NER + retry-on-`TimeAdvancingState` backoff)
+- Acceptance gate (W5): `rti/spec/M21/time_service_test.go` (8 spec tests binding AC §3 invariants) + `pysdk/tests/spec/m21/test_time_service_cross_language.py`; cut-3 README "no time-managed variant" caveats struck in `pyjevsim-relay-cross-process` / `pyjevsim` / `pyjevsim-sync-points` / `pyjevsim-dashboard-bridged` README files (they now point to `examples/pyjevsim-time-advance/` for the time-managed reference)
+- Two known-narrow workarounds carried forward as M21 follow-ups: the NER `clearPending=False` race on sole-pending forced grants is documented in `regulator_main.py` and the Go example sidesteps it by switching to TAR; pysdk currently exposes NER only (TAR / TARA / NMRA / FQR Python surface is post-M21 ergonomics, not a semantic gap — the wire path works)
+- `enableAsynchronousDelivery` / `disableAsynchronousDelivery` and lookahead-zero / optimistic time variants explicitly NOT in M21 (deferred to M20)
+- Frozen plan + 22 tasks (TASK-201..220) at `docs/M21_DISPATCH_PLAN.md`
+
 #### M19 — DDS / RTPS data plane adapter (Phase 0 + Phase 1a; halted clean)
 - Phase 0 design doc at `docs/m19-dds-adapter.md` — architecture, library + binding choices, QoS mapping, distribution model, phasing
 - §6.1 / §6.2 / §6.3 / §6.5 PINNED: Cyclone DDS / hand-rolled minimal CGo / `cyclonedds-python` / build-tag-gated split (default `rtid` stays CGo-free + DDS-free)

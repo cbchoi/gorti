@@ -159,19 +159,18 @@ env-overridable too; see `_run_common.sh` for the full list.
 | `_real_pyjevsim_adapter.py` | adapter mapping a real `pyjevsim.StructuralModel` onto the bridge's `CoupledModelProtocol`. Not used by the cross-process runner directly; available for users wiring real pyjevsim coupled models. |
 | `cross_lang_runner.py` `cross_lang_test.py` | M5 cut-1 cross-language smoke (rtid out-of-process, pub+sub as asyncio tasks in one Python process). Subset of what the new `runner.py` does; kept for the spec-test reference. |
 
-## Why we don't use `HLAFederate.step_once` here
+## Why this example uses an untimed driver
 
-Same reason as the relay-cross-process variant. The bridge's
-`HLAFederate.step_once` issues `next_message_request` on every
-cycle, but real `rtid` (M3+) does not yet wire the time-service gRPC
-handlers (`rti/internal/transport/grpc/server.go`:
-`timeService: nil`). Cross-process therefore uses an *untimed*
-driver from `_federate_common.run_untimed_loop` /
-`run_drain_only_loop`. Logical time still flows (the model's
-`time_advance` is consulted), but there is no LBTS / NER
-coordination. When `rtid` ships its TimeService implementation, this
-example can be tightened by replacing the untimed driver with
-`HLAFederate.step_once`.
+Producer/Consumer is a pure pub/sub demo — no LBTS / NER coordination
+needed. The example uses `_federate_common.run_untimed_loop` /
+`run_drain_only_loop`; logical time still flows (the model's
+`time_advance` is consulted), but the federation doesn't care about
+time advance. Tightening to `HLAFederate.step_once` is possible
+post-M21 (TimeService is now wired) but adds machinery without
+changing what this example demonstrates.
+
+For an example that *does* exercise time advance, see
+`examples/pyjevsim-time-advance/` (M21 W4B).
 
 ## Debugging tips
 

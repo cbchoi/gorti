@@ -186,29 +186,26 @@ see `_run_common.sh` for the full list.
 | `generator_run.sh` `buffer_run.sh` `processor_run.sh` | launch the corresponding federate against an already-running rtid (use `rtid_run.sh` first); prints a `DONE`/`FAILED` summary on exit |
 | `verify_run.sh` | cross-result conservation check after a manual run; exits 0 on PASS, 1 on FAIL with diagnostic |
 
-## Why we don't use `HLAFederate.step_once` here
+## Why this example uses an untimed driver
 
-The bridge's `HLAFederate.step_once` issues `next_message_request` on
-every cycle. Real `rtid` (M3+) does not yet wire the time-service
-gRPC handlers (`rti/internal/transport/grpc/server.go` line 144:
-`timeService: nil`), so any cross-process call to
-`next_message_request` hangs forever waiting for a grant that never
-arrives. See `pysdk/rti1516e/_transport.py`'s module docstring:
+This example runs each federate's main loop as an *untimed* driver
+(`_federate_common.run_untimed_loop` / `run_drain_only_loop`). Logical
+time still flows -- the model's `time_advance` is consulted to size
+the per-tick wall-clock sleep -- but there is no LBTS / NER
+coordination at the federation level.
 
-> Time-management RPCs (NextMessageRequest etc.) are not wired --
-> rtid's TimeService is nil at M2; the SDK records the call but does
-> not dispatch it. The bridge's `_await_grant` would block forever
-> in real gRPC mode; cross-language tests therefore avoid the
-> time-managed code path and instead drive interactions directly.
+As of M21, `rtid`'s TimeService is wired and the bridge's
+`HLAFederate.step_once` would work cross-process. This example
+keeps the untimed driver because the relay model's accounting
+invariants (every published seq is forwarded-or-dropped-or-residual)
+don't need time coordination — they hold under wall-clock pacing.
+Tightening to `step_once` is a future cut where the relay would
+also exercise time advance.
 
-This example takes that escape hatch: each federate's main runs an
-*untimed* driver (`_federate_common.run_untimed_loop` /
-`run_drain_only_loop`). Logical time still flows -- the model's
-`time_advance` is consulted to size the per-tick wall-clock sleep --
-but there is no LBTS / NER coordination. When `rtid` ships its
-TimeService implementation, this example can be tightened to the
-in-process variant's same-tick fan-out semantics by replacing the
-untimed driver with `HLAFederate.step_once`.
+For a federation that *needs* time advance, see
+`examples/go-timed/` (Go) or `examples/pyjevsim-time-advance/`
+(Python) — both restored in M21 on top of the new TimeService
+wire path.
 
 ## Why drop counts drift
 

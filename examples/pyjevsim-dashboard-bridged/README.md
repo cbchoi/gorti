@@ -18,20 +18,21 @@ behavior, different developer ergonomics.
    corresponding RPCs.                  events to the model.
 ```
 
-## Why we don't use `HLAFederate.step_once` here
+## Why this example reads the model protocol manually
 
-Same reason as
-[`examples/pyjevsim-relay-cross-process`](../pyjevsim-relay-cross-process/README.md#why-we-dont-use-hlafederatestep_once-here):
-real rtid (M3+) does not yet wire the time-service gRPC handlers
-(`timeService: nil`). The bridge's `HLAFederate.step_once` issues
-`next_message_request` on every cycle, which would block forever
-waiting for a grant. The cross-process entry points therefore read
-the model's protocol surface and make the corresponding RPCs
-manually.
+The cross-process entry points read the model's `ObjectClassFederateProtocol`
+surface (publications, instance registrations, attribute updates,
+discover/reflect handlers) and make the corresponding RPCs directly,
+rather than going through `HLAFederate.step_once`. This is a
+demonstration of the bridge's protocol shape, not a workaround:
+the dashboard demo doesn't need LBTS / NER coordination because
+its accounting (received == published) holds under wall-clock pacing.
 
-When rtid ships TimeService, this example can be tightened by
-replacing the manual cycle in `sensor_main.py` / `dashboard_main.py`
-with `HLAFederate.step_once` -- the model code stays unchanged.
+As of M21, rtid's TimeService is wired and `HLAFederate.step_once`
+works cross-process. Tightening this example to use `step_once`
+is a future-cut ergonomics improvement; the model code stays
+unchanged either way. For a federation that *does* exercise time
+advance, see `examples/pyjevsim-time-advance/` (M21 W4B).
 
 ## Prerequisites
 

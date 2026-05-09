@@ -117,14 +117,16 @@ Tunables (env-overridable):
 | `alpha_run.sh` `beta_run.sh` `gamma_run.sh` | per-participant federate launchers |
 | `verify_run.sh` | cross-result invariant check after a manual run |
 
-## Why no time-managed variant?
+## Why an untimed driver here
 
-Same reason as
-[`examples/pyjevsim-relay-cross-process`](../pyjevsim-relay-cross-process/README.md#why-we-dont-use-hlafederatestep_once-here):
-real rtid (M3+) does not yet wire the time-service gRPC handlers
-(`timeService: nil`). Cross-process therefore uses an untimed driver
-for the running phase. When rtid ships TimeService, the running-phase
-loop can be tightened to use `HLAFederate.step_once`.
+Sync-points is a sync-rendezvous demo — the running phase between
+labels uses an untimed driver because the example's invariants
+(every federate achieves every label, ticks emitted between labels)
+don't need LBTS / NER coordination.
+
+As of M21, rtid's TimeService is wired and `HLAFederate.step_once`
+works cross-process. For an example that exercises time advance,
+see `examples/pyjevsim-time-advance/` (M21 W4B).
 
 ## Debugging tips
 

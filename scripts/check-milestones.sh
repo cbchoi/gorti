@@ -453,11 +453,91 @@ check_m11() {
   else set_status M11 NOT_STARTED; printf "${DIM}M11: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M21 (cut 3 cross-cutting: complete TimeService gRPC wiring) ----------
+check_m21() {
+  section "M21 — Complete TimeService gRPC wiring (Owner: agent-a + agent-c)"
+  echo "Exit (srs.md §10.4): all 5 advance primitives + 3 queries reachable cross-process; pysdk time RPCs real; cut-3 README caveats struck"
+  local pass=0 total=8
+
+  # 1. proto wire surface
+  if grep -q 'rpc TimeAdvanceRequest' proto/rti/v1/time.proto 2>/dev/null \
+     && grep -q 'rpc NextMessageRequestAvailable' proto/rti/v1/time.proto 2>/dev/null \
+     && grep -q 'rpc FlushQueueRequest' proto/rti/v1/time.proto 2>/dev/null \
+     && grep -q 'rpc QueryLogicalTime' proto/rti/v1/time.proto 2>/dev/null; then
+    present "proto/rti/v1/time.proto: TAR + NMRA + FQR + queries declared"; pass=$((pass+1))
+  else
+    pending "proto/rti/v1/time.proto missing M21 advance primitives or queries"
+  fi
+
+  # 2. wire adapter file present
+  if [ -f rti/internal/transport/grpc/time.go ]; then
+    present "rti/internal/transport/grpc/time.go: TimeServiceServer impl"; pass=$((pass+1))
+  else
+    missing "rti/internal/transport/grpc/time.go absent — TimeService not wired"
+  fi
+
+  # 3. Manager.ModifyLookahead landed
+  if grep -q 'func (m \*Manager) ModifyLookahead' rti/internal/time/manager.go 2>/dev/null; then
+    present "Manager.ModifyLookahead present"; pass=$((pass+1))
+  else
+    pending "Manager.ModifyLookahead missing"
+  fi
+
+  # 4. Go federate SDK time surface
+  if [ -f rti/pkg/federate/time.go ]; then
+    present "rti/pkg/federate/time.go: SDK time methods"; pass=$((pass+1))
+  else
+    missing "rti/pkg/federate/time.go absent"
+  fi
+
+  # 5. pysdk time RPCs flipped (no-op caveat gone)
+  if [ -f pysdk/rti1516e/_transport.py ] \
+     && ! grep -q 'TimeService is nil at M2' pysdk/rti1516e/_transport.py 2>/dev/null; then
+    present "pysdk/_transport.py: time RPCs no longer no-op (M2 caveat struck)"; pass=$((pass+1))
+  else
+    pending "pysdk/_transport.py still carries the M2 'TimeService is nil' caveat"
+  fi
+
+  # 6. Showcase examples restored
+  if [ -f examples/go-timed/regulator_main.go ] && [ -f examples/pyjevsim-time-advance/regulator_main.py ]; then
+    present "examples/go-timed/ + examples/pyjevsim-time-advance/ restored"; pass=$((pass+1))
+  else
+    pending "M21 showcase examples not yet restored"
+  fi
+
+  # 7. Spec test files in place (W5 gate)
+  if [ -f rti/spec/M21/time_service_test.go ] && [ -f pysdk/tests/spec/m21/test_time_service_cross_language.py ]; then
+    present "rti/spec/M21/ + pysdk/tests/spec/m21/ committed"; pass=$((pass+1))
+  else
+    pending "M21 spec test dirs incomplete"
+  fi
+
+  # 8. Cut-3 README caveats struck in all 4 examples (literal-string regression check)
+  local stale=0
+  for f in examples/pyjevsim-relay-cross-process/README.md \
+           examples/pyjevsim/README.md \
+           examples/pyjevsim-sync-points/README.md \
+           examples/pyjevsim-dashboard-bridged/README.md; do
+    if [ -f "$f" ] && grep -q 'does not yet wire the time-service gRPC handlers' "$f" 2>/dev/null; then
+      stale=$((stale+1))
+    fi
+  done
+  if [ "$stale" -eq 0 ]; then
+    present "Cut-3 README 'time-service not yet wired' caveats struck"; pass=$((pass+1))
+  else
+    missing "$stale cut-3 README(s) still carry the pre-M21 caveat"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M21 DONE; printf "${GRN}M21: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M21 IN_PROGRESS; printf "${YLW}M21: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M21 NOT_STARTED; printf "${DIM}M21: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -491,6 +571,7 @@ check_m8
 check_m9
 check_m10
 check_m11
+check_m21
 print_summary
 
 exit "$REGRESSED"
