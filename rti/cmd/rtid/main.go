@@ -24,6 +24,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,6 +34,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -92,6 +94,13 @@ func main() {
 	replayInput := flag.String("replay-input", "", "source event-log file path for replay-from-log mode")
 	tlsCert := flag.String("tls-cert", "", "path to TLS server cert PEM (enables TLS when set; clients dial grpcs://host:port). Requires --tls-key.")
 	tlsKey := flag.String("tls-key", "", "path to TLS server key PEM. Required when --tls-cert is set.")
+	// M14 W1 — mTLS: client cert verification.
+	tlsClientCA := flag.String("tls-client-ca", "", "path to PEM bundle for verifying client certs (mTLS). When set, clients MUST present a cert signed by one of these CAs.")
+	tlsClientCNAllow := flag.String("tls-client-cn-allow", "", "comma-separated list of client cert CommonNames to allow (M14). Empty → any cert signed by --tls-client-ca passes.")
+	// M14 W4 — OIDC bearer token verification.
+	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer URL. Server fetches JWKS from <url>/.well-known/openid-configuration. Empty disables OIDC.")
+	oidcAudience := flag.String("oidc-audience", "", "Required `aud` claim on incoming JWTs.")
+	oidcJWKSPem := flag.String("oidc-jwks-pem", "", "Pre-pinned JWKS as PEM (alternative to --oidc-issuer for air-gapped deployments).")
 	saveDir := flag.String("save-dir", "./gorti-saves", "directory under which federation save bundles are written + read (M9: FR-SR-1..5)")
 	researchConfig := flag.String("research-config", "", "path to a TOML research-config file (Phase 3 of docs/research-platform.md). Server mode only; absent → default strategies + per-impl-opt-in determinism. Honors GORTI_RESEARCH_CONFIG as fallback when flag is empty; GORTI_DETERMINISM overrides the determinism field if set.")
 	// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): DDS data-plane
@@ -154,6 +163,11 @@ func main() {
 			LogDir:                        *logDir,
 			TLSCert:                       *tlsCert,
 			TLSKey:                        *tlsKey,
+			TLSClientCA:                   *tlsClientCA,
+			TLSClientCNAllow:              *tlsClientCNAllow,
+			OIDCIssuer:                    *oidcIssuer,
+			OIDCAudience:                  *oidcAudience,
+			OIDCJWKSPem:                   *oidcJWKSPem,
 			SaveDir:                       *saveDir,
 			ResearchConfigPath:            *researchConfig,
 			AdminMutating:                 *adminMutating,
@@ -215,6 +229,13 @@ type serverMainArgs struct {
 	LogDir                        string
 	TLSCert                       string
 	TLSKey                        string
+	// M14 W1 — mTLS.
+	TLSClientCA      string
+	TLSClientCNAllow string
+	// M14 W4 — OIDC.
+	OIDCIssuer   string
+	OIDCAudience string
+	OIDCJWKSPem  string
 	SaveDir                       string
 	ResearchConfigPath            string
 	AdminMutating                 bool
@@ -234,7 +255,7 @@ func runServerMain(logger *slog.Logger, args serverMainArgs) {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
 	}
 
-	tlsConfig, err := buildServerTLS(args.TLSCert, args.TLSKey)
+	tlsConfig, err := buildServerTLSWithMTLS(args.TLSCert, args.TLSKey, args.TLSClientCA, args.TLSClientCNAllow)
 	if err != nil {
 		logger.Error("rtid TLS configuration failed", "err", err)
 		os.Exit(2)
@@ -1225,7 +1246,20 @@ func resolveResearchConfig(flagPath, envPath, determinismOverride string) (resea
 // no mTLS, no rotation; clients dial grpcs://host:port and rely on a
 // trusted CA bundle (or system roots when the cert chains to one).
 func buildServerTLS(certPath, keyPath string) (*tls.Config, error) {
+	return buildServerTLSWithMTLS(certPath, keyPath, "", "")
+}
+
+// buildServerTLSWithMTLS extends buildServerTLS with optional mTLS
+// (M14 W1). When clientCAPath is non-empty, the returned config
+// requires + verifies a client cert against the CA bundle. When
+// clientCNAllow is non-empty, only certs whose Subject CN appears in
+// the comma-separated list are accepted (the verification chain still
+// runs first; the allow-list is the secondary filter).
+func buildServerTLSWithMTLS(certPath, keyPath, clientCAPath, clientCNAllow string) (*tls.Config, error) {
 	if certPath == "" && keyPath == "" {
+		if clientCAPath != "" {
+			return nil, fmt.Errorf("rtid: --tls-client-ca requires --tls-cert + --tls-key (mTLS implies TLS)")
+		}
 		return nil, nil
 	}
 	if certPath == "" || keyPath == "" {
@@ -1235,14 +1269,58 @@ func buildServerTLS(certPath, keyPath string) (*tls.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("rtid: load TLS keypair: %w", err)
 	}
-	return &tls.Config{
+	cfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		// MinVersion: TLS 1.2 floor matches Go's secure-by-default
 		// recommendation and avoids the gosec G402 lint. Clients
 		// dialing with the Python SDK's default ssl.create_default_context
 		// negotiate TLS 1.2 or higher.
 		MinVersion: tls.VersionTLS12,
-	}, nil
+	}
+	if clientCAPath != "" {
+		caPEM, err := os.ReadFile(clientCAPath)
+		if err != nil {
+			return nil, fmt.Errorf("rtid: read --tls-client-ca: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("rtid: --tls-client-ca contains no valid PEM certs")
+		}
+		cfg.ClientCAs = pool
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
+
+		if clientCNAllow != "" {
+			allowList := strings.Split(clientCNAllow, ",")
+			for i := range allowList {
+				allowList[i] = strings.TrimSpace(allowList[i])
+			}
+			cfg.VerifyPeerCertificate = makeCNAllowVerifier(allowList)
+		}
+	}
+	return cfg, nil
+}
+
+// makeCNAllowVerifier — M14 W1. Returns a tls.Config.VerifyPeerCertificate
+// callback that succeeds only when the peer leaf cert's Subject CN is
+// in allow. The standard chain verification has already passed by the
+// time this fires (we set ClientAuth=RequireAndVerifyClientCert above).
+func makeCNAllowVerifier(allow []string) func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	allowSet := make(map[string]struct{}, len(allow))
+	for _, cn := range allow {
+		if cn != "" {
+			allowSet[cn] = struct{}{}
+		}
+	}
+	return func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
+		if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
+			return fmt.Errorf("rtid: no verified chain for client cert")
+		}
+		leaf := verifiedChains[0][0]
+		if _, ok := allowSet[leaf.Subject.CommonName]; !ok {
+			return fmt.Errorf("rtid: client cert CN %q not in --tls-client-cn-allow", leaf.Subject.CommonName)
+		}
+		return nil
+	}
 }
 
 // buildLogger constructs the slog Logger from the level / format flags.
