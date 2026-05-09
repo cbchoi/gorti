@@ -38,11 +38,13 @@ The GrpcTransport is intentionally MINIMAL (cut-1 per TASK-081):
     SDK and the Go-side ``fomHandle.LookupInteractionClass`` derive
     handles from a sorted-by-name index, so the two sides agree
     deterministically.
-  - Time-management RPCs (NextMessageRequest etc.) are not wired —
-    rtid's TimeService is nil at M2; the SDK records the call but does
-    not dispatch it. The bridge's ``_await_grant`` would block forever
-    in real gRPC mode; cross-language tests therefore avoid the
-    time-managed code path and instead drive interactions directly.
+  - Time-management RPCs (NextMessageRequest, EnableTimeRegulation,
+    EnableTimeConstrained) are dispatched to rtid's TimeService as of
+    M21 (TASK-208). Earlier cuts short-circuited because rtid's
+    timeService field was nil; M21 W2A composed it unconditionally
+    and W2B closed the grant-on-the-wire conversion gap. The
+    bridge's ``_await_grant`` now resolves once a real
+    TimeAdvanceGrant arrives on ``StreamService.Events``.
 
 This module is internal to rti1516e and is not part of the public API.
 """
@@ -122,6 +124,7 @@ class GrpcTransport:
             federation_pb2_grpc,
             object_pb2_grpc,
             stream_pb2_grpc,
+            time_pb2_grpc,
         )
 
         self.channel = channel
@@ -130,6 +133,8 @@ class GrpcTransport:
         self.declaration = declaration_pb2_grpc.DeclarationServiceStub(channel)
         self.objects = object_pb2_grpc.ObjectServiceStub(channel)
         self.streams = stream_pb2_grpc.StreamServiceStub(channel)
+        # M21 TASK-208: TimeService is now wired (was nil at M2 / M3).
+        self.time = time_pb2_grpc.TimeServiceStub(channel)
         # Federation name → name-resolver state. The first
         # ``create_federation`` for a given federation name parses the
         # FOM and caches name→handle maps; later RPCs reuse them.
@@ -240,16 +245,18 @@ class GrpcTransport:
                 kwargs.get("parameters") or {},
                 kwargs.get("timestamp"),
             )
-        if method in (
-            "enable_time_regulation",
-            "enable_time_constrained",
-            "next_message_request",
-        ):
-            # rtid's TimeService is nil at M2; dispatching would yield
-            # codes.Unimplemented and the bridge's NER loop would block
-            # forever. The cross-language smoke explicitly avoids the
-            # time-managed code path.
-            return None
+        if method == "enable_time_regulation":
+            return await self._enable_time_regulation(
+                kwargs["federate_handle"], kwargs["lookahead"],
+            )
+        if method == "enable_time_constrained":
+            return await self._enable_time_constrained(
+                kwargs["federate_handle"],
+            )
+        if method == "next_message_request":
+            return await self._next_message_request(
+                kwargs["federate_handle"], kwargs["time"],
+            )
         # Unknown method — surface a clear error rather than a silent
         # drop; better the test fails loudly than passes by omission.
         raise NotImplementedError(
@@ -409,6 +416,62 @@ class GrpcTransport:
             req.logical_time = float(timestamp)
         await self.objects.SendInteraction(req)
         return
+
+    # --- M21 TASK-208: TimeService dispatchers ---------------------------------
+
+    async def _enable_time_regulation(
+        self, federate_handle: int, lookahead: float,
+    ) -> None:
+        """Dispatch TimeService.EnableTimeRegulation (M21)."""
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.EnableRegulationRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            lookahead=float(lookahead),
+        )
+        try:
+            await self.time.EnableTimeRegulation(req)
+        except Exception as exc:  # noqa: BLE001 — translate_rpc_error reraises
+            translate_rpc_error(exc)
+
+    async def _enable_time_constrained(self, federate_handle: int) -> None:
+        """Dispatch TimeService.EnableTimeConstrained (M21)."""
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.EnableConstrainedRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+        )
+        try:
+            await self.time.EnableTimeConstrained(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _next_message_request(
+        self, federate_handle: int, t: float,
+    ) -> None:
+        """Dispatch TimeService.NextMessageRequest (M21)."""
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.NERRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            logical_time=float(t),
+        )
+        try:
+            await self.time.NextMessageRequest(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
 
     async def _publish_object_class(
         self, federate_handle: int, class_name: str, attributes: list[str]

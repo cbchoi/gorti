@@ -102,6 +102,69 @@ class InvalidSaveState(RtiError):
     error_code = 608
 
 
+# --- Time service (M21 TASK-208) typed exceptions ----------------------------
+#
+# Each maps to one row of docs/M21_DISPATCH_PLAN.md §2.3.1. The codes
+# 700-708 are reserved for time-management; cut-3 service groups use
+# 600-608 (above) and the cut-1 federation/declaration codes are <600.
+
+
+class TimeRegulationAlreadyEnabled(RtiError):
+    """Attempted EnableTimeRegulation while already regulating (HLA §8.2)."""
+
+    error_code = 700
+
+
+class TimeRegulationNotEnabled(RtiError):
+    """Operation requires time-regulating state which the federate lacks."""
+
+    error_code = 701
+
+
+class TimeConstrainedAlreadyEnabled(RtiError):
+    """Attempted EnableTimeConstrained while already constrained."""
+
+    error_code = 702
+
+
+class TimeConstrainedNotEnabled(RtiError):
+    """Operation requires time-constrained state which the federate lacks."""
+
+    error_code = 703
+
+
+class InvalidLookahead(RtiError):
+    """Lookahead must be >= 0 and finite (NaN / -Inf / +Inf rejected)."""
+
+    error_code = 704
+
+
+class LogicalTimeAlreadyPassed(RtiError):
+    """Requested logical time is not greater than currentTime + lookahead.
+
+    Maps to server-side core.ErrTimeRequestInPast — note the manager
+    fires when t < currentTime + lookahead (with lookahead floor),
+    not strictly t < currentTime.
+    """
+
+    error_code = 705
+
+
+class TimeAdvancingState(RtiError):
+    """Federate has an outstanding advance request (NER/NMRA/TAR/TARA/FQR)."""
+
+    error_code = 706
+
+
+class FederationHaltedError(RtiError):
+    """Federation is in the terminal halted state.
+
+    Suffixed "Error" to disambiguate from the FederationHalted event class.
+    """
+
+    error_code = 707
+
+
 # --- Translation entry point --------------------------------------------------
 
 
@@ -125,6 +188,13 @@ def translate_rpc_error(exc: BaseException) -> NoReturn:
     code_name = _grpc_code_name(exc)
     detail = _grpc_detail(exc) or str(exc)
 
+    # M21 TASK-208: time-management errors share gRPC codes
+    # (FailedPrecondition for most state errors, InvalidArgument for
+    # bad inputs). The detail string is the manager's sentinel.Error()
+    # text — sniff that to disambiguate.
+    if time_cls := _time_class_for(detail):
+        raise time_cls(detail) from exc
+
     cls = _CODE_TO_EXCEPTION.get(code_name)
     if cls is not None:
         raise cls(detail) from exc
@@ -132,6 +202,33 @@ def translate_rpc_error(exc: BaseException) -> NoReturn:
     # Unknown code (or non-gRPC exception) — propagate unchanged so the
     # caller sees the most diagnostically useful trace.
     raise exc
+
+
+def _time_class_for(detail: str) -> type[RtiError] | None:
+    """Return the time-mgmt typed exception for ``detail``, or None.
+
+    Detail strings come from server-side core.ErrTime*.Error() text
+    (see rti/internal/core/errors.go). Substring match on the
+    distinguishing fragment.
+    """
+    # Order matters — pick the most-specific match first.
+    if "already time-regulating" in detail:
+        return TimeRegulationAlreadyEnabled
+    if "not time-regulating" in detail:
+        return TimeRegulationNotEnabled
+    if "already time-constrained" in detail:
+        return TimeConstrainedAlreadyEnabled
+    if "not time-constrained" in detail:
+        return TimeConstrainedNotEnabled
+    if "lookahead must be" in detail:
+        return InvalidLookahead
+    if "requested time is not greater" in detail:
+        return LogicalTimeAlreadyPassed
+    if "outstanding advance request" in detail:
+        return TimeAdvancingState
+    if "federation halted" in detail:
+        return FederationHaltedError
+    return None
 
 
 # --- Helpers ------------------------------------------------------------------

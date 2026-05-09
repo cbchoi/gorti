@@ -25,6 +25,7 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/federation"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 	"github.com/cbchoi/gorti/rti/internal/object"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 )
 
@@ -39,6 +40,20 @@ type testRtid struct {
 }
 
 func newTestRtid(t *testing.T) *testRtid {
+	t.Helper()
+	return newTestRtidShared(t, false)
+}
+
+// newTestRtidWithTime is the time-aware variant: composes a real
+// *time.Manager so the gRPC TimeService handlers don't return Unimplemented.
+// W3A's time-method tests use this path; the base foundation tests use
+// newTestRtid which leaves timeService nil.
+func newTestRtidWithTime(t *testing.T) *testRtid {
+	t.Helper()
+	return newTestRtidShared(t, true)
+}
+
+func newTestRtidShared(t *testing.T, withTime bool) *testRtid {
 	t.Helper()
 	clock := core.NewFakeClock(time.Unix(0, 0))
 	declMgr := declaration.New()
@@ -60,12 +75,20 @@ func newTestRtid(t *testing.T) *testRtid {
 	if err != nil {
 		t.Fatalf("federation.New: %v", err)
 	}
-	srv, err := grpcsvc.NewServer(grpcsvc.Options{
+	opts := grpcsvc.Options{
 		Federations:  fedMgr,
 		Declarations: declMgr,
 		Objects:      objReg,
 		Outbox:       outbox,
-	})
+	}
+	if withTime {
+		mgr, mErr := timepkg.New(timepkg.Options{Clock: clock, Outbox: outbox})
+		if mErr != nil {
+			t.Fatalf("time.New: %v", mErr)
+		}
+		opts.Time = mgr
+	}
+	srv, err := grpcsvc.NewServer(opts)
 	if err != nil {
 		t.Fatalf("grpcsvc.NewServer: %v", err)
 	}
