@@ -1,208 +1,368 @@
-"""End-to-end runner for the pyjevsim bridge example.
+"""End-to-end runner for the cross-process Producer -> Consumer
+pipeline.
 
-Wires :class:`producer.Producer` and :class:`consumer.Consumer` to two
-``HLAFederate`` instances, runs them concurrently against an in-process
-``FakeRtiServer``, and returns the consumer's received list.
+Production-deployment shape: ``rtid`` runs as a real subprocess with a
+real gRPC listener; each of the two federates runs as its own Python
+subprocess talking to rtid over ``grpc://``. No in-process fan-out
+tricks -- rtid does the routing.
 
 Run from the repo root::
 
-    python examples/pyjevsim/runner.py
+    python3 examples/pyjevsim/runner.py
 
-Exit code is 0 on success, 1 on any uncaught exception.
+Optional flags::
 
-Notes on the in-process RTI
----------------------------
-The runner uses ``InProcessTransport`` from
-``pysdk/rti1516e/_inprocess.py`` — the production-suitable in-process
-driver extracted at M6 close. Earlier cuts (M4/M5) imported
-``FakeRtiServer`` from ``pysdk/tests/spec/m4/_fakes/``; that path was a
-documented contract violation (examples must not depend on test
-infrastructure) and was the M6-W2 follow-up that resolved it.
+    --ticks N            producer emits N messages then idles (default 50)
+    --drain-ticks D      D extra idle ticks after the emit phase (default 30)
+    --tick-period P      wall-clock seconds per tick (default 0.05)
+    --rtid-binary PATH   override the rtid binary (default <repo>/bin/rtid;
+                         built via 'go build' if missing)
+    --keep-tempdir       leave the temp dir intact for inspection
 
-``InProcessTransport`` records every call deterministically, exposes
-per-federate event queues that the runner's fan-out task drains, and
-auto-registers under ``memory://fake-rti`` so existing call sites
-keep working without re-plumbing.
+Exit code 0 on success (both federates produced result files AND the
+accounting invariant holds: consumer.received == producer.published),
+1 on any failure path.
 
-The runner stages a cooperative fan-out:
-
-1. Producer's federate calls ``send_interaction`` (recorded on the fake).
-2. Each recorded ``send_interaction`` is translated into a
-   :class:`rti1516e.events.ReceiveInteraction` and pushed onto every
-   subscriber's event queue.
-3. The consumer's bridge drains the queue inside its NER loop, hands the
-   payload to ``Consumer.external_transition``, and the determinism
-   harness reads the resulting ``Consumer.received`` list.
-
-The fan-out runs as an asyncio task started before the federates so
-producer and consumer can advance concurrently with no shared lock.
+Mirrors the structure of
+``examples/pyjevsim-relay-cross-process/runner.py`` so contributors
+who learn one runner understand the other immediately.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import json
+import os
+import shutil
+import socket
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
-# Make sibling modules importable when run as ``python examples/pyjevsim/runner.py``.
 _HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
+_REPO_ROOT = _HERE.parents[1]
+_BIN_DIR = _REPO_ROOT / "bin"
+_DEFAULT_RTID = _BIN_DIR / "rtid"
 
-# Make the pysdk package importable when the user has not installed it.
-_PYSDK = _HERE.parents[1] / "pysdk"
-if str(_PYSDK) not in sys.path:
-    sys.path.insert(0, str(_PYSDK))
-
-# ruff: noqa: E402  (sys.path tweaks above must precede project imports)
-from consumer import Consumer
-from producer import Producer
-
-from pyjevsim_bridge import HLAFederate, PortMapping
-from rti1516e._inprocess import InProcessTransport
-from rti1516e.connection import FederationSpec
-from rti1516e.events import ReceiveInteraction
-
-FOM_PATH = (
-    _HERE.parents[1] / "tests" / "conformance" / "foms" / "good" / "pyjevsim-bridge.xml"
-)
+PRODUCER_SCRIPT = _HERE / "producer_main.py"
+CONSUMER_SCRIPT = _HERE / "consumer_main.py"
 
 
-async def run_once(*, ticks: int = 5, seed: int = 0) -> dict[str, Any]:
-    """Run one full producer/consumer exchange and return a result dict.
+def _is_windows() -> bool:
+    return sys.platform.startswith("win")
 
-    The dict shape is::
 
-        {
-            "received": [(port, parameters), ...],
-            "published": [seq_number, ...],
-            "send_interactions": int,  # producer-side wire calls
-        }
+def _free_port() -> int:
+    """Bind to port 0 to discover a free TCP port; close + return."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
 
-    ``seed`` is currently informational — the harness has no random
-    component to seed; deterministic behaviour comes from the deterministic
-    FakeRtiServer + the producer's monotonic counter. The parameter exists
-    so the M4 determinism harness can pass a seed and so a future
-    implementation can wire it to the FederationSpec.
+
+def _build_rtid(target: Path) -> Path:
+    """Build the rtid binary into ``target``. Idempotent."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(  # noqa: S603, S607
+        ["go", "build", "-o", str(target), "./rti/cmd/rtid"],
+        cwd=_REPO_ROOT,
+        check=True,
+    )
+    return target
+
+
+def _ensure_rtid(binary: Path) -> Path:
+    if binary.exists():
+        return binary
+    return _build_rtid(binary)
+
+
+async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109
+    """Poll a TCP connect until rtid accepts on ``port``."""
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", port), timeout=0.5
+            )
+            writer.close()
+            with contextlib.suppress(BaseException):
+                await writer.wait_closed()
+            del reader
+            return
+        except (OSError, TimeoutError):
+            await asyncio.sleep(0.1)
+    raise TimeoutError(f"rtid never accepted on port {port}")
+
+
+def _spawn_rtid(
+    binary: Path,
+    listen_port: int,
+    metrics_port: int,
+    admin_port: int,
+    *,
+    save_dir: Path,
+    log_dir: Path,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    """Launch rtid as a subprocess. Mirrors the relay-cross-process
+    runner so teardown behaviour is consistent across both examples.
     """
-
-    server = InProcessTransport()
-    federation = FederationSpec(
-        name="pyjevsim-bridge-example",
-        fom_modules=[str(FOM_PATH)],
-        seed=seed,
+    kwargs: dict[str, Any] = {
+        "stdout": log_path.open("wb"),  # noqa: SIM115
+        "stderr": subprocess.STDOUT,
+    }
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(  # noqa: S603
+        [
+            str(binary),
+            "--listen", f":{listen_port}",
+            "--metrics-listen", f":{metrics_port}",
+            "--admin-listen", f"127.0.0.1:{admin_port}",
+            "--log-level", "warn",
+            "--log-dir", str(log_dir),
+            "--save-dir", str(save_dir),
+        ],
+        **kwargs,
     )
 
-    producer = Producer()
-    consumer = Consumer()
 
-    producer_federate = HLAFederate(
-        coupled_model=producer,
-        federation=federation,
-        federate_name="producer",
-        port_mapping=PortMapping.from_dict({"out_seq": "ProducerOutput"}),
-        url="memory://fake-rti",
+def _spawn_federate(
+    script: Path,
+    *,
+    url: str,
+    result_path: Path,
+    ticks: int,
+    drain_ticks: int,
+    tail_ticks: int,
+    tick_period: float,
+    startup_delay: float,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    """Spawn one federate as ``python3 <script> ...``. Stdout + stderr
+    are tee'd into ``log_path`` for post-mortem of a crashed federate.
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_fh = log_path.open("wb")  # noqa: SIM115
+    kwargs: dict[str, Any] = {"stdout": log_fh, "stderr": subprocess.STDOUT}
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    return subprocess.Popen(  # noqa: S603
+        [
+            sys.executable,
+            str(script),
+            "--url", url,
+            "--result", str(result_path),
+            "--ticks", str(ticks),
+            "--drain-ticks", str(drain_ticks),
+            "--tail-ticks", str(tail_ticks),
+            "--tick-period", str(tick_period),
+            "--startup-delay", str(startup_delay),
+        ],
+        env=env,
+        **kwargs,
     )
-    consumer_federate = HLAFederate(
-        coupled_model=consumer,
-        federation=federation,
-        federate_name="consumer",
-        port_mapping=PortMapping.from_dict({"in_seq": "ProducerOutput"}),
-        url="memory://fake-rti",
-    )
 
-    # Bring federates up so we can read their handles before starting
-    # the fan-out task. ``aclose`` is wired into the finally block.
-    await producer_federate._ensure_federate()  # noqa: SLF001 — orchestrated lifecycle
-    await consumer_federate._ensure_federate()  # noqa: SLF001
-    consumer_handle = consumer_federate._federate.handle  # type: ignore[union-attr]
-    producer_handle = producer_federate._federate.handle  # type: ignore[union-attr]
 
-    subscribers = {"ProducerOutput": [consumer_handle]}
+def _terminate(proc: subprocess.Popen[bytes], *, timeout: float = 5.0) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        with contextlib.suppress(BaseException):
+            proc.wait(timeout=timeout)
 
-    def _fanout_now() -> None:
-        """Translate every send_interaction recorded since the last sweep
-        into ReceiveInteraction events on each subscriber's queue.
 
-        Run synchronously between producer.step_once and consumer.step_once
-        within each tick — that ordering is what makes the consumer see
-        the producer's tick-N output as an external on the same tick,
-        instead of racing the consumer's auto-grant.
-        """
-        nonlocal _fanout_cursor
-        end = len(server.calls)
-        while _fanout_cursor < end:
-            call = server.calls[_fanout_cursor]
-            _fanout_cursor += 1
-            if call.method != "send_interaction":
-                continue
-            class_name = call.args.get("class_name")
-            if not isinstance(class_name, str):
-                continue
-            sender = call.args.get("federate_handle")
-            for handle in subscribers.get(class_name, ()):
-                if handle == sender:
-                    continue
-                event = ReceiveInteraction(
-                    class_name=class_name,
-                    parameters=dict(call.args.get("parameters", {})),
-                    timestamp=call.args.get("timestamp"),
-                )
-                server.push_event(handle, event)
+async def run_once(
+    *,
+    ticks: int = 50,
+    drain_ticks: int = 30,
+    tick_period: float = 0.05,
+    rtid_binary: Path | None = None,
+    keep_tempdir: bool = False,
+    federate_timeout: float = 60.0,
+) -> dict[str, Any]:
+    """Drive one full cross-process run.
 
-    _fanout_cursor = 0
+    Consumer's tail is set so a producer emit on its last drain tick
+    is still delivered before the consumer resigns.
+    """
+    binary = _ensure_rtid(rtid_binary or _DEFAULT_RTID)
+    listen_port = _free_port()
+    metrics_port = _free_port()
+    admin_port = _free_port()
+    while metrics_port == listen_port:
+        metrics_port = _free_port()
+    while admin_port in (listen_port, metrics_port):
+        admin_port = _free_port()
+
+    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-cross-"))
+    save_dir = tmpdir / "saves"
+    log_dir = tmpdir / "logs"
+    fed_log_dir = tmpdir / "federate-logs"
+    for d in (save_dir, log_dir, fed_log_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    prod_result = tmpdir / "producer-result.json"
+    cons_result = tmpdir / "consumer-result.json"
+
+    rtid_proc: subprocess.Popen[bytes] | None = None
+    fed_procs: list[subprocess.Popen[bytes]] = []
 
     try:
-        # Drive each tick deterministically: producer first (so its
-        # send_interaction lands), fan-out (so the consumer's queue has
-        # the event before it asks for a grant), then consumer.
-        for _ in range(ticks):
-            await producer_federate.step_once()
-            _fanout_now()
-            await consumer_federate.step_once()
-    finally:
-        await producer_federate.aclose()
-        await consumer_federate.aclose()
+        rtid_proc = _spawn_rtid(
+            binary, listen_port, metrics_port, admin_port,
+            save_dir=save_dir, log_dir=log_dir,
+            log_path=tmpdir / "rtid.log",
+        )
+        await _wait_for_grpc(listen_port)
+        url = f"grpc://127.0.0.1:{listen_port}"
 
-    return {
-        "received": list(consumer.received),
-        "published": list(producer.published),
-        "send_interactions": len(server.calls_for("send_interaction")),
-        "producer_handle": producer_handle,
-        "consumer_handle": consumer_handle,
-    }
+        # Consumer first so its subscribe lands before any publish.
+        # Pre-subscription publishes are dropped server-side -- the
+        # 0.5s sleep before the producer spawn gives the consumer's
+        # subscribe RPC time to round-trip.
+        consumer_tail = 40
+        cons_proc = _spawn_federate(
+            CONSUMER_SCRIPT, url=url, result_path=cons_result,
+            ticks=ticks, drain_ticks=drain_ticks,
+            tail_ticks=consumer_tail,
+            tick_period=tick_period,
+            startup_delay=0.0,
+            log_path=fed_log_dir / "consumer.log",
+        )
+        fed_procs.append(cons_proc)
+        await asyncio.sleep(0.5)
+
+        prod_proc = _spawn_federate(
+            PRODUCER_SCRIPT, url=url, result_path=prod_result,
+            ticks=ticks, drain_ticks=drain_ticks,
+            tail_ticks=0,
+            tick_period=tick_period,
+            startup_delay=0.0,
+            log_path=fed_log_dir / "producer.log",
+        )
+        fed_procs.append(prod_proc)
+
+        deadline = asyncio.get_event_loop().time() + federate_timeout
+        for proc, name in (
+            (prod_proc, "producer"),
+            (cons_proc, "consumer"),
+        ):
+            remaining = max(0.1, deadline - asyncio.get_event_loop().time())
+            try:
+                await asyncio.to_thread(proc.wait, remaining)
+            except subprocess.TimeoutExpired:
+                print(
+                    f"runner: federate {name} did not exit within "
+                    f"{remaining:.1f}s; will be force-terminated",
+                    file=sys.stderr,
+                )
+
+    finally:
+        for proc in fed_procs:
+            _terminate(proc)
+        if rtid_proc is not None:
+            _terminate(rtid_proc)
+
+        result = {
+            "published": _read_list(prod_result, "published"),
+            "received": _read_list(cons_result, "received"),
+            "tempdir": str(tmpdir) if keep_tempdir else None,
+            "rtid_port": listen_port,
+            "rtid_pid": rtid_proc.pid if rtid_proc is not None else None,
+        }
+
+        if not keep_tempdir:
+            with contextlib.suppress(BaseException):
+                shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return result
+
+
+def _read_list(path: Path, key: str) -> list[int]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    value = payload.get(key, [])
+    if not isinstance(value, list):
+        return []
+    return [int(x) for x in value if isinstance(x, int)]
+
+
+def verify(result: dict[str, Any]) -> tuple[bool, str]:
+    """Cross-process accounting invariant: every seq the producer
+    published should arrive at the consumer, in order, exactly once.
+
+    With only one publisher and one subscriber and gRPC in-order
+    delivery, this should hold exactly -- there is no buffer to drop
+    on overflow, no race between concurrent publishers. If it FAILS,
+    something is structurally wrong (subscription didn't land in
+    time, or a federate crashed mid-loop).
+    """
+    pub = result["published"]
+    recv = result["received"]
+    if not pub:
+        return False, "producer published nothing -- result file missing or empty"
+    if recv != pub:
+        only_pub = [s for s in pub if s not in set(recv)]
+        only_recv = [s for s in recv if s not in set(pub)]
+        return False, (
+            f"received != published: published={len(pub)} received={len(recv)}; "
+            f"only-published(first 5)={only_pub[:5]} "
+            f"only-received(first 5)={only_recv[:5]}"
+        )
+    return True, "ok"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--ticks", type=int, default=5, help="number of bridge cycles per federate"
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=0,
-        help="federation seed (informational; harness is deterministic without it)",
-    )
+    parser.add_argument("--ticks", type=int, default=50)
+    parser.add_argument("--drain-ticks", type=int, default=30)
+    parser.add_argument("--tick-period", type=float, default=0.05)
+    parser.add_argument("--rtid-binary", type=Path, default=None)
+    parser.add_argument("--keep-tempdir", action="store_true")
+    parser.add_argument("--federate-timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
     try:
-        result = asyncio.run(run_once(ticks=args.ticks, seed=args.seed))
-    except Exception as exc:  # noqa: BLE001 — top-level wrapper, surface message
+        result = asyncio.run(
+            run_once(
+                ticks=args.ticks,
+                drain_ticks=args.drain_ticks,
+                tick_period=args.tick_period,
+                rtid_binary=args.rtid_binary,
+                keep_tempdir=args.keep_tempdir,
+                federate_timeout=args.federate_timeout,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
         print(f"runner: {exc}", file=sys.stderr)
         return 1
 
+    ok, msg = verify(result)
     print(
-        f"runner: {args.ticks} ticks; "
-        f"producer published {len(result['published'])} "
-        f"({result['published']}); "
-        f"consumer received {len(result['received'])} interaction(s)"
+        f"runner: published={len(result['published'])}  "
+        f"received={len(result['received'])}  "
+        f"rtid_port={result['rtid_port']}  "
+        f"verify={msg}",
+        flush=True,
     )
-    for entry in result["received"]:
-        print(f"  consumer.received: {entry!r}")
-    return 0
+    if result.get("tempdir"):
+        print(f"runner: tempdir kept at {result['tempdir']}", flush=True)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
