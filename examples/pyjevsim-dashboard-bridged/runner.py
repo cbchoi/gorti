@@ -1,23 +1,10 @@
-"""End-to-end runner for the Sensor → Dashboard object-class example
-(Path B — via ``pyjevsim_bridge.HLAFederate``).
+"""End-to-end cross-process runner for the Sensor -> Dashboard
+object-class example.
 
-This is the **bridged** variant of ``examples/pyjevsim-dashboard/``.
-The pedagogical contrast:
-
-  * **Path A** (``examples/pyjevsim-dashboard/runner.py``) — federate
-    code calls ``Federate.register_object_instance`` /
-    ``Federate.update_attributes`` directly. The runner owns the
-    Sensor and Dashboard as plain Python objects and threads the
-    raw RTI calls through them.
-  * **Path B** (this file) — Sensor and Dashboard are plain
-    coupled-model-shaped objects that opt INTO
-    ``ObjectClassFederateProtocol``. ``HLAFederate`` reads the
-    publications / subscriptions / instance registrations off the
-    model and issues the corresponding ``publish_object_class`` /
-    ``subscribe_object_class`` / ``register_object_instance`` /
-    ``update_attributes`` RPCs. ``DiscoverObjectInstance`` /
-    ``ReflectAttributeValues`` events route to the model's
-    ``discover_handler`` / ``reflect_handler``.
+Spawns rtid + 2 Python federate subprocesses (sensor + dashboard).
+Sensor publishes a ``SensorReading`` object instance and updates its
+``value`` attribute every tick; Dashboard subscribes and accumulates
+the reflected sequence via ``ReflectAttributeValues`` events.
 
 Run from the repo root::
 
@@ -27,81 +14,158 @@ Optional flags::
 
     --ticks N            sensor publishes N updates (default 10)
     --mode {sequence,sine}
-    --amplitude A        for sine mode: integer amplitude (default 100)
-    --verbose            print per-tick state
+    --amplitude A        for sine mode (default 100)
+    --tick-period P      wall-clock seconds per tick (default 0.05)
+    --rtid-binary PATH   override the rtid binary
+    --keep-tempdir       leave temp dir for inspection
 
-Exit code 0 on success, 1 on verify failure.
-
-Why the runner still synthesizes Discover + Reflect events
-----------------------------------------------------------
-``InProcessTransport`` is a **recorder**, not a router — it captures
-every ``record(...)`` call but doesn't walk the FOM to dispatch
-``DiscoverObjectInstance`` / ``ReflectAttributeValues`` to
-subscribers. Production rtid does this via the
-DeclarationService + Registry hooks (``rti/internal/object/registry.go``).
-
-So the runner does the same thing the bypass runner does: after the
-sensor's ``register_object_instance`` lands (visible in
-``transport.calls``), push a synthesised Discover into the
-dashboard's queue; after every ``update_attributes`` call, push a
-synthesised Reflect. The bridge then routes those events to the
-dashboard's handlers exactly as it would for a real RTI.
-
-This is allowed by the task constraints — runners may be aware of
-the in-process transport's recorder-not-router quirk.
+Mirrors examples/pyjevsim-dashboard/runner.py and
+examples/pyjevsim-relay-cross-process/runner.py.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import importlib.util as _il
+import contextlib
+import json
+import os
+import shutil
+import socket
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
-# Make sibling modules importable when run as
-# ``python examples/pyjevsim-dashboard-bridged/runner.py``.
 _HERE = Path(__file__).resolve().parent
+_REPO_ROOT = _HERE.parents[1]
+_BIN_DIR = _REPO_ROOT / "bin"
+_DEFAULT_RTID = _BIN_DIR / "rtid"
 
-# Make the pysdk package importable when not pip-installed.
-_PYSDK = _HERE.parents[1] / "pysdk"
-if str(_PYSDK) not in sys.path:
-    sys.path.insert(0, str(_PYSDK))
-
-
-def _load_sibling(unique_name: str, file_name: str) -> Any:
-    """Load ``_HERE/<file_name>`` under ``unique_name`` so it doesn't
-    collide with the bypass example's ``sensor.py`` / ``dashboard.py``
-    when both example dirs are on ``sys.path`` in one pytest session.
-
-    Mirrors the pattern the test files use (per the dcefea5
-    housekeeping fix), applied at runtime so bare ``import sensor``
-    can't pick up the bypass variant by accident."""
-    spec = _il.spec_from_file_location(unique_name, _HERE / file_name)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"failed to load {file_name} from {_HERE}")
-    module = _il.module_from_spec(spec)
-    sys.modules[unique_name] = module
-    spec.loader.exec_module(module)
-    return module
+SENSOR_SCRIPT = _HERE / "sensor_main.py"
+DASHBOARD_SCRIPT = _HERE / "dashboard_main.py"
 
 
-_sensor = _load_sibling("_pyjevsim_dashboard_bridged_sensor", "sensor.py")
-_dashboard = _load_sibling("_pyjevsim_dashboard_bridged_dashboard", "dashboard.py")
-Sensor = _sensor.Sensor
-Dashboard = _dashboard.Dashboard
+def _is_windows() -> bool:
+    return sys.platform.startswith("win")
 
-# ruff: noqa: E402  (sys.path tweaks above must precede project imports)
-from pyjevsim_bridge import HLAFederate, PortMapping
-from rti1516e._inprocess import InProcessTransport
-from rti1516e.connection import FederationSpec
-from rti1516e.events import (
-    DiscoverObjectInstance,
-    ReflectAttributeValues,
-)
 
-FOM_PATH = _HERE / "dashboard-fom.xml"
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+def _build_rtid(target: Path) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(  # noqa: S603, S607
+        ["go", "build", "-o", str(target), "./rti/cmd/rtid"],
+        cwd=_REPO_ROOT,
+        check=True,
+    )
+    return target
+
+
+def _ensure_rtid(binary: Path) -> Path:
+    return binary if binary.exists() else _build_rtid(binary)
+
+
+async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", port), timeout=0.5
+            )
+            writer.close()
+            with contextlib.suppress(BaseException):
+                await writer.wait_closed()
+            del reader
+            return
+        except (OSError, TimeoutError):
+            await asyncio.sleep(0.1)
+    raise TimeoutError(f"rtid never accepted on port {port}")
+
+
+def _spawn_rtid(
+    binary: Path,
+    listen_port: int,
+    metrics_port: int,
+    admin_port: int,
+    *,
+    save_dir: Path,
+    log_dir: Path,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    kwargs: dict[str, Any] = {
+        "stdout": log_path.open("wb"),  # noqa: SIM115
+        "stderr": subprocess.STDOUT,
+    }
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(  # noqa: S603
+        [
+            str(binary),
+            "--listen", f":{listen_port}",
+            "--metrics-listen", f":{metrics_port}",
+            "--admin-listen", f"127.0.0.1:{admin_port}",
+            "--log-level", "warn",
+            "--log-dir", str(log_dir),
+            "--save-dir", str(save_dir),
+        ],
+        **kwargs,
+    )
+
+
+def _spawn_federate(
+    script: Path,
+    *,
+    url: str,
+    result_path: Path,
+    ticks: int,
+    drain_ticks: int,
+    mode: str,
+    amplitude: int,
+    tick_period: float,
+    startup_delay: float,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_fh = log_path.open("wb")  # noqa: SIM115
+    kwargs: dict[str, Any] = {"stdout": log_fh, "stderr": subprocess.STDOUT}
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    return subprocess.Popen(  # noqa: S603
+        [
+            sys.executable,
+            str(script),
+            "--url", url,
+            "--result", str(result_path),
+            "--ticks", str(ticks),
+            "--drain-ticks", str(drain_ticks),
+            "--mode", mode,
+            "--amplitude", str(amplitude),
+            "--tick-period", str(tick_period),
+            "--startup-delay", str(startup_delay),
+        ],
+        env=env,
+        **kwargs,
+    )
+
+
+def _terminate(proc: subprocess.Popen[bytes], *, timeout: float = 5.0) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        with contextlib.suppress(BaseException):
+            proc.wait(timeout=timeout)
 
 
 async def run_once(
@@ -109,199 +173,146 @@ async def run_once(
     ticks: int = 10,
     mode: str = "sequence",
     amplitude: int = 100,
-    verbose: bool = False,
+    tick_period: float = 0.05,
+    rtid_binary: Path | None = None,
+    keep_tempdir: bool = False,
+    federate_timeout: float = 60.0,
 ) -> dict[str, Any]:
-    """Run one full Sensor → Dashboard exchange via the bridge and
-    return a result dict suitable for ``verify()``.
+    binary = _ensure_rtid(rtid_binary or _DEFAULT_RTID)
+    listen_port = _free_port()
+    metrics_port = _free_port()
+    admin_port = _free_port()
+    while metrics_port == listen_port:
+        metrics_port = _free_port()
+    while admin_port in (listen_port, metrics_port):
+        admin_port = _free_port()
 
-    The returned shape matches the bypass variant exactly so the same
-    verifier logic works for both.
-    """
-    transport = InProcessTransport()
-    federation = FederationSpec(
-        name="pyjevsim-dashboard-bridged-example",
-        fom_modules=[str(FOM_PATH)],
-        seed=0,
-    )
+    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-dashboard-bridged-"))
+    save_dir = tmpdir / "saves"
+    log_dir = tmpdir / "logs"
+    fed_log_dir = tmpdir / "federate-logs"
+    for d in (save_dir, log_dir, fed_log_dir):
+        d.mkdir(parents=True, exist_ok=True)
 
-    sensor = Sensor(stop_after=ticks, mode=mode, amplitude=amplitude)
-    dashboard = Dashboard()
+    sensor_result = tmpdir / "sensor-result.json"
+    dashboard_result = tmpdir / "dashboard-result.json"
 
-    sensor_fed = HLAFederate(
-        coupled_model=sensor,
-        federation=federation,
-        federate_name="sensor",
-        port_mapping=PortMapping.from_dict({}),
-        url="memory://fake-rti",
-    )
-    dashboard_fed = HLAFederate(
-        coupled_model=dashboard,
-        federation=federation,
-        federate_name="dashboard",
-        port_mapping=PortMapping.from_dict({}),
-        url="memory://fake-rti",
-    )
+    rtid_proc: subprocess.Popen[bytes] | None = None
+    fed_procs: list[subprocess.Popen[bytes]] = []
 
-    # Bring both bridges up so we can read their handles + the
-    # sensor's instance handle before starting the per-tick loop.
-    # _ensure_federate runs the lazy object-class declaration init
-    # for free, which is why we don't need an explicit
-    # publish/subscribe call here.
-    await sensor_fed._ensure_federate()  # noqa: SLF001
-    await dashboard_fed._ensure_federate()  # noqa: SLF001
-    dashboard_handle = dashboard_fed._federate.handle  # type: ignore[union-attr]
-    # Sensor instance handle is in the bridge's local-name → handle map
-    # after register_instances ran during _ensure_federate.
-    obj_handle = sensor_fed._instance_handles[Sensor.INSTANCE_NAME]  # noqa: SLF001
-
-    # The runner mediates the in-process transport's recorder/router
-    # gap by synthesising Discover + Reflect events into the
-    # dashboard's bridge queue. Bridge then routes them to
-    # dashboard.discover_handler / dashboard.reflect_handler.
-    await dashboard_fed.deliver_object_event(
-        DiscoverObjectInstance(
-            object_handle=obj_handle,
-            class_name=Sensor.CLASS_NAME,
-            instance_name=Sensor.INSTANCE_NAME,
+    try:
+        rtid_proc = _spawn_rtid(
+            binary, listen_port, metrics_port, admin_port,
+            save_dir=save_dir, log_dir=log_dir,
+            log_path=tmpdir / "rtid.log",
         )
-    )
-    # Drain that single discover event before the first reflect, so
-    # the trace shows discover-before-reflect (matches the bypass
-    # variant's ordering invariant).
-    await dashboard_fed.step_once()
+        await _wait_for_grpc(listen_port)
+        url = f"grpc://127.0.0.1:{listen_port}"
 
-    # Track which update_attributes calls we've already converted to
-    # Reflect events so we don't double-fire when the runner loops.
-    update_cursor = 0
+        # Dashboard FIRST so its subscribe lands before the sensor's
+        # register / update_attributes — pre-subscription publishes
+        # are dropped server-side.
+        dash_proc = _spawn_federate(
+            DASHBOARD_SCRIPT, url=url, result_path=dashboard_result,
+            ticks=ticks, drain_ticks=20,
+            mode=mode, amplitude=amplitude,
+            tick_period=tick_period,
+            startup_delay=0.0,
+            log_path=fed_log_dir / "dashboard.log",
+        )
+        fed_procs.append(dash_proc)
+        await asyncio.sleep(0.5)
 
-    for tick in range(ticks):
-        # Sensor cycle: bridge calls attribute_update_handler internally
-        # and emits update_attributes via the in-process transport.
-        await sensor_fed.step_once()
+        sensor_proc = _spawn_federate(
+            SENSOR_SCRIPT, url=url, result_path=sensor_result,
+            ticks=ticks, drain_ticks=0,
+            mode=mode, amplitude=amplitude,
+            tick_period=tick_period,
+            startup_delay=0.0,
+            log_path=fed_log_dir / "sensor.log",
+        )
+        fed_procs.append(sensor_proc)
 
-        # Drain new update_attributes calls into the dashboard bridge's
-        # event queue as ReflectAttributeValues. The transport.calls
-        # list is append-only, so a cursor is enough to find newcomers.
-        new_updates = transport.calls_for("update_attributes")[update_cursor:]
-        update_cursor += len(new_updates)
-        for call in new_updates:
-            if call.args.get("federate_handle") == dashboard_handle:
-                # Defensive: skip self-loop (shouldn't happen — the
-                # dashboard never calls update_attributes — but keep
-                # the symmetry with the relay example's fanout filter).
-                continue
-            await dashboard_fed.deliver_object_event(
-                ReflectAttributeValues(
-                    object_handle=int(call.args.get("object_handle", 0)),
-                    values=dict(call.args.get("values", {})),
-                    timestamp=call.args.get("timestamp"),
+        deadline = asyncio.get_event_loop().time() + federate_timeout
+        for proc, name in ((sensor_proc, "sensor"), (dash_proc, "dashboard")):
+            remaining = max(0.1, deadline - asyncio.get_event_loop().time())
+            try:
+                await asyncio.to_thread(proc.wait, remaining)
+            except subprocess.TimeoutExpired:
+                print(
+                    f"runner: federate {name} did not exit within "
+                    f"{remaining:.1f}s; will be force-terminated",
+                    file=sys.stderr,
                 )
-            )
 
-        # Dashboard cycle: drains its pending Reflect events. The
-        # bridge's external-first contract makes this run
-        # _drain_pending_external (no internal cycle) when the queue
-        # is non-empty, and a normal idle internal cycle when it's
-        # empty (e.g. when the sensor returned no update this tick).
-        await dashboard_fed.step_once()
+    finally:
+        for proc in fed_procs:
+            _terminate(proc)
+        if rtid_proc is not None:
+            _terminate(rtid_proc)
 
-        if verbose:
-            print(
-                f"tick={tick:3d}  "
-                f"sensor.published={len(sensor.published):3d}  "
-                f"dashboard.received={len(dashboard.received):3d}",
-                flush=True,
-            )
+        sensor_data = _read_result(sensor_result)
+        dashboard_data = _read_result(dashboard_result)
+        result = {
+            "published": list(sensor_data.get("published") or []),
+            "received": list(dashboard_data.get("received") or []),
+            "discovered": list(dashboard_data.get("discovered") or []),
+            "instance_name": sensor_data.get("instance_name"),
+            "mode": sensor_data.get("mode") or mode,
+            "tempdir": str(tmpdir) if keep_tempdir else None,
+            "rtid_port": listen_port,
+            "rtid_pid": rtid_proc.pid if rtid_proc is not None else None,
+        }
 
-    await sensor_fed.aclose()
-    await dashboard_fed.aclose()
+        if not keep_tempdir:
+            with contextlib.suppress(BaseException):
+                shutil.rmtree(tmpdir, ignore_errors=True)
 
-    return {
-        "published": list(sensor.published),
-        "received": list(dashboard.received),
-        "discovered": list(dashboard.discovered),
-        "update_attribute_calls": len(transport.calls_for("update_attributes")),
-        "register_object_calls": len(
-            transport.calls_for("register_object_instance")
-        ),
-        "publish_object_calls": len(transport.calls_for("publish_object_class")),
-        "subscribe_object_calls": len(
-            transport.calls_for("subscribe_object_class")
-        ),
-    }
+    return result
+
+
+def _read_result(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def verify(result: dict[str, Any]) -> tuple[bool, str]:
-    """End-to-end checks (same shape as bypass variant + bridge wiring
-    invariants).
-
-    1. Dashboard's received list equals the sensor's published list.
-    2. Discover happened exactly once.
-    3. update_attribute_calls equals the number of values published.
-    4. Sensor's bridge issued exactly one publish_object_class.
-    5. Dashboard's bridge issued exactly one subscribe_object_class.
-    6. Sensor's bridge issued exactly one register_object_instance.
-    """
-    published = result["published"]
-    received = result["received"]
+    pub = result["published"]
+    recv = result["received"]
     discovered = result["discovered"]
-
-    if received != published:
+    if not pub:
+        return False, "sensor published nothing — result file missing or empty"
+    if recv != pub:
+        only_pub = [v for v in pub if v not in set(recv)]
+        only_recv = [v for v in recv if v not in set(pub)]
         return False, (
-            f"received != published: "
-            f"len(received)={len(received)} len(published)={len(published)}; "
-            f"first divergence at index "
-            f"{_first_divergence_index(received, published)}"
+            f"received != published: published={len(pub)} received={len(recv)}; "
+            f"only-published(first 5)={only_pub[:5]} "
+            f"only-received(first 5)={only_recv[:5]}"
         )
-
-    if len(discovered) != 1:
-        return False, (
-            f"expected exactly one DiscoverObjectInstance; got "
-            f"{len(discovered)} ({discovered!r})"
-        )
-
-    if result["update_attribute_calls"] != len(published):
-        return False, (
-            f"update_attribute_calls={result['update_attribute_calls']} "
-            f"!= len(published)={len(published)}"
-        )
-
-    if result["register_object_calls"] != 1:
-        return False, (
-            f"register_object_calls={result['register_object_calls']} "
-            "must be 1"
-        )
-
-    if result["publish_object_calls"] != 1:
-        return False, (
-            f"publish_object_calls={result['publish_object_calls']} "
-            "must be 1 (bridge issues publish exactly once at startup)"
-        )
-
-    if result["subscribe_object_calls"] != 1:
-        return False, (
-            f"subscribe_object_calls={result['subscribe_object_calls']} "
-            "must be 1 (bridge issues subscribe exactly once at startup)"
-        )
-
+    if not discovered:
+        return False, "dashboard saw no DiscoverObjectInstance event"
+    # discovered is [[handle, instance_name], ...]; sanity-check that
+    # the sensor's instance_name shows up.
+    instance = result.get("instance_name")
+    if instance and not any(d[1] == instance for d in discovered):
+        return False, f"discovered={discovered} missing instance {instance!r}"
     return True, "ok"
-
-
-def _first_divergence_index(a: list[Any], b: list[Any]) -> int:
-    for i, (x, y) in enumerate(zip(a, b, strict=False)):
-        if x != y:
-            return i
-    return min(len(a), len(b))
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ticks", type=int, default=10)
-    parser.add_argument(
-        "--mode", choices=("sequence", "sine"), default="sequence"
-    )
+    parser.add_argument("--mode", choices=("sequence", "sine"), default="sequence")
     parser.add_argument("--amplitude", type=int, default=100)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--tick-period", type=float, default=0.05)
+    parser.add_argument("--rtid-binary", type=Path, default=None)
+    parser.add_argument("--keep-tempdir", action="store_true")
+    parser.add_argument("--federate-timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
     try:
@@ -310,7 +321,10 @@ def main(argv: list[str] | None = None) -> int:
                 ticks=args.ticks,
                 mode=args.mode,
                 amplitude=args.amplitude,
-                verbose=args.verbose,
+                tick_period=args.tick_period,
+                rtid_binary=args.rtid_binary,
+                keep_tempdir=args.keep_tempdir,
+                federate_timeout=args.federate_timeout,
             )
         )
     except Exception as exc:  # noqa: BLE001
@@ -322,9 +336,11 @@ def main(argv: list[str] | None = None) -> int:
         f"runner: published={len(result['published'])}  "
         f"received={len(result['received'])}  "
         f"discovered={len(result['discovered'])}  "
-        f"updates={result['update_attribute_calls']}  "
-        f"verify={msg}"
+        f"rtid_port={result['rtid_port']}  verify={msg}",
+        flush=True,
     )
+    if result.get("tempdir"):
+        print(f"runner: tempdir kept at {result['tempdir']}", flush=True)
     return 0 if ok else 1
 
 
