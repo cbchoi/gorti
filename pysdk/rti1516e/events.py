@@ -74,6 +74,15 @@ class FederationHalted:
     stalled_federate_handle: int
 
 
+@dataclass(frozen=True)
+class RemoveObjectInstance:
+    """The object instance has been deleted by its owner (M23, IEEE 1516.1 §6.16)."""
+
+    object_handle: int
+    tag: bytes
+    timestamp: float | None  # None for RO; non-None for TSO delete
+
+
 # --- Cut-2 service-group callbacks (M12 W2 deferral #1 close) -------------
 # Wire-side proto variants live on rti.v1.FederateEvent at oneof tags
 # 20/21 (sync), 30/31/32 (ownership), 40/41/42 (save). The dataclasses

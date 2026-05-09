@@ -100,6 +100,9 @@ func (stubObjRegistry) UpdateAttributes(_ context.Context, _ core.FederationName
 func (stubObjRegistry) SendInteraction(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime) error {
 	return errors.New("stub")
 }
+func (stubObjRegistry) Delete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ *core.LogicalTime, _ []byte) error {
+	return errors.New("stub")
+}
 func (stubObjRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }

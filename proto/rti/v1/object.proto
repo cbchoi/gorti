@@ -12,6 +12,9 @@ service ObjectService {
   rpc RegisterObjectInstance(RegisterObjectRequest) returns (RegisterObjectResponse);
   rpc UpdateAttributeValues(UpdateAttributeValuesRequest) returns (Empty);
   rpc SendInteraction(SendInteractionRequest) returns (Empty);
+
+  // M23 — IEEE 1516.1-2010 §6 additions (append-only).
+  rpc DeleteObjectInstance(DeleteObjectInstanceRequest) returns (Empty);
 }
 
 message RegisterObjectRequest {
@@ -49,4 +52,20 @@ message SendInteractionRequest {
   map<uint64, bytes> parameters = 5;
   // Optional. If absent, RO; if present, TSO with this timestamp.
   optional double logical_time = 6;
+}
+
+// DeleteObjectInstance — IEEE 1516.1-2010 §6.16 (M23).
+// Owner-only: returns PermissionDenied + object_not_owned if the
+// caller doesn't own all attributes of obj. Removes the instance
+// from the federation; emits RemoveObjectInstance to subscribers
+// via the existing FederateEvent.remove oneof tag.
+message DeleteObjectInstanceRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  // Optional TSO timestamp; absent → RO delete.
+  optional double logical_time = 5;
+  // User-supplied tag passed through to RemoveObjectInstance.tag.
+  bytes user_supplied_tag = 6;
 }

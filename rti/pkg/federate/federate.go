@@ -305,6 +305,24 @@ func (f *Federate) translate(evt *rtiv1.FederateEvent) Event {
 		return TimeAdvanceGrant{Time: v.Grant.GetLogicalTime()}
 	case *rtiv1.FederateEvent_Halted:
 		return FederationHalted{Reason: v.Halted.GetCause()}
+	case *rtiv1.FederateEvent_Remove:
+		// M23 W1 — IEEE 1516.1-2010 §6.16 RemoveObjectInstance callback.
+		rm := v.Remove
+		if rm == nil {
+			return nil
+		}
+		var ts *float64
+		if rm.LogicalTime != nil {
+			lt := rm.GetLogicalTime()
+			ts = &lt
+		}
+		// Defensive copy on the tag bytes.
+		tag := append([]byte(nil), rm.GetUserSuppliedTag()...)
+		return RemoveObjectInstance{
+			ObjectHandle: rm.GetObjectHandle(),
+			Tag:          tag,
+			Timestamp:    ts,
+		}
 	default:
 		return nil
 	}

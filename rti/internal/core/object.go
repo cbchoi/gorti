@@ -31,6 +31,18 @@ type ObjectRegistry interface {
 		ts *LogicalTime,
 	) error
 
+	// Delete — IEEE 1516.1-2010 §6.16. M23.
+	// Owner-only; subscribers receive RemoveObjectInstance via Outbox.
+	// Errors: ErrObjectHandleInvalid, ErrObjectNotOwned.
+	Delete(
+		ctx context.Context,
+		fed FederationName,
+		deleter FederateHandle,
+		obj ObjectHandle,
+		ts *LogicalTime,
+		tag []byte,
+	) error
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns aggregate object-instance counts for the

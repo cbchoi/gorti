@@ -177,6 +177,30 @@ class TimeNotAsynchronous(RtiError):
     error_code = 709
 
 
+class ObjectNotOwned(RtiError):
+    """Federate is not the owner of the object instance (M23)."""
+
+    error_code = 710
+
+
+class AttributeNotPublishedByFederation(RtiError):
+    """No federate publishes any of the requested attributes (M23)."""
+
+    error_code = 711
+
+
+class ObjectAlreadyDeleted(RtiError):
+    """Object instance has already been deleted (M23)."""
+
+    error_code = 712
+
+
+class TransportTypeUnspecified(RtiError):
+    """Transport type must be Reliable or BestEffort (M23)."""
+
+    error_code = 713
+
+
 # --- Translation entry point --------------------------------------------------
 
 
@@ -244,6 +268,14 @@ def _time_class_for(detail: str) -> type[RtiError] | None:
         return TimeAlreadyAsynchronous
     if "not enabled asynchronous" in detail:
         return TimeNotAsynchronous
+    if "object not owned" in detail:
+        return ObjectNotOwned
+    if "no federate publishes" in detail:
+        return AttributeNotPublishedByFederation
+    if "object instance already deleted" in detail:
+        return ObjectAlreadyDeleted
+    if "transport type must be" in detail:
+        return TransportTypeUnspecified
     return None
 
 

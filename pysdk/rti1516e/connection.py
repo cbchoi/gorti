@@ -550,6 +550,28 @@ class Federate:
             federate_handle=self.handle,
         )
 
+    # --- M23 W1: §6 delete_object_instance ---
+
+    async def delete_object_instance(
+        self,
+        object_handle: int,
+        tag: bytes = b"",
+        timestamp: float | None = None,
+    ) -> None:
+        """Delete an object instance owned by this federate.
+
+        Per IEEE 1516.1-2010 §6.16. Subscribers receive a
+        ``RemoveObjectInstance`` event on their events() stream.
+        """
+        await _dispatch(
+            self._transport,
+            "delete_object_instance",
+            federate_handle=self.handle,
+            object_handle=object_handle,
+            tag=tag,
+            timestamp=timestamp,
+        )
+
     # --- Cut-3 service-group accessors (M12 W2) ---
     #
     # Each property lazily constructs a dedicated thin client wrapper

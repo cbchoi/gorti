@@ -49,6 +49,10 @@ var (
 
 	// ErrTimeNotAsynchronous — M22 — async delivery already disabled.
 	ErrTimeNotAsynchronous = errors.New("federate: asynchronous delivery is not enabled")
+
+	// M23 — object-management additions.
+	ErrObjectNotOwned        = errors.New("federate: object not owned by this federate")
+	ErrObjectAlreadyDeleted  = errors.New("federate: object instance already deleted")
 )
 
 // SDK-foundation errors (not from TimeService).
@@ -96,6 +100,10 @@ func wrapStatusErr(err error) error {
 		return ErrTimeAlreadyAsynchronous
 	case contains(msg, "not enabled asynchronous"):
 		return ErrTimeNotAsynchronous
+	case contains(msg, "object not owned"):
+		return ErrObjectNotOwned
+	case contains(msg, "object instance already deleted"):
+		return ErrObjectAlreadyDeleted
 	}
 	return err
 }

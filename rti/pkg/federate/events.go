@@ -39,3 +39,14 @@ type FederationHalted struct {
 }
 
 func (FederationHalted) isFederateEvent() {}
+
+// RemoveObjectInstance corresponds to proto FederateEvent.remove (oneof
+// tag 12) — IEEE 1516.1-2010 §6.16. Delivered to subscribers when an
+// object instance owner calls DeleteObjectInstance. M23.
+type RemoveObjectInstance struct {
+	ObjectHandle    uint64
+	Tag             []byte
+	Timestamp       *float64 // nil = RO delete
+}
+
+func (RemoveObjectInstance) isFederateEvent() {}

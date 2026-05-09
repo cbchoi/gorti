@@ -291,6 +291,13 @@ class GrpcTransport:
             return await self._enable_asynchronous_delivery(kwargs["federate_handle"])
         if method == "disable_asynchronous_delivery":
             return await self._disable_asynchronous_delivery(kwargs["federate_handle"])
+        if method == "delete_object_instance":
+            return await self._delete_object_instance(
+                kwargs["federate_handle"],
+                kwargs["object_handle"],
+                kwargs.get("tag") or b"",
+                kwargs.get("timestamp"),
+            )
         # Unknown method — surface a clear error rather than a silent
         # drop; better the test fails loudly than passes by omission.
         raise NotImplementedError(
@@ -712,6 +719,33 @@ class GrpcTransport:
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 
+    # --- M23 TASK-250: ObjectService.DeleteObjectInstance dispatcher ---
+
+    async def _delete_object_instance(
+        self,
+        federate_handle: int,
+        object_handle: int,
+        tag: bytes,
+        timestamp: float | None,
+    ) -> None:
+        from rti.v1 import common_pb2, object_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = object_pb2.DeleteObjectInstanceRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_handle=object_handle,
+            user_supplied_tag=tag,
+        )
+        if timestamp is not None:
+            req.logical_time = float(timestamp)
+        try:
+            await self.objects.DeleteObjectInstance(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
     async def _publish_object_class(
         self, federate_handle: int, class_name: str, attributes: list[str]
     ) -> None:
@@ -951,6 +985,16 @@ class GrpcTransport:
             return ReflectAttributeValues(
                 object_handle=int(r.object_handle),
                 values={str(k): bytes(v) for k, v in r.attributes.items()},
+                timestamp=ts,
+            )
+        if which == "remove":
+            # M23 — RemoveObjectInstance per IEEE 1516.1 §6.16.
+            from .events import RemoveObjectInstance
+            rm = fed_event.remove
+            ts = rm.logical_time if rm.HasField("logical_time") else None
+            return RemoveObjectInstance(
+                object_handle=int(rm.object_handle),
+                tag=bytes(rm.user_supplied_tag),
                 timestamp=ts,
             )
         # M12 W2 cut-2 service-group callbacks (deferral #1 close).

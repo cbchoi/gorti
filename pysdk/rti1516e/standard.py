@@ -228,6 +228,13 @@ class Rti1516eAmbassador:
     def disableAsynchronousDelivery(self) -> None:  # noqa: N802
         self._run(self._fed().disable_asynchronous_delivery())
 
+    # --- M23 W1: §6 deleteObjectInstance ---
+
+    def deleteObjectInstance(  # noqa: N802
+        self, object_handle: int, tag: bytes = b"", timestamp: float | None = None,
+    ) -> None:
+        self._run(self._fed().delete_object_instance(object_handle, tag, timestamp))
+
     # --- Callbacks: subclass overrides these ---
 
     def discoverObjectInstance(  # noqa: N802

@@ -40,6 +40,12 @@ var (
 	ErrTimeAlreadyAsynchronous = errors.New("federate has already enabled asynchronous delivery")
 	ErrTimeNotAsynchronous     = errors.New("federate has not enabled asynchronous delivery")
 
+	// M23 — object-management additions per IEEE 1516.1 §6.
+	ErrObjectNotOwned                    = errors.New("object not owned by federate (cannot delete or change transport)")
+	ErrAttributeNotPublishedByFederation = errors.New("no federate publishes any of the requested attributes")
+	ErrObjectAlreadyDeleted              = errors.New("object instance already deleted")
+	ErrTransportTypeUnspecified          = errors.New("transport type must be Reliable or BestEffort")
+
 	// Encoding
 	ErrEncInsufficientBytes = errors.New("insufficient bytes for type")
 	ErrEncTypeMismatch      = errors.New("value does not match codec type")

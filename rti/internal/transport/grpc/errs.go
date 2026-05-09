@@ -41,7 +41,8 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrDimensionNotFound),
 		errors.Is(err, core.ErrRegionNotFound),
 		errors.Is(err, core.ErrFederateNotInSave),
-		errors.Is(err, core.ErrFederateNotInRestore):
+		errors.Is(err, core.ErrFederateNotInRestore),
+		errors.Is(err, core.ErrObjectAlreadyDeleted): // M23
 		return status.Error(codes.NotFound, err.Error())
 
 	// AlreadyExists — entity creation conflict.
@@ -54,7 +55,8 @@ func errToStatus(err error) error {
 	// Distinct from FailedPrecondition (state-forbids) because the action
 	// itself is unauthorized regardless of state.
 	case errors.Is(err, core.ErrAttributeNotOwned),
-		errors.Is(err, core.ErrRegionNotOwnedByFederate):
+		errors.Is(err, core.ErrRegionNotOwnedByFederate),
+		errors.Is(err, core.ErrObjectNotOwned): // M23
 		return status.Error(codes.PermissionDenied, err.Error())
 
 	// FailedPrecondition — entity exists but state forbids the action.
@@ -68,8 +70,9 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrTimeAlreadyRegulating),
 		errors.Is(err, core.ErrTimeAlreadyConstrained),
 		errors.Is(err, core.ErrTimeAdvancingState), // M21 TASK-202c: re-export of time.ErrDuplicateNER
-		errors.Is(err, core.ErrTimeAlreadyAsynchronous), // M22 TASK-235
-		errors.Is(err, core.ErrTimeNotAsynchronous),     // M22 TASK-235
+		errors.Is(err, core.ErrTimeAlreadyAsynchronous),         // M22 TASK-235
+		errors.Is(err, core.ErrTimeNotAsynchronous),             // M22 TASK-235
+		errors.Is(err, core.ErrAttributeNotPublishedByFederation), // M23
 		errors.Is(err, core.ErrWireVersionMismatch),
 		errors.Is(err, core.ErrSyncPointAlreadyAchieved),
 		errors.Is(err, core.ErrOwnershipDivestPending),
@@ -89,6 +92,7 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrObjectHandleInvalid),
 		errors.Is(err, core.ErrTimeInvalidLookahead),
 		errors.Is(err, core.ErrTimeRequestInPast),
+		errors.Is(err, core.ErrTransportTypeUnspecified), // M23
 		errors.Is(err, core.ErrEncInsufficientBytes),
 		errors.Is(err, core.ErrEncTypeMismatch),
 		errors.Is(err, core.ErrEncPaddingViolation),

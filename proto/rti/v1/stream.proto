@@ -66,6 +66,8 @@ message ReflectAttributeValues {
 message RemoveObjectInstance {
   uint64 object_handle = 1;
   optional double logical_time = 2;
+  // M23 — user-supplied tag from the deleter (IEEE 1516.1-2010 §6.16).
+  bytes user_supplied_tag = 3;
 }
 
 message ReceiveInteraction {

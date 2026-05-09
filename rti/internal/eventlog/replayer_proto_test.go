@@ -108,6 +108,9 @@ func (s *stubObjects) SendInteraction(_ context.Context, fed core.FederationName
 	s.interactCalls = append(s.interactCalls, interactCall{fed, p, c, params, ts})
 	return nil
 }
+func (s *stubObjects) Delete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ *core.LogicalTime, _ []byte) error {
+	return nil
+}
 func (s *stubObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
@@ -816,6 +819,9 @@ func (e *errorObjects) UpdateAttributes(_ context.Context, _ core.FederationName
 	return e.err
 }
 func (e *errorObjects) SendInteraction(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime) error {
+	return e.err
+}
+func (e *errorObjects) Delete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ *core.LogicalTime, _ []byte) error {
 	return e.err
 }
 func (e *errorObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {

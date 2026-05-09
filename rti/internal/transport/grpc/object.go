@@ -87,6 +87,24 @@ func (s *objectService) SendInteraction(ctx context.Context, req *rtiv1.SendInte
 	return &rtiv1.Empty{}, nil
 }
 
+// DeleteObjectInstance — IEEE 1516.1-2010 §6.16 (M23 W1).
+func (s *objectService) DeleteObjectInstance(ctx context.Context, req *rtiv1.DeleteObjectInstanceRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	if err := s.obj.Delete(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectHandle(req.GetObjectHandle()),
+		toLogicalTime(req.LogicalTime),
+		req.GetUserSuppliedTag(),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
 // validWireVersion returns true when the wire version on a request is one
 // the server understands. WIRE_VERSION_UNSPECIFIED is rejected: clients
 // must opt into a versioned dialect.
