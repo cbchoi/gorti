@@ -82,6 +82,20 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
+#### M15 — Distributed RTI: multi-process federation hosting (CUT-1 closed, multi-node deferred 2026-05-09)
+- M15 promises distributed RTI: a federation spanning N rtid processes that route federates to the right host. Real distributed correctness is genuine distributed-systems work (cluster membership protocol, federation routing, state replication, partition handling). Full scope is months of work for production correctness.
+- **Cut-1 ships surface contract + single-node-correct implementation:**
+  - New `proto/rti/v1/cluster.proto` — `ClusterService` with `ListClusterNodes`, `LookupFederationHost`, `ReportNodeHealth` (rejected in cut-1).
+  - New `rti/internal/cluster/` package — `Manager` tracks federation→node assignments; cut-1 always assigns to self. `Lookup` returns `StatusCurrent` for known federations, `StatusNotFound` otherwise.
+  - For N=1 deployments (the default), behavior is identical to pre-M15.
+- **Cut-2 (multi-node consensus) deferred** — needs Raft integration + federation reassignment + cross-node event ordering. Plan §0 documents the scope honestly.
+- Plan at `docs/M15_DISPATCH_PLAN.md`. 5 spec tests cover the cut-1 surface.
+
+#### M16 — Hot standby + replay-driven RTI failover (DEFERRED 2026-05-09)
+- M16 builds on M15 cut-2; deferred until that lands.
+- **Dispatch plan written** at `docs/M16_DISPATCH_PLAN.md` so the design contract is pinned: replicated event log, federation lease + automatic promotion, federate reconnect via M15's `LookupFederationHost`, AdminService `PromoteFederation` + `QueryFederationRole`.
+- 6-wave structure documented; each wave is genuine distributed-systems work.
+
 #### M14 — mTLS + OIDC client authentication (closed 2026-05-09)
 - Pre-M14 every gRPC connection was plaintext + unauthenticated; any process on the network could JoinFederation. M14 wires authentication at the transport / interceptor layer; no service-handler changes.
 - Two paths, AND-stackable:
