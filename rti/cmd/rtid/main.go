@@ -654,6 +654,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		return nil, fmt.Errorf("rtid: time manager init: %w", err)
 	}
 
+	// M24 W1 — ownership-release hook is set after ownMgr is constructed
+	// (a few lines down). The fedMgr's OnFederateResigned chain captures
+	// a function-pointer indirection so the resign call dispatches into
+	// ownMgr.ReleaseAllOwnedBy at runtime, after ownMgr is wired in.
+	var ownResignHook func(context.Context, core.FederationName, core.FederateHandle)
 	fedMgr, err := federation.New(federation.Options{
 		Clock:              clock,
 		EventLog:           multi,
@@ -664,6 +669,13 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			// M21 TASK-204c: drop time-mgr pending state on resign so a
 			// pending NER/TAR/TARA/NMRA/FQR doesn't leak in nerStore.
 			timeMgr.OnFederateResign,
+			// M24 W1: indirection — resolved when ownResignHook is set
+			// after ownMgr construction.
+			func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+				if ownResignHook != nil {
+					ownResignHook(ctx, fed, h)
+				}
+			},
 		),
 	})
 	if err != nil {
@@ -688,6 +700,15 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	// M24 W1 — wire the ownership release into the resign chain. The
+	// federation manager's OnFederateResigned was constructed earlier
+	// with a closure that defers to ownResignHook; assigning here
+	// activates it. ReleaseAllOwnedBy is silent at the manager level —
+	// no peer notifications — which matches the cut-1 simplification
+	// documented in rti/internal/ownership/release.go.
+	ownResignHook = func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+		ownMgr.ReleaseAllOwnedBy(ctx, fed, h)
 	}
 	syncMgr, err := syncpkg.New(syncpkg.Options{
 		Outbox:   outbox,
