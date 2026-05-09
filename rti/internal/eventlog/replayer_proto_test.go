@@ -111,6 +111,15 @@ func (s *stubObjects) SendInteraction(_ context.Context, fed core.FederationName
 func (s *stubObjects) Delete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ *core.LogicalTime, _ []byte) error {
 	return nil
 }
+func (s *stubObjects) LocalDelete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle) error {
+	return nil
+}
+func (s *stubObjects) RequestAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ []byte) error {
+	return nil
+}
+func (s *stubObjects) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
+	return nil
+}
 func (s *stubObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
@@ -822,6 +831,15 @@ func (e *errorObjects) SendInteraction(_ context.Context, _ core.FederationName,
 	return e.err
 }
 func (e *errorObjects) Delete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ *core.LogicalTime, _ []byte) error {
+	return e.err
+}
+func (e *errorObjects) LocalDelete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle) error {
+	return e.err
+}
+func (e *errorObjects) RequestAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ []byte) error {
+	return e.err
+}
+func (e *errorObjects) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
 	return e.err
 }
 func (e *errorObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {

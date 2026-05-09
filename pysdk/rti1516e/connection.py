@@ -572,6 +572,50 @@ class Federate:
             timestamp=timestamp,
         )
 
+    async def local_delete_object_instance(self, object_handle: int) -> None:
+        """Federate-local cleanup; no peer notification (§6.18, M23)."""
+        await _dispatch(
+            self._transport,
+            "local_delete_object_instance",
+            federate_handle=self.handle,
+            object_handle=object_handle,
+        )
+
+    async def request_attribute_value_update(
+        self, object_handle: int, attribute_handles: list[int], tag: bytes = b"",
+    ) -> None:
+        """Pull-style resync: ask the owner to emit fresh values (§6.24, M23).
+
+        The owner receives a ``ProvideAttributeValueUpdate`` event on
+        its events() stream and is expected to respond with
+        ``update_attributes``.
+        """
+        await _dispatch(
+            self._transport,
+            "request_attribute_value_update",
+            federate_handle=self.handle,
+            object_handle=object_handle,
+            attribute_handles=attribute_handles,
+            tag=tag,
+        )
+
+    async def request_class_attribute_value_update(
+        self,
+        object_class_handle: int,
+        attribute_handles: list[int],
+        tag: bytes = b"",
+    ) -> None:
+        """Class-scoped pull (§6.25, M23). Every owner of any instance of
+        the class receives a ProvideAttributeValueUpdate event."""
+        await _dispatch(
+            self._transport,
+            "request_class_attribute_value_update",
+            federate_handle=self.handle,
+            object_class_handle=object_class_handle,
+            attribute_handles=attribute_handles,
+            tag=tag,
+        )
+
     # --- Cut-3 service-group accessors (M12 W2) ---
     #
     # Each property lazily constructs a dedicated thin client wrapper

@@ -325,6 +325,19 @@ func (f *Federate) translate(evt *rtiv1.FederateEvent) Event {
 			Tag:          tag,
 			Timestamp:    ts,
 		}
+	case *rtiv1.FederateEvent_ProvideUpdate:
+		// M23 W2 — IEEE 1516.1-2010 §6.26 ProvideAttributeValueUpdate callback.
+		pv := v.ProvideUpdate
+		if pv == nil {
+			return nil
+		}
+		attrs := append([]uint64(nil), pv.GetAttributeHandles()...)
+		tag := append([]byte(nil), pv.GetUserSuppliedTag()...)
+		return ProvideAttributeValueUpdate{
+			ObjectHandle:     pv.GetObjectHandle(),
+			AttributeHandles: attrs,
+			Tag:              tag,
+		}
 	default:
 		return nil
 	}

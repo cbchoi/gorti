@@ -15,6 +15,9 @@ service ObjectService {
 
   // M23 — IEEE 1516.1-2010 §6 additions (append-only).
   rpc DeleteObjectInstance(DeleteObjectInstanceRequest) returns (Empty);
+  rpc LocalDeleteObjectInstance(LocalDeleteObjectInstanceRequest) returns (Empty);
+  rpc RequestAttributeValueUpdate(RequestAttributeValueUpdateRequest) returns (Empty);
+  rpc RequestClassAttributeValueUpdate(RequestClassAttributeValueUpdateRequest) returns (Empty);
 }
 
 message RegisterObjectRequest {
@@ -67,5 +70,41 @@ message DeleteObjectInstanceRequest {
   // Optional TSO timestamp; absent → RO delete.
   optional double logical_time = 5;
   // User-supplied tag passed through to RemoveObjectInstance.tag.
+  bytes user_supplied_tag = 6;
+}
+
+// LocalDeleteObjectInstance — IEEE 1516.1-2010 §6.18 (M23).
+// Federate-local cleanup; no peer notification. M23 records the
+// event but cut-1 simplification keeps the global instance live
+// for other subscribers — the requester is expected to drop their
+// own local view.
+message LocalDeleteObjectInstanceRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+}
+
+// RequestAttributeValueUpdate — IEEE 1516.1-2010 §6.24 (M23).
+// Subscriber asks the owner of obj to emit fresh values. Manager
+// resolves owner and emits ProvideAttributeValueUpdate event.
+message RequestAttributeValueUpdateRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  bytes user_supplied_tag = 6;
+}
+
+// RequestClassAttributeValueUpdate — IEEE 1516.1-2010 §6.25 (M23).
+// Class-scoped variant — every owner of any instance of the class
+// receives a ProvideAttributeValueUpdate event.
+message RequestClassAttributeValueUpdateRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
   bytes user_supplied_tag = 6;
 }

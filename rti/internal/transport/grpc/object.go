@@ -105,6 +105,66 @@ func (s *objectService) DeleteObjectInstance(ctx context.Context, req *rtiv1.Del
 	return &rtiv1.Empty{}, nil
 }
 
+// LocalDeleteObjectInstance — IEEE 1516.1-2010 §6.18 (M23 W2).
+func (s *objectService) LocalDeleteObjectInstance(ctx context.Context, req *rtiv1.LocalDeleteObjectInstanceRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	if err := s.obj.LocalDelete(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectHandle(req.GetObjectHandle()),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// RequestAttributeValueUpdate — IEEE 1516.1-2010 §6.24 (M23 W2).
+func (s *objectService) RequestAttributeValueUpdate(ctx context.Context, req *rtiv1.RequestAttributeValueUpdateRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	attrs := make([]core.AttributeHandle, 0, len(req.GetAttributeHandles()))
+	for _, h := range req.GetAttributeHandles() {
+		attrs = append(attrs, core.AttributeHandle(h))
+	}
+	if err := s.obj.RequestAttributeValueUpdate(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectHandle(req.GetObjectHandle()),
+		attrs,
+		req.GetUserSuppliedTag(),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// RequestClassAttributeValueUpdate — IEEE 1516.1-2010 §6.25 (M23 W2).
+func (s *objectService) RequestClassAttributeValueUpdate(ctx context.Context, req *rtiv1.RequestClassAttributeValueUpdateRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	attrs := make([]core.AttributeHandle, 0, len(req.GetAttributeHandles()))
+	for _, h := range req.GetAttributeHandles() {
+		attrs = append(attrs, core.AttributeHandle(h))
+	}
+	if err := s.obj.RequestClassAttributeValueUpdate(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		core.ObjectClassHandle(req.GetObjectClassHandle()),
+		attrs,
+		req.GetUserSuppliedTag(),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
 // validWireVersion returns true when the wire version on a request is one
 // the server understands. WIRE_VERSION_UNSPECIFIED is rejected: clients
 // must opt into a versioned dialect.

@@ -33,6 +33,7 @@ message FederateEvent {
     RemoveObjectInstance remove = 12;
     ReceiveInteraction receive = 13;
     TimeAdvanceGrant grant = 14;
+    ProvideAttributeValueUpdate provide_update = 15;
     // Cut-2 service-group callbacks (M12 W2 deferral #1 close).
     // Sync (§4.6 / §4.7).
     SynchronizationPointAnnounced sync_announced = 20;
@@ -67,6 +68,17 @@ message RemoveObjectInstance {
   uint64 object_handle = 1;
   optional double logical_time = 2;
   // M23 — user-supplied tag from the deleter (IEEE 1516.1-2010 §6.16).
+  bytes user_supplied_tag = 3;
+}
+
+// ProvideAttributeValueUpdate — IEEE 1516.1-2010 §6.26 callback (M23).
+// Delivered to the owner of an object instance when a peer calls
+// RequestAttributeValueUpdate (or the class variant). The owner is
+// expected to call UpdateAttributeValues with fresh values for the
+// listed attributes.
+message ProvideAttributeValueUpdate {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
   bytes user_supplied_tag = 3;
 }
 

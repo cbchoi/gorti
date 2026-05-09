@@ -47,6 +47,15 @@ func (stubObjRegistryForServerTest) SendInteraction(_ context.Context, _ core.Fe
 func (stubObjRegistryForServerTest) Delete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ *core.LogicalTime, _ []byte) error {
 	return errors.New("stub")
 }
+func (stubObjRegistryForServerTest) LocalDelete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle) error {
+	return errors.New("stub")
+}
+func (stubObjRegistryForServerTest) RequestAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ []byte) error {
+	return errors.New("stub")
+}
+func (stubObjRegistryForServerTest) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
+	return errors.New("stub")
+}
 func (stubObjRegistryForServerTest) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }

@@ -235,6 +235,19 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(self._fed().delete_object_instance(object_handle, tag, timestamp))
 
+    def localDeleteObjectInstance(self, object_handle: int) -> None:  # noqa: N802
+        self._run(self._fed().local_delete_object_instance(object_handle))
+
+    def requestAttributeValueUpdate(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int], tag: bytes = b"",
+    ) -> None:
+        self._run(self._fed().request_attribute_value_update(object_handle, attribute_handles, tag))
+
+    def requestClassAttributeValueUpdate(  # noqa: N802
+        self, object_class_handle: int, attribute_handles: list[int], tag: bytes = b"",
+    ) -> None:
+        self._run(self._fed().request_class_attribute_value_update(object_class_handle, attribute_handles, tag))
+
     # --- Callbacks: subclass overrides these ---
 
     def discoverObjectInstance(  # noqa: N802

@@ -50,3 +50,17 @@ type RemoveObjectInstance struct {
 }
 
 func (RemoveObjectInstance) isFederateEvent() {}
+
+// ProvideAttributeValueUpdate corresponds to proto
+// FederateEvent.provide_update (oneof tag 15) — IEEE 1516.1-2010 §6.26.
+// Delivered to the owner of an object instance when a peer calls
+// RequestAttributeValueUpdate. The owner is expected to respond by
+// calling Federate.UpdateAttributes with fresh values for the listed
+// attribute set. M23 W2.
+type ProvideAttributeValueUpdate struct {
+	ObjectHandle     uint64
+	AttributeHandles []uint64
+	Tag              []byte
+}
+
+func (ProvideAttributeValueUpdate) isFederateEvent() {}

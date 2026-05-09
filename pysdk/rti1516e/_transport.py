@@ -298,6 +298,24 @@ class GrpcTransport:
                 kwargs.get("tag") or b"",
                 kwargs.get("timestamp"),
             )
+        if method == "local_delete_object_instance":
+            return await self._local_delete_object_instance(
+                kwargs["federate_handle"], kwargs["object_handle"],
+            )
+        if method == "request_attribute_value_update":
+            return await self._request_attribute_value_update(
+                kwargs["federate_handle"],
+                kwargs["object_handle"],
+                list(kwargs.get("attribute_handles") or []),
+                kwargs.get("tag") or b"",
+            )
+        if method == "request_class_attribute_value_update":
+            return await self._request_class_attribute_value_update(
+                kwargs["federate_handle"],
+                kwargs["object_class_handle"],
+                list(kwargs.get("attribute_handles") or []),
+                kwargs.get("tag") or b"",
+            )
         # Unknown method — surface a clear error rather than a silent
         # drop; better the test fails loudly than passes by omission.
         raise NotImplementedError(
@@ -746,6 +764,72 @@ class GrpcTransport:
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 
+    async def _local_delete_object_instance(
+        self, federate_handle: int, object_handle: int,
+    ) -> None:
+        from rti.v1 import common_pb2, object_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = object_pb2.LocalDeleteObjectInstanceRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_handle=object_handle,
+        )
+        try:
+            await self.objects.LocalDeleteObjectInstance(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _request_attribute_value_update(
+        self,
+        federate_handle: int,
+        object_handle: int,
+        attribute_handles: list[int],
+        tag: bytes,
+    ) -> None:
+        from rti.v1 import common_pb2, object_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = object_pb2.RequestAttributeValueUpdateRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_handle=object_handle,
+            attribute_handles=[int(h) for h in attribute_handles],
+            user_supplied_tag=tag,
+        )
+        try:
+            await self.objects.RequestAttributeValueUpdate(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _request_class_attribute_value_update(
+        self,
+        federate_handle: int,
+        object_class_handle: int,
+        attribute_handles: list[int],
+        tag: bytes,
+    ) -> None:
+        from rti.v1 import common_pb2, object_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = object_pb2.RequestClassAttributeValueUpdateRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            object_class_handle=object_class_handle,
+            attribute_handles=[int(h) for h in attribute_handles],
+            user_supplied_tag=tag,
+        )
+        try:
+            await self.objects.RequestClassAttributeValueUpdate(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
     async def _publish_object_class(
         self, federate_handle: int, class_name: str, attributes: list[str]
     ) -> None:
@@ -996,6 +1080,15 @@ class GrpcTransport:
                 object_handle=int(rm.object_handle),
                 tag=bytes(rm.user_supplied_tag),
                 timestamp=ts,
+            )
+        if which == "provide_update":
+            # M23 — ProvideAttributeValueUpdate per IEEE 1516.1 §6.26.
+            from .events import ProvideAttributeValueUpdate
+            pv = fed_event.provide_update
+            return ProvideAttributeValueUpdate(
+                object_handle=int(pv.object_handle),
+                attribute_handles=tuple(int(h) for h in pv.attribute_handles),
+                tag=bytes(pv.user_supplied_tag),
             )
         # M12 W2 cut-2 service-group callbacks (deferral #1 close).
         if which == "sync_announced":

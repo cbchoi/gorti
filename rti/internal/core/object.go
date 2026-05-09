@@ -43,6 +43,42 @@ type ObjectRegistry interface {
 		tag []byte,
 	) error
 
+	// LocalDelete — IEEE 1516.1-2010 §6.18. M23.
+	// Federate-local cleanup; no peer notification. Cut-1 simplification:
+	// records the event for replay but does NOT mutate global instance
+	// state — other subscribers continue to see the instance.
+	LocalDelete(
+		ctx context.Context,
+		fed FederationName,
+		federate FederateHandle,
+		obj ObjectHandle,
+	) error
+
+	// RequestAttributeValueUpdate — IEEE 1516.1-2010 §6.24. M23.
+	// Resolves the owner of obj and emits a ProvideAttributeValueUpdate
+	// event with the requested attributes + tag.
+	// Errors: ErrObjectHandleInvalid.
+	RequestAttributeValueUpdate(
+		ctx context.Context,
+		fed FederationName,
+		requester FederateHandle,
+		obj ObjectHandle,
+		attrs []AttributeHandle,
+		tag []byte,
+	) error
+
+	// RequestClassAttributeValueUpdate — IEEE 1516.1-2010 §6.25. M23.
+	// Class-scoped variant: every unique owner of any instance of the
+	// class receives a ProvideAttributeValueUpdate event.
+	RequestClassAttributeValueUpdate(
+		ctx context.Context,
+		fed FederationName,
+		requester FederateHandle,
+		cls ObjectClassHandle,
+		attrs []AttributeHandle,
+		tag []byte,
+	) error
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns aggregate object-instance counts for the

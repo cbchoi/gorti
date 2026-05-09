@@ -73,6 +73,15 @@ func (s *stubObjectRegistry) SendInteraction(_ context.Context, fed core.Federat
 func (s *stubObjectRegistry) Delete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ *core.LogicalTime, _ []byte) error {
 	return nil
 }
+func (s *stubObjectRegistry) LocalDelete(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle) error {
+	return nil
+}
+func (s *stubObjectRegistry) RequestAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ []core.AttributeHandle, _ []byte) error {
+	return nil
+}
+func (s *stubObjectRegistry) RequestClassAttributeValueUpdate(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectClassHandle, _ []core.AttributeHandle, _ []byte) error {
+	return nil
+}
 func (s *stubObjectRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
