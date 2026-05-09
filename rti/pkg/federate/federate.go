@@ -9,6 +9,7 @@ package federate
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
@@ -79,17 +81,57 @@ type Federate struct {
 	mu sync.Mutex // protects future state mutators added in W3A
 }
 
-// Connect dials rtid at addr (host:port). Caller MUST call Close()
-// when done. The connection uses insecure credentials for cut-3 —
-// TLS is M14 territory.
+// ConnectOptions — M14 W2. Per-connection auth + transport tuning.
+type ConnectOptions struct {
+	// TLS — server identity verification + optional client cert.
+	// Nil → insecure (current default). For mTLS, set
+	// TLS.Certificates with the client cert pair.
+	TLS *tls.Config
+
+	// BearerToken — sent as `authorization: Bearer <token>` on every
+	// RPC. Combinable with TLS. Empty → no token.
+	BearerToken string
+
+	// BearerTokenProvider — refreshable token source. Called per-RPC.
+	// Empty BearerToken with non-nil Provider → Provider wins.
+	// Both empty/nil → no token.
+	BearerTokenProvider func(ctx context.Context) (string, error)
+}
+
+// Connect dials rtid at addr (host:port) with insecure credentials.
+// Use ConnectWithOptions for TLS / bearer-token configurations.
 func Connect(ctx context.Context, addr string) (*Connection, error) {
-	cc, err := grpc.NewClient(addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	return ConnectWithOptions(ctx, addr, ConnectOptions{})
+}
+
+// ConnectWithOptions dials rtid at addr with the given auth options.
+// Caller MUST call Close() when done.
+//
+// M14 W2: opts.TLS nil → insecure (matches Connect). opts.TLS non-nil
+// → grpc.WithTransportCredentials(credentials.NewTLS(opts.TLS)). Bearer
+// token (literal or via Provider) attaches via PerRPCCredentials.
+func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (*Connection, error) {
+	dialOpts := []grpc.DialOption{}
+	if opts.TLS != nil {
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(opts.TLS)))
+	} else {
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+	if opts.BearerToken != "" || opts.BearerTokenProvider != nil {
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(bearerCreds{
+			token:    opts.BearerToken,
+			provider: opts.BearerTokenProvider,
+			// requireTLS: only require TLS when TLS is actually
+			// configured. Insecure + bearer is allowed for tests
+			// (real deployments should pair them).
+			requireTLS: opts.TLS != nil,
+		}))
+	}
+	cc, err := grpc.NewClient(addr, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("federate: dial %s: %w", addr, err)
 	}
-	_ = ctx // grpc.NewClient is non-blocking; ctx unused at this layer.
+	_ = ctx
 	return &Connection{
 		cc:     cc,
 		fed:    rtiv1.NewFederationServiceClient(cc),
@@ -100,6 +142,32 @@ func Connect(ctx context.Context, addr string) (*Connection, error) {
 		ddm:    rtiv1.NewDDMServiceClient(cc),
 	}, nil
 }
+
+// bearerCreds satisfies grpc.PerRPCCredentials for the M14 W2
+// bearer-token path. token / provider are mutually exclusive at the
+// API surface; provider wins when both set.
+type bearerCreds struct {
+	token      string
+	provider   func(ctx context.Context) (string, error)
+	requireTLS bool
+}
+
+func (c bearerCreds) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
+	tok := c.token
+	if c.provider != nil {
+		t, err := c.provider(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("federate: bearer token provider: %w", err)
+		}
+		tok = t
+	}
+	if tok == "" {
+		return nil, nil
+	}
+	return map[string]string{"authorization": "Bearer " + tok}, nil
+}
+
+func (c bearerCreds) RequireTransportSecurity() bool { return c.requireTLS }
 
 // Close releases the gRPC connection. Open Federates created from
 // this Connection should be Resigned first; Close() does NOT auto-resign.
