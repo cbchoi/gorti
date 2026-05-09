@@ -1,4 +1,4 @@
-.PHONY: verify fmt lint typecheck test determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps clean ci-all help build build-dds test-dds
+.PHONY: verify fmt lint typecheck test determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps clean ci-all help build build-dds test-dds rti-top
 
 GO_PKGS := ./...
 PY_DIR := pysdk
@@ -11,7 +11,8 @@ help:
 	@echo "  typecheck    mypy --strict (Python)"
 	@echo "  test         go test + pytest"
 	@echo "  determinism  10x determinism harness on core packages"
-	@echo "  build        compile bin/rtid (default — CGo-free, DDS-free)"
+	@echo "  build        compile bin/rtid + bin/rti-top (CGo-free, DDS-free)"
+	@echo "  rti-top      compile bin/rti-top only (live-federation TUI)"
 	@echo "  build-dds    compile bin/rtid-dds (DDS-capable; requires libcyclonedds-dev)"
 	@echo "  test-dds     go test under -tags=dds (M19 Phase 1a stub-contract tests)"
 	@echo "  proto        regenerate gRPC bindings via buf"
@@ -63,12 +64,21 @@ test:
 		echo "pytest or $(PY_DIR) not present; skipping"; \
 	fi
 
-# build is the default rtid binary — CGo-free, DDS-free. Identical to
-# every cut-2 release; the M19 work does not change its dependency
-# surface or output bytes.
+# build is the default deployment artifact set — CGo-free, DDS-free.
+# bin/rtid is identical to every cut-2 release; the M19 work does not
+# change its dependency surface or output bytes. bin/rti-top is the
+# live-federation TUI (read-only AdminService client; see
+# docs/rtid-tui.md and rti/cmd/rti-top/README.md).
 build:
 	mkdir -p bin
 	go build -o bin/rtid ./rti/cmd/rtid
+	go build -o bin/rti-top ./rti/cmd/rti-top
+
+# rti-top builds just the TUI binary, for iterating on the TUI
+# without recompiling rtid.
+rti-top:
+	mkdir -p bin
+	go build -o bin/rti-top ./rti/cmd/rti-top
 
 # build-dds compiles the DDS-capable rtid variant. M19 Phase 1a — see
 # docs/m19-dds-adapter.md §3.5 PINNED. The dds-tagged build links the
