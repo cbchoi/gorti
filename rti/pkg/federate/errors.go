@@ -54,3 +54,60 @@ var (
 	// Subsequent JoinFederation calls return this.
 	ErrAlreadyJoined = errors.New("federate: already joined to a federation")
 )
+
+// wrapStatusErr inspects a gRPC status error and returns a typed
+// federate error when the detail string matches a known mapping
+// (per docs/M21_DISPATCH_PLAN.md §2.3.1). Falls through to the raw
+// error for codes we don't translate.
+//
+// The translation is detail-string based rather than gRPC-code based
+// because multiple HLA errors share the same code (e.g. 4 errors
+// share FailedPrecondition). The detail string is the manager's
+// sentinel.Error() text — see errs.go's status.Error(... err.Error()).
+func wrapStatusErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := errorString(err)
+	switch {
+	case contains(msg, "already time-regulating"):
+		return ErrTimeRegulationAlreadyEnabled
+	case contains(msg, "not time-regulating"):
+		return ErrTimeRegulationNotEnabled
+	case contains(msg, "already time-constrained"):
+		return ErrTimeConstrainedAlreadyEnabled
+	case contains(msg, "not time-constrained"):
+		return ErrTimeConstrainedNotEnabled
+	case contains(msg, "lookahead must be"):
+		return ErrInvalidLookahead
+	case contains(msg, "requested time"):
+		return ErrLogicalTimeAlreadyPassed
+	case contains(msg, "outstanding advance"):
+		return ErrTimeAdvancingState
+	case contains(msg, "federation halted"):
+		return ErrFederationHalted
+	}
+	return err
+}
+
+func contains(haystack, needle string) bool {
+	return len(needle) > 0 && len(haystack) >= len(needle) && indexOf(haystack, needle) >= 0
+}
+
+func indexOf(s, substr string) int {
+	// Tiny substring scan — avoids importing "strings" in the
+	// hot-path error wrapper. n*m worst case but inputs here
+	// are short fixed sentinel strings.
+	if len(substr) == 0 {
+		return 0
+	}
+	if len(s) < len(substr) {
+		return -1
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
