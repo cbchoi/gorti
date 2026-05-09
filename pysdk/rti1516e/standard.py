@@ -186,11 +186,47 @@ class Rti1516eAmbassador:
     def enableTimeRegulation(self, lookahead: float) -> None:  # noqa: N802
         self._run(self._fed().enable_time_regulation(lookahead))
 
+    def disableTimeRegulation(self) -> None:  # noqa: N802
+        self._run(self._fed().disable_time_regulation())
+
     def enableTimeConstrained(self) -> None:  # noqa: N802
         self._run(self._fed().enable_time_constrained())
 
+    def disableTimeConstrained(self) -> None:  # noqa: N802
+        self._run(self._fed().disable_time_constrained())
+
+    def modifyLookahead(self, lookahead: float) -> None:  # noqa: N802
+        self._run(self._fed().modify_lookahead(lookahead))
+
     def nextMessageRequest(self, time: float) -> None:  # noqa: N802
         self._run(self._fed().next_message_request(time))
+
+    def nextMessageRequestAvailable(self, time: float) -> None:  # noqa: N802
+        self._run(self._fed().next_message_request_available(time))
+
+    def timeAdvanceRequest(self, time: float) -> None:  # noqa: N802
+        self._run(self._fed().time_advance_request(time))
+
+    def timeAdvanceRequestAvailable(self, time: float) -> None:  # noqa: N802
+        self._run(self._fed().time_advance_request_available(time))
+
+    def flushQueueRequest(self, time: float) -> None:  # noqa: N802
+        self._run(self._fed().flush_queue_request(time))
+
+    def queryLogicalTime(self) -> float:  # noqa: N802
+        return self._run(self._fed().query_logical_time())
+
+    def queryLookahead(self) -> float:  # noqa: N802
+        return self._run(self._fed().query_lookahead())
+
+    def queryLBTS(self) -> tuple[float, bool]:  # noqa: N802
+        return self._run(self._fed().query_lbts())
+
+    def enableAsynchronousDelivery(self) -> None:  # noqa: N802
+        self._run(self._fed().enable_asynchronous_delivery())
+
+    def disableAsynchronousDelivery(self) -> None:  # noqa: N802
+        self._run(self._fed().disable_asynchronous_delivery())
 
     # --- Callbacks: subclass overrides these ---
 

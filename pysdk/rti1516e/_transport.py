@@ -257,6 +257,40 @@ class GrpcTransport:
             return await self._next_message_request(
                 kwargs["federate_handle"], kwargs["time"],
             )
+        if method == "disable_time_regulation":
+            return await self._disable_time_regulation(kwargs["federate_handle"])
+        if method == "disable_time_constrained":
+            return await self._disable_time_constrained(kwargs["federate_handle"])
+        if method == "modify_lookahead":
+            return await self._modify_lookahead(
+                kwargs["federate_handle"], kwargs["lookahead"],
+            )
+        if method == "next_message_request_available":
+            return await self._next_message_request_available(
+                kwargs["federate_handle"], kwargs["time"],
+            )
+        if method == "time_advance_request":
+            return await self._time_advance_request(
+                kwargs["federate_handle"], kwargs["time"],
+            )
+        if method == "time_advance_request_available":
+            return await self._time_advance_request_available(
+                kwargs["federate_handle"], kwargs["time"],
+            )
+        if method == "flush_queue_request":
+            return await self._flush_queue_request(
+                kwargs["federate_handle"], kwargs["time"],
+            )
+        if method == "query_logical_time":
+            return await self._query_logical_time(kwargs["federate_handle"])
+        if method == "query_lookahead":
+            return await self._query_lookahead(kwargs["federate_handle"])
+        if method == "query_lbts":
+            return await self._query_lbts()
+        if method == "enable_asynchronous_delivery":
+            return await self._enable_asynchronous_delivery(kwargs["federate_handle"])
+        if method == "disable_asynchronous_delivery":
+            return await self._disable_asynchronous_delivery(kwargs["federate_handle"])
         # Unknown method — surface a clear error rather than a silent
         # drop; better the test fails loudly than passes by omission.
         raise NotImplementedError(
@@ -470,6 +504,211 @@ class GrpcTransport:
         )
         try:
             await self.time.NextMessageRequest(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    # --- M22 TASK-222: TimeService dispatchers (parity with rti/pkg/federate) -
+
+    async def _disable_time_regulation(self, federate_handle: int) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.DisableRegulationRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+        )
+        try:
+            await self.time.DisableTimeRegulation(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _disable_time_constrained(self, federate_handle: int) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.DisableConstrainedRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+        )
+        try:
+            await self.time.DisableTimeConstrained(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _modify_lookahead(
+        self, federate_handle: int, lookahead: float,
+    ) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.ModifyLookaheadRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            lookahead=float(lookahead),
+        )
+        try:
+            await self.time.ModifyLookahead(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _next_message_request_available(
+        self, federate_handle: int, t: float,
+    ) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.NMRARequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            logical_time=float(t),
+        )
+        try:
+            await self.time.NextMessageRequestAvailable(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _time_advance_request(
+        self, federate_handle: int, t: float,
+    ) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.TARRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            logical_time=float(t),
+        )
+        try:
+            await self.time.TimeAdvanceRequest(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _time_advance_request_available(
+        self, federate_handle: int, t: float,
+    ) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.TARARequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            logical_time=float(t),
+        )
+        try:
+            await self.time.TimeAdvanceRequestAvailable(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _flush_queue_request(
+        self, federate_handle: int, t: float,
+    ) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.FQRRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+            logical_time=float(t),
+        )
+        try:
+            await self.time.FlushQueueRequest(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _query_logical_time(self, federate_handle: int) -> float:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.QueryFederateTimeRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+        )
+        try:
+            resp = await self.time.QueryLogicalTime(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+            raise  # unreachable; translate_rpc_error always raises
+        return float(resp.logical_time)
+
+    async def _query_lookahead(self, federate_handle: int) -> float:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.QueryFederateTimeRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+        )
+        try:
+            resp = await self.time.QueryLookahead(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+            raise
+        return float(resp.lookahead)
+
+    async def _query_lbts(self) -> tuple[float, bool]:
+        """Return (lbts, finite). Federation-scoped (no federate handle)."""
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.QueryLBTSRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+        )
+        try:
+            resp = await self.time.QueryLBTS(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+            raise
+        return (float(resp.lbts), bool(resp.finite))
+
+    # --- M22 TASK-234: AsynchronousDelivery dispatchers (W2) -------------------
+
+    async def _enable_asynchronous_delivery(self, federate_handle: int) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.EnableAsynchronousDeliveryRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+        )
+        try:
+            await self.time.EnableAsynchronousDelivery(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def _disable_asynchronous_delivery(self, federate_handle: int) -> None:
+        from rti.v1 import common_pb2, time_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = time_pb2.DisableAsynchronousDeliveryRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name or "",
+            federate_handle=federate_handle,
+        )
+        try:
+            await self.time.DisableAsynchronousDelivery(req)
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 

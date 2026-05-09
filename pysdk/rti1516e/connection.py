@@ -441,6 +441,115 @@ class Federate:
             time=time,
         )
 
+    # --- M22 TASK-221: TimeService surface parity ---
+
+    async def disable_time_regulation(self) -> None:
+        """Stop being time-regulating. ``ErrTimeRegulationNotEnabled`` if not."""
+        await _dispatch(
+            self._transport,
+            "disable_time_regulation",
+            federate_handle=self.handle,
+        )
+
+    async def disable_time_constrained(self) -> None:
+        """Stop being time-constrained. ``ErrTimeConstrainedNotEnabled`` if not."""
+        await _dispatch(
+            self._transport,
+            "disable_time_constrained",
+            federate_handle=self.handle,
+        )
+
+    async def modify_lookahead(self, lookahead: float) -> None:
+        """Mutate lookahead without re-enabling regulation."""
+        await _dispatch(
+            self._transport,
+            "modify_lookahead",
+            federate_handle=self.handle,
+            lookahead=lookahead,
+        )
+
+    async def next_message_request_available(self, time: float) -> None:
+        """NMRA(t). Grant time may equal LBTS (vs NER's strict-less)."""
+        await _dispatch(
+            self._transport,
+            "next_message_request_available",
+            federate_handle=self.handle,
+            time=time,
+        )
+
+    async def time_advance_request(self, time: float) -> None:
+        """TAR(t). Grant fires at min(t, LBTS); pending always clears on grant."""
+        await _dispatch(
+            self._transport,
+            "time_advance_request",
+            federate_handle=self.handle,
+            time=time,
+        )
+
+    async def time_advance_request_available(self, time: float) -> None:
+        """TARA(t). Grant time may equal LBTS."""
+        await _dispatch(
+            self._transport,
+            "time_advance_request_available",
+            federate_handle=self.handle,
+            time=time,
+        )
+
+    async def flush_queue_request(self, time: float) -> None:
+        """FQR(t). Force-deliver all messages with timestamp ≤ t."""
+        await _dispatch(
+            self._transport,
+            "flush_queue_request",
+            federate_handle=self.handle,
+            time=time,
+        )
+
+    async def query_logical_time(self) -> float:
+        """Return the federate's current logical time."""
+        return await _dispatch(
+            self._transport,
+            "query_logical_time",
+            federate_handle=self.handle,
+        )
+
+    async def query_lookahead(self) -> float:
+        """Return the federate's current lookahead. Errors if not regulating."""
+        return await _dispatch(
+            self._transport,
+            "query_lookahead",
+            federate_handle=self.handle,
+        )
+
+    async def query_lbts(self) -> tuple[float, bool]:
+        """Return ``(lbts, finite)``. ``finite=False`` ⇒ no regulators."""
+        return await _dispatch(
+            self._transport,
+            "query_lbts",
+        )
+
+    async def enable_asynchronous_delivery(self) -> None:
+        """Enable async TSO delivery. ``TimeAlreadyAsynchronous`` if already on.
+
+        Per IEEE 1516.1 §8.16: when enabled, TSO messages are delivered as
+        soon as produced (gorti's pre-M22 behavior). When disabled (the
+        default per spec), TSO messages with timestamp t > federate's
+        currentTime are buffered server-side until the federate advances
+        past t. RO messages are unaffected.
+        """
+        await _dispatch(
+            self._transport,
+            "enable_asynchronous_delivery",
+            federate_handle=self.handle,
+        )
+
+    async def disable_asynchronous_delivery(self) -> None:
+        """Disable async TSO delivery. ``TimeNotAsynchronous`` if already off."""
+        await _dispatch(
+            self._transport,
+            "disable_asynchronous_delivery",
+            federate_handle=self.handle,
+        )
+
     # --- Cut-3 service-group accessors (M12 W2) ---
     #
     # Each property lazily constructs a dedicated thin client wrapper
