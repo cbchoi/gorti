@@ -1,18 +1,10 @@
-"""End-to-end runner for the Sensor → Dashboard object-class example.
+"""End-to-end cross-process runner for the Sensor -> Dashboard
+object-class example.
 
-This example deliberately **bypasses** the ``pyjevsim_bridge`` and uses
-the lower-level ``RtiConnection`` + ``Federate`` API directly. Rationale:
-
-The bridge's ``port_mapping.py`` wraps payloads under ``_payload`` and
-its ``time_advance.py::_run_internal_cycle`` calls
-``send_interaction(...)`` for each output port. There is no equivalent
-path in the cut-1/cut-2 bridge for ``register_object_instance`` /
-``update_attributes`` / ``ReflectAttributeValues``. Object-class
-semantics are pedagogically distinct from interactions and need their
-own integration; the bridge can grow that surface in a later cut.
-
-Until the bridge gains that surface, the canonical way to publish an
-object instance from Python is the API the Sensor federate uses here.
+Spawns rtid + 2 Python federate subprocesses (sensor + dashboard).
+Sensor publishes a ``SensorReading`` object instance and updates its
+``value`` attribute every tick; Dashboard subscribes and accumulates
+the reflected sequence via ``ReflectAttributeValues`` events.
 
 Run from the repo root::
 
@@ -21,46 +13,159 @@ Run from the repo root::
 Optional flags::
 
     --ticks N            sensor publishes N updates (default 10)
-    --mode {seq,sine}    publish a sequence or a quantised sine wave
-                         (default: sequence)
-    --amplitude A        for sine mode: integer amplitude (default 100)
-    --verbose            print per-tick state
+    --mode {sequence,sine}
+    --amplitude A        for sine mode (default 100)
+    --tick-period P      wall-clock seconds per tick (default 0.05)
+    --rtid-binary PATH   override the rtid binary
+    --keep-tempdir       leave temp dir for inspection
 
-Exit code 0 on success, 1 on verify failure.
+Mirrors examples/pyjevsim/runner.py and
+examples/pyjevsim-relay-cross-process/runner.py.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import json
+import os
+import shutil
+import socket
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
-# Make sibling modules importable when run as
-# ``python examples/pyjevsim-dashboard/runner.py``.
 _HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
+_REPO_ROOT = _HERE.parents[1]
+_BIN_DIR = _REPO_ROOT / "bin"
+_DEFAULT_RTID = _BIN_DIR / "rtid"
 
-# Make the pysdk package importable when not pip-installed.
-_PYSDK = _HERE.parents[1] / "pysdk"
-if str(_PYSDK) not in sys.path:
-    sys.path.insert(0, str(_PYSDK))
+SENSOR_SCRIPT = _HERE / "sensor_main.py"
+DASHBOARD_SCRIPT = _HERE / "dashboard_main.py"
 
-# ruff: noqa: E402  (sys.path tweaks above must precede project imports)
-from dashboard import Dashboard
-from sensor import Sensor
 
-from rti1516e._inprocess import InProcessTransport
-from rti1516e.connection import FederationSpec, RtiConnection
-from rti1516e.events import (
-    DiscoverObjectInstance,
-    ReflectAttributeValues,
-    TimeAdvanceGrant,
-)
+def _is_windows() -> bool:
+    return sys.platform.startswith("win")
 
-FOM_PATH = _HERE / "dashboard-fom.xml"
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+def _build_rtid(target: Path) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(  # noqa: S603, S607
+        ["go", "build", "-o", str(target), "./rti/cmd/rtid"],
+        cwd=_REPO_ROOT,
+        check=True,
+    )
+    return target
+
+
+def _ensure_rtid(binary: Path) -> Path:
+    return binary if binary.exists() else _build_rtid(binary)
+
+
+async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", port), timeout=0.5
+            )
+            writer.close()
+            with contextlib.suppress(BaseException):
+                await writer.wait_closed()
+            del reader
+            return
+        except (OSError, TimeoutError):
+            await asyncio.sleep(0.1)
+    raise TimeoutError(f"rtid never accepted on port {port}")
+
+
+def _spawn_rtid(
+    binary: Path,
+    listen_port: int,
+    metrics_port: int,
+    admin_port: int,
+    *,
+    save_dir: Path,
+    log_dir: Path,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    kwargs: dict[str, Any] = {
+        "stdout": log_path.open("wb"),  # noqa: SIM115
+        "stderr": subprocess.STDOUT,
+    }
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(  # noqa: S603
+        [
+            str(binary),
+            "--listen", f":{listen_port}",
+            "--metrics-listen", f":{metrics_port}",
+            "--admin-listen", f"127.0.0.1:{admin_port}",
+            "--log-level", "warn",
+            "--log-dir", str(log_dir),
+            "--save-dir", str(save_dir),
+        ],
+        **kwargs,
+    )
+
+
+def _spawn_federate(
+    script: Path,
+    *,
+    url: str,
+    result_path: Path,
+    ticks: int,
+    drain_ticks: int,
+    mode: str,
+    amplitude: int,
+    tick_period: float,
+    startup_delay: float,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_fh = log_path.open("wb")  # noqa: SIM115
+    kwargs: dict[str, Any] = {"stdout": log_fh, "stderr": subprocess.STDOUT}
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    return subprocess.Popen(  # noqa: S603
+        [
+            sys.executable,
+            str(script),
+            "--url", url,
+            "--result", str(result_path),
+            "--ticks", str(ticks),
+            "--drain-ticks", str(drain_ticks),
+            "--mode", mode,
+            "--amplitude", str(amplitude),
+            "--tick-period", str(tick_period),
+            "--startup-delay", str(startup_delay),
+        ],
+        env=env,
+        **kwargs,
+    )
+
+
+def _terminate(proc: subprocess.Popen[bytes], *, timeout: float = 5.0) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        with contextlib.suppress(BaseException):
+            proc.wait(timeout=timeout)
 
 
 async def run_once(
@@ -68,209 +173,146 @@ async def run_once(
     ticks: int = 10,
     mode: str = "sequence",
     amplitude: int = 100,
-    verbose: bool = False,
+    tick_period: float = 0.05,
+    rtid_binary: Path | None = None,
+    keep_tempdir: bool = False,
+    federate_timeout: float = 60.0,
 ) -> dict[str, Any]:
-    """Run one full Sensor → Dashboard exchange and return a result
-    dict suitable for verify()."""
+    binary = _ensure_rtid(rtid_binary or _DEFAULT_RTID)
+    listen_port = _free_port()
+    metrics_port = _free_port()
+    admin_port = _free_port()
+    while metrics_port == listen_port:
+        metrics_port = _free_port()
+    while admin_port in (listen_port, metrics_port):
+        admin_port = _free_port()
 
-    transport = InProcessTransport()
-    federation = FederationSpec(
-        name="pyjevsim-dashboard-example",
-        fom_modules=[str(FOM_PATH)],
-        seed=0,
-    )
+    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-dashboard-"))
+    save_dir = tmpdir / "saves"
+    log_dir = tmpdir / "logs"
+    fed_log_dir = tmpdir / "federate-logs"
+    for d in (save_dir, log_dir, fed_log_dir):
+        d.mkdir(parents=True, exist_ok=True)
 
-    sensor = Sensor(stop_after=ticks, mode=mode, amplitude=amplitude)
-    dashboard = Dashboard()
+    sensor_result = tmpdir / "sensor-result.json"
+    dashboard_result = tmpdir / "dashboard-result.json"
 
-    async with (
-        RtiConnection.connect("memory://fake-rti") as rti_s,
-        RtiConnection.connect("memory://fake-rti") as rti_d,
-    ):
-        async with (
-            rti_s.join_federation(
-                federation, federate_name="sensor"
-            ) as fed_sensor,
-            rti_d.join_federation(
-                federation, federate_name="dashboard"
-            ) as fed_dashboard,
-        ):
-            # Declaration management. Sensor publishes; Dashboard
-            # subscribes. Both calls are recorded by the in-process
-            # transport; routing is the runner's job (no real RTI to
-            # walk the FOM and dispatch).
-            await fed_sensor.publish_object_class(
-                "SensorReading", attributes=["value"]
-            )
-            await fed_dashboard.subscribe_object_class(
-                "SensorReading", attributes=["value"]
-            )
+    rtid_proc: subprocess.Popen[bytes] | None = None
+    fed_procs: list[subprocess.Popen[bytes]] = []
 
-            # Sensor registers its instance. The handle comes from the
-            # in-process transport's monotonic allocator. The Dashboard
-            # learns about the instance via a DiscoverObjectInstance
-            # event the runner synthesises right here (the in-process
-            # transport doesn't auto-route discover events; production
-            # rtid does, via DeclarationService + Registry hooks).
-            obj_handle = await fed_sensor.register_object_instance(
-                "SensorReading", instance_name="sensor-1"
-            )
-            transport.push_event(
-                fed_dashboard.handle,
-                DiscoverObjectInstance(
-                    object_handle=obj_handle,
-                    class_name="SensorReading",
-                    instance_name="sensor-1",
-                ),
-            )
+    try:
+        rtid_proc = _spawn_rtid(
+            binary, listen_port, metrics_port, admin_port,
+            save_dir=save_dir, log_dir=log_dir,
+            log_path=tmpdir / "rtid.log",
+        )
+        await _wait_for_grpc(listen_port)
+        url = f"grpc://127.0.0.1:{listen_port}"
 
-            # Drain the dashboard's event queue once to deliver the
-            # discover before the first reflect. We deliberately do
-            # this outside the per-tick loop so the discover is
-            # observable as a separate event in the trace.
-            await _drain_dashboard_once(
-                transport, fed_dashboard, dashboard, expect_grant=False
-            )
+        # Dashboard FIRST so its subscribe lands before the sensor's
+        # register / update_attributes — pre-subscription publishes
+        # are dropped server-side.
+        dash_proc = _spawn_federate(
+            DASHBOARD_SCRIPT, url=url, result_path=dashboard_result,
+            ticks=ticks, drain_ticks=20,
+            mode=mode, amplitude=amplitude,
+            tick_period=tick_period,
+            startup_delay=0.0,
+            log_path=fed_log_dir / "dashboard.log",
+        )
+        fed_procs.append(dash_proc)
+        await asyncio.sleep(0.5)
 
-            # Per-tick loop. Each tick:
-            #   1. Sensor computes the next value, calls update_attributes.
-            #   2. Runner synthesises a ReflectAttributeValues event to
-            #      the dashboard's queue.
-            #   3. Dashboard drains its queue. The reflect event is
-            #      fed to dashboard.handle_reflect; any TimeAdvanceGrant
-            #      we triggered earlier is consumed.
-            for tick in range(ticks):
-                value = sensor.tick()
-                if value is None:
-                    break  # sensor stopped early; runner exits the loop
-                payload = value.to_bytes(4, byteorder="big", signed=True)
-                # Issue the update. The in-process transport records
-                # the call; we then synthesise the reflect ourselves.
-                await fed_sensor.update_attributes(
-                    obj_handle,
-                    {"value": payload},
-                    timestamp=float(tick),
+        sensor_proc = _spawn_federate(
+            SENSOR_SCRIPT, url=url, result_path=sensor_result,
+            ticks=ticks, drain_ticks=0,
+            mode=mode, amplitude=amplitude,
+            tick_period=tick_period,
+            startup_delay=0.0,
+            log_path=fed_log_dir / "sensor.log",
+        )
+        fed_procs.append(sensor_proc)
+
+        deadline = asyncio.get_event_loop().time() + federate_timeout
+        for proc, name in ((sensor_proc, "sensor"), (dash_proc, "dashboard")):
+            remaining = max(0.1, deadline - asyncio.get_event_loop().time())
+            try:
+                await asyncio.to_thread(proc.wait, remaining)
+            except subprocess.TimeoutExpired:
+                print(
+                    f"runner: federate {name} did not exit within "
+                    f"{remaining:.1f}s; will be force-terminated",
+                    file=sys.stderr,
                 )
-                transport.push_event(
-                    fed_dashboard.handle,
-                    ReflectAttributeValues(
-                        object_handle=obj_handle,
-                        values={"value": payload},
-                        timestamp=float(tick),
-                    ),
-                )
-                await _drain_dashboard_once(
-                    transport,
-                    fed_dashboard,
-                    dashboard,
-                    expect_grant=False,
-                )
-                if verbose:
-                    print(
-                        f"tick={tick:3d}  "
-                        f"sensor.published={len(sensor.published):3d}  "
-                        f"dashboard.received={len(dashboard.received):3d}  "
-                        f"value={value}",
-                        flush=True,
-                    )
 
-    return {
-        "published": list(sensor.published),
-        "received": list(dashboard.received),
-        "discovered": list(dashboard.discovered),
-        "update_attribute_calls": len(transport.calls_for("update_attributes")),
-        "register_object_calls": len(
-            transport.calls_for("register_object_instance")
-        ),
-    }
+    finally:
+        for proc in fed_procs:
+            _terminate(proc)
+        if rtid_proc is not None:
+            _terminate(rtid_proc)
+
+        sensor_data = _read_result(sensor_result)
+        dashboard_data = _read_result(dashboard_result)
+        result = {
+            "published": list(sensor_data.get("published") or []),
+            "received": list(dashboard_data.get("received") or []),
+            "discovered": list(dashboard_data.get("discovered") or []),
+            "instance_name": sensor_data.get("instance_name"),
+            "mode": sensor_data.get("mode") or mode,
+            "tempdir": str(tmpdir) if keep_tempdir else None,
+            "rtid_port": listen_port,
+            "rtid_pid": rtid_proc.pid if rtid_proc is not None else None,
+        }
+
+        if not keep_tempdir:
+            with contextlib.suppress(BaseException):
+                shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return result
 
 
-async def _drain_dashboard_once(
-    transport: InProcessTransport,
-    fed_dashboard: Any,
-    dashboard: Dashboard,
-    *,
-    expect_grant: bool,
-) -> None:
-    """Drain the dashboard's event queue until empty.
-
-    The in-process transport's queue is filled by the runner's
-    push_event calls; we don't issue NER on the dashboard side, so
-    there are no auto-grants in the queue. ``expect_grant`` is wired
-    here as a forward-compatible knob for a future variant that
-    enables time regulation on the dashboard.
-    """
-    queue = transport.events_for(fed_dashboard.handle)
-    while not queue.empty():
-        event = await queue.get()
-        if isinstance(event, DiscoverObjectInstance):
-            dashboard.handle_discover(event.object_handle, event.instance_name)
-        elif isinstance(event, ReflectAttributeValues):
-            dashboard.handle_reflect(dict(event.values))
-        elif isinstance(event, TimeAdvanceGrant):
-            if not expect_grant:
-                # Defensive — at this cut neither federate calls NER.
-                continue
-        # Other event kinds (FederationHalted etc.) are out of scope
-        # for this pedagogical example; drop silently.
+def _read_result(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def verify(result: dict[str, Any]) -> tuple[bool, str]:
-    """End-to-end checks:
-
-    1. Dashboard's received list equals the sensor's published list.
-    2. Discover happened exactly once (one instance was registered).
-    3. The number of update_attribute wire calls equals the number
-       of values the sensor published.
-    """
-    published = result["published"]
-    received = result["received"]
+    pub = result["published"]
+    recv = result["received"]
     discovered = result["discovered"]
-
-    if received != published:
+    if not pub:
+        return False, "sensor published nothing — result file missing or empty"
+    if recv != pub:
+        only_pub = [v for v in pub if v not in set(recv)]
+        only_recv = [v for v in recv if v not in set(pub)]
         return False, (
-            f"received != published: "
-            f"len(received)={len(received)} len(published)={len(published)}; "
-            f"first divergence at index "
-            f"{_first_divergence_index(received, published)}"
+            f"received != published: published={len(pub)} received={len(recv)}; "
+            f"only-published(first 5)={only_pub[:5]} "
+            f"only-received(first 5)={only_recv[:5]}"
         )
-
-    if len(discovered) != 1:
-        return False, (
-            f"expected exactly one DiscoverObjectInstance; got "
-            f"{len(discovered)} ({discovered!r})"
-        )
-
-    if result["update_attribute_calls"] != len(published):
-        return False, (
-            f"update_attribute_calls={result['update_attribute_calls']} "
-            f"!= len(published)={len(published)}"
-        )
-
-    if result["register_object_calls"] != 1:
-        return False, (
-            f"register_object_calls={result['register_object_calls']} "
-            "must be 1"
-        )
-
+    if not discovered:
+        return False, "dashboard saw no DiscoverObjectInstance event"
+    # discovered is [[handle, instance_name], ...]; sanity-check that
+    # the sensor's instance_name shows up.
+    instance = result.get("instance_name")
+    if instance and not any(d[1] == instance for d in discovered):
+        return False, f"discovered={discovered} missing instance {instance!r}"
     return True, "ok"
-
-
-def _first_divergence_index(a: list[Any], b: list[Any]) -> int:
-    for i, (x, y) in enumerate(zip(a, b, strict=False)):
-        if x != y:
-            return i
-    return min(len(a), len(b))
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ticks", type=int, default=10)
-    parser.add_argument(
-        "--mode", choices=("sequence", "sine"), default="sequence"
-    )
+    parser.add_argument("--mode", choices=("sequence", "sine"), default="sequence")
     parser.add_argument("--amplitude", type=int, default=100)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--tick-period", type=float, default=0.05)
+    parser.add_argument("--rtid-binary", type=Path, default=None)
+    parser.add_argument("--keep-tempdir", action="store_true")
+    parser.add_argument("--federate-timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
     try:
@@ -279,7 +321,10 @@ def main(argv: list[str] | None = None) -> int:
                 ticks=args.ticks,
                 mode=args.mode,
                 amplitude=args.amplitude,
-                verbose=args.verbose,
+                tick_period=args.tick_period,
+                rtid_binary=args.rtid_binary,
+                keep_tempdir=args.keep_tempdir,
+                federate_timeout=args.federate_timeout,
             )
         )
     except Exception as exc:  # noqa: BLE001
@@ -291,9 +336,11 @@ def main(argv: list[str] | None = None) -> int:
         f"runner: published={len(result['published'])}  "
         f"received={len(result['received'])}  "
         f"discovered={len(result['discovered'])}  "
-        f"updates={result['update_attribute_calls']}  "
-        f"verify={msg}"
+        f"rtid_port={result['rtid_port']}  verify={msg}",
+        flush=True,
     )
+    if result.get("tempdir"):
+        print(f"runner: tempdir kept at {result['tempdir']}", flush=True)
     return 0 if ok else 1
 
 

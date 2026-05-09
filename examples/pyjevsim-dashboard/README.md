@@ -1,81 +1,44 @@
-# pyjevsim dashboard example — Sensor → Dashboard (object instances)
+# pyjevsim dashboard example -- cross-process
 
-Two-federate object-class example running on the in-process pysdk
-transport:
+Two federates exercising the **object half** of HLA: a `Sensor`
+publishes attribute updates on a `SensorReading` object instance, a
+`Dashboard` subscribes and accumulates the reflected sequence. Each
+federate runs as its own Python subprocess; rtid is a real
+subprocess; everything talks `grpc://`.
 
 ```text
-Sensor ──register_object_instance(SensorReading)──▶
-       ──update_attributes(value=...) per tick──▶ Dashboard
-                                                   (reflects received)
+   +------------+   register_object_instance,   +-------------+
+   | sensor_main| ===update_attributes("value")==> dashboard_main
+   +------------+                                +-------------+
+         |                                              ^
+         |                                              | DiscoverObjectInstance
+         |                                              | + ReflectAttributeValues
+         |     grpc://127.0.0.1:8442                    |
+         +--------------------+-------------------------+
+                              v
+                       +-------------+
+                       |    rtid     |
+                       +-------------+
 ```
 
-## What you'll learn
+This is the OBJECT-CLASS variant of the pyjevsim cross-process
+examples: it uses `register_object_instance` /
+`update_attributes` / `ReflectAttributeValues` rather than
+`send_interaction` / `ReceiveInteraction`. The pedagogical contrast
+with `examples/pyjevsim/` (interactions) is the point.
 
-- The **OBJECT INSTANCE half** of HLA: ``register_object_instance`` +
-  ``update_attributes`` on the publish side, ``subscribe_object_class``
-  + ``ReflectAttributeValues`` callbacks on the subscribe side.
-- How a runner stages ``DiscoverObjectInstance`` and
-  ``ReflectAttributeValues`` events explicitly when running on the
-  in-process transport (which is a recorder, not a router).
-- The pedagogical contrast with ``examples/pyjevsim/`` and
-  ``examples/pyjevsim-relay/``, which exercise interactions only.
+## Prerequisites
 
-## Federates
+Same as the other cross-process examples -- see
+[`examples/pyjevsim-relay-cross-process`](../pyjevsim-relay-cross-process/README.md#prerequisites).
+One-time setup, **from the repo root**:
 
-### Sensor (object publisher)
+```bash
+pip install -e './pysdk[dev]'
+make py-codegen
+```
 
-Registers a ``SensorReading`` instance once, then calls
-``update_attributes(value=...)`` every tick. Defaults publish a
-monotonic sequence ``0, 1, 2, ...``; ``--mode sine`` publishes a
-quantised 8-step sine wave with configurable amplitude.
-
-### Dashboard (object subscriber)
-
-Subscribes to ``SensorReading.value`` and accumulates the reflected
-sequence. Records both ``DiscoverObjectInstance`` (exactly once,
-when the sensor's instance becomes visible) and
-``ReflectAttributeValues`` (once per sensor update).
-
-## Why this example bypasses the bridge
-
-This is the most important pedagogical point of the example.
-
-The ``pyjevsim_bridge`` is **interaction-only** at this cut:
-
-- ``port_mapping.py`` infers direction from ``out_*`` / ``in_*``
-  port-name prefixes and binds each to a FOM **interaction class**.
-- ``time_advance.py::_run_internal_cycle`` calls ``send_interaction``
-  on every output the coupled model emits, wrapping the payload as
-  ``parameters={"_payload": payload}``.
-- There is no equivalent path for object-class
-  ``register_object_instance`` / ``update_attributes`` /
-  ``ReflectAttributeValues``.
-
-A ``pyjevsim`` coupled model whose semantics are object-attribute
-updates therefore can't be wired through the bridge as-is. Two paths
-were considered:
-
-- **Path A (taken)** — Use the lower-level ``RtiConnection`` +
-  ``Federate`` API directly. The federate models in this example
-  (``Sensor``, ``Dashboard``) are plain Python objects whose state
-  the runner manipulates; the runner owns the ``register`` and
-  ``update_attributes`` calls and the synthesis of reflect events.
-  This is the same surface the M12 spec tests use (see
-  ``pysdk/tests/spec/m12/test_spec_m12_sdk_exposure.py``); it's
-  pedagogically closer to "real HLA" than to "DEVS-via-bridge".
-
-- **Path B (deferred)** — Extend the bridge to recognise an
-  object-class output convention (e.g. ``coupled_model.attributes()``
-  returning ``{class: {attr: value}}``). Out of scope here; the
-  bridge contract change would touch every existing user of the
-  bridge and the cut-1 design intentionally narrowed to interactions
-  to keep the first-pass surface small.
-
-A future cut that grows the bridge into Path B can keep this
-example as the "what it looked like before" reference; the verify()
-checks here are the same checks a Path-B variant would ship.
-
-## Run it
+## Run it -- orchestrated (runner.py)
 
 ```bash
 # From the repo root
@@ -85,68 +48,115 @@ python3 examples/pyjevsim-dashboard/runner.py
 python3 examples/pyjevsim-dashboard/runner.py \
     --ticks 10 \
     --mode sequence \
-    --amplitude 100 \
-    --verbose
+    --tick-period 0.05 \
+    --keep-tempdir
 ```
 
-Default-config output:
+Sample output:
 
 ```text
-runner: published=10  received=10  discovered=1  updates=10  verify=ok
+runner: published=10  received=10  discovered=1  rtid_port=44219  verify=ok
 ```
 
-## Verification invariants
+`mode=sine` quantises a sine wave at the configured `--amplitude`
+(default 100) instead of the default `0..N-1` sequence — useful when
+demonstrating that arbitrary integer streams round-trip through
+the wire.
 
-1. ``sensor.published == dashboard.received`` (ordered equality —
-   no reflects are lost or reordered).
-2. Exactly one ``DiscoverObjectInstance`` event reached the
-   dashboard (one instance was registered).
-3. ``update_attributes`` wire-call count equals the number of
-   ``sensor.published`` values.
+## Run it -- manually (shell scripts)
 
-## Tuning knobs
+4 terminals: rtid, dashboard (subscribe FIRST), sensor, then verify.
 
-| Knob | Effect |
-|---|---|
-| ``--ticks N`` | Number of sensor updates (default 10) |
-| ``--mode sequence`` | Publish ``i`` on tick ``i`` (default; trivial verify) |
-| ``--mode sine`` | Publish a quantised 8-step sine wave |
-| ``--amplitude A`` | For sine mode: integer amplitude (default 100) |
+```bash
+cd examples/pyjevsim-dashboard
 
-## Wire shape
+# Terminal 1
+./rtid_run.sh
 
-One object class, one attribute. See ``dashboard-fom.xml``:
+# Terminal 2 -- subscribe FIRST so register/update don't race the join
+./dashboard_run.sh
 
-```xml
-<objectClass>
-  <name>SensorReading</name>
-  <attribute>
-    <name>value</name>
-    <dataType>HLAinteger32BE</dataType>
-  </attribute>
-</objectClass>
+# Terminal 3 -- sensor publishes attribute updates
+./sensor_run.sh
+
+# Terminal 4 -- after both federates exit
+./verify_run.sh
 ```
 
-## What's deferred
+Each federate prints a `DONE` summary on exit:
 
-- **Bridge extension for object classes** (Path B above). Would
-  require a new ``CoupledModelProtocol`` output convention plus
-  ``port_mapping.py`` rules for object-class binding; not done at
-  this cut.
-- **Cross-process variant.** This runs on the in-process transport;
-  a real ``rtid`` subprocess + two ``grpc://`` federates would route
-  the discover/reflect events automatically (the rtid Registry has
-  the OnRegister/OnUpdate hooks; see
-  ``rti/internal/object/registry.go``). Use the M12 helper at
-  ``pysdk/tests/spec/m12/_helpers.py::RtidProcess`` as the cross-
-  process scaffold.
-- **Time-stamped reflects vs receive-order.** The runner stamps
-  ``timestamp=float(tick)`` on every update so a future variant can
-  exercise TSO ordering; this example doesn't enable time
-  regulation on either federate (no ``enable_time_regulation`` /
-  ``next_message_request`` calls), so the dashboard processes the
-  reflects in arrival order. See ``examples/pyjevsim-time-advance/``
-  for the time-management example.
-- **Multi-instance.** Sensor registers one instance; production
-  topologies often have many. Verify() asserts ``discovered == 1``
-  to keep this example crisp.
+```text
+sensor_run:    DONE — published=10  result=...
+dashboard_run: DONE — received=10 discovered=1  result=...
+```
+
+`verify_run.sh` checks `received == published` (gRPC's in-order
+delivery guarantees this for one publisher + one subscriber) AND
+that the dashboard saw a `DiscoverObjectInstance` event for the
+sensor's instance.
+
+Tunables (env-overridable):
+
+| var | default | meaning |
+|---|---|---|
+| `TICKS` | 10 | number of update_attributes calls the sensor makes |
+| `MODE` | sequence | `sequence` (`0..N-1`) or `sine` |
+| `AMPLITUDE` | 100 | for `MODE=sine`: integer amplitude |
+| `TICK_PERIOD` | 0.05 | wall-clock seconds per tick |
+| `DASHBOARD_DRAIN_TICKS` | 20 | extra cycles dashboard runs after sensor stops |
+| `RESULT_DIR` | /tmp/pyjevsim-dashboard-cross | where result JSONs land |
+
+## Files
+
+| File | Role |
+|------|------|
+| `runner.py` | spawns rtid + 2 federate processes; reads JSONs; verifies |
+| `_federate_common.py` | minimal scaffolding: argparse, sys.path, federation spec, write_result |
+| `sensor_main.py` | sensor entry: register_object_instance + update_attributes loop |
+| `dashboard_main.py` | dashboard entry: subscribe + drain DiscoverObjectInstance / ReflectAttributeValues |
+| `sensor.py` `dashboard.py` | model files (transport-free) |
+| `dashboard-fom.xml` | FOM declaring the `SensorReading` object class with `value` attribute |
+| `_run_common.sh` `rtid_run.sh` `sensor_run.sh` `dashboard_run.sh` `verify_run.sh` | shell scaffolding for manual runs |
+
+## Why this example uses the low-level API directly
+
+Unlike `examples/pyjevsim/` (which goes through `HLAFederate` and
+the bridge's port-mapping), this example uses
+`Federate.register_object_instance` / `Federate.update_attributes`
+directly. The pyjevsim bridge's port-mapping is interaction-only
+at this cut: its `time_advance.py::_run_internal_cycle` emits via
+`send_interaction(...)` and there's no equivalent path for object
+attribute updates yet. Object-class semantics are pedagogically
+distinct from interactions and need their own integration; the
+bridge can grow that surface in a later cut.
+
+The bridged variant of the same example lives at
+[`examples/pyjevsim-dashboard-bridged/`](../pyjevsim-dashboard-bridged/README.md)
+-- it shows how the same model could be written via `HLAFederate`
+once the bridge gains an object-class surface.
+
+## Debugging tips
+
+### `received != published` from verify_run.sh
+
+Most common cause: the sensor started publishing before the
+dashboard's `subscribe_object_class` round-tripped to rtid.
+Pre-subscription updates are dropped server-side. Restart with
+the dashboard launched first; the orchestrator runner.py does
+this with a 0.5-second sleep between the dashboard spawn and
+the sensor spawn.
+
+### `discovered=0` in dashboard's result
+
+Means the dashboard never saw `DiscoverObjectInstance`. Either
+the dashboard subscribed AFTER the sensor's `register_object_instance`
+(so the discover went out before any subscriber existed -- some
+RTI implementations replay it, gorti currently does not), or the
+subscribe is on the wrong class. Check the federate logs:
+
+```bash
+python3 runner.py --keep-tempdir
+# tempdir printed at end; logs at:
+#   <tempdir>/federate-logs/{sensor,dashboard}.log
+#   <tempdir>/rtid.log
+```
