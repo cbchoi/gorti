@@ -456,6 +456,38 @@ func allRequiredResponded(as *activeSave) bool {
 	return true
 }
 
+// AbortSave aborts an in-progress save for fed. M24 W3 — IEEE 1516.1-2010
+// §4.28 abortFederationSave. Returns ErrSaveNotInProgress when no save
+// is active. The completed map records the label as StateNotSaved so
+// QuerySaveState reads back consistently.
+func (m *Manager) AbortSave(_ context.Context, fed core.FederationName) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	as, ok := m.saves[fed]
+	if !ok {
+		return core.ErrSaveNotInProgress
+	}
+	label := as.label
+	delete(m.saves, fed)
+	m.completed[saveKey{fed, label}] = StateNotSaved
+	return nil
+}
+
+// AbortRestore aborts an in-progress restore for fed. M24 W3 — IEEE
+// 1516.1-2010 §4.30 abortFederationRestore.
+func (m *Manager) AbortRestore(_ context.Context, fed core.FederationName) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ar, ok := m.restore[fed]
+	if !ok {
+		return core.ErrRestoreNotInProgress
+	}
+	label := ar.label
+	delete(m.restore, fed)
+	m.completedRestore[saveKey{fed, label}] = RestoreFailed
+	return nil
+}
+
 // finalizeSave drops the active save entry and records the final state
 // for QuerySaveState lookup after teardown.
 func (m *Manager) finalizeSave(fed core.FederationName, label string, failed bool) {

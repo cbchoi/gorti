@@ -113,6 +113,14 @@ type SavepointCoordinator interface {
 	// (fed, label).
 	QueryRestoreState(fed FederationName, label string) RestoreState
 
+	// AbortSave — IEEE 1516.1-2010 §4.28 (M24 W3). Aborts an in-progress
+	// save. Returns ErrSaveNotInProgress when no save is active.
+	AbortSave(ctx context.Context, fed FederationName) error
+
+	// AbortRestore — IEEE 1516.1-2010 §4.30 (M24 W3). Aborts an
+	// in-progress restore.
+	AbortRestore(ctx context.Context, fed FederationName) error
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns the current save / restore state for a

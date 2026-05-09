@@ -513,6 +513,31 @@ func (m *Manager) List(_ context.Context) ([]core.FederationSummary, error) {
 	return out, nil
 }
 
+// ListMembers returns every joined federate's (handle, name, type)
+// for fed in handle-ascending order. Combines MembersOf +
+// FederateTypeOf + the per-federate name lookup. M24 W3.
+// Implements core.FederationStore.ListMembers.
+func (m *Manager) ListMembers(fed core.FederationName) []core.FederationMember {
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return []core.FederationMember{}
+	}
+	fs.mu.RLock()
+	out := make([]core.FederationMember, 0, len(fs.handleToName))
+	for h, name := range fs.handleToName {
+		out = append(out, core.FederationMember{
+			Handle:       h,
+			Name:         name,
+			FederateType: fs.federateType[h],
+		})
+	}
+	fs.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].Handle < out[j].Handle })
+	return out
+}
+
 // MembersOf returns the snapshot of currently-joined federate handles
 // for fed, sorted ascending. Returns an empty (non-nil) slice when no
 // such federation exists, or when the federation has zero joined

@@ -55,6 +55,9 @@ func (s *recordingFedStore) DestroyFederation(_ context.Context, name core.Feder
 }
 
 func (s *recordingFedStore) Snapshot() []core.FederationRoster { return s.rosters }
+func (*recordingFedStore) ListMembers(_ core.FederationName) []core.FederationMember {
+	return nil
+}
 
 // Unused federate-path methods.
 func (*recordingFedStore) CreateFederation(_ context.Context, _ core.CreateFederationRequest) error {

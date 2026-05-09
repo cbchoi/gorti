@@ -201,6 +201,40 @@ func (s *savepointService) QueryRestoreState(
 	return &rtiv1.QueryRestoreStateResponse{State: restoreStateToProto(st)}, nil
 }
 
+// AbortFederationSave — IEEE 1516.1-2010 §4.28 (M24 W3).
+func (s *savepointService) AbortFederationSave(
+	ctx context.Context,
+	req *rtiv1.AbortFederationSaveRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("AbortFederationSave")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.AbortSave(ctx, core.FederationName(req.GetFederationName())); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// AbortFederationRestore — IEEE 1516.1-2010 §4.30 (M24 W3).
+func (s *savepointService) AbortFederationRestore(
+	ctx context.Context,
+	req *rtiv1.AbortFederationRestoreRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("AbortFederationRestore")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if err := s.mgr.AbortRestore(ctx, core.FederationName(req.GetFederationName())); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
 // saveStateToProto maps savepoint.SaveState into the proto enum.
 func saveStateToProto(s savepoint.SaveState) rtiv1.SaveState {
 	switch s {

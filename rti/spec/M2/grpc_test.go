@@ -42,6 +42,9 @@ func (s *stubFedStore) List(_ context.Context) ([]core.FederationSummary, error)
 	return s.listResp, s.listErr
 }
 func (s *stubFedStore) Snapshot() []core.FederationRoster { return nil }
+func (s *stubFedStore) ListMembers(_ core.FederationName) []core.FederationMember {
+	return nil
+}
 
 // TestSpec_M2_GRPC_Server_RequiresAllRequiredOptions: NewServer rejects
 // nil Federations / Declarations / Objects (Time may be nil at M2;

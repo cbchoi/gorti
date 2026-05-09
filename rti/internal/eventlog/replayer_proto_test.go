@@ -54,6 +54,9 @@ func (s *stubFederation) List(_ context.Context) ([]core.FederationSummary, erro
 	return nil, nil
 }
 func (s *stubFederation) Snapshot() []core.FederationRoster { return nil }
+func (s *stubFederation) ListMembers(_ core.FederationName) []core.FederationMember {
+	return nil
+}
 
 // stubObjects is a minimal core.ObjectRegistry. Records every call;
 // returns a configurable next ObjectHandle.
@@ -821,6 +824,9 @@ func (e *errorFederation) List(_ context.Context) ([]core.FederationSummary, err
 	return nil, e.err
 }
 func (e *errorFederation) Snapshot() []core.FederationRoster { return nil }
+func (e *errorFederation) ListMembers(_ core.FederationName) []core.FederationMember {
+	return nil
+}
 
 // errorObjects always returns err.
 type errorObjects struct {

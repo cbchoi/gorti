@@ -238,6 +238,35 @@ func (f *Federate) Resign(ctx context.Context) error {
 	return f.ResignWithAction(ctx, ResignActionUnconditionallyDivestAttributes)
 }
 
+// FederationMember — IEEE 1516.1-2010 §4.8 (M24 W3) entry.
+type FederationMember struct {
+	Handle       uint64
+	Name         string
+	FederateType string
+}
+
+// ListFederationMembers — IEEE 1516.1-2010 §4.8 (M24 W3). Returns
+// every joined federate's (handle, name, type) for the federation
+// in handle-ascending order.
+func (f *Federate) ListFederationMembers(ctx context.Context) ([]FederationMember, error) {
+	resp, err := f.conn.fed.ListFederationMembers(ctx, &rtiv1.ListFederationMembersRequest{
+		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName: f.federationName,
+	})
+	if err != nil {
+		return nil, wrapStatusErr(err)
+	}
+	out := make([]FederationMember, 0, len(resp.GetMembers()))
+	for _, m := range resp.GetMembers() {
+		out = append(out, FederationMember{
+			Handle:       m.GetFederateHandle(),
+			Name:         m.GetFederateName(),
+			FederateType: m.GetFederateType(),
+		})
+	}
+	return out, nil
+}
+
 // ResignWithAction sends ResignFederation with an explicit action.
 // IEEE 1516.1-2010 §4.10. M24 W2.
 func (f *Federate) ResignWithAction(ctx context.Context, action ResignAction) error {

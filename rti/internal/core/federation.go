@@ -121,6 +121,12 @@ type FederationStore interface {
 
 	List(ctx context.Context) ([]FederationSummary, error)
 
+	// ListMembers — IEEE 1516.1-2010 §4.8 (M24 W3). Returns every
+	// joined federate's (handle, name, type) for fed in
+	// handle-ascending order. Empty slice for unknown federation
+	// (parity with MembersOf).
+	ListMembers(fed FederationName) []FederationMember
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns the federation roster (mode + per-federate
@@ -129,6 +135,14 @@ type FederationStore interface {
 	// is sorted by handle. Returns an empty slice when no federations
 	// are active.
 	Snapshot() []FederationRoster
+}
+
+// FederationMember is one entry on the IEEE 1516.1-2010 §4.8
+// listFederationExecutionMembers response. M24 W3.
+type FederationMember struct {
+	Handle       FederateHandle
+	Name         string
+	FederateType string // empty when not declared on JoinFederation
 }
 
 // FederateInfo is one (handle, name) entry on a FederationRoster.

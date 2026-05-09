@@ -16,6 +16,22 @@ service SavepointService {
   rpc RequestFederationRestore(RequestFederationRestoreRequest) returns (Empty);
   rpc FederateRestoreComplete(FederateRestoreResponseRequest) returns (Empty);
   rpc QueryRestoreState(QueryRestoreStateRequest) returns (QueryRestoreStateResponse);
+
+  // M24 W3 — IEEE 1516.1-2010 §4.28 + §4.30.
+  rpc AbortFederationSave(AbortFederationSaveRequest) returns (Empty);
+  rpc AbortFederationRestore(AbortFederationRestoreRequest) returns (Empty);
+}
+
+// AbortFederationSave — §4.28 (M24).
+message AbortFederationSaveRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+// AbortFederationRestore — §4.30 (M24).
+message AbortFederationRestoreRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
 }
 
 message RequestFederationSaveRequest {

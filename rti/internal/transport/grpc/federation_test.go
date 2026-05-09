@@ -60,6 +60,9 @@ func (f *fakeFedStore) List(_ context.Context) ([]core.FederationSummary, error)
 	return f.listResp, f.listErr
 }
 func (f *fakeFedStore) Snapshot() []core.FederationRoster { return nil }
+func (f *fakeFedStore) ListMembers(_ core.FederationName) []core.FederationMember {
+	return nil
+}
 
 func newFedSvc(s core.FederationStore) *federationService {
 	return newFederationService(s)

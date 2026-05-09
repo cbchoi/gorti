@@ -32,6 +32,9 @@ func (stubFedStoreForServerTest) List(_ context.Context) ([]core.FederationSumma
 	return nil, nil
 }
 func (stubFedStoreForServerTest) Snapshot() []core.FederationRoster { return nil }
+func (stubFedStoreForServerTest) ListMembers(_ core.FederationName) []core.FederationMember {
+	return nil
+}
 
 type stubObjRegistryForServerTest struct{}
 

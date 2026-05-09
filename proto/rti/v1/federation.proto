@@ -14,6 +14,9 @@ service FederationService {
   rpc JoinFederation(JoinFederationRequest) returns (JoinFederationResponse);
   rpc ResignFederation(ResignFederationRequest) returns (Empty);
   rpc ListFederations(ListFederationsRequest) returns (ListFederationsResponse);
+
+  // M24 W3 — IEEE 1516.1-2010 §4.8.
+  rpc ListFederationMembers(ListFederationMembersRequest) returns (ListFederationMembersResponse);
 }
 
 message CreateFederationRequest {
@@ -106,4 +109,21 @@ message FederationSummary {
   string name = 1;
   Mode mode = 2;
   uint32 federates_joined = 3;
+}
+
+// ListFederationMembers — IEEE 1516.1-2010 §4.8 listFederationExecutionMembers.
+// M24 W3.
+message ListFederationMembersRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+message ListFederationMembersResponse {
+  repeated FederationMember members = 1;
+}
+
+message FederationMember {
+  uint64 federate_handle = 1;
+  string federate_name = 2;
+  string federate_type = 3;
 }

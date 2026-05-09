@@ -88,6 +88,9 @@ func (stubFedStore) List(_ context.Context) ([]core.FederationSummary, error) {
 	return nil, nil
 }
 func (stubFedStore) Snapshot() []core.FederationRoster { return nil }
+func (stubFedStore) ListMembers(_ core.FederationName) []core.FederationMember {
+	return nil
+}
 
 type stubObjRegistry struct{}
 

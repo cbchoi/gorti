@@ -187,6 +187,27 @@ func (s *federationService) ListFederations(ctx context.Context, req *rtiv1.List
 	return &rtiv1.ListFederationsResponse{Federations: out}, nil
 }
 
+// ListFederationMembers implements rti.v1.FederationService.ListFederationMembers.
+// M24 W3 — IEEE 1516.1-2010 §4.8.
+func (s *federationService) ListFederationMembers(_ context.Context, req *rtiv1.ListFederationMembersRequest) (*rtiv1.ListFederationMembersResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "nil request")
+	}
+	if err := requireWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	members := s.fed.ListMembers(core.FederationName(req.GetFederationName()))
+	out := make([]*rtiv1.FederationMember, 0, len(members))
+	for _, m := range members {
+		out = append(out, &rtiv1.FederationMember{
+			FederateHandle: uint64(m.Handle),
+			FederateName:   m.Name,
+			FederateType:   m.FederateType,
+		})
+	}
+	return &rtiv1.ListFederationMembersResponse{Members: out}, nil
+}
+
 // requireWireVersion enforces that the client speaks a supported wire
 // version. UNSPECIFIED or anything other than V1 is rejected as
 // FailedPrecondition (matching ErrWireVersionMismatch -> ERR_WIRE_VERSION_MISMATCH).
