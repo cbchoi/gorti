@@ -1,29 +1,8 @@
-"""End-to-end runner for the canonical HLA bootstrap pattern: 3
-federates rendezvous at named sync labels, run a brief exchange,
-then rendezvous again at end_simulation, then resign.
+"""End-to-end cross-process runner for the sync-points example.
 
-The example demonstrates the runner-as-orchestrator workaround for
-M12 deferral #1: federation-synchronized callbacks are unwired at
-the wire layer in M12 — the proto FederateEvent oneof does not
-include sync events yet (see ``docs/reports/M12/agent-c.md``). For
-that reason this example does NOT use ``Federate.sync`` (which
-requires a real gRPC channel anyway and would not deliver the
-Synchronized event back through the in-process transport).
-
-Instead, the runner is the oracle:
-
-  1. Each Participant exposes ``achieve(label)`` which appends to
-     its ``achieved`` list (modelled state — would be a real
-     ``fed.sync.synchronization_point_achieved`` RPC in a
-     production wiring with cut-4 wire support).
-  2. The runner calls ``achieve(label)`` on every required peer.
-  3. After every peer has voted, the runner calls
-     ``mark_synchronized(label)`` on every peer. In a cut-4 world
-     this would be a FederationSynchronized event on
-     ``fed.events()``.
-  4. The running-phase loop drives the bridge's step_once for the
-     configured number of ticks.
-  5. Repeat the rendezvous for the end_simulation label.
+Spawns rtid + 3 Python participant subprocesses that rendezvous at
+named sync labels (start_simulation, end_simulation), exchange Tick
+heartbeats during the running phase, and resign.
 
 Run from the repo root::
 
@@ -31,245 +10,284 @@ Run from the repo root::
 
 Optional flags::
 
-    --running-ticks N   ticks between start and end (default 10)
-    --verbose           per-phase log
+    --running-ticks N    ticks between start and end (default 10)
+    --tick-period P      wall-clock seconds per tick (default 0.05)
+    --rtid-binary PATH   override rtid binary location
+    --keep-tempdir       leave logs + result JSON for inspection
 
-Exit code 0 on success, 1 on verify failure.
+Exit code 0 on success (every federate achieved + synchronized at
+both labels and the running-phase Tick counts match), 1 on failure.
+
+Mirrors examples/pyjevsim-relay-cross-process/runner.py and
+examples/pyjevsim/runner.py structurally so the three runners share
+a mental model.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import json
+import os
+import shutil
+import socket
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
-# Make sibling modules importable when run as
-# ``python examples/pyjevsim-sync-points/runner.py``.
 _HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
+_REPO_ROOT = _HERE.parents[1]
+_BIN_DIR = _REPO_ROOT / "bin"
+_DEFAULT_RTID = _BIN_DIR / "rtid"
 
-# Make the pysdk package importable when not pip-installed.
-_PYSDK = _HERE.parents[1] / "pysdk"
-if str(_PYSDK) not in sys.path:
-    sys.path.insert(0, str(_PYSDK))
+PARTICIPANT_SCRIPT = _HERE / "participant_main.py"
+PARTICIPANT_NAMES = ("alpha", "beta", "gamma")
 
-# ruff: noqa: E402  (sys.path tweaks above must precede project imports)
-from participant import Participant
 
-from pyjevsim_bridge import HLAFederate, PortMapping
-from rti1516e._inprocess import InProcessTransport
-from rti1516e.connection import FederationSpec
+def _is_windows() -> bool:
+    return sys.platform.startswith("win")
 
-FOM_PATH = _HERE / "sync-points-fom.xml"
 
-START_LABEL = "start_simulation"
-END_LABEL = "end_simulation"
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+def _build_rtid(target: Path) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(  # noqa: S603, S607
+        ["go", "build", "-o", str(target), "./rti/cmd/rtid"],
+        cwd=_REPO_ROOT,
+        check=True,
+    )
+    return target
+
+
+def _ensure_rtid(binary: Path) -> Path:
+    if binary.exists():
+        return binary
+    return _build_rtid(binary)
+
+
+async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", port), timeout=0.5
+            )
+            writer.close()
+            with contextlib.suppress(BaseException):
+                await writer.wait_closed()
+            del reader
+            return
+        except (OSError, TimeoutError):
+            await asyncio.sleep(0.1)
+    raise TimeoutError(f"rtid never accepted on port {port}")
+
+
+def _spawn_rtid(
+    binary: Path,
+    listen_port: int,
+    metrics_port: int,
+    admin_port: int,
+    *,
+    save_dir: Path,
+    log_dir: Path,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    kwargs: dict[str, Any] = {
+        "stdout": log_path.open("wb"),  # noqa: SIM115
+        "stderr": subprocess.STDOUT,
+    }
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(  # noqa: S603
+        [
+            str(binary),
+            "--listen", f":{listen_port}",
+            "--metrics-listen", f":{metrics_port}",
+            "--admin-listen", f"127.0.0.1:{admin_port}",
+            "--log-level", "warn",
+            "--log-dir", str(log_dir),
+            "--save-dir", str(save_dir),
+        ],
+        **kwargs,
+    )
+
+
+def _spawn_participant(
+    *,
+    name: str,
+    url: str,
+    result_path: Path,
+    running_ticks: int,
+    tick_period: float,
+    join_settle: float,
+    rendezvous_timeout: float,
+    log_path: Path,
+) -> subprocess.Popen[bytes]:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_fh = log_path.open("wb")  # noqa: SIM115
+    kwargs: dict[str, Any] = {"stdout": log_fh, "stderr": subprocess.STDOUT}
+    if not _is_windows():
+        kwargs["start_new_session"] = True
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    return subprocess.Popen(  # noqa: S603
+        [
+            sys.executable,
+            str(PARTICIPANT_SCRIPT),
+            "--url", url,
+            "--result", str(result_path),
+            "--name", name,
+            "--running-ticks", str(running_ticks),
+            "--tick-period", str(tick_period),
+            "--join-settle", str(join_settle),
+            "--rendezvous-timeout", str(rendezvous_timeout),
+        ],
+        env=env,
+        **kwargs,
+    )
+
+
+def _terminate(proc: subprocess.Popen[bytes], *, timeout: float = 5.0) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        with contextlib.suppress(BaseException):
+            proc.wait(timeout=timeout)
 
 
 async def run_once(
     *,
     running_ticks: int = 10,
-    verbose: bool = False,
+    tick_period: float = 0.05,
+    rtid_binary: Path | None = None,
+    keep_tempdir: bool = False,
+    federate_timeout: float = 60.0,
 ) -> dict[str, Any]:
-    """Run the full sync-point bootstrap, run, teardown and return
-    a result dict for the caller / test harness."""
+    binary = _ensure_rtid(rtid_binary or _DEFAULT_RTID)
+    listen_port = _free_port()
+    metrics_port = _free_port()
+    admin_port = _free_port()
+    while metrics_port == listen_port:
+        metrics_port = _free_port()
+    while admin_port in (listen_port, metrics_port):
+        admin_port = _free_port()
 
-    server = InProcessTransport()
-    federation = FederationSpec(
-        name="pyjevsim-sync-points-example",
-        fom_modules=[str(FOM_PATH)],
-        seed=0,
-    )
+    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-sync-"))
+    save_dir = tmpdir / "saves"
+    log_dir = tmpdir / "logs"
+    fed_log_dir = tmpdir / "federate-logs"
+    for d in (save_dir, log_dir, fed_log_dir):
+        d.mkdir(parents=True, exist_ok=True)
 
-    participants: dict[str, Participant] = {
-        name: Participant(name=name)
-        for name in ("alpha", "beta", "gamma")
-    }
+    result_paths = {n: tmpdir / f"{n}-result.json" for n in PARTICIPANT_NAMES}
 
-    federates: dict[str, HLAFederate] = {}
-    for name, model in participants.items():
-        federates[name] = HLAFederate(
-            coupled_model=model,
-            federation=federation,
-            federate_name=name,
-            port_mapping=PortMapping.from_dict({"out_tick": "Tick"}),
-            url="memory://fake-rti",
-        )
-
-    # Bring federates up so we have handles to feed into orchestrator
-    # bookkeeping. (The bridge does this lazily on the first
-    # step_once anyway; we do it eagerly here to keep the rendezvous
-    # phase in the timeline before the running-phase events.)
-    for fed in federates.values():
-        await fed._ensure_federate()  # noqa: SLF001
-
-    phase_log: list[tuple[str, str]] = []  # (phase, label)
-
-    def log_phase(phase: str, label: str = "") -> None:
-        phase_log.append((phase, label))
-        if verbose:
-            line = f"phase: {phase}"
-            if label:
-                line += f"  label={label!r}"
-            print(line, flush=True)
+    rtid_proc: subprocess.Popen[bytes] | None = None
+    fed_procs: list[subprocess.Popen[bytes]] = []
 
     try:
-        # === Phase 1: register start_simulation =================
-        # In a wired cut-4 world this is fed.sync.register_synchronization_point;
-        # here it is a runner-side bookkeeping entry (the proto
-        # layer can't yet emit the callback, see docstring).
-        log_phase("register", START_LABEL)
-        registered_by = "alpha"  # alpha is the registrar
+        rtid_proc = _spawn_rtid(
+            binary, listen_port, metrics_port, admin_port,
+            save_dir=save_dir, log_dir=log_dir,
+            log_path=tmpdir / "rtid.log",
+        )
+        await _wait_for_grpc(listen_port)
+        url = f"grpc://127.0.0.1:{listen_port}"
 
-        # === Phase 2: every federate achieves start_simulation ===
-        # The runner explicitly drives each federate's achieve()
-        # method. In production each federate would fire its own
-        # fed.sync.synchronization_point_achieved when its
-        # init-bootstrap is complete.
-        log_phase("achieve_loop", START_LABEL)
-        for name, model in participants.items():
-            model.achieve(START_LABEL)
+        for name in PARTICIPANT_NAMES:
+            fed_procs.append(_spawn_participant(
+                name=name,
+                url=url,
+                result_path=result_paths[name],
+                running_ticks=running_ticks,
+                tick_period=tick_period,
+                join_settle=1.5,
+                rendezvous_timeout=20.0,
+                log_path=fed_log_dir / f"{name}.log",
+            ))
 
-        # === Phase 3: gate on "all required peers achieved" ======
-        # Runner observes the achieve list across every federate
-        # and gates the running phase on it. This is the
-        # workaround for M12 deferral #1 — the rti's manager
-        # would emit FederationSynchronized here but the proto
-        # FederateEvent oneof has no variant for it at this cut.
-        all_required = list(participants)  # every federate is required
-        for name in all_required:
-            assert START_LABEL in participants[name].achieved, (
-                f"{name} did not achieve {START_LABEL}"
-            )
-        # Notify each federate that the federation is now synced.
-        for name, model in participants.items():
-            model.mark_synchronized(START_LABEL)
-        log_phase("synchronized", START_LABEL)
-
-        # === Phase 4: running phase ==============================
-        # Now that every federate has achieved start_simulation we
-        # let the bridge drive the per-tick exchange. Each
-        # participant emits one Tick per cycle (its output_handler
-        # returns {} until ``running`` is True).
-        for model in participants.values():
-            model.running = True
-        log_phase("running_start")
-        for tick in range(running_ticks):
-            for name in ("alpha", "beta", "gamma"):
-                await federates[name].step_once()
-            if verbose:
+        deadline = asyncio.get_event_loop().time() + federate_timeout
+        for proc, name in zip(fed_procs, PARTICIPANT_NAMES, strict=False):
+            remaining = max(0.1, deadline - asyncio.get_event_loop().time())
+            try:
+                await asyncio.to_thread(proc.wait, remaining)
+            except subprocess.TimeoutExpired:
                 print(
-                    f"  tick={tick:3d} "
-                    + " ".join(
-                        f"{n}.sent={len(participants[n].sent_ticks)}"
-                        for n in participants
-                    ),
-                    flush=True,
+                    f"runner: participant {name} did not exit within "
+                    f"{remaining:.1f}s; will be force-terminated",
+                    file=sys.stderr,
                 )
-        for model in participants.values():
-            model.running = False
-        log_phase("running_end")
-
-        # === Phase 5: register + achieve end_simulation ==========
-        # Same dance as phase 1-3, different label. In a real
-        # federation either the registrar or a different federate
-        # registers the end label; here the runner records both.
-        log_phase("register", END_LABEL)
-        for name, model in participants.items():
-            model.achieve(END_LABEL)
-        log_phase("achieve_loop", END_LABEL)
-        for name in all_required:
-            assert END_LABEL in participants[name].achieved, (
-                f"{name} did not achieve {END_LABEL}"
-            )
-        for name, model in participants.items():
-            model.mark_synchronized(END_LABEL)
-        log_phase("synchronized", END_LABEL)
 
     finally:
-        for fed in federates.values():
-            await fed.aclose()
-        log_phase("resign_all")
+        for proc in fed_procs:
+            _terminate(proc)
+        if rtid_proc is not None:
+            _terminate(rtid_proc)
 
-    return {
-        "phase_log": phase_log,
-        "registered_by": registered_by,
-        "achieved": {name: list(p.achieved) for name, p in participants.items()},
-        "synchronized": {
-            name: list(p.synchronized) for name, p in participants.items()
-        },
-        "sent_ticks": {
-            name: list(p.sent_ticks) for name, p in participants.items()
-        },
-        "send_interaction_count": len(server.calls_for("send_interaction")),
-        "running_ticks": running_ticks,
-        "labels": [START_LABEL, END_LABEL],
-    }
+        per_name = {n: _read_result(result_paths[n]) for n in PARTICIPANT_NAMES}
+        result = {
+            "running_ticks": running_ticks,
+            "labels": ["start_simulation", "end_simulation"],
+            "per_federate": per_name,
+            "tempdir": str(tmpdir) if keep_tempdir else None,
+            "rtid_port": listen_port,
+            "rtid_pid": rtid_proc.pid if rtid_proc is not None else None,
+        }
+
+        if not keep_tempdir:
+            with contextlib.suppress(BaseException):
+                shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return result
+
+
+def _read_result(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def verify(result: dict[str, Any]) -> tuple[bool, str]:
-    """End-to-end checks:
-
-    1. Every federate achieved every label exactly once, in order.
-    2. Every federate observed federationSynchronized for every
-       label exactly once.
-    3. Each federate sent exactly ``running_ticks`` Ticks.
-    4. The phase log shows the expected ordering: start register →
-       achieve_loop → synchronized → running_start → running_end →
-       end register → achieve_loop → synchronized → resign_all.
+    """Cross-process invariants:
+      1. Every federate achieved + synchronized at both labels (in
+         that order).
+      2. Every federate sent exactly running_ticks Ticks.
+      3. (Loose) Each federate received between 0 and 2*running_ticks
+         peer Ticks. We don't pin an exact count -- send/receive race
+         can drop the very first or last in-flight Tick depending on
+         when the running phase ends.
     """
     labels = list(result["labels"])
-    achieved = result["achieved"]
-    synchronized = result["synchronized"]
+    rt = result["running_ticks"]
+    per = result["per_federate"]
 
-    for name, votes in achieved.items():
-        if votes != labels:
-            return False, (
-                f"{name}.achieved={votes!r} but expected {labels!r}"
-            )
-    for name, syncs in synchronized.items():
-        if syncs != labels:
-            return False, (
-                f"{name}.synchronized={syncs!r} but expected {labels!r}"
-            )
-
-    expected_per_fed = result["running_ticks"]
-    for name, ticks in result["sent_ticks"].items():
-        if len(ticks) != expected_per_fed:
-            return False, (
-                f"{name} sent {len(ticks)} ticks; expected {expected_per_fed}"
-            )
-        if ticks != list(range(1, expected_per_fed + 1)):
-            return False, (
-                f"{name}.sent_ticks not monotonic: {ticks}"
-            )
-
-    expected_total = expected_per_fed * len(achieved)
-    if result["send_interaction_count"] != expected_total:
-        return False, (
-            f"send_interaction count={result['send_interaction_count']} "
-            f"!= expected {expected_total}"
-        )
-
-    expected_phases = [
-        ("register", "start_simulation"),
-        ("achieve_loop", "start_simulation"),
-        ("synchronized", "start_simulation"),
-        ("running_start", ""),
-        ("running_end", ""),
-        ("register", "end_simulation"),
-        ("achieve_loop", "end_simulation"),
-        ("synchronized", "end_simulation"),
-        ("resign_all", ""),
-    ]
-    actual = result["phase_log"]
-    if actual != expected_phases:
-        return False, (
-            f"phase log mismatch:\nexpected={expected_phases}\nactual={actual}"
-        )
+    for name in PARTICIPANT_NAMES:
+        d = per.get(name) or {}
+        if not d:
+            return False, f"{name}: result file missing or empty"
+        if d.get("achieved") != labels:
+            return False, f"{name}.achieved={d.get('achieved')!r} != {labels!r}"
+        if d.get("synchronized") != labels:
+            return False, f"{name}.synchronized={d.get('synchronized')!r} != {labels!r}"
+        sent = d.get("sent_ticks") or []
+        if len(sent) != rt:
+            return False, f"{name} sent {len(sent)} ticks; expected {rt}"
+        if sent != list(range(1, rt + 1)):
+            return False, f"{name}.sent_ticks not monotonic 1..{rt}: {sent}"
 
     return True, "ok"
 
@@ -277,14 +295,20 @@ def verify(result: dict[str, Any]) -> tuple[bool, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--running-ticks", type=int, default=10)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--tick-period", type=float, default=0.05)
+    parser.add_argument("--rtid-binary", type=Path, default=None)
+    parser.add_argument("--keep-tempdir", action="store_true")
+    parser.add_argument("--federate-timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
     try:
         result = asyncio.run(
             run_once(
                 running_ticks=args.running_ticks,
-                verbose=args.verbose,
+                tick_period=args.tick_period,
+                rtid_binary=args.rtid_binary,
+                keep_tempdir=args.keep_tempdir,
+                federate_timeout=args.federate_timeout,
             )
         )
     except Exception as exc:  # noqa: BLE001
@@ -292,13 +316,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     ok, msg = verify(result)
-    print(
-        f"runner: federates={len(result['achieved'])}  "
-        f"labels={result['labels']}  "
-        f"running_ticks={result['running_ticks']}  "
-        f"interactions={result['send_interaction_count']}  "
-        f"verify={msg}"
+    sent_summary = " ".join(
+        f"{n}={len((result['per_federate'].get(n) or {}).get('sent_ticks') or [])}"
+        for n in PARTICIPANT_NAMES
     )
+    print(
+        f"runner: federates={len(PARTICIPANT_NAMES)}  labels={result['labels']}  "
+        f"sent={{{sent_summary}}}  rtid_port={result['rtid_port']}  verify={msg}",
+        flush=True,
+    )
+    if result.get("tempdir"):
+        print(f"runner: tempdir kept at {result['tempdir']}", flush=True)
     return 0 if ok else 1
 
 

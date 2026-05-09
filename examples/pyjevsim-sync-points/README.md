@@ -1,8 +1,9 @@
-# pyjevsim sync-points example — canonical HLA bootstrap
+# pyjevsim sync-points example -- cross-process
 
-Three federates rendezvous at named sync labels, run a brief
-exchange, then rendezvous again at end-of-simulation, then resign.
-This is the canonical HLA bootstrap pattern.
+Three federates (`alpha`, `beta`, `gamma`) rendezvous at named sync
+labels, run a brief exchange, then rendezvous again at
+`end_simulation`, then resign. The canonical HLA bootstrap pattern,
+demonstrated against a real `rtid` over `grpc://`.
 
 ```text
             register   achieve(all)   synchronized
@@ -11,94 +12,33 @@ This is the canonical HLA bootstrap pattern.
    gamma ──┴────────┴──────────────┴──────────────┴──▶  RUN N ticks
                                                         │
                                                         │  Tick interactions
-                                                        │  per cycle
                                                         ▼
-            register   achieve(all)   synchronized   ▼
+            register   achieve(all)   synchronized
    alpha ──┬─ phase ─┬──── achieve──┬──── (gate) ──┐
    beta  ──┤   end   │   _simulation│              │
    gamma ──┴────────┴──────────────┴──────────────┴──▶  RESIGN
 ```
 
-## What you'll learn
+Each `participant_main.py` runs as its own Python subprocess; rtid
+is a real subprocess; everything talks `grpc://`. Sync RPCs go
+through the wired SyncService (M12 W1); the
+`SynchronizationPointAnnounced` and `FederationSynchronized` events
+arrive on each federate's event stream (proto FederateEvent oneof
+tags 20 / 21). The runner-as-oracle workaround the original example
+used (M12 deferral #1) is no longer needed.
 
-- The canonical **bootstrap rendezvous pattern**: register a sync
-  label, every federate votes "achieved", the federation observes
-  "synchronized" once every required peer has voted.
-- How to **gate progress on rendezvous** — the running phase
-  doesn't start until the federation is synchronized on
-  ``start_simulation``, and resign doesn't happen until everyone
-  achieves ``end_simulation``.
-- The **runner-as-orchestrator workaround** for the M12 wire-layer
-  deferral that makes ``Federate.sync`` callbacks unobservable on
-  the in-process transport.
+## Prerequisites
 
-## Federates
+Identical to `examples/pyjevsim-relay-cross-process` -- see its
+[Prerequisites](../pyjevsim-relay-cross-process/README.md#prerequisites)
+section. One-time setup, **from the repo root**:
 
-### Participant (×3)
+```bash
+pip install -e './pysdk[dev]'
+make py-codegen
+```
 
-Identical model wrapped three times under three federate names
-(``alpha``, ``beta``, ``gamma``). The model exposes:
-
-- ``achieve(label)``: vote "achieved" on a label. Appends to the
-  ``achieved`` list. (Would be ``fed.sync.synchronization_point_achieved(label)``
-  in a wired cut-4 world.)
-- ``mark_synchronized(label)``: notify the federate that the
-  federation is fully synchronized on a label. Appends to the
-  ``synchronized`` list. (Would arrive as a
-  ``FederationSynchronized`` event on ``fed.events()`` in a
-  wired cut-4 world.)
-- DEVS ``output_handler`` that emits one ``Tick`` interaction per
-  cycle when the federate's ``running`` flag is True (and ``{}``
-  otherwise — the bridge calls ``send_interaction`` only when
-  ``output_handler`` returns a non-empty dict).
-
-## The M12 wire-layer deferral and the workaround
-
-Per ``docs/reports/M12/agent-c.md`` deferral #1, the proto
-``FederateEvent`` oneof in M12 does not include sync-event
-variants. As a result the rti's manager runs the
-all-required-achieved → emit-synchronized internal path but the
-``federationSynchronized`` callback **is not observable on the
-wire**. The M12 spec test
-``test_spec_m12_sync_register_and_achieve`` works around this by
-asserting "no error from the four RPCs", which is the round-trip
-evidence the manager ran.
-
-This example takes the same workaround one step further: since
-the in-process ``InProcessTransport`` has no scheduler at all
-(let alone a sync manager), the runner is the **oracle** for
-both the achieve voting AND the synchronized emission:
-
-  1. Each ``Participant.achieve(label)`` call models the
-     federate's voting intent.
-  2. The runner explicitly drives every required peer's
-     ``achieve(label)``.
-  3. After every peer has voted, the runner calls
-     ``Participant.mark_synchronized(label)`` on each peer to
-     model the synchronized callback.
-  4. Only then does the runner enter the running phase.
-
-The test ``test_sync_points_phase_ordering_is_canonical`` asserts
-the runner's phase log shows the strict ordering this gating
-implies.
-
-## Why not use ``Federate.sync`` directly?
-
-Two reasons:
-
-1. **Memory transport.** ``Federate.sync`` requires a real gRPC
-   channel; the in-process ``memory://`` transport raises
-   ``RuntimeError`` from the accessor. See
-   ``Federate._require_channel`` in ``rti1516e/connection.py``.
-
-2. **No callback even on real gRPC.** Even on a cross-process
-   ``rtid``-backed run, the ``federationSynchronized`` callback
-   has no wire variant in M12, so the federate would still need
-   to gate on something other than the event stream. The M12
-   test gates on "no error" — that's a placeholder for what cut-4
-   makes a real event.
-
-## Run it
+## Run it -- orchestrated (runner.py)
 
 ```bash
 # From the repo root
@@ -107,72 +47,104 @@ python3 examples/pyjevsim-sync-points/runner.py
 # Knobs (defaults shown)
 python3 examples/pyjevsim-sync-points/runner.py \
     --running-ticks 10 \
-    --verbose
+    --tick-period 0.05 \
+    --keep-tempdir
 ```
 
-Default-config output:
+Sample output:
 
 ```text
-runner: federates=3  labels=['start_simulation', 'end_simulation']  running_ticks=10  interactions=30  verify=ok
+runner: federates=3  labels=['start_simulation', 'end_simulation']  sent={alpha=10 beta=10 gamma=10}  rtid_port=43781  verify=ok
 ```
 
-A verbose trace shows the canonical phase ordering:
+`verify=ok` means: every federate achieved + synchronized at both
+labels and emitted exactly `running_ticks` Tick interactions in
+order.
+
+## Run it -- manually (shell scripts)
+
+5 terminals: rtid, three participants, then verify:
+
+```bash
+cd examples/pyjevsim-sync-points
+
+# Terminal 1
+./rtid_run.sh
+
+# Terminals 2, 3, 4 -- start in any order; the JOIN_SETTLE delay
+# (default 1.5s) ensures all three are joined before any registers
+# the sync point.
+./alpha_run.sh
+./beta_run.sh
+./gamma_run.sh
+
+# Terminal 5 -- after all three exit
+./verify_run.sh
+```
+
+Each participant script prints a `DONE` summary on exit:
 
 ```text
-phase: register  label='start_simulation'
-phase: achieve_loop  label='start_simulation'
-phase: synchronized  label='start_simulation'
-phase: running_start
-  tick=  0 alpha.sent=1 beta.sent=1 gamma.sent=1
-  ...
-phase: running_end
-phase: register  label='end_simulation'
-phase: achieve_loop  label='end_simulation'
-phase: synchronized  label='end_simulation'
-phase: resign_all
+alpha_run: DONE — achieved=2 synchronized=2 sent_ticks=10  result=...
+beta_run:  DONE — achieved=2 synchronized=2 sent_ticks=10  result=...
+gamma_run: DONE — achieved=2 synchronized=2 sent_ticks=10  result=...
 ```
 
-## Verification invariants
+`verify_run.sh` then checks the cross-result invariants and prints
+`PASS` / `FAIL` for each.
 
-1. **Every federate achieved every label exactly once, in order.**
-   ``alpha.achieved == beta.achieved == gamma.achieved ==
-   ['start_simulation', 'end_simulation']``.
-2. **Every federate observed the synchronized callback for every
-   label exactly once.** Same equality on ``synchronized``.
-3. **Running-phase Tick count is exact.** Each federate emits
-   exactly ``running_ticks`` Tick interactions; total wire
-   ``send_interaction`` count is ``3 * running_ticks``.
-4. **Phase log shows canonical ordering.** The 9-element phase
-   log matches the expected bootstrap → run → teardown sequence.
+Tunables (env-overridable):
 
-## Tuning knobs
+| var | default | meaning |
+|---|---|---|
+| `RUNNING_TICKS` | 10 | ticks between start and end labels |
+| `TICK_PERIOD` | 0.05 | wall-clock seconds per tick |
+| `JOIN_SETTLE` | 1.5 | delay after join before registering sync point |
+| `RENDEZVOUS_TIMEOUT` | 20.0 | per-rendezvous deadline |
+| `RESULT_DIR` | /tmp/pyjevsim-sync-cross | where result JSONs land |
 
-| Knob | Effect |
-|---|---|
-| ``--running-ticks N`` | Number of Tick interactions per federate between rendezvous points (default 10; 0 is valid — verifies "no Ticks before sync") |
+## Files
 
-## What's deferred
+| File | Role |
+|------|------|
+| `runner.py` | spawns rtid + 3 participant processes; reads JSONs; verifies |
+| `_federate_common.py` | scaffolding: argparse, sync-aware wait helpers, running-phase loop |
+| `participant_main.py` | participant entry point (`--name alpha\|beta\|gamma`) |
+| `participant.py` | DEVS coupled-model file (Tick emitter; runner-driven oracle methods are unused but kept for backward compat) |
+| `sync-points-fom.xml` | FOM declaring the `Tick` interaction class |
+| `_run_common.sh` | shell defaults + `report_result` helper |
+| `rtid_run.sh` | rtid daemon launcher |
+| `alpha_run.sh` `beta_run.sh` `gamma_run.sh` | per-participant federate launchers |
+| `verify_run.sh` | cross-result invariant check after a manual run |
 
-- **Real wire-driven federationSynchronized event.** Tracked as
-  M12 deferral #1; cut-4 evolves the proto ``FederateEvent``
-  oneof to include sync variants. Once that lands, the runner
-  here can be replaced with one that consumes
-  ``fed.events()`` and reacts to ``FederationSynchronized``
-  directly.
-- **Wait-for-synchronized blocking primitive.** A real federation
-  bootstrap typically blocks each federate at ``waitForSynchronized``
-  semantics; the in-process transport cannot model this without
-  a proper scheduler. The runner-driven gating here serves the
-  same purpose at the orchestration level.
-- **Cross-process variant.** Same gap as the dashboard example:
-  works in-process with the orchestrator-as-oracle pattern;
-  cross-process needs the cut-4 wire support.
-- **Partial-rendezvous semantics.** A real federation might have
-  some federates as "required" and others as optional. This
-  example treats every federate as required; making it
-  configurable is one knob away (``required_federates`` argument
-  to the achieve loop) but not exercised here.
-- **register_synchronization_point with a tag.** The M12 spec
-  test exercises ``tag=b"hello"``; here the registration is just
-  a phase-log entry without a tag because the runner can't
-  meaningfully consume one.
+## Why no time-managed variant?
+
+Same reason as
+[`examples/pyjevsim-relay-cross-process`](../pyjevsim-relay-cross-process/README.md#why-we-dont-use-hlafederatestep_once-here):
+real rtid (M3+) does not yet wire the time-service gRPC handlers
+(`timeService: nil`). Cross-process therefore uses an untimed driver
+for the running phase. When rtid ships TimeService, the running-phase
+loop can be tightened to use `HLAFederate.step_once`.
+
+## Debugging tips
+
+### A federate hangs on rendezvous
+
+The rendezvous waits for `SynchronizationPointAnnounced` /
+`FederationSynchronized` events with a per-rendezvous deadline
+(default 20s, env-overridable as `RENDEZVOUS_TIMEOUT`). A timeout
+usually means one of the three federates didn't actually join in
+time -- check the federate logs (`runner.py --keep-tempdir` keeps
+them):
+
+```text
+<tempdir>/federate-logs/{alpha,beta,gamma}.log
+<tempdir>/rtid.log
+```
+
+### `ALREADY_REGISTERED` errors
+
+Expected for two of the three federates — exactly one wins the
+register-synchronization-point race. The `register_or_swallow`
+helper drops the error silently. If you see it in a log it's just
+narration; the rendezvous still proceeds via the announced event.
