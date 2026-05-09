@@ -804,11 +804,63 @@ check_m24() {
   else set_status M24 NOT_STARTED; printf "${DIM}M24: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M14 (mTLS + OIDC client authentication) ----------
+check_m14() {
+  section "M14 — mTLS + OIDC client authentication (Owner: agent-a + agent-c)"
+  echo "Exit (srs.md §10.4): mTLS + OIDC bearer-token auth wired end-to-end"
+  local pass=0 total=5
+
+  # 1. Server-side mTLS flags + builder
+  if grep -q 'tls-client-ca' rti/cmd/rtid/main.go 2>/dev/null \
+     && grep -q 'buildServerTLSWithMTLS' rti/cmd/rtid/main.go 2>/dev/null \
+     && grep -q 'RequireAndVerifyClientCert' rti/cmd/rtid/main.go 2>/dev/null; then
+    present "cmd/rtid mTLS flags + builder wired"; pass=$((pass+1))
+  else
+    pending "mTLS flags / builder incomplete"
+  fi
+
+  # 2. OIDC verifier + interceptor packages
+  if [ -f rti/internal/auth/oidc/verifier.go ] \
+     && [ -f rti/internal/auth/oidc/interceptor.go ]; then
+    present "rti/internal/auth/oidc/ verifier + interceptor"; pass=$((pass+1))
+  else
+    missing "rti/internal/auth/oidc/ missing"
+  fi
+
+  # 3. testtls fixture
+  if [ -f rti/internal/auth/testtls/testtls.go ]; then
+    present "rti/internal/auth/testtls/ in-memory fixture"; pass=$((pass+1))
+  else
+    missing "rti/internal/auth/testtls/ missing"
+  fi
+
+  # 4. Go SDK ConnectOptions
+  if grep -q 'type ConnectOptions struct' rti/pkg/federate/federate.go 2>/dev/null \
+     && grep -q 'BearerToken' rti/pkg/federate/federate.go 2>/dev/null; then
+    present "Go SDK ConnectOptions + ConnectWithOptions"; pass=$((pass+1))
+  else
+    pending "Go SDK TLS surface incomplete"
+  fi
+
+  # 5. M14 spec test files
+  if [ -f rti/spec/M14/mtls_test.go ] \
+     && [ -f rti/spec/M14/oidc_test.go ] \
+     && [ -f rti/spec/M14/go_sdk_test.go ]; then
+    present "rti/spec/M14/ + pysdk/tests/spec/m14/ committed"; pass=$((pass+1))
+  else
+    pending "M14 spec test files incomplete"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M14 DONE; printf "${GRN}M14: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M14 IN_PROGRESS; printf "${YLW}M14: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M14 NOT_STARTED; printf "${DIM}M14: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M21 M22 M23 M24; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -846,6 +898,7 @@ check_m21
 check_m22
 check_m23
 check_m24
+check_m14
 print_summary
 
 exit "$REGRESSED"

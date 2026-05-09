@@ -82,6 +82,28 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
+#### M14 — mTLS + OIDC client authentication (closed 2026-05-09)
+- Pre-M14 every gRPC connection was plaintext + unauthenticated; any process on the network could JoinFederation. M14 wires authentication at the transport / interceptor layer; no service-handler changes.
+- Two paths, AND-stackable:
+  1. **mTLS** — client certificates verified against a configured CA bundle. `--tls-client-ca <path>` + optional `--tls-client-cn-allow <list>` flags.
+  2. **OIDC bearer tokens** — RS256 JWT validated against a pre-pinned PEM public key (`--oidc-jwks-pem`). `--oidc-audience` + `--oidc-issuer` enable claim checks. JWKS HTTP discovery via `--oidc-issuer` URL is a future cut.
+
+Surface:
+- `cmd/rtid` flags: `--tls-client-ca`, `--tls-client-cn-allow`, `--oidc-issuer`, `--oidc-audience`, `--oidc-jwks-pem`.
+- `buildServerTLSWithMTLS` extends the existing `buildServerTLS` with mTLS support: `RequireAndVerifyClientCert` + `VerifyPeerCertificate` callback for CN allow-list.
+- New `rti/internal/auth/oidc/` package: `Verifier` (RS256 JWT parse + verify, exp/nbf/aud/iss claim validation), `UnaryServerInterceptor` + `StreamServerInterceptor` (gRPC metadata extraction → context-injected subject).
+- New `rti/internal/auth/testtls/` package: in-memory ECDSA P-256 CA + server leaf + client leaf for spec tests; never touches disk.
+
+SDKs:
+- Go: `federate.ConnectWithOptions(ctx, addr, opts)` accepts `ConnectOptions{TLS, BearerToken, BearerTokenProvider}`. `Connect` keeps insecure-by-default behavior.
+- Pysdk: `RtiConnection.connect(url, *, ca_cert, client_cert, client_key, bearer_token)`. Bearer token requires `grpcs://` (matches Go SDK's `RequireTransportSecurity` contract).
+
+Spec tests: 9 Go + 2 Python.
+
+Out of scope: OIDC discovery (JWKS HTTP fetch), HS256/ES256/EdDSA, CRL/OCSP, per-RPC authorization, federate-cert-as-handle binding.
+
+Plan + 5 waves (TASK-291..303) at `docs/M14_DISPATCH_PLAN.md`.
+
 #### M24 — FederationManagement (§4) completion + Resign correctness (closed 2026-05-09)
 - Closes the most surprising correctness gap left in cut-3. Pre-M24 the federation manager rejected every `ResignAction` except `UNCONDITIONALLY_DIVEST_ATTRIBUTES` — and **even the accepted action did not actually divest**. The manager removed the federate from the roster; ownership records stayed pointing at a non-existent handle.
 
