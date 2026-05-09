@@ -1339,34 +1339,53 @@ def _is_already_exists(exc: BaseException) -> bool:
 
 
 async def build_grpc_transport(
-    url: str, *, ca_cert: bytes | None = None
+    url: str,
+    *,
+    ca_cert: bytes | None = None,
+    client_cert: bytes | None = None,
+    client_key: bytes | None = None,
+    bearer_token: str | None = None,
 ) -> GrpcTransport:
     """Open a real ``grpc.aio`` channel for ``url`` and wrap it.
 
     Two URL schemes are supported:
 
       - ``grpc://host:port``  — plaintext ``grpc.aio.insecure_channel``.
-        Used by the M5 cross-language smoke and any deployment where
-        TLS is not configured on the rtid side.
       - ``grpcs://host:port`` — TLS-secured ``grpc.aio.secure_channel``.
         ``ca_cert`` (PEM bytes) populates ``root_certificates``; pass
-        ``None`` to rely on the system trust store (e.g. when the rtid
-        cert chains to a publicly trusted root). Server-side TLS is
-        provided by rtid's ``--tls-cert/--tls-key`` (see
-        ``rti/cmd/rtid/main.go``).
+        ``None`` to rely on the system trust store.
 
-    Errors:
-      - Unknown URL scheme raises ``ValueError`` so a typo surfaces at
-        connect-time rather than as a misleading ``UNAVAILABLE`` later.
+    M14 W3 — additional auth knobs:
+
+      - ``client_cert`` + ``client_key`` (both PEM bytes) → mTLS. The
+        rtid must have been started with ``--tls-client-ca`` set.
+      - ``bearer_token`` → ``authorization: Bearer <token>`` metadata
+        on every RPC. Combinable with TLS / mTLS.
     """
     import grpc
 
     if url.startswith("grpcs://"):
         target = url.removeprefix("grpcs://")
-        creds = grpc.ssl_channel_credentials(root_certificates=ca_cert)
-        channel = grpc.aio.secure_channel(target, creds)
+        ssl_creds = grpc.ssl_channel_credentials(
+            root_certificates=ca_cert,
+            private_key=client_key,
+            certificate_chain=client_cert,
+        )
+        if bearer_token:
+            # M14 W3: composite credentials = TLS + per-call metadata.
+            # Mirrors Go SDK's bearerCreds path which requires TLS too.
+            call_creds = grpc.metadata_call_credentials(
+                _bearer_token_plugin(bearer_token)
+            )
+            ssl_creds = grpc.composite_channel_credentials(ssl_creds, call_creds)
+        channel = grpc.aio.secure_channel(target, ssl_creds)
         return GrpcTransport(channel, url=url)
     if url.startswith("grpc://"):
+        if bearer_token:
+            raise ValueError(
+                "build_grpc_transport: bearer_token requires grpcs:// "
+                "(matches Go SDK's RequireTransportSecurity contract)"
+            )
         target = url.removeprefix("grpc://")
         channel = grpc.aio.insecure_channel(target)
         return GrpcTransport(channel, url=url)
@@ -1374,3 +1393,14 @@ async def build_grpc_transport(
         f"build_grpc_transport: unsupported URL scheme in {url!r} "
         "(expected 'grpc://' or 'grpcs://')"
     )
+
+
+def _bearer_token_plugin(token: str):
+    """Return a grpc.AuthMetadataPlugin that attaches authorization:
+    Bearer <token> to every RPC. M14 W3.
+    """
+
+    def plugin(_context, callback):  # noqa: ANN001
+        callback((("authorization", f"Bearer {token}"),), None)
+
+    return plugin

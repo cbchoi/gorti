@@ -69,6 +69,9 @@ class RtiConnection:
         *,
         options: dict[str, Any] | None = None,
         ca_cert: bytes | None = None,
+        client_cert: bytes | None = None,
+        client_key: bytes | None = None,
+        bearer_token: str | None = None,
     ) -> None:
         self._url = url
         self._options: dict[str, Any] = dict(options) if options else {}
@@ -76,6 +79,10 @@ class RtiConnection:
         # means "use system roots" (handed straight through to
         # ``grpc.ssl_channel_credentials(root_certificates=None)``).
         self._ca_cert = ca_cert
+        # M14 W3 — mTLS + bearer token.
+        self._client_cert = client_cert
+        self._client_key = client_key
+        self._bearer_token = bearer_token
         self._transport: Any | None = None
         self._closed = False
 
@@ -86,6 +93,9 @@ class RtiConnection:
         *,
         options: dict[str, Any] | None = None,
         ca_cert: bytes | None = None,
+        client_cert: bytes | None = None,
+        client_key: bytes | None = None,
+        bearer_token: str | None = None,
     ) -> Self:
         """Build a connection wrapper bound to ``url``.
 
@@ -110,7 +120,14 @@ class RtiConnection:
 
         The actual transport setup happens inside ``__aenter__``.
         """
-        return cls(url, options=options, ca_cert=ca_cert)
+        return cls(
+            url,
+            options=options,
+            ca_cert=ca_cert,
+            client_cert=client_cert,
+            client_key=client_key,
+            bearer_token=bearer_token,
+        )
 
     async def __aenter__(self) -> Self:
         """Open the transport.
@@ -142,7 +159,11 @@ class RtiConnection:
             # ``ca_cert`` is forwarded to ``ssl_channel_credentials``;
             # ``grpc://`` ignores it.
             self._transport = await _build_grpc_transport(
-                self._url, ca_cert=self._ca_cert
+                self._url,
+                ca_cert=self._ca_cert,
+                client_cert=self._client_cert,
+                client_key=self._client_key,
+                bearer_token=self._bearer_token,
             )
         else:
             raise ValueError(
