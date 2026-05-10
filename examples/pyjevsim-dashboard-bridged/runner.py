@@ -28,13 +28,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import datetime as _dt
 import json
 import os
 import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +45,17 @@ _DEFAULT_RTID = _BIN_DIR / "rtid"
 
 SENSOR_SCRIPT = _HERE / "sensor_main.py"
 DASHBOARD_SCRIPT = _HERE / "dashboard_main.py"
+
+# Shared tee helper.
+sys.path.insert(0, str(_REPO_ROOT / "examples"))
+from _log_tee import LogTee  # noqa: E402
+
+
+def _resolve_workdir(workdir: Path | None) -> Path:
+    if workdir is not None:
+        return workdir
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    return _HERE / ".run" / stamp
 
 
 def _is_windows() -> bool:
@@ -89,56 +100,42 @@ async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: 
     raise TimeoutError(f"rtid never accepted on port {port}")
 
 
-def _spawn_rtid(
-    binary: Path,
-    listen_port: int,
-    metrics_port: int,
-    admin_port: int,
-    *,
-    save_dir: Path,
-    log_dir: Path,
-    log_path: Path,
-) -> subprocess.Popen[bytes]:
-    kwargs: dict[str, Any] = {
-        "stdout": log_path.open("wb"),  # noqa: SIM115
-        "stderr": subprocess.STDOUT,
-    }
+def _spawn_rtid_with_tee(
+    binary: Path, listen_port: int, metrics_port: int, admin_port: int,
+    *, save_dir: Path, log_dir: Path, log_path: Path, log_level: str,
+) -> tuple[subprocess.Popen[bytes], LogTee]:
+    kwargs: dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
     if not _is_windows():
         kwargs["start_new_session"] = True
-    return subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(  # noqa: S603
         [
             str(binary),
             "--listen", f":{listen_port}",
             "--metrics-listen", f":{metrics_port}",
             "--admin-listen", f"127.0.0.1:{admin_port}",
-            "--log-level", "warn",
+            "--log-level", log_level,
+            "--log-format", "text",
             "--log-dir", str(log_dir),
             "--save-dir", str(save_dir),
         ],
         **kwargs,
     )
+    tee = LogTee(proc, log_path=log_path, prefix="rtid")
+    tee.start()
+    return proc, tee
 
 
-def _spawn_federate(
-    script: Path,
-    *,
-    url: str,
-    result_path: Path,
-    ticks: int,
-    drain_ticks: int,
-    mode: str,
-    amplitude: int,
-    tick_period: float,
-    startup_delay: float,
-    log_path: Path,
-) -> subprocess.Popen[bytes]:
+def _spawn_federate_with_tee(
+    script: Path, *, url: str, result_path: Path, ticks: int, drain_ticks: int,
+    mode: str, amplitude: int, tick_period: float, startup_delay: float,
+    log_path: Path, name: str,
+) -> tuple[subprocess.Popen[bytes], LogTee]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_fh = log_path.open("wb")  # noqa: SIM115
-    kwargs: dict[str, Any] = {"stdout": log_fh, "stderr": subprocess.STDOUT}
+    kwargs: dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
     if not _is_windows():
         kwargs["start_new_session"] = True
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    return subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(  # noqa: S603
         [
             sys.executable,
             str(script),
@@ -154,6 +151,9 @@ def _spawn_federate(
         env=env,
         **kwargs,
     )
+    tee = LogTee(proc, log_path=log_path, prefix=name)
+    tee.start()
+    return proc, tee
 
 
 def _terminate(proc: subprocess.Popen[bytes], *, timeout: float = 5.0) -> None:
@@ -175,8 +175,10 @@ async def run_once(
     amplitude: int = 100,
     tick_period: float = 0.05,
     rtid_binary: Path | None = None,
-    keep_tempdir: bool = False,
+    workdir: Path | None = None,
+    keep_workdir: bool = True,
     federate_timeout: float = 60.0,
+    log_level: str = "info",
 ) -> dict[str, Any]:
     binary = _ensure_rtid(rtid_binary or _DEFAULT_RTID)
     listen_port = _free_port()
@@ -187,69 +189,75 @@ async def run_once(
     while admin_port in (listen_port, metrics_port):
         admin_port = _free_port()
 
-    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-dashboard-bridged-"))
-    save_dir = tmpdir / "saves"
-    log_dir = tmpdir / "logs"
-    fed_log_dir = tmpdir / "federate-logs"
-    for d in (save_dir, log_dir, fed_log_dir):
+    workdir = _resolve_workdir(workdir)
+    save_dir = workdir / "saves"
+    log_dir = workdir / "eventlog"
+    for d in (save_dir, log_dir, workdir):
         d.mkdir(parents=True, exist_ok=True)
 
-    sensor_result = tmpdir / "sensor-result.json"
-    dashboard_result = tmpdir / "dashboard-result.json"
+    sensor_result = workdir / "sensor-result.json"
+    dashboard_result = workdir / "dashboard-result.json"
+
+    print(f"[runner] working directory: {workdir}", flush=True)
+    print(f"[runner] rtid listen port: {listen_port}", flush=True)
 
     rtid_proc: subprocess.Popen[bytes] | None = None
-    fed_procs: list[subprocess.Popen[bytes]] = []
+    rtid_tee: LogTee | None = None
+    fed_procs: list[tuple[subprocess.Popen[bytes], LogTee, str]] = []
 
     try:
-        rtid_proc = _spawn_rtid(
+        rtid_proc, rtid_tee = _spawn_rtid_with_tee(
             binary, listen_port, metrics_port, admin_port,
             save_dir=save_dir, log_dir=log_dir,
-            log_path=tmpdir / "rtid.log",
+            log_path=workdir / "rtid.log",
+            log_level=log_level,
         )
         await _wait_for_grpc(listen_port)
         url = f"grpc://127.0.0.1:{listen_port}"
 
-        # Dashboard FIRST so its subscribe lands before the sensor's
-        # register / update_attributes — pre-subscription publishes
-        # are dropped server-side.
-        dash_proc = _spawn_federate(
+        dash_proc, dash_tee = _spawn_federate_with_tee(
             DASHBOARD_SCRIPT, url=url, result_path=dashboard_result,
             ticks=ticks, drain_ticks=20,
             mode=mode, amplitude=amplitude,
             tick_period=tick_period,
             startup_delay=0.0,
-            log_path=fed_log_dir / "dashboard.log",
+            log_path=workdir / "dashboard.log",
+            name="dashboard",
         )
-        fed_procs.append(dash_proc)
+        fed_procs.append((dash_proc, dash_tee, "dashboard"))
         await asyncio.sleep(0.5)
 
-        sensor_proc = _spawn_federate(
+        sensor_proc, sensor_tee = _spawn_federate_with_tee(
             SENSOR_SCRIPT, url=url, result_path=sensor_result,
             ticks=ticks, drain_ticks=0,
             mode=mode, amplitude=amplitude,
             tick_period=tick_period,
             startup_delay=0.0,
-            log_path=fed_log_dir / "sensor.log",
+            log_path=workdir / "sensor.log",
+            name="sensor",
         )
-        fed_procs.append(sensor_proc)
+        fed_procs.append((sensor_proc, sensor_tee, "sensor"))
 
         deadline = asyncio.get_event_loop().time() + federate_timeout
-        for proc, name in ((sensor_proc, "sensor"), (dash_proc, "dashboard")):
+        for proc, _tee, name in [(p, t, n) for p, t, n in fed_procs]:
             remaining = max(0.1, deadline - asyncio.get_event_loop().time())
             try:
                 await asyncio.to_thread(proc.wait, remaining)
             except subprocess.TimeoutExpired:
                 print(
-                    f"runner: federate {name} did not exit within "
+                    f"[runner] federate {name} did not exit within "
                     f"{remaining:.1f}s; will be force-terminated",
                     file=sys.stderr,
                 )
 
     finally:
-        for proc in fed_procs:
+        for proc, tee, _name in fed_procs:
             _terminate(proc)
+            tee.join(timeout=1.0)
         if rtid_proc is not None:
             _terminate(rtid_proc)
+        if rtid_tee is not None:
+            rtid_tee.join(timeout=1.0)
 
         sensor_data = _read_result(sensor_result)
         dashboard_data = _read_result(dashboard_result)
@@ -259,14 +267,15 @@ async def run_once(
             "discovered": list(dashboard_data.get("discovered") or []),
             "instance_name": sensor_data.get("instance_name"),
             "mode": sensor_data.get("mode") or mode,
-            "tempdir": str(tmpdir) if keep_tempdir else None,
+            "workdir": str(workdir),
             "rtid_port": listen_port,
             "rtid_pid": rtid_proc.pid if rtid_proc is not None else None,
         }
 
-        if not keep_tempdir:
+        if not keep_workdir:
             with contextlib.suppress(BaseException):
-                shutil.rmtree(tmpdir, ignore_errors=True)
+                shutil.rmtree(workdir, ignore_errors=True)
+            result["workdir"] = ""
 
     return result
 
@@ -311,7 +320,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--amplitude", type=int, default=100)
     parser.add_argument("--tick-period", type=float, default=0.05)
     parser.add_argument("--rtid-binary", type=Path, default=None)
-    parser.add_argument("--keep-tempdir", action="store_true")
+    parser.add_argument(
+        "--workdir", type=Path, default=None,
+        help="working directory (default: examples/pyjevsim-dashboard-bridged/.run/<timestamp>/)",
+    )
+    parser.add_argument("--no-keep-workdir", action="store_true")
+    parser.add_argument(
+        "--log-level", default="info",
+        choices=["debug", "info", "warn", "error"],
+    )
     parser.add_argument("--federate-timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
@@ -323,24 +340,26 @@ def main(argv: list[str] | None = None) -> int:
                 amplitude=args.amplitude,
                 tick_period=args.tick_period,
                 rtid_binary=args.rtid_binary,
-                keep_tempdir=args.keep_tempdir,
+                workdir=args.workdir,
+                keep_workdir=not args.no_keep_workdir,
                 federate_timeout=args.federate_timeout,
+                log_level=args.log_level,
             )
         )
     except Exception as exc:  # noqa: BLE001
-        print(f"runner: {exc}", file=sys.stderr)
+        print(f"[runner] {exc}", file=sys.stderr)
         return 1
 
     ok, msg = verify(result)
     print(
-        f"runner: published={len(result['published'])}  "
+        f"[runner] published={len(result['published'])}  "
         f"received={len(result['received'])}  "
         f"discovered={len(result['discovered'])}  "
         f"rtid_port={result['rtid_port']}  verify={msg}",
         flush=True,
     )
-    if result.get("tempdir"):
-        print(f"runner: tempdir kept at {result['tempdir']}", flush=True)
+    if result.get("workdir"):
+        print(f"[runner] workdir: {result['workdir']}", flush=True)
     return 0 if ok else 1
 
 

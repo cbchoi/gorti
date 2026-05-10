@@ -8,6 +8,10 @@ Run from the repo root::
 
     python3 examples/pyjevsim-time-advance/runner.py
 
+Logs are written to ``examples/pyjevsim-time-advance/.run/<timestamp>/``
+AND streamed to the parent's stderr with [rtid] / [<federate>] prefixes.
+Pass ``--workdir DIR`` to override; ``--no-keep-workdir`` to delete on exit.
+
 Exit code 0 on success, 1 on failure.
 """
 
@@ -16,13 +20,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import datetime as _dt
 import json
 import os
 import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +34,10 @@ _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parents[1]
 _DEFAULT_RTID = _REPO_ROOT / "bin" / "rtid"
 _REGULATOR_SCRIPT = _HERE / "regulator_main.py"
+
+# Shared tee helper.
+sys.path.insert(0, str(_REPO_ROOT / "examples"))
+from _log_tee import LogTee  # noqa: E402
 
 SPECS = [
     {"name": "fast", "lookahead": 0.5},
@@ -74,30 +82,41 @@ def _build_rtid_if_missing(target: Path) -> Path:
     return target
 
 
-def _spawn_rtid(binary: Path, port: int, log_path: Path, save_dir: Path) -> subprocess.Popen[bytes]:
+def _resolve_workdir(workdir: Path | None) -> Path:
+    if workdir is not None:
+        return workdir
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    return _HERE / ".run" / stamp
+
+
+def _spawn_rtid_with_tee(
+    binary: Path, port: int, log_path: Path, save_dir: Path, log_level: str,
+) -> tuple[subprocess.Popen[bytes], LogTee]:
     save_dir.mkdir(parents=True, exist_ok=True)
-    log_fh = log_path.open("wb")  # noqa: SIM115
-    return subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(  # noqa: S603
         [
             str(binary),
             "--listen", f":{port}",
             "--metrics-listen", f":{_free_port()}",
             "--admin-listen", f"127.0.0.1:{_free_port()}",
-            "--log-level", "warn",
+            "--log-level", log_level,
+            "--log-format", "text",
             "--save-dir", str(save_dir),
         ],
-        stdout=log_fh,
+        stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    tee = LogTee(proc, log_path=log_path, prefix="rtid")
+    tee.start()
+    return proc, tee
 
 
-def _spawn_regulator(
+def _spawn_regulator_with_tee(
     spec: dict[str, Any], url: str, result_path: Path, log_path: Path, cycles: int, tick_step: float,
-) -> subprocess.Popen[bytes]:
-    log_fh = log_path.open("wb")  # noqa: SIM115
+) -> tuple[subprocess.Popen[bytes], LogTee]:
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    return subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(  # noqa: S603
         [
             sys.executable,
             str(_REGULATOR_SCRIPT),
@@ -109,10 +128,13 @@ def _spawn_regulator(
             "--tick-step", str(tick_step),
         ],
         env=env,
-        stdout=log_fh,
+        stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    tee = LogTee(proc, log_path=log_path, prefix=spec["name"])
+    tee.start()
+    return proc, tee
 
 
 def _terminate(proc: subprocess.Popen[bytes], timeout: float = 5.0) -> None:
@@ -132,49 +154,62 @@ async def run_once(
     cycles: int = 10,
     tick_step: float = 3.0,
     rtid_binary: Path | None = None,
-    keep_tempdir: bool = False,
+    workdir: Path | None = None,
+    keep_workdir: bool = True,
+    log_level: str = "info",
 ) -> dict[str, Any]:
     binary = _build_rtid_if_missing(rtid_binary or _DEFAULT_RTID)
     port = _free_port()
-    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-time-advance-"))
-    fed_log_dir = tmpdir / "federate-logs"
-    fed_log_dir.mkdir()
+    workdir = _resolve_workdir(workdir)
+    workdir.mkdir(parents=True, exist_ok=True)
 
-    rtid_proc = _spawn_rtid(binary, port, tmpdir / "rtid.log", tmpdir / "saves")
-    fed_procs: list[subprocess.Popen[bytes]] = []
+    print(f"[runner] working directory: {workdir}", flush=True)
+    print(f"[runner] rtid listen port: {port}", flush=True)
+
+    rtid_proc, rtid_tee = _spawn_rtid_with_tee(
+        binary, port, workdir / "rtid.log", workdir / "saves", log_level,
+    )
+    fed_procs: list[tuple[subprocess.Popen[bytes], LogTee, str]] = []
     try:
         await _wait_for_grpc(port)
         url = f"grpc://127.0.0.1:{port}"
         for spec in SPECS:
-            fed_procs.append(_spawn_regulator(
+            p, t = _spawn_regulator_with_tee(
                 spec, url,
-                tmpdir / f"{spec['name']}-result.json",
-                fed_log_dir / f"{spec['name']}.log",
+                workdir / f"{spec['name']}-result.json",
+                workdir / f"{spec['name']}.log",
                 cycles, tick_step,
-            ))
+            )
+            fed_procs.append((p, t, spec["name"]))
         deadline = asyncio.get_event_loop().time() + 60.0
-        for proc, spec in zip(fed_procs, SPECS, strict=True):
+        for proc, _tee, name in [(p, t, n) for p, t, n in fed_procs]:
             remaining = max(0.1, deadline - asyncio.get_event_loop().time())
             try:
                 await asyncio.to_thread(proc.wait, remaining)
             except subprocess.TimeoutExpired:
-                print(f"runner: federate {spec['name']} timed out", file=sys.stderr)
+                print(f"[runner] federate {name} timed out", file=sys.stderr)
     finally:
-        for proc in fed_procs:
+        for proc, tee, _name in fed_procs:
             _terminate(proc)
+            tee.join(timeout=1.0)
         _terminate(rtid_proc)
+        rtid_tee.join(timeout=1.0)
 
-    results = {}
+    results: dict[str, Any] = {}
     for spec in SPECS:
-        path = tmpdir / f"{spec['name']}-result.json"
+        path = workdir / f"{spec['name']}-result.json"
         if path.exists():
             results[spec["name"]] = json.loads(path.read_text())
-    out: dict[str, Any] = {"per_federate": results, "cycles": cycles, "rtid_port": port}
-    if keep_tempdir:
-        out["tempdir"] = str(tmpdir)
-    else:
+    out: dict[str, Any] = {
+        "per_federate": results,
+        "cycles": cycles,
+        "rtid_port": port,
+        "workdir": str(workdir),
+    }
+    if not keep_workdir:
         with contextlib.suppress(BaseException):
-            shutil.rmtree(tmpdir, ignore_errors=True)
+            shutil.rmtree(workdir, ignore_errors=True)
+        out["workdir"] = ""
     return out
 
 
@@ -196,24 +231,36 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--cycles", type=int, default=10)
     p.add_argument("--tick-step", type=float, default=3.0)
-    p.add_argument("--keep-tempdir", action="store_true")
+    p.add_argument("--rtid-binary", type=Path, default=None)
+    p.add_argument(
+        "--workdir", type=Path, default=None,
+        help="working directory (default: examples/pyjevsim-time-advance/.run/<timestamp>/)",
+    )
+    p.add_argument("--no-keep-workdir", action="store_true")
+    p.add_argument(
+        "--log-level", default="info",
+        choices=["debug", "info", "warn", "error"],
+    )
     args = p.parse_args(argv)
     try:
         result = asyncio.run(run_once(
             cycles=args.cycles,
             tick_step=args.tick_step,
-            keep_tempdir=args.keep_tempdir,
+            rtid_binary=args.rtid_binary,
+            workdir=args.workdir,
+            keep_workdir=not args.no_keep_workdir,
+            log_level=args.log_level,
         ))
     except Exception as exc:  # noqa: BLE001
-        print(f"runner: {exc}", file=sys.stderr)
+        print(f"[runner] {exc}", file=sys.stderr)
         return 1
     ok, msg = verify(result)
     summary = " ".join(
         f"{n}={len(r['grants'])}" for n, r in result["per_federate"].items()
     )
-    print(f"runner: cycles={result['cycles']} per-federate-grants={{{summary}}} verify={msg}")
-    if result.get("tempdir"):
-        print(f"runner: tempdir kept at {result['tempdir']}")
+    print(f"[runner] cycles={result['cycles']} per-federate-grants={{{summary}}} verify={msg}")
+    if result.get("workdir"):
+        print(f"[runner] workdir: {result['workdir']}")
     return 0 if ok else 1
 
 

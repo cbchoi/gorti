@@ -33,13 +33,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import datetime as _dt
 import json
 import os
 import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +47,10 @@ _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parents[1]
 _BIN_DIR = _REPO_ROOT / "bin"
 _DEFAULT_RTID = _BIN_DIR / "rtid"
+
+# Shared tee helper (echo subprocess output to console + log file).
+sys.path.insert(0, str(_REPO_ROOT / "examples"))
+from _log_tee import LogTee  # noqa: E402
 
 PRODUCER_SCRIPT = _HERE / "producer_main.py"
 CONSUMER_SCRIPT = _HERE / "consumer_main.py"
@@ -99,7 +103,7 @@ async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: 
     raise TimeoutError(f"rtid never accepted on port {port}")
 
 
-def _spawn_rtid(
+def _spawn_rtid_with_tee(
     binary: Path,
     listen_port: int,
     metrics_port: int,
@@ -108,31 +112,38 @@ def _spawn_rtid(
     save_dir: Path,
     log_dir: Path,
     log_path: Path,
-) -> subprocess.Popen[bytes]:
-    """Launch rtid as a subprocess. Mirrors the relay-cross-process
-    runner so teardown behaviour is consistent across both examples.
+    log_level: str = "info",
+) -> tuple[subprocess.Popen[bytes], LogTee]:
+    """Launch rtid as a subprocess and tee its output to log + console.
+
+    Returns the Popen handle AND the LogTee that's pumping its output;
+    caller owns calling tee.join() after proc.wait().
     """
     kwargs: dict[str, Any] = {
-        "stdout": log_path.open("wb"),  # noqa: SIM115
+        "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
     }
     if not _is_windows():
         kwargs["start_new_session"] = True
-    return subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(  # noqa: S603
         [
             str(binary),
             "--listen", f":{listen_port}",
             "--metrics-listen", f":{metrics_port}",
             "--admin-listen", f"127.0.0.1:{admin_port}",
-            "--log-level", "warn",
+            "--log-level", log_level,
+            "--log-format", "text",
             "--log-dir", str(log_dir),
             "--save-dir", str(save_dir),
         ],
         **kwargs,
     )
+    tee = LogTee(proc, log_path=log_path, prefix="rtid")
+    tee.start()
+    return proc, tee
 
 
-def _spawn_federate(
+def _spawn_federate_with_tee(
     script: Path,
     *,
     url: str,
@@ -143,17 +154,20 @@ def _spawn_federate(
     tick_period: float,
     startup_delay: float,
     log_path: Path,
-) -> subprocess.Popen[bytes]:
-    """Spawn one federate as ``python3 <script> ...``. Stdout + stderr
-    are tee'd into ``log_path`` for post-mortem of a crashed federate.
-    """
+    name: str,
+) -> tuple[subprocess.Popen[bytes], LogTee]:
+    """Spawn one federate as ``python3 <script> ...`` and tee its
+    stdout+stderr to a log file AND the parent's stderr (with [name]
+    prefix)."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_fh = log_path.open("wb")  # noqa: SIM115
-    kwargs: dict[str, Any] = {"stdout": log_fh, "stderr": subprocess.STDOUT}
+    kwargs: dict[str, Any] = {
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.STDOUT,
+    }
     if not _is_windows():
         kwargs["start_new_session"] = True
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    return subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(  # noqa: S603
         [
             sys.executable,
             str(script),
@@ -168,6 +182,9 @@ def _spawn_federate(
         env=env,
         **kwargs,
     )
+    tee = LogTee(proc, log_path=log_path, prefix=name)
+    tee.start()
+    return proc, tee
 
 
 def _terminate(proc: subprocess.Popen[bytes], *, timeout: float = 5.0) -> None:
@@ -182,19 +199,40 @@ def _terminate(proc: subprocess.Popen[bytes], *, timeout: float = 5.0) -> None:
             proc.wait(timeout=timeout)
 
 
+def _resolve_workdir(workdir: Path | None) -> Path:
+    """Return the working directory. Default: ``examples/pyjevsim/.run/<timestamp>/``.
+
+    The example always runs inside the example's directory tree so
+    artifacts (logs, saves, result JSON) stay under the example for
+    inspection. Each run gets its own timestamped subdirectory.
+    """
+    if workdir is not None:
+        return workdir
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    return _HERE / ".run" / stamp
+
+
 async def run_once(
     *,
     ticks: int = 50,
     drain_ticks: int = 30,
     tick_period: float = 0.05,
     rtid_binary: Path | None = None,
-    keep_tempdir: bool = False,
+    workdir: Path | None = None,
+    keep_workdir: bool = True,
     federate_timeout: float = 60.0,
+    log_level: str = "info",
 ) -> dict[str, Any]:
     """Drive one full cross-process run.
 
     Consumer's tail is set so a producer emit on its last drain tick
     is still delivered before the consumer resigns.
+
+    Logs:
+      - rtid stdout/stderr: tee'd to ``<workdir>/rtid.log`` AND the
+        parent's stderr with ``[rtid]`` prefix.
+      - producer / consumer: same shape, ``<workdir>/<name>.log``.
+      - rtid event-log files (per-federation): ``<workdir>/eventlog/``.
     """
     binary = _ensure_rtid(rtid_binary or _DEFAULT_RTID)
     listen_port = _free_port()
@@ -205,86 +243,90 @@ async def run_once(
     while admin_port in (listen_port, metrics_port):
         admin_port = _free_port()
 
-    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-cross-"))
-    save_dir = tmpdir / "saves"
-    log_dir = tmpdir / "logs"
-    fed_log_dir = tmpdir / "federate-logs"
-    for d in (save_dir, log_dir, fed_log_dir):
+    workdir = _resolve_workdir(workdir)
+    save_dir = workdir / "saves"
+    log_dir = workdir / "eventlog"
+    for d in (save_dir, log_dir, workdir):
         d.mkdir(parents=True, exist_ok=True)
 
-    prod_result = tmpdir / "producer-result.json"
-    cons_result = tmpdir / "consumer-result.json"
+    prod_result = workdir / "producer-result.json"
+    cons_result = workdir / "consumer-result.json"
+
+    print(f"[runner] working directory: {workdir}", flush=True)
+    print(f"[runner] rtid listen port: {listen_port}", flush=True)
 
     rtid_proc: subprocess.Popen[bytes] | None = None
-    fed_procs: list[subprocess.Popen[bytes]] = []
+    rtid_tee: LogTee | None = None
+    fed_procs: list[tuple[subprocess.Popen[bytes], LogTee, str]] = []
 
     try:
-        rtid_proc = _spawn_rtid(
+        rtid_proc, rtid_tee = _spawn_rtid_with_tee(
             binary, listen_port, metrics_port, admin_port,
             save_dir=save_dir, log_dir=log_dir,
-            log_path=tmpdir / "rtid.log",
+            log_path=workdir / "rtid.log",
+            log_level=log_level,
         )
         await _wait_for_grpc(listen_port)
         url = f"grpc://127.0.0.1:{listen_port}"
 
         # Consumer first so its subscribe lands before any publish.
-        # Pre-subscription publishes are dropped server-side -- the
-        # 0.5s sleep before the producer spawn gives the consumer's
-        # subscribe RPC time to round-trip.
         consumer_tail = 40
-        cons_proc = _spawn_federate(
+        cons_proc, cons_tee = _spawn_federate_with_tee(
             CONSUMER_SCRIPT, url=url, result_path=cons_result,
             ticks=ticks, drain_ticks=drain_ticks,
             tail_ticks=consumer_tail,
             tick_period=tick_period,
             startup_delay=0.0,
-            log_path=fed_log_dir / "consumer.log",
+            log_path=workdir / "consumer.log",
+            name="consumer",
         )
-        fed_procs.append(cons_proc)
+        fed_procs.append((cons_proc, cons_tee, "consumer"))
         await asyncio.sleep(0.5)
 
-        prod_proc = _spawn_federate(
+        prod_proc, prod_tee = _spawn_federate_with_tee(
             PRODUCER_SCRIPT, url=url, result_path=prod_result,
             ticks=ticks, drain_ticks=drain_ticks,
             tail_ticks=0,
             tick_period=tick_period,
             startup_delay=0.0,
-            log_path=fed_log_dir / "producer.log",
+            log_path=workdir / "producer.log",
+            name="producer",
         )
-        fed_procs.append(prod_proc)
+        fed_procs.append((prod_proc, prod_tee, "producer"))
 
         deadline = asyncio.get_event_loop().time() + federate_timeout
-        for proc, name in (
-            (prod_proc, "producer"),
-            (cons_proc, "consumer"),
-        ):
+        for proc, _tee, name in [(p, t, n) for p, t, n in fed_procs]:
             remaining = max(0.1, deadline - asyncio.get_event_loop().time())
             try:
                 await asyncio.to_thread(proc.wait, remaining)
             except subprocess.TimeoutExpired:
                 print(
-                    f"runner: federate {name} did not exit within "
+                    f"[runner] federate {name} did not exit within "
                     f"{remaining:.1f}s; will be force-terminated",
                     file=sys.stderr,
                 )
 
     finally:
-        for proc in fed_procs:
+        for proc, tee, _name in fed_procs:
             _terminate(proc)
+            tee.join(timeout=1.0)
         if rtid_proc is not None:
             _terminate(rtid_proc)
+        if rtid_tee is not None:
+            rtid_tee.join(timeout=1.0)
 
         result = {
             "published": _read_list(prod_result, "published"),
             "received": _read_list(cons_result, "received"),
-            "tempdir": str(tmpdir) if keep_tempdir else None,
+            "workdir": str(workdir),
             "rtid_port": listen_port,
             "rtid_pid": rtid_proc.pid if rtid_proc is not None else None,
         }
 
-        if not keep_tempdir:
+        if not keep_workdir:
             with contextlib.suppress(BaseException):
-                shutil.rmtree(tmpdir, ignore_errors=True)
+                shutil.rmtree(workdir, ignore_errors=True)
+            result["workdir"] = ""
 
     return result
 
@@ -333,7 +375,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--drain-ticks", type=int, default=30)
     parser.add_argument("--tick-period", type=float, default=0.05)
     parser.add_argument("--rtid-binary", type=Path, default=None)
-    parser.add_argument("--keep-tempdir", action="store_true")
+    parser.add_argument(
+        "--workdir",
+        type=Path,
+        default=None,
+        help="working directory for logs + result files (default: examples/pyjevsim/.run/<timestamp>/)",
+    )
+    parser.add_argument(
+        "--no-keep-workdir",
+        action="store_true",
+        help="delete the workdir after the run (default: keep it for inspection)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="info",
+        choices=["debug", "info", "warn", "error"],
+        help="rtid log level",
+    )
     parser.add_argument("--federate-timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
@@ -344,24 +402,26 @@ def main(argv: list[str] | None = None) -> int:
                 drain_ticks=args.drain_ticks,
                 tick_period=args.tick_period,
                 rtid_binary=args.rtid_binary,
-                keep_tempdir=args.keep_tempdir,
+                workdir=args.workdir,
+                keep_workdir=not args.no_keep_workdir,
                 federate_timeout=args.federate_timeout,
+                log_level=args.log_level,
             )
         )
     except Exception as exc:  # noqa: BLE001
-        print(f"runner: {exc}", file=sys.stderr)
+        print(f"[runner] {exc}", file=sys.stderr)
         return 1
 
     ok, msg = verify(result)
     print(
-        f"runner: published={len(result['published'])}  "
+        f"[runner] published={len(result['published'])}  "
         f"received={len(result['received'])}  "
         f"rtid_port={result['rtid_port']}  "
         f"verify={msg}",
         flush=True,
     )
-    if result.get("tempdir"):
-        print(f"runner: tempdir kept at {result['tempdir']}", flush=True)
+    if result.get("workdir"):
+        print(f"[runner] workdir: {result['workdir']}", flush=True)
     return 0 if ok else 1
 
 

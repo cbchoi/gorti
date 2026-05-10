@@ -46,6 +46,7 @@ hit a teardown issue on Windows, file a bug.
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import asyncio
 import contextlib
 import json
@@ -54,7 +55,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +66,10 @@ _DEFAULT_RTID = _BIN_DIR / "rtid"
 GENERATOR_SCRIPT = _HERE / "generator_main.py"
 BUFFER_SCRIPT = _HERE / "buffer_main.py"
 PROCESSOR_SCRIPT = _HERE / "processor_main.py"
+
+# Shared tee helper (echo subprocess output to console + log file).
+sys.path.insert(0, str(_REPO_ROOT / "examples"))
+from _log_tee import LogTee  # noqa: E402
 
 
 def _is_windows() -> bool:
@@ -132,7 +136,17 @@ async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: 
     raise TimeoutError(f"rtid never accepted on port {port}")
 
 
-def _spawn_rtid(
+def _resolve_workdir(workdir: Path | None) -> Path:
+    """Return the working directory. Default: a timestamped dir under
+    ``examples/pyjevsim-relay-cross-process/.run/``.
+    """
+    if workdir is not None:
+        return workdir
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    return _HERE / ".run" / stamp
+
+
+def _spawn_rtid_with_tee(
     binary: Path,
     listen_port: int,
     metrics_port: int,
@@ -141,41 +155,34 @@ def _spawn_rtid(
     save_dir: Path,
     log_dir: Path,
     log_path: Path,
-) -> subprocess.Popen[bytes]:
-    """Launch rtid as a subprocess. Mirrors
-    ``pysdk/tests/spec/m12/_helpers.py::_spawn_rtid`` so this example's
-    teardown behaviour matches the established harness.
-
-    Why we explicitly set ``--admin-listen``: the rtid binary defaults
-    to ``localhost:8443`` for its read-only admin port; if a stale
-    rtid (or any other service) holds 8443, every fresh launch fails
-    with ``bind: address already in use``. Allocating a free admin
-    port per-run sidesteps that.
-    """
+    log_level: str = "info",
+) -> tuple[subprocess.Popen[bytes], LogTee]:
+    """Launch rtid as a subprocess and tee its output to log + console."""
     kwargs: dict[str, Any] = {
-        "stdout": log_path.open("wb"),  # noqa: SIM115 — closed on Popen.wait
+        "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
     }
     if not _is_windows():
-        # POSIX: detach from the parent's session so a Ctrl-C at the
-        # runner doesn't reach rtid before our finally-block can
-        # cleanly terminate it.
         kwargs["start_new_session"] = True
-    return subprocess.Popen(  # noqa: S603 — controlled args
+    proc = subprocess.Popen(  # noqa: S603
         [
             str(binary),
             "--listen", f":{listen_port}",
             "--metrics-listen", f":{metrics_port}",
             "--admin-listen", f"127.0.0.1:{admin_port}",
-            "--log-level", "warn",
+            "--log-level", log_level,
+            "--log-format", "text",
             "--log-dir", str(log_dir),
             "--save-dir", str(save_dir),
         ],
         **kwargs,
     )
+    tee = LogTee(proc, log_path=log_path, prefix="rtid")
+    tee.start()
+    return proc, tee
 
 
-def _spawn_federate(
+def _spawn_federate_with_tee(
     script: Path,
     *,
     url: str,
@@ -188,25 +195,18 @@ def _spawn_federate(
     tick_period: float,
     startup_delay: float,
     log_path: Path,
-) -> subprocess.Popen[bytes]:
-    """Spawn one federate as ``python3 <script> ...``. Stdout + stderr
-    are tee'd into ``log_path`` so a crashed federate is debuggable
-    after the runner has cleaned up everything else.
-    """
+    name: str,
+) -> tuple[subprocess.Popen[bytes], LogTee]:
+    """Spawn one federate and tee stdout+stderr to log + console."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_fh = log_path.open("wb")  # noqa: SIM115 — closed on Popen.wait
     kwargs: dict[str, Any] = {
-        "stdout": log_fh,
+        "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
     }
     if not _is_windows():
         kwargs["start_new_session"] = True
-    # Ensure the child doesn't inherit pytest's pyc-write disable etc.
-    # by preserving the parent's environment but explicitly setting
-    # PYTHONUNBUFFERED so the federate's debug prints land in the log
-    # promptly instead of waiting for stdout buffer flush at exit.
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    return subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(  # noqa: S603
         [
             sys.executable,
             str(script),
@@ -223,6 +223,9 @@ def _spawn_federate(
         env=env,
         **kwargs,
     )
+    tee = LogTee(proc, log_path=log_path, prefix=name)
+    tee.start()
+    return proc, tee
 
 
 def _terminate(proc: subprocess.Popen[bytes], *, name: str, timeout: float = 5.0) -> None:
@@ -249,8 +252,10 @@ async def run_once(
     drain_ticks: int = 30,
     tick_period: float = 0.05,
     rtid_binary: Path | None = None,
-    keep_tempdir: bool = False,
+    workdir: Path | None = None,
+    keep_workdir: bool = True,
     federate_timeout: float = 60.0,
+    log_level: str = "info",
 ) -> dict[str, Any]:
     """Drive one full cross-process run.
 
@@ -269,29 +274,30 @@ async def run_once(
     while admin_port in (listen_port, metrics_port):
         admin_port = _free_port()
 
-    # Use mkdtemp instead of TemporaryDirectory: we want explicit
-    # cleanup-or-keep control without TemporaryDirectory's finalizer
-    # racing the ``--keep-tempdir`` flag at function exit.
-    tmpdir = Path(tempfile.mkdtemp(prefix="pyjevsim-relay-cross-"))
-    save_dir = tmpdir / "saves"
-    log_dir = tmpdir / "logs"
-    fed_log_dir = tmpdir / "federate-logs"
+    workdir = _resolve_workdir(workdir)
+    save_dir = workdir / "saves"
+    log_dir = workdir / "eventlog"
     save_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
-    fed_log_dir.mkdir(parents=True, exist_ok=True)
+    workdir.mkdir(parents=True, exist_ok=True)
 
-    gen_result = tmpdir / "generator-result.json"
-    buf_result = tmpdir / "buffer-result.json"
-    proc_result = tmpdir / "processor-result.json"
+    gen_result = workdir / "generator-result.json"
+    buf_result = workdir / "buffer-result.json"
+    proc_result = workdir / "processor-result.json"
+
+    print(f"[runner] working directory: {workdir}", flush=True)
+    print(f"[runner] rtid listen port: {listen_port}", flush=True)
 
     rtid_proc: subprocess.Popen[bytes] | None = None
-    fed_procs: list[subprocess.Popen[bytes]] = []
+    rtid_tee: LogTee | None = None
+    fed_procs: list[tuple[subprocess.Popen[bytes], LogTee, str]] = []
 
     try:
-        rtid_proc = _spawn_rtid(
+        rtid_proc, rtid_tee = _spawn_rtid_with_tee(
             binary, listen_port, metrics_port, admin_port,
             save_dir=save_dir, log_dir=log_dir,
-            log_path=tmpdir / "rtid.log",
+            log_path=workdir / "rtid.log",
+            log_level=log_level,
         )
         await _wait_for_grpc(listen_port)
 
@@ -336,94 +342,79 @@ async def run_once(
         # and miss the drain by a few microseconds.
         buffer_tail = 20
         processor_tail = buffer_tail + 20
-        proc_proc = _spawn_federate(
+        proc_proc, proc_tee = _spawn_federate_with_tee(
             PROCESSOR_SCRIPT, url=url, result_path=proc_result,
             gen_messages=gen_messages, capacity=capacity,
             service_period=service_period, drain_ticks=drain_ticks,
             tail_ticks=processor_tail,
             tick_period=tick_period,
             startup_delay=0.0,
-            log_path=fed_log_dir / "processor.log",
+            log_path=workdir / "processor.log",
+            name="processor",
         )
-        fed_procs.append(proc_proc)
-        buf_proc = _spawn_federate(
+        fed_procs.append((proc_proc, proc_tee, "processor"))
+        buf_proc, buf_tee = _spawn_federate_with_tee(
             BUFFER_SCRIPT, url=url, result_path=buf_result,
             gen_messages=gen_messages, capacity=capacity,
             service_period=service_period, drain_ticks=drain_ticks,
             tail_ticks=buffer_tail,
             tick_period=tick_period,
             startup_delay=0.0,
-            log_path=fed_log_dir / "buffer.log",
+            log_path=workdir / "buffer.log",
+            name="buffer",
         )
-        fed_procs.append(buf_proc)
+        fed_procs.append((buf_proc, buf_tee, "buffer"))
         # Brief pause for the consumers' subscribe RPCs to round-trip
         # before the generator starts publishing.
         await asyncio.sleep(0.5)
-        gen_proc = _spawn_federate(
+        gen_proc, gen_tee = _spawn_federate_with_tee(
             GENERATOR_SCRIPT, url=url, result_path=gen_result,
             gen_messages=gen_messages, capacity=capacity,
             service_period=service_period, drain_ticks=drain_ticks,
-            tail_ticks=0,  # generator has no incoming work past drain
+            tail_ticks=0,
             tick_period=tick_period,
             startup_delay=0.0,
-            log_path=fed_log_dir / "generator.log",
+            log_path=workdir / "generator.log",
+            name="generator",
         )
-        fed_procs.append(gen_proc)
+        fed_procs.append((gen_proc, gen_tee, "generator"))
 
-        # Wait for all three federates to exit with their own deadline.
-        # If a federate is still running after federate_timeout we
-        # treat it as a hang and let the finally block kill it; the
-        # missing result file will turn into a verification error so
-        # the failure mode is visible.
         deadline = asyncio.get_event_loop().time() + federate_timeout
-        for proc, name in (
-            (gen_proc, "generator"),
-            (buf_proc, "buffer"),
-            (proc_proc, "processor"),
-        ):
+        for proc, _tee, name in [(p, t, n) for p, t, n in fed_procs]:
             remaining = max(0.1, deadline - asyncio.get_event_loop().time())
             try:
-                # ``Popen.wait`` blocks the event loop; offload to a
-                # thread so concurrent rtid teardown stays responsive.
                 await asyncio.to_thread(proc.wait, remaining)
             except subprocess.TimeoutExpired:
-                # Don't abort here -- continue to read whatever
-                # results made it to disk and let verify() report
-                # the partial picture.
                 print(
-                    f"runner: federate {name} did not exit within "
+                    f"[runner] federate {name} did not exit within "
                     f"{remaining:.1f}s; will be force-terminated",
                     file=sys.stderr,
                 )
 
     finally:
-        # Names mirror the order in which procs were appended above
-        # (consumers first, generator last); kept aligned by index so
-        # the zip below remains correct.
-        names = ("processor", "buffer", "generator")
-        for proc, name in zip(fed_procs, names, strict=False):
+        for proc, tee, name in fed_procs:
             _terminate(proc, name=name)
+            tee.join(timeout=1.0)
         if rtid_proc is not None:
             _terminate(rtid_proc, name="rtid")
+        if rtid_tee is not None:
+            rtid_tee.join(timeout=1.0)
 
-        # IMPORTANT: read result files BEFORE the cleanup that removes
-        # the tempdir. The previous shape (read after rmtree) silently
-        # returned empty results because the JSON files were already
-        # gone.
         result = {
             "published": _read_list(gen_result, "published"),
             "forwarded": _read_list(buf_result, "forwarded"),
             "dropped": _read_list(buf_result, "dropped"),
             "queue_residual": _read_list(buf_result, "queue_residual"),
             "received": _read_list(proc_result, "received"),
-            "tempdir": str(tmpdir) if keep_tempdir else None,
+            "workdir": str(workdir),
             "rtid_port": listen_port,
             "rtid_pid": rtid_proc.pid if rtid_proc is not None else None,
         }
 
-        if not keep_tempdir:
+        if not keep_workdir:
             with contextlib.suppress(BaseException):
-                shutil.rmtree(tmpdir, ignore_errors=True)
+                shutil.rmtree(workdir, ignore_errors=True)
+            result["workdir"] = ""
 
     return result
 
@@ -507,7 +498,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--drain-ticks", type=int, default=30)
     parser.add_argument("--tick-period", type=float, default=0.05)
     parser.add_argument("--rtid-binary", type=Path, default=None)
-    parser.add_argument("--keep-tempdir", action="store_true")
+    parser.add_argument(
+        "--workdir", type=Path, default=None,
+        help="working directory for logs + result files (default: examples/pyjevsim-relay-cross-process/.run/<timestamp>/)",
+    )
+    parser.add_argument(
+        "--no-keep-workdir", action="store_true",
+        help="delete the workdir after the run (default: keep)",
+    )
+    parser.add_argument(
+        "--log-level", default="info",
+        choices=["debug", "info", "warn", "error"],
+        help="rtid log level",
+    )
     parser.add_argument("--federate-timeout", type=float, default=60.0)
     args = parser.parse_args(argv)
 
@@ -520,17 +523,19 @@ def main(argv: list[str] | None = None) -> int:
                 drain_ticks=args.drain_ticks,
                 tick_period=args.tick_period,
                 rtid_binary=args.rtid_binary,
-                keep_tempdir=args.keep_tempdir,
+                workdir=args.workdir,
+                keep_workdir=not args.no_keep_workdir,
                 federate_timeout=args.federate_timeout,
+                log_level=args.log_level,
             )
         )
     except Exception as exc:  # noqa: BLE001
-        print(f"runner: {exc}", file=sys.stderr)
+        print(f"[runner] {exc}", file=sys.stderr)
         return 1
 
     ok, msg = verify(result)
     print(
-        f"runner: published={len(result['published'])}  "
+        f"[runner] published={len(result['published'])}  "
         f"forwarded={len(result['forwarded'])}  "
         f"dropped={len(result['dropped'])}  "
         f"received={len(result['received'])}  "
@@ -539,8 +544,8 @@ def main(argv: list[str] | None = None) -> int:
         f"verify={msg}",
         flush=True,
     )
-    if result.get("tempdir"):
-        print(f"runner: tempdir kept at {result['tempdir']}", flush=True)
+    if result.get("workdir"):
+        print(f"[runner] workdir: {result['workdir']}", flush=True)
     return 0 if ok else 1
 
 
