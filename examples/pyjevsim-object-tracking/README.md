@@ -36,7 +36,7 @@ over-constrain the federation. Each cycle:
   4. Tracker `drain_events_into_model` routes the reflect into the
      coupled model's `external_transition("reflect:Vehicle", attrs)`.
 
-## Run
+## Run — automated (one command)
 
 ```bash
 python3 examples/pyjevsim-object-tracking/runner.py
@@ -45,6 +45,32 @@ python3 examples/pyjevsim-object-tracking/runner.py
 Default: 5 cycles, tick_step=1.0, lookahead=1.0. Override with `--cycles`,
 `--tick-step`, `--rtid-binary`, `--workdir`, `--log-level` (see
 `examples/RUNNER_LOGGING.md`).
+
+## Run — manual (each federate in its own terminal)
+
+For interactive experimentation. Three terminals:
+
+```bash
+# Terminal 1 — start rtid
+./bin/rtid --listen :8442
+
+# Terminal 2 — start a tracker (blocks on Discover until producer registers)
+examples/pyjevsim-object-tracking/tracker_run.sh tracker-A
+
+# Terminal 3 — start the producer (registers the Vehicle 1.5s after publish)
+examples/pyjevsim-object-tracking/producer_run.sh
+```
+
+Order: rtid → trackers → producer. Trackers must subscribe before the
+producer registers (rtid does not replay registrations to late
+subscribers in cut-3); the producer's 1.5 s post-publish sleep covers
+the join+subscribe window.
+
+Both scripts honor `RTID_URL` (default `grpc://127.0.0.1:8442`) and
+`RTID_VENV` (default `<repo>/.m21-venv`) env overrides, and pass any
+remaining flags through to the Python entry point — e.g.,
+`./tracker_run.sh tracker-B --cycles 10 --tick-step 0.5`. Result JSONs
+land in `examples/pyjevsim-object-tracking/.run/manual/`.
 
 Sample output (each `[name] ...` line is tee'd to BOTH the parent's
 console AND `<workdir>/<name>.log`):
