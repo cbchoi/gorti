@@ -43,6 +43,12 @@ type Registry struct {
 	// ChangeInteractionTransportType; read-only via the AttributeTransportType
 	// / InteractionTransportType accessors.
 	transports *transportStore
+
+	// M26 Phase F — per-federation object instance name reservation
+	// table per IEEE 1516.1-2010 §6.1-6.5. Reservations are checked
+	// at Register time; registered names are tracked so re-reservation
+	// of a live name fails.
+	reservations *reservationStore
 }
 
 // federationState is the per-federation in-memory record.
@@ -249,9 +255,10 @@ func New(opts Options) (*Registry, error) {
 		opts.DDM = nil
 	}
 	return &Registry{
-		opts:        opts,
-		federations: map[core.FederationName]*federationState{},
-		transports:  newTransportStore(),
+		opts:         opts,
+		federations:  map[core.FederationName]*federationState{},
+		transports:   newTransportStore(),
+		reservations: newReservationStore(),
 	}, nil
 }
 
@@ -316,11 +323,31 @@ func (r *Registry) Register(
 			return core.InvalidObjectHandle, "", fmt.Errorf("object: name %q already registered in federation %q", name, fed)
 		}
 	}
+	// M26 Phase F — if the caller supplied a name AND the name has
+	// been pre-reserved, consume the reservation. This enforces
+	// IEEE 1516.1 §6.6 for federates that opt in to the reservation
+	// flow. Federates that register with a name WITHOUT pre-reserving
+	// (the pre-M26 backwards-compat path) get the name marked as
+	// registered without a prior reservation. If the name was
+	// reserved by ANOTHER federate, Consume returns
+	// ErrObjectInstanceNameReservedByOther — reject.
+	if name != "" {
+		if err := r.reservations.Consume(fed, producer, name); err != nil {
+			if errors.Is(err, core.ErrObjectInstanceNameReservedByOther) {
+				st.mu.Unlock()
+				return core.InvalidObjectHandle, "", err
+			}
+			// Not reserved by anyone — accept as auto-reservation
+			// for backwards compat. Mark as registered.
+			r.reservations.MarkRegistered(fed, name)
+		}
+	}
 	st.nextObjectHandle++
 	assigned := core.ObjectHandle(st.nextObjectHandle)
 	canonical := name
 	if canonical == "" {
 		canonical = fmt.Sprintf("HLAobj_%d_%d", cls, assigned)
+		r.reservations.MarkRegistered(fed, canonical)
 	}
 
 	if r.opts.EventLog != nil {

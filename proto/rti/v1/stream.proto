@@ -47,6 +47,11 @@ message FederateEvent {
     InitiateFederateSave save_initiate = 40;
     FederationSaved save_completed = 41;
     FederationNotSaved save_failed = 42;
+    // Object instance name reservation (§6.1 / §6.5 — M26 Phase F).
+    ObjectInstanceNameReservationSucceeded reservation_succeeded = 50;
+    ObjectInstanceNameReservationFailed reservation_failed = 51;
+    MultipleObjectInstanceNameReservationSucceeded reservation_multi_succeeded = 52;
+    MultipleObjectInstanceNameReservationFailed reservation_multi_failed = 53;
     FederationHalted halted = 99;
   }
 }
@@ -169,4 +174,38 @@ message FederationSaved {
 // on every federate when the save aborts.
 message FederationNotSaved {
   string label = 1;
+}
+
+// ObjectInstanceNameReservationSucceeded — IEEE 1516.1-2010 §6.1 (M26
+// Phase F). Fires on the federate that called
+// ReserveObjectInstanceName when the per-federation reservation table
+// accepted the name. After this event, the federate may call
+// RegisterObjectInstance with the reserved name.
+message ObjectInstanceNameReservationSucceeded {
+  string object_name = 1;
+}
+
+// ObjectInstanceNameReservationFailed — IEEE 1516.1-2010 §6.1.
+// Fires when the name is already reserved (by this or another
+// federate) or has been registered. The federate must pick a
+// different name.
+message ObjectInstanceNameReservationFailed {
+  string object_name = 1;
+}
+
+// MultipleObjectInstanceNameReservationSucceeded — IEEE 1516.1-2010 §6.5
+// (M26 Phase F). Fires when ReserveMultipleObjectInstanceNames
+// accepted ALL names atomically.
+message MultipleObjectInstanceNameReservationSucceeded {
+  repeated string object_names = 1;
+}
+
+// MultipleObjectInstanceNameReservationFailed — IEEE 1516.1-2010 §6.5.
+// Fires when at least one of the requested names was already
+// reserved. None of the names in this batch were reserved (atomic
+// failure). The `colliding_names` field lists which specific names
+// caused the failure.
+message MultipleObjectInstanceNameReservationFailed {
+  repeated string requested_names = 1;
+  repeated string colliding_names = 2;
 }

@@ -32,6 +32,10 @@ from rti1516e.events import (
     FederationSaved,
     FederationSynchronized,
     InitiateFederateSave,
+    MultipleObjectInstanceNameReservationFailed,
+    MultipleObjectInstanceNameReservationSucceeded,
+    ObjectInstanceNameReservationFailed,
+    ObjectInstanceNameReservationSucceeded,
     ProvideAttributeValueUpdate,
     ReceiveInteraction,
     ReflectAttributeValues,
@@ -76,6 +80,10 @@ class Rti1516eAmbassador:
         self._federate: Federate | None = None
         self._event_pump_task: Future[None] | None = None
         self._callback_target: Rti1516eAmbassador = self
+        # M26 Phase E — evokeCallback callback-fired counter. Bumped
+        # exactly once per dispatched event by _pump_events; read by
+        # evokeCallback to compute its bool return.
+        self._callback_fired_count: int = 0
 
     # --- Connection / federation lifecycle ---
 
@@ -572,6 +580,24 @@ class Rti1516eAmbassador:
             )
         )
 
+    # --- §6.1-6.5 Object instance name reservation (M26 Phase F) ---
+
+    def reserveObjectInstanceName(self, object_name: str) -> None:  # noqa: N802
+        """§6.1 — request a name reservation. Result delivered as
+        objectInstanceNameReservationSucceeded / Failed callback."""
+        self._run(self._fed().reservation.reserve(object_name))
+
+    def releaseObjectInstanceName(self, object_name: str) -> None:  # noqa: N802
+        """§6.4 — release a name reservation held by this federate."""
+        self._run(self._fed().reservation.release(object_name))
+
+    def reserveMultipleObjectInstanceNames(  # noqa: N802
+        self, object_names: list[str]
+    ) -> None:
+        """§6.5 — atomic batch reservation. Result delivered as
+        multipleObjectInstanceNameReservation{Succeeded,Failed}."""
+        self._run(self._fed().reservation.reserve_multiple(object_names))
+
     # --- Callbacks: subclass overrides these ---
 
     def discoverObjectInstance(  # noqa: N802
@@ -600,6 +626,75 @@ class Rti1516eAmbassador:
 
     def federationHalted(self, cause: str, stalled_federate_handle: int) -> None:  # noqa: N802
         """Override to handle FederationHalted."""
+
+    # --- §10.4 Callback evocation (M26 Phase E, cheap variant) ---
+    # gorti's native callback model is HLA_IMMEDIATE: _pump_events runs
+    # on a background task and fires overrides as events arrive. Pitch
+    # federates port more easily if the ambassador also accepts the
+    # HLA_EVOKED-style `evokeCallback` API. Cheap implementation: yield
+    # to the asyncio loop for approxMinTime seconds (up to approxMaxTime
+    # if no callback has fired by then), and report whether any callback
+    # was dispatched in the window. This is observable parity for
+    # federate ports that drive their main loop via evoke, even though
+    # the strict §10.4 HLA_EVOKED semantics (buffered drain, no
+    # immediate dispatch) are not enforced. See docs/PITCH_PARITY.md.
+
+    def evokeCallback(  # noqa: N802
+        self, approx_min_time: float = 0.0, approx_max_time: float | None = None
+    ) -> bool:
+        """§10.4 — yield to the callback pump for ≥ approx_min_time seconds.
+
+        Returns True if any callback fired during the window. If
+        approx_max_time is None, the wait is exactly approx_min_time
+        and the return value reflects whether a callback fired in
+        that interval.
+
+        Behaviour note: callbacks may fire OUTSIDE the window too —
+        gorti is HLA_IMMEDIATE-flavored. This method observes
+        firings within the window for spec-test compatibility.
+        """
+        start_count = self._callback_fired_count
+        deadline_min = approx_min_time
+        deadline_max = approx_max_time if approx_max_time is not None else approx_min_time
+        if deadline_max < deadline_min:
+            deadline_max = deadline_min
+
+        async def _wait() -> bool:
+            # Sleep at least approx_min_time. If a callback fires in
+            # that window, return immediately after the minimum has
+            # elapsed (matches Pitch's "deliver promptly but respect
+            # the floor" intent).
+            await asyncio.sleep(deadline_min)
+            if self._callback_fired_count != start_count:
+                return True
+            # No callback yet — wait up to approx_max_time for one.
+            remaining = deadline_max - deadline_min
+            if remaining <= 0:
+                return False
+            # Poll cheaply rather than parking on a Condition; the
+            # event pump runs in the same loop so a brief sleep loop
+            # is enough.
+            slept = 0.0
+            tick = min(0.005, remaining)
+            while slept < remaining:
+                await asyncio.sleep(tick)
+                if self._callback_fired_count != start_count:
+                    return True
+                slept += tick
+            return False
+
+        return bool(self._run(_wait()))
+
+    def evokeMultipleCallbacks(  # noqa: N802
+        self, approx_min_time: float = 0.0, approx_max_time: float | None = None
+    ) -> bool:
+        """§10.4 — multi-callback variant of evokeCallback.
+
+        Same window semantics; returns True if at least one callback
+        fired. Pitch federates typically loop on this:
+        ``while running: rtiAmb.evokeMultipleCallbacks(0.1, 1.0)``.
+        """
+        return self.evokeCallback(approx_min_time, approx_max_time)
 
     # --- M25 Phase D — additional FederateAmbassador callbacks ---
     # Each is a no-op by default; federates ported from Pitch
@@ -667,6 +762,24 @@ class Rti1516eAmbassador:
     def federationNotSaved(self, label: str) -> None:  # noqa: N802
         """§4.9 — federation save was aborted; bundle was NOT written."""
 
+    # --- M26 Phase F — object instance name reservation callbacks ---
+
+    def objectInstanceNameReservationSucceeded(self, object_name: str) -> None:  # noqa: N802
+        """§6.1 — a previously requested name reservation was accepted."""
+
+    def objectInstanceNameReservationFailed(self, object_name: str) -> None:  # noqa: N802
+        """§6.1 — a previously requested name reservation was rejected."""
+
+    def multipleObjectInstanceNameReservationSucceeded(  # noqa: N802
+        self, object_names: tuple[str, ...]
+    ) -> None:
+        """§6.5 — an atomic batch reservation was accepted."""
+
+    def multipleObjectInstanceNameReservationFailed(  # noqa: N802
+        self, requested_names: tuple[str, ...], colliding_names: tuple[str, ...]
+    ) -> None:
+        """§6.5 — an atomic batch reservation was rejected (NONE reserved)."""
+
     # --- Internals ---
 
     def _start_loop(self) -> None:
@@ -715,73 +828,87 @@ class Rti1516eAmbassador:
             raise RuntimeError("not joined — call joinFederationExecution() first")
         return self._federate
 
+    def _dispatch_event(self, event: Any) -> bool:
+        """Dispatch one event to its callback. Return True if recognized.
+
+        Factored out of _pump_events so evokeCallback (M26 Phase E) can
+        share the dispatch path, and so the callback-fired counter is
+        bumped exactly once per recognized event regardless of source.
+        """
+        target = self._callback_target
+        if isinstance(event, DiscoverObjectInstance):
+            target.discoverObjectInstance(
+                event.object_handle, event.class_name, event.instance_name
+            )
+        elif isinstance(event, ReflectAttributeValues):
+            target.reflectAttributeValues(
+                event.object_handle, event.values, event.timestamp
+            )
+        elif isinstance(event, ReceiveInteraction):
+            target.receiveInteraction(
+                event.class_name, event.parameters, event.timestamp
+            )
+        elif isinstance(event, TimeAdvanceGrant):
+            target.timeAdvanceGrant(event.time)
+        elif isinstance(event, FederationHalted):
+            target.federationHalted(event.cause, event.stalled_federate_handle)
+        elif isinstance(event, RemoveObjectInstance):
+            target.removeObjectInstance(
+                event.object_handle, event.tag, event.timestamp
+            )
+        elif isinstance(event, ProvideAttributeValueUpdate):
+            target.provideAttributeValueUpdate(
+                event.object_handle, event.attribute_handles, event.tag
+            )
+        elif isinstance(event, SynchronizationPointAnnounced):
+            target.announceSynchronizationPoint(event.label, event.tag)
+        elif isinstance(event, FederationSynchronized):
+            target.federationSynchronized(event.label)
+        elif isinstance(event, RequestAttributeOwnershipAssumption):
+            target.requestAttributeOwnershipAssumption(
+                event.object_handle,
+                event.attribute_handles,
+                event.divesting_federate,
+                event.tag,
+            )
+        elif isinstance(event, AttributeOwnershipAcquisitionNotification):
+            target.attributeOwnershipAcquisitionNotification(
+                event.object_handle,
+                event.attribute_handles,
+                event.owning_federate,
+            )
+        elif isinstance(event, RequestDivestitureConfirmation):
+            target.requestDivestitureConfirmation(
+                event.object_handle, event.attribute_handles
+            )
+        elif isinstance(event, InitiateFederateSave):
+            target.initiateFederateSave(event.label, event.save_time)
+        elif isinstance(event, FederationSaved):
+            target.federationSaved(event.label)
+        elif isinstance(event, FederationNotSaved):
+            target.federationNotSaved(event.label)
+        elif isinstance(event, ObjectInstanceNameReservationSucceeded):
+            target.objectInstanceNameReservationSucceeded(event.object_name)
+        elif isinstance(event, ObjectInstanceNameReservationFailed):
+            target.objectInstanceNameReservationFailed(event.object_name)
+        elif isinstance(event, MultipleObjectInstanceNameReservationSucceeded):
+            target.multipleObjectInstanceNameReservationSucceeded(event.object_names)
+        elif isinstance(event, MultipleObjectInstanceNameReservationFailed):
+            target.multipleObjectInstanceNameReservationFailed(
+                event.requested_names, event.colliding_names
+            )
+        else:
+            return False
+        self._callback_fired_count += 1
+        return True
+
     async def _pump_events(self) -> None:
         """Drain Federate.events() and dispatch to the appropriate callback."""
         federate = self._federate
         if federate is None:
             return
-        target = self._callback_target
         try:
             async for event in federate.events():
-                if isinstance(event, DiscoverObjectInstance):
-                    target.discoverObjectInstance(
-                        event.object_handle, event.class_name, event.instance_name
-                    )
-                elif isinstance(event, ReflectAttributeValues):
-                    target.reflectAttributeValues(
-                        event.object_handle, event.values, event.timestamp
-                    )
-                elif isinstance(event, ReceiveInteraction):
-                    target.receiveInteraction(
-                        event.class_name, event.parameters, event.timestamp
-                    )
-                elif isinstance(event, TimeAdvanceGrant):
-                    target.timeAdvanceGrant(event.time)
-                elif isinstance(event, FederationHalted):
-                    target.federationHalted(event.cause, event.stalled_federate_handle)
-                # M25 Phase D — broaden dispatch to cover the full
-                # FederateAmbassador callback surface. Each branch
-                # forwards directly to the override slot; the base
-                # class no-ops mean unhandled callbacks are silently
-                # dropped, matching Pitch's "subscribe to what you
-                # care about" model.
-                elif isinstance(event, RemoveObjectInstance):
-                    target.removeObjectInstance(
-                        event.object_handle, event.tag, event.timestamp
-                    )
-                elif isinstance(event, ProvideAttributeValueUpdate):
-                    target.provideAttributeValueUpdate(
-                        event.object_handle, event.attribute_handles, event.tag
-                    )
-                elif isinstance(event, SynchronizationPointAnnounced):
-                    target.announceSynchronizationPoint(event.label, event.tag)
-                elif isinstance(event, FederationSynchronized):
-                    target.federationSynchronized(event.label)
-                elif isinstance(event, RequestAttributeOwnershipAssumption):
-                    target.requestAttributeOwnershipAssumption(
-                        event.object_handle,
-                        event.attribute_handles,
-                        event.divesting_federate,
-                        event.tag,
-                    )
-                elif isinstance(event, AttributeOwnershipAcquisitionNotification):
-                    target.attributeOwnershipAcquisitionNotification(
-                        event.object_handle,
-                        event.attribute_handles,
-                        event.owning_federate,
-                    )
-                elif isinstance(event, RequestDivestitureConfirmation):
-                    target.requestDivestitureConfirmation(
-                        event.object_handle, event.attribute_handles
-                    )
-                elif isinstance(event, InitiateFederateSave):
-                    target.initiateFederateSave(event.label, event.save_time)
-                elif isinstance(event, FederationSaved):
-                    target.federationSaved(event.label)
-                elif isinstance(event, FederationNotSaved):
-                    target.federationNotSaved(event.label)
-                # Unknown event types are silently ignored — Layer 1 owns
-                # the closed-set of dataclasses, so this branch is dead in
-                # practice but defensive against future additions.
+                self._dispatch_event(event)
         except asyncio.CancelledError:
             return

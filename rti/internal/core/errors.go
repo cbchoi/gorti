@@ -51,6 +51,11 @@ var (
 	ErrSaveNotInProgress       = errors.New("no save in progress to abort")
 	ErrRestoreNotInProgress    = errors.New("no restore in progress to abort")
 
+	// M26 Phase F — object instance name reservation per IEEE 1516.1 §6.1-6.5.
+	ErrObjectInstanceNameInUse       = errors.New("object instance name already reserved or in use")
+	ErrObjectInstanceNameNotReserved = errors.New("object instance name has not been reserved")
+	ErrObjectInstanceNameReservedByOther = errors.New("object instance name is reserved by another federate")
+
 	// Encoding
 	ErrEncInsufficientBytes = errors.New("insufficient bytes for type")
 	ErrEncTypeMismatch      = errors.New("value does not match codec type")

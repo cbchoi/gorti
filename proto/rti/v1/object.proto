@@ -20,6 +20,11 @@ service ObjectService {
   rpc RequestClassAttributeValueUpdate(RequestClassAttributeValueUpdateRequest) returns (Empty);
   rpc ChangeAttributeTransportationType(ChangeAttributeTransportRequest) returns (Empty);
   rpc ChangeInteractionTransportationType(ChangeInteractionTransportRequest) returns (Empty);
+
+  // M26 — IEEE 1516.1-2010 §6.1-6.5 object instance name reservation.
+  rpc ReserveObjectInstanceName(ReserveObjectInstanceNameRequest) returns (Empty);
+  rpc ReleaseObjectInstanceName(ReleaseObjectInstanceNameRequest) returns (Empty);
+  rpc ReserveMultipleObjectInstanceNames(ReserveMultipleObjectInstanceNamesRequest) returns (Empty);
 }
 
 message RegisterObjectRequest {
@@ -134,4 +139,39 @@ message ChangeInteractionTransportRequest {
   uint64 federate_handle = 3;
   uint64 interaction_class_handle = 4;
   TransportationType transport_type = 5;
+}
+
+// ReserveObjectInstanceName — IEEE 1516.1-2010 §6.1 (M26 Phase F).
+// Per-federation name reservation table. The wire RPC enqueues the
+// reservation request; the response is delivered asynchronously as
+// ObjectInstanceNameReservationSucceeded / Failed on the federate's
+// FederateEvent stream. The synchronous return is Empty — the
+// federate must await the matching event before calling
+// RegisterObjectInstance with the reserved name.
+message ReserveObjectInstanceNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  string object_name = 4;
+}
+
+// ReleaseObjectInstanceName — IEEE 1516.1-2010 §6.4 (M26 Phase F).
+// Caller must own the reservation (the federate who reserved the
+// name). Returns PermissionDenied if reserved by another federate.
+message ReleaseObjectInstanceNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  string object_name = 4;
+}
+
+// ReserveMultipleObjectInstanceNames — IEEE 1516.1-2010 §6.5 (M26 Phase F).
+// Atomic batch reserve: either ALL names are reserved successfully
+// (one ObjectInstanceNameReservationSucceeded per name) or NONE are
+// (one ObjectInstanceNameReservationFailed per collision).
+message ReserveMultipleObjectInstanceNamesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  repeated string object_names = 4;
 }

@@ -703,6 +703,9 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	// so dispatch resolves at runtime, after the dependencies are wired in.
 	var ownResignHook func(context.Context, core.FederationName, core.FederateHandle)
 	var resigningDispatch func(context.Context, core.FederationName, core.FederateHandle, core.ResignAction)
+	// M26 Phase F — same indirection pattern for the object registry's
+	// reservation-cleanup hook (objReg is constructed below).
+	var reservationResignHook func(core.FederationName, core.FederateHandle)
 	fedMgr, err := federation.New(federation.Options{
 		Clock:              clock,
 		EventLog:           multi,
@@ -713,6 +716,13 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			// M21 TASK-204c: drop time-mgr pending state on resign so a
 			// pending NER/TAR/TARA/NMRA/FQR doesn't leak in nerStore.
 			timeMgr.OnFederateResign,
+			// M26 Phase F — drop object instance name reservations
+			// owned by the resigning federate.
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+				if reservationResignHook != nil {
+					reservationResignHook(fed, h)
+				}
+			},
 			// M24 W1: indirection — resolved when ownResignHook is set
 			// after ownMgr construction. UNCONDITIONALLY_DIVEST is the
 			// default action; this hook fires on every resign regardless
@@ -892,6 +902,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// M26 Phase F — bind the reservation-resign indirection now that
+	// objReg exists.
+	reservationResignHook = objReg.OnFederateResign
 
 	// M24 W2 — action-aware resign dispatch. Wired here, AFTER both
 	// ownMgr and objReg exist. Per IEEE 1516.1-2010 §4.10:

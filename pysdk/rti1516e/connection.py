@@ -332,6 +332,7 @@ class Federate:
         self._savepoint_client: Any | None = None
         self._mom_client: Any | None = None
         self._support_client: Any | None = None
+        self._reservation_client: Any | None = None
 
     # --- Declaration management (TASK-064) ---
 
@@ -769,6 +770,24 @@ class Federate:
                 federation_name=self._require_federation_name(),
             )
         return self._support_client
+
+    @property
+    def reservation(self) -> Any:
+        """§6.1-6.5 ReservationClient — object instance name reservation.
+
+        Result events are delivered on the federate's normal events()
+        stream as ObjectInstanceNameReservation{Succeeded,Failed} or
+        the Multiple-name variants.
+        """
+        if self._reservation_client is None:
+            from rti1516e.reservation import ReservationClient
+
+            self._reservation_client = ReservationClient(
+                self._require_channel(),
+                federation_name=self._require_federation_name(),
+                federate_handle=self.handle,
+            )
+        return self._reservation_client
 
     def _require_channel(self) -> Any:
         """Return the underlying ``grpc.aio.Channel`` or raise RuntimeError.

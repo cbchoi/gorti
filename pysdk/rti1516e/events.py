@@ -204,3 +204,50 @@ class FederationNotSaved:
     """
 
     label: str
+
+
+# --- M26 Phase F — object instance name reservation events --------------
+
+
+@dataclass(frozen=True)
+class ObjectInstanceNameReservationSucceeded:
+    """IEEE 1516.1 §6.1 — a single-name reservation was accepted.
+
+    The federate may now call registerObjectInstance with this name.
+    """
+
+    object_name: str
+
+
+@dataclass(frozen=True)
+class ObjectInstanceNameReservationFailed:
+    """IEEE 1516.1 §6.1 — a single-name reservation was rejected.
+
+    The name is already reserved (by this or another federate) or
+    already in use by a registered instance. The federate must pick
+    a different name.
+    """
+
+    object_name: str
+
+
+@dataclass(frozen=True)
+class MultipleObjectInstanceNameReservationSucceeded:
+    """IEEE 1516.1 §6.5 — an atomic batch reservation was accepted.
+
+    Every name in ``object_names`` is now reserved for this federate.
+    """
+
+    object_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MultipleObjectInstanceNameReservationFailed:
+    """IEEE 1516.1 §6.5 — an atomic batch reservation was rejected.
+
+    NONE of the requested names were reserved. ``colliding_names``
+    lists the specific names that caused the failure.
+    """
+
+    requested_names: tuple[str, ...]
+    colliding_names: tuple[str, ...]

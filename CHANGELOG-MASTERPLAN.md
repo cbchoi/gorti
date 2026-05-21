@@ -178,6 +178,32 @@ Out of scope for M25 (deferred to M26):
 - Phase F — `reserveObjectInstanceName` flow (§6.1-6.5) with success/fail callbacks. New state machine for per-federation reservation table.
 - Phase G — verify a real Pitch federate against the M25 surface.
 
+#### M26 — Layer-2 Pitch-API parity follow-ups (Phases E–G, closed 2026-05-21)
+- Phases E, F, G — closes the deferrals from M25.
+
+Phase E — `evokeCallback` / `evokeMultipleCallbacks` (§10.4):
+- "Cheap" variant per the design call documented in `docs/PITCH_PARITY.md`. gorti's native callback model is HLA_IMMEDIATE; the new methods on `Rti1516eAmbassador` give ported Pitch federates a sync API that yields to the asyncio loop for `[approx_min_time, approx_max_time]` and returns `True` iff any callback fired in the window.
+- `_pump_events` refactored: dispatch logic factored into `_dispatch_event(event) -> bool`. `_callback_fired_count` bumps exactly once per recognized event; `evokeCallback` observes the counter delta.
+- Pin: `pysdk/tests/spec/m26/test_evoke_callback.py` (5 tests).
+- Out of scope: strict HLA_EVOKED buffered-drain semantics. Federates that race on shared mutable state across `evokeCallback` boundaries may see callbacks at unexpected times — issue an explicit ask if you need strict mode.
+
+Phase F — `reserveObjectInstanceName` flow (§6.1-6.5):
+- New proto RPCs: `ReserveObjectInstanceName`, `ReleaseObjectInstanceName`, `ReserveMultipleObjectInstanceNames` (all on `ObjectService`). New `FederateEvent` oneof variants at tags 50-53: `ObjectInstanceNameReservation{Succeeded,Failed}` + `MultipleObjectInstanceNameReservation{Succeeded,Failed}`.
+- New `core.ObjectInstanceNameReserver` interface (separate from `core.ObjectRegistry` so test stubs aren't forced to implement it). `rti/internal/object/reservation.go` — per-federation reservation table (name → holder federate handle) + registered-name index. `rti/internal/object/reservation_handlers.go` — Registry-side methods that dispatch via Outbox.
+- `Registry.Register` updated: if caller supplied a name AND name was pre-reserved by caller → consume the reservation; if reserved by ANOTHER federate → reject with `ErrObjectInstanceNameReservedByOther`; if not reserved → auto-mark as registered (backwards-compat for pre-M26 federates that don't reserve).
+- Resign clears reservations owned by the resigning federate (`OnFederateResign` chain in `cmd/rtid/main.go`).
+- New sentinels: `core.ErrObjectInstanceName{InUse,NotReserved,ReservedByOther}`.
+- Pysdk `rti1516e/reservation.py::ReservationClient` + `Federate.reservation` accessor. `Rti1516eAmbassador` Pitch-style methods (`reserveObjectInstanceName`, `releaseObjectInstanceName`, `reserveMultipleObjectInstanceNames`) + matching callback override slots (`objectInstanceNameReservationSucceeded`, etc.). Event-stream translation in `_transport.py` handles the four new oneof variants.
+- Pins: `rti/spec/M26/reservation_test.go` (10 tests, Registry direct), `pysdk/tests/spec/m26/test_reservation.py` (4 tests, wire end-to-end through rtid).
+
+Phase G — Pitch-shape smoke federate:
+- `examples/pitch-shape-smoke/` — `federation.fom.xml` + `smoke_federate.py`. A federate written using ONLY Pitch-style `Rti1516eAmbassador` methods (no `sdk.ownership.*` / `sdk.ddm.*` reach-around). Exercises handle lookup → publish-by-class → reserve-name (with evoked callback dispatch) → register → update attributes → send interaction → register sync point → resign.
+- Pin: `pysdk/tests/spec/m26/test_pitch_shape_smoke.py` runs the smoke against a live rtid subprocess and asserts on returned state.
+
+Outbox race note: tests that drive a Pitch-style federate against rtid sometimes need a small `await asyncio.sleep(0.1)` after `join_federation` to let the `StreamService.Events` outbox channel register before service-group events fire. Same race that affects all M12+ callback-bearing service-group RPCs; documented in the M26 reservation test fixtures.
+
+19 new spec tests (10 Go + 9 Python).
+
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
 Out of scope (deferred to M25+):

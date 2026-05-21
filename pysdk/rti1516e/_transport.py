@@ -1085,7 +1085,7 @@ class GrpcTransport:
                     queue.put_nowait(translated)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Server closed or error — let the queue drain quietly.
             return
 
@@ -1196,6 +1196,31 @@ class GrpcTransport:
             return FederationSaved(label=str(fed_event.save_completed.label))
         if which == "save_failed":
             return FederationNotSaved(label=str(fed_event.save_failed.label))
+        # M26 Phase F — object instance name reservation events.
+        if which == "reservation_succeeded":
+            from .events import ObjectInstanceNameReservationSucceeded
+            return ObjectInstanceNameReservationSucceeded(
+                object_name=str(fed_event.reservation_succeeded.object_name),
+            )
+        if which == "reservation_failed":
+            from .events import ObjectInstanceNameReservationFailed
+            return ObjectInstanceNameReservationFailed(
+                object_name=str(fed_event.reservation_failed.object_name),
+            )
+        if which == "reservation_multi_succeeded":
+            from .events import MultipleObjectInstanceNameReservationSucceeded
+            return MultipleObjectInstanceNameReservationSucceeded(
+                object_names=tuple(
+                    str(n) for n in fed_event.reservation_multi_succeeded.object_names
+                ),
+            )
+        if which == "reservation_multi_failed":
+            from .events import MultipleObjectInstanceNameReservationFailed
+            mf = fed_event.reservation_multi_failed
+            return MultipleObjectInstanceNameReservationFailed(
+                requested_names=tuple(str(n) for n in mf.requested_names),
+                colliding_names=tuple(str(n) for n in mf.colliding_names),
+            )
         if which == "halted":
             # The proto FederationHalted lacks a stalled-federate field;
             # surface 0 as "no specific federate identified" so the

@@ -56,7 +56,8 @@ func errToStatus(err error) error {
 	// itself is unauthorized regardless of state.
 	case errors.Is(err, core.ErrAttributeNotOwned),
 		errors.Is(err, core.ErrRegionNotOwnedByFederate),
-		errors.Is(err, core.ErrObjectNotOwned): // M23
+		errors.Is(err, core.ErrObjectNotOwned), // M23
+		errors.Is(err, core.ErrObjectInstanceNameReservedByOther): // M26
 		return status.Error(codes.PermissionDenied, err.Error())
 
 	// FailedPrecondition — entity exists but state forbids the action.
@@ -83,7 +84,9 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrRestoreAlreadyInProgress),
 		errors.Is(err, core.ErrSaveBundleCorrupt),
 		errors.Is(err, core.ErrSaveNotInProgress),    // M24
-		errors.Is(err, core.ErrRestoreNotInProgress): // M24
+		errors.Is(err, core.ErrRestoreNotInProgress), // M24
+		errors.Is(err, core.ErrObjectInstanceNameInUse),       // M26
+		errors.Is(err, core.ErrObjectInstanceNameNotReserved): // M26
 		return status.Error(codes.FailedPrecondition, err.Error())
 
 	// InvalidArgument — caller-supplied value violates the contract.

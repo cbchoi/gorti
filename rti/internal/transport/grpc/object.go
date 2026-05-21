@@ -238,3 +238,68 @@ func toLogicalTime(p *float64) *core.LogicalTime {
 // Compile-time assertion that objectService implements the generated
 // server interface.
 var _ rtiv1.ObjectServiceServer = (*objectService)(nil)
+
+// M26 Phase F — object instance name reservation handlers
+// (IEEE 1516.1-2010 §6.1-6.5). The handlers type-assert the
+// composed ObjectRegistry to core.ObjectInstanceNameReserver;
+// composition root in cmd/rtid passes *object.Registry which
+// implements both. If the registry doesn't satisfy the reserver
+// contract, the handler returns Unimplemented — preserves test
+// stubs that don't need reservation.
+
+func (s *objectService) ReserveObjectInstanceName(ctx context.Context, req *rtiv1.ReserveObjectInstanceNameRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	res, ok := s.obj.(core.ObjectInstanceNameReserver)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "object registry does not support name reservation")
+	}
+	if err := res.ReserveObjectInstanceName(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		req.GetObjectName(),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+func (s *objectService) ReleaseObjectInstanceName(ctx context.Context, req *rtiv1.ReleaseObjectInstanceNameRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	res, ok := s.obj.(core.ObjectInstanceNameReserver)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "object registry does not support name reservation")
+	}
+	if err := res.ReleaseObjectInstanceName(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		req.GetObjectName(),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+func (s *objectService) ReserveMultipleObjectInstanceNames(ctx context.Context, req *rtiv1.ReserveMultipleObjectInstanceNamesRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	res, ok := s.obj.(core.ObjectInstanceNameReserver)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "object registry does not support name reservation")
+	}
+	if err := res.ReserveMultipleObjectInstanceNames(
+		ctx,
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		req.GetObjectNames(),
+	); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
