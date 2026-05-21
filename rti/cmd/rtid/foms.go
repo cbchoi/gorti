@@ -173,6 +173,109 @@ func (h *fomHandle) LookupParameter(cls core.InteractionClassHandle, name string
 	return core.InvalidParameterHandle, false
 }
 
+// ObjectClassName implements core.FOMHandleNameLookup. M25 Phase B —
+// reverse of LookupObjectClass.
+func (h *fomHandle) ObjectClassName(cls core.ObjectClassHandle) (string, bool) {
+	if !h.IsValid() {
+		return "", false
+	}
+	classes := h.fom.ObjectClasses()
+	idx := int(cls) - 1
+	if idx < 0 || idx >= len(classes) {
+		return "", false
+	}
+	return classes[idx].Name, true
+}
+
+// InteractionClassName implements core.FOMHandleNameLookup.
+func (h *fomHandle) InteractionClassName(cls core.InteractionClassHandle) (string, bool) {
+	if !h.IsValid() {
+		return "", false
+	}
+	classes := h.fom.InteractionClasses()
+	idx := int(cls) - 1
+	if idx < 0 || idx >= len(classes) {
+		return "", false
+	}
+	return classes[idx].Name, true
+}
+
+// AttributeName implements core.FOMHandleNameLookup.
+func (h *fomHandle) AttributeName(cls core.ObjectClassHandle, attr core.AttributeHandle) (string, bool) {
+	if !h.IsValid() {
+		return "", false
+	}
+	classes := h.fom.ObjectClasses()
+	cidx := int(cls) - 1
+	if cidx < 0 || cidx >= len(classes) {
+		return "", false
+	}
+	aidx := int(attr) - 1
+	attrs := classes[cidx].Attributes
+	if aidx < 0 || aidx >= len(attrs) {
+		return "", false
+	}
+	return attrs[aidx].Name, true
+}
+
+// ParameterName implements core.FOMHandleNameLookup.
+func (h *fomHandle) ParameterName(cls core.InteractionClassHandle, p core.ParameterHandle) (string, bool) {
+	if !h.IsValid() {
+		return "", false
+	}
+	classes := h.fom.InteractionClasses()
+	cidx := int(cls) - 1
+	if cidx < 0 || cidx >= len(classes) {
+		return "", false
+	}
+	pidx := int(p) - 1
+	params := classes[cidx].Parameters
+	if pidx < 0 || pidx >= len(params) {
+		return "", false
+	}
+	return params[pidx].Name, true
+}
+
+// LookupDimension implements core.FOMHandleNameLookup. Returns the
+// 1-based position in the name-sorted dimension slice; 0 on miss.
+func (h *fomHandle) LookupDimension(name string) (core.DimensionHandle, bool) {
+	if !h.IsValid() {
+		return core.InvalidDimensionHandle, false
+	}
+	for i, d := range h.fom.Dimensions() {
+		if d.Name == name {
+			return core.DimensionHandle(i + 1), true
+		}
+	}
+	return core.InvalidDimensionHandle, false
+}
+
+// DimensionName implements core.FOMHandleNameLookup.
+func (h *fomHandle) DimensionName(dh core.DimensionHandle) (string, bool) {
+	if !h.IsValid() {
+		return "", false
+	}
+	dims := h.fom.Dimensions()
+	idx := int(dh) - 1
+	if idx < 0 || idx >= len(dims) {
+		return "", false
+	}
+	return dims[idx].Name, true
+}
+
+// DimensionUpperBound implements core.FOMHandleNameLookup.
+func (h *fomHandle) DimensionUpperBound(dh core.DimensionHandle) (uint64, bool) {
+	if !h.IsValid() {
+		return 0, false
+	}
+	dims := h.fom.Dimensions()
+	idx := int(dh) - 1
+	if idx < 0 || idx >= len(dims) {
+		return 0, false
+	}
+	return dims[idx].UpperBound, true
+}
+
 // OrderForAttribute returns the per-attribute delivery order ("TimeStamp"
 // or "Receive") declared in the FOM. Implements
 // transport/grpc.FOMOrderResolver so FOMRepoOrderLookup can drive the
@@ -259,3 +362,7 @@ var _ grpcsvc.FOMOrderResolver = (*fomHandle)(nil)
 // so the DDM manager can read routing-space declarations directly from
 // the production FOM handle (M10 / FR-DDM-1).
 var _ ddm.DimensionEnumerator = (*fomHandle)(nil)
+
+// Compile-time assertion that *fomHandle satisfies the M25 Phase B
+// reverse-lookup contract used by the SupportService.
+var _ core.FOMHandleNameLookup = (*fomHandle)(nil)

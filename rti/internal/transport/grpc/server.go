@@ -43,6 +43,7 @@ type Server struct {
 	ddmService       *ddmService
 	savepointService *savepointService
 	momService       *momService
+	supportService   *supportService
 }
 
 // Options bundles Server dependencies. All MUST be non-nil except Time
@@ -144,6 +145,14 @@ type Options struct {
 	DDSEnabled         bool
 	DDSDefaultDomainID int32
 	TransportLookup    func(core.FederationName) (core.TransportMode, int32, bool)
+
+	// FOMs is the federation-scoped FOM repository consumed by
+	// SupportService (M25 Phase B — IEEE 1516.1-2010 §10.2 handle /
+	// name / dimension / order / transport lookups). When nil, the
+	// SupportService is NOT registered. Composition in cmd/rtid wires
+	// the same fomRepository instance that the federation manager
+	// already uses for Load + RememberFor.
+	FOMs core.FOMRepository
 }
 
 // NewServer constructs a Server. Validates that all required Options
@@ -198,6 +207,9 @@ func NewServer(opts Options) (*Server, error) {
 	if opts.MOM != nil {
 		srv.momService = newMomService(opts.MOM)
 	}
+	if opts.FOMs != nil {
+		srv.supportService = newSupportService(opts.FOMs)
+	}
 	return srv, nil
 }
 
@@ -250,6 +262,9 @@ func (s *Server) Register(grpcServer any) error {
 	}
 	if s.momService != nil {
 		rtiv1.RegisterMomServiceServer(gs, s.momService)
+	}
+	if s.supportService != nil {
+		rtiv1.RegisterSupportServiceServer(gs, s.supportService)
 	}
 	return nil
 }

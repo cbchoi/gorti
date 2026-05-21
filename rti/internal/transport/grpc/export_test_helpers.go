@@ -1,8 +1,17 @@
 package grpc
 
 import (
+	"github.com/cbchoi/gorti/rti/internal/core"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
+
+// NewSupportServiceForTest constructs a SupportService directly,
+// bypassing the full Server compose. Used by rti/spec/M25 to exercise
+// the §10.2 handler against a stub FOMRepository without dragging in
+// federation / object / outbox stubs.
+func NewSupportServiceForTest(foms core.FOMRepository) rtiv1.SupportServiceServer {
+	return newSupportService(foms)
+}
 
 // FederationServiceForTest returns the FederationService server that
 // Server registers on the gRPC handler. Cross-package tests
@@ -14,3 +23,4 @@ import (
 func FederationServiceForTest(s *Server) rtiv1.FederationServiceServer {
 	return s.fedService
 }
+

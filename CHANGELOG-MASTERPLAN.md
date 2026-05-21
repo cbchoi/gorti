@@ -147,6 +147,37 @@ Plan + 5 waves (TASK-291..303) at `docs/M14_DISPATCH_PLAN.md`.
 
 Frozen plan + 4 waves (TASK-274..290) at `docs/M24_DISPATCH_PLAN.md`.
 
+#### M25 — Layer-2 Pitch-API parity (Phases A–D, closed 2026-05-21)
+- Phases A–D of the M25 Pitch-parity milestone. Phases E (`evokeCallback` model), F (`reserveObjectInstanceName` flow), and G (federate-port verification) deferred to M26.
+
+Phase A — TSO delivery gate fix:
+- `rti/internal/time/asyncdelivery.go::ShouldDeliverNow` now consults the `stateStore` for `regulating || constrained` before applying the M22 buffering policy. Federates that have never engaged with time management (no `EnableRegulation` / `EnableConstrained`) get immediate TSO delivery — TSO ordering is only meaningful for time-coordinated federates per IEEE 1516.1 §8.16-8.17. Pre-M25 the gate buffered for any federate with no `nerState`, silently dropping TSO events for plain pub/sub subscribers (regression caught by `test_spec_m5_verbose_attribute_delivers_tso`). M22 buffering for regulating/constrained federates is unchanged.
+- Spec test `rti/spec/M25/tso_gate_test.go` pins the contract for the three federate states (none / regulating-only / constrained-only).
+
+Phase B — §10.2 Support services:
+- New `proto/rti/v1/support.proto` + `rti/internal/transport/grpc/support.go` `SupportService` with 15 RPCs: `Get{Object,Interaction}ClassHandle/Name`, `Get{Attribute,Parameter}Handle/Name`, `GetDimensionHandle/Name`, `GetDimensionUpperBound`, `GetOrder{Type,Name}`, `GetTransportation{Type,Name}`. Read-only against the federation's FOM via `core.FOMRepository`.
+- New `core.FOMHandleNameLookup` interface for reverse handle→name lookups; `rti/cmd/rtid/foms.go::fomHandle` implements it. `core.DimensionHandle` typed handle + `InvalidDimensionHandle` added.
+- Pysdk `rti1516e/support.py::SupportClient` mirrors the wire surface; `Federate.support` lazy accessor in `connection.py`.
+- Order / transportation encodings (1=Receive/2=TimeStamp, 1=Reliable/2=BestEffort) constant on both sides.
+
+Phase C — Layer-2 ambassador unification:
+- `pysdk/rti1516e/standard.py::Rti1516eAmbassador` gains 35+ Pitch-style sync delegate methods covering §4.11-4.13 sync, §7 ownership, §4.8-4.15 save/restore, §9 DDM, §10.2 handle services. Each forwards to the existing async module via `self._run(self._fed().<module>.<method>(...))`. Pitch federates can now call methods like `unconditionalAttributeOwnershipDivestiture` / `requestFederationSave` / `createRegion` directly on the ambassador instead of reaching for `sdk.ownership.*` / `sdk.savepoint.*`.
+- `pysdk/tests/spec/m25/test_ambassador_surface.py` parametrizes over every Pitch-style method name so future refactors can't silently remove a method.
+
+Phase D — FederateAmbassador callback completeness:
+- `Rti1516eAmbassador._pump_events` extended to dispatch the existing 10 event types that were already wired through `pysdk/rti1516e/events.py` but ignored by the standard ambassador: `RemoveObjectInstance`, `ProvideAttributeValueUpdate`, `SynchronizationPointAnnounced`, `FederationSynchronized`, `RequestAttributeOwnershipAssumption`, `AttributeOwnershipAcquisitionNotification`, `RequestDivestitureConfirmation`, `InitiateFederateSave`, `FederationSaved`, `FederationNotSaved`.
+- Matching no-op override slots on the base class: `removeObjectInstance`, `provideAttributeValueUpdate`, `announceSynchronizationPoint`, `federationSynchronized`, `requestAttributeOwnershipAssumption`, `attributeOwnershipAcquisitionNotification`, `requestDivestitureConfirmation`, `initiateFederateSave`, `federationSaved`, `federationNotSaved`. Plus `synchronizationPointRegistrationSucceeded` for Pitch symmetry (no underlying event yet).
+- `pysdk/tests/spec/m25/test_callback_dispatch.py` synthesizes one of each event and asserts dispatch order + payload bytes.
+
+Spec tests: 12 Go (rti/spec/M25) + 50 Python (pysdk/tests/spec/m25). Total cross-language M25 surface: 62 tests.
+
+Tooling: regen requires `buf` (`go install github.com/bufbuild/buf/cmd/buf@v1.34.0`). Python venv needs protobuf>=7.
+
+Out of scope for M25 (deferred to M26):
+- Phase E — `evokeCallback` / `evokeMultipleCallbacks` tick model (§10.4). gorti's async-first model conflicts with the HLA_EVOKED semantics; needs a buffered-drain design.
+- Phase F — `reserveObjectInstanceName` flow (§6.1-6.5) with success/fail callbacks. New state machine for per-federation reservation table.
+- Phase G — verify a real Pitch federate against the M25 surface.
+
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
 Out of scope (deferred to M25+):

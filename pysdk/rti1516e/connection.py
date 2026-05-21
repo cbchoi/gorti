@@ -331,6 +331,7 @@ class Federate:
         self._ddm_client: Any | None = None
         self._savepoint_client: Any | None = None
         self._mom_client: Any | None = None
+        self._support_client: Any | None = None
 
     # --- Declaration management (TASK-064) ---
 
@@ -750,6 +751,24 @@ class Federate:
                 federate_handle=self.handle,
             )
         return self._mom_client
+
+    @property
+    def support(self) -> Any:
+        """§10.2 SupportService client — handle / name / dimension / order /
+        transport lookups against the federation's FOM. M25 Phase B.
+
+        Read-only; safe to call concurrently from any task. Lookups are
+        FOM-driven so the returned handles match what the federation
+        wire RPCs accept.
+        """
+        if self._support_client is None:
+            from rti1516e.support import SupportClient
+
+            self._support_client = SupportClient(
+                self._require_channel(),
+                federation_name=self._require_federation_name(),
+            )
+        return self._support_client
 
     def _require_channel(self) -> Any:
         """Return the underlying ``grpc.aio.Channel`` or raise RuntimeError.

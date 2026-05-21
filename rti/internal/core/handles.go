@@ -19,6 +19,10 @@ type InteractionClassHandle uint64
 
 type ParameterHandle uint64
 
+// DimensionHandle identifies a routing-space dimension declared in the
+// FOM. M25 Phase B (§10.2 dimension services).
+type DimensionHandle uint64
+
 const (
 	InvalidFederateHandle         FederateHandle         = 0
 	InvalidObjectHandle           ObjectHandle           = 0
@@ -26,4 +30,5 @@ const (
 	InvalidAttributeHandle        AttributeHandle        = 0
 	InvalidInteractionClassHandle InteractionClassHandle = 0
 	InvalidParameterHandle        ParameterHandle        = 0
+	InvalidDimensionHandle        DimensionHandle        = 0
 )

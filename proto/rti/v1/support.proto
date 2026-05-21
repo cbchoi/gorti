@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// SupportService — IEEE 1516.1-2010 §10 handle / name / type lookup
+// services. M25 Phase B. These are pure functions of the federation's
+// FOM; no federate-side state is mutated. All methods are scoped by
+// federation_name so a single rtid serving multiple federations can
+// answer for each independently.
+service SupportService {
+  // §10.2 handle ↔ name
+  rpc GetObjectClassHandle(GetObjectClassHandleRequest) returns (GetObjectClassHandleResponse);
+  rpc GetObjectClassName(GetObjectClassNameRequest) returns (GetObjectClassNameResponse);
+  rpc GetAttributeHandle(GetAttributeHandleRequest) returns (GetAttributeHandleResponse);
+  rpc GetAttributeName(GetAttributeNameRequest) returns (GetAttributeNameResponse);
+  rpc GetInteractionClassHandle(GetInteractionClassHandleRequest) returns (GetInteractionClassHandleResponse);
+  rpc GetInteractionClassName(GetInteractionClassNameRequest) returns (GetInteractionClassNameResponse);
+  rpc GetParameterHandle(GetParameterHandleRequest) returns (GetParameterHandleResponse);
+  rpc GetParameterName(GetParameterNameRequest) returns (GetParameterNameResponse);
+
+  // §10.2 dimension services
+  rpc GetDimensionHandle(GetDimensionHandleRequest) returns (GetDimensionHandleResponse);
+  rpc GetDimensionName(GetDimensionNameRequest) returns (GetDimensionNameResponse);
+  rpc GetDimensionUpperBound(GetDimensionUpperBoundRequest) returns (GetDimensionUpperBoundResponse);
+
+  // §10.2 order / transportation services. order_name and
+  // transportation_name are FOM strings ("Receive"/"TimeStamp" /
+  // "HLAreliable"/"HLAbestEffort"); the type fields encode the
+  // standard MIM enum values (1=HLAreliable, 2=HLAbestEffort;
+  // 1=Receive, 2=TimeStamp) per §10.2.
+  rpc GetOrderType(GetOrderTypeRequest) returns (GetOrderTypeResponse);
+  rpc GetOrderName(GetOrderNameRequest) returns (GetOrderNameResponse);
+  rpc GetTransportationType(GetTransportationTypeRequest) returns (GetTransportationTypeResponse);
+  rpc GetTransportationName(GetTransportationNameRequest) returns (GetTransportationNameResponse);
+}
+
+message GetObjectClassHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string class_name = 3;
+}
+message GetObjectClassHandleResponse {
+  uint64 class_handle = 1;
+}
+
+message GetObjectClassNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 class_handle = 3;
+}
+message GetObjectClassNameResponse {
+  string class_name = 1;
+}
+
+message GetAttributeHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 class_handle = 3;
+  string attribute_name = 4;
+}
+message GetAttributeHandleResponse {
+  uint64 attribute_handle = 1;
+}
+
+message GetAttributeNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 class_handle = 3;
+  uint64 attribute_handle = 4;
+}
+message GetAttributeNameResponse {
+  string attribute_name = 1;
+}
+
+message GetInteractionClassHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string class_name = 3;
+}
+message GetInteractionClassHandleResponse {
+  uint64 class_handle = 1;
+}
+
+message GetInteractionClassNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 class_handle = 3;
+}
+message GetInteractionClassNameResponse {
+  string class_name = 1;
+}
+
+message GetParameterHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 class_handle = 3;
+  string parameter_name = 4;
+}
+message GetParameterHandleResponse {
+  uint64 parameter_handle = 1;
+}
+
+message GetParameterNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 class_handle = 3;
+  uint64 parameter_handle = 4;
+}
+message GetParameterNameResponse {
+  string parameter_name = 1;
+}
+
+message GetDimensionHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string dimension_name = 3;
+}
+message GetDimensionHandleResponse {
+  uint64 dimension_handle = 1;
+}
+
+message GetDimensionNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 dimension_handle = 3;
+}
+message GetDimensionNameResponse {
+  string dimension_name = 1;
+}
+
+message GetDimensionUpperBoundRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 dimension_handle = 3;
+}
+message GetDimensionUpperBoundResponse {
+  uint64 upper_bound = 1;
+}
+
+message GetOrderTypeRequest {
+  WireVersion wire_version = 1;
+  string order_name = 2;
+}
+message GetOrderTypeResponse {
+  uint32 order_type = 1;  // 1=Receive, 2=TimeStamp
+}
+
+message GetOrderNameRequest {
+  WireVersion wire_version = 1;
+  uint32 order_type = 2;
+}
+message GetOrderNameResponse {
+  string order_name = 1;
+}
+
+message GetTransportationTypeRequest {
+  WireVersion wire_version = 1;
+  string transportation_name = 2;
+}
+message GetTransportationTypeResponse {
+  uint32 transportation_type = 1;  // 1=HLAreliable, 2=HLAbestEffort
+}
+
+message GetTransportationNameRequest {
+  WireVersion wire_version = 1;
+  uint32 transportation_type = 2;
+}
+message GetTransportationNameResponse {
+  string transportation_name = 1;
+}

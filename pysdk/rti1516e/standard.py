@@ -25,10 +25,20 @@ from typing import TYPE_CHECKING, Any
 
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.events import (
+    AttributeOwnershipAcquisitionNotification,
     DiscoverObjectInstance,
     FederationHalted,
+    FederationNotSaved,
+    FederationSaved,
+    FederationSynchronized,
+    InitiateFederateSave,
+    ProvideAttributeValueUpdate,
     ReceiveInteraction,
     ReflectAttributeValues,
+    RemoveObjectInstance,
+    RequestAttributeOwnershipAssumption,
+    RequestDivestitureConfirmation,
+    SynchronizationPointAnnounced,
     TimeAdvanceGrant,
 )
 
@@ -258,6 +268,310 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(self._fed().change_interaction_transportation_type(interaction_class_handle, transport))
 
+    # --- §10.2 Support services (M25 Phase B) ---
+    # Pitch-style sync wrappers around the async SupportClient. Each
+    # delegates to fed.support.<method> via _run(). Federates ported
+    # from Pitch use these directly.
+
+    def getObjectClassHandle(self, class_name: str) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.get_object_class_handle(class_name)))
+
+    def getObjectClassName(self, class_handle: int) -> str:  # noqa: N802
+        return str(self._run(self._fed().support.get_object_class_name(class_handle)))
+
+    def getAttributeHandle(self, class_handle: int, attribute_name: str) -> int:  # noqa: N802
+        return int(
+            self._run(self._fed().support.get_attribute_handle(class_handle, attribute_name))
+        )
+
+    def getAttributeName(self, class_handle: int, attribute_handle: int) -> str:  # noqa: N802
+        return str(
+            self._run(self._fed().support.get_attribute_name(class_handle, attribute_handle))
+        )
+
+    def getInteractionClassHandle(self, class_name: str) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.get_interaction_class_handle(class_name)))
+
+    def getInteractionClassName(self, class_handle: int) -> str:  # noqa: N802
+        return str(self._run(self._fed().support.get_interaction_class_name(class_handle)))
+
+    def getParameterHandle(self, class_handle: int, parameter_name: str) -> int:  # noqa: N802
+        return int(
+            self._run(self._fed().support.get_parameter_handle(class_handle, parameter_name))
+        )
+
+    def getParameterName(self, class_handle: int, parameter_handle: int) -> str:  # noqa: N802
+        return str(
+            self._run(self._fed().support.get_parameter_name(class_handle, parameter_handle))
+        )
+
+    def getDimensionHandle(self, dimension_name: str) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.get_dimension_handle(dimension_name)))
+
+    def getDimensionName(self, dimension_handle: int) -> str:  # noqa: N802
+        return str(self._run(self._fed().support.get_dimension_name(dimension_handle)))
+
+    def getDimensionUpperBound(self, dimension_handle: int) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.get_dimension_upper_bound(dimension_handle)))
+
+    def getOrderType(self, order_name: str) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.get_order_type(order_name)))
+
+    def getOrderName(self, order_type: int) -> str:  # noqa: N802
+        return str(self._run(self._fed().support.get_order_name(order_type)))
+
+    def getTransportationType(self, transportation_name: str) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.get_transportation_type(transportation_name)))
+
+    def getTransportationName(self, transportation_type: int) -> str:  # noqa: N802
+        return str(self._run(self._fed().support.get_transportation_name(transportation_type)))
+
+    # --- §4.11-4.13 Synchronization points (M25 Phase C) ---
+
+    def registerFederationSynchronizationPoint(  # noqa: N802
+        self, label: str, tag: bytes = b"", sync_set: list[int] | None = None
+    ) -> None:
+        self._run(
+            self._fed().sync.register_synchronization_point(
+                label, tag=tag, required_federates=sync_set
+            )
+        )
+
+    def synchronizationPointAchieved(self, label: str) -> None:  # noqa: N802
+        self._run(self._fed().sync.synchronization_point_achieved(label))
+
+    # --- §7 Ownership Management (M25 Phase C) ---
+
+    def unconditionalAttributeOwnershipDivestiture(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int]
+    ) -> None:
+        self._run(self._fed().ownership.unconditional_divest(object_handle, attribute_handles))
+
+    def negotiatedAttributeOwnershipDivestiture(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int], tag: bytes = b""
+    ) -> None:
+        self._run(
+            self._fed().ownership.negotiated_divest(object_handle, attribute_handles, tag=tag)
+        )
+
+    def attributeOwnershipAcquisition(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int], tag: bytes = b""
+    ) -> None:
+        self._run(
+            self._fed().ownership.acquire(object_handle, attribute_handles, tag=tag)
+        )
+
+    def cancelNegotiatedAttributeOwnershipDivestiture(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int]
+    ) -> None:
+        self._run(
+            self._fed().ownership.cancel_negotiated_divest(object_handle, attribute_handles)
+        )
+
+    def cancelAttributeOwnershipAcquisition(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int]
+    ) -> None:
+        self._run(self._fed().ownership.cancel_acquire(object_handle, attribute_handles))
+
+    def attributeOwnershipDivestitureIfWanted(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int]
+    ) -> None:
+        self._run(self._fed().ownership.divest_if_wanted(object_handle, attribute_handles))
+
+    def queryAttributeOwnership(  # noqa: N802
+        self, object_handle: int, attribute_handle: int
+    ) -> tuple[int, bool]:
+        return self._run(
+            self._fed().ownership.query_attribute_ownership(object_handle, attribute_handle)
+        )
+
+    def isAttributeOwnedByFederate(  # noqa: N802
+        self, object_handle: int, attribute_handle: int
+    ) -> bool:
+        return bool(
+            self._run(
+                self._fed().ownership.is_attribute_owned_by_federate(
+                    object_handle, attribute_handle
+                )
+            )
+        )
+
+    # --- §4.8-4.15 Federation save/restore (M25 Phase C) ---
+
+    def requestFederationSave(  # noqa: N802
+        self, label: str, save_time: float | None = None
+    ) -> None:
+        self._run(self._fed().savepoint.request_federation_save(label, save_time=save_time))
+
+    def federateSaveComplete(self) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.federate_save_complete())
+
+    def federateSaveNotComplete(self) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.federate_save_not_complete())
+
+    def queryFederationSaveStatus(self, label: str) -> Any:  # noqa: N802
+        return self._run(self._fed().savepoint.query_save_state(label))
+
+    def requestFederationRestore(self, label: str) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.request_federation_restore(label))
+
+    def federateRestoreComplete(self) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.federate_restore_complete())
+
+    def queryFederationRestoreStatus(self, label: str) -> Any:  # noqa: N802
+        return self._run(self._fed().savepoint.query_restore_state(label))
+
+    # --- §9 Data Distribution Management (M25 Phase C) ---
+
+    def createRegion(  # noqa: N802
+        self, routing_space_handle: int, dimension_handles: list[int]
+    ) -> int:
+        return int(
+            self._run(self._fed().ddm.create_region(routing_space_handle, dimension_handles))
+        )
+
+    def setRangeBounds(  # noqa: N802
+        self,
+        region_handle: int,
+        dimension_handle: int,
+        lower_bound: int,
+        upper_bound: int,
+    ) -> None:
+        self._run(
+            self._fed().ddm.set_range_bounds(
+                region_handle, dimension_handle, lower=lower_bound, upper=upper_bound
+            )
+        )
+
+    def commitRegionModifications(self, region_handles: list[int]) -> None:  # noqa: N802
+        self._run(self._fed().ddm.commit_region_modifications(region_handles))
+
+    def deleteRegion(self, region_handle: int) -> None:  # noqa: N802
+        self._run(self._fed().ddm.delete_region(region_handle))
+
+    def subscribeObjectClassAttributesWithRegions(  # noqa: N802
+        self,
+        object_class_handle: int,
+        attribute_handles: list[int],
+        region_handles: list[int],
+    ) -> None:
+        self._run(
+            self._fed().ddm.subscribe_object_class_attributes_with_regions(
+                object_class_handle, attribute_handles, region_handles
+            )
+        )
+
+    def subscribeInteractionClassWithRegions(  # noqa: N802
+        self, interaction_class_handle: int, region_handles: list[int]
+    ) -> None:
+        self._run(
+            self._fed().ddm.subscribe_interaction_class_with_regions(
+                interaction_class_handle, region_handles
+            )
+        )
+
+    def registerObjectInstanceWithRegions(  # noqa: N802
+        self,
+        object_class_handle: int,
+        attributes_and_regions: dict[int, list[int]],
+        instance_name: str = "",
+    ) -> int:
+        from rti1516e.ddm import AttributeRegions
+
+        bindings = [
+            AttributeRegions(attribute_handle=int(a), region_handles=[int(r) for r in regs])
+            for a, regs in attributes_and_regions.items()
+        ]
+        return int(
+            self._run(
+                self._fed().ddm.register_object_instance_with_regions(
+                    object_class_handle, bindings, object_name=instance_name
+                )
+            )
+        )
+
+    def associateRegionsForUpdates(  # noqa: N802
+        self,
+        object_handle: int,
+        attributes_and_regions: dict[int, list[int]],
+    ) -> None:
+        from rti1516e.ddm import AttributeRegions
+
+        bindings = [
+            AttributeRegions(attribute_handle=int(a), region_handles=[int(r) for r in regs])
+            for a, regs in attributes_and_regions.items()
+        ]
+        self._run(self._fed().ddm.associate_regions_for_updates(object_handle, bindings))
+
+    def unassociateRegionsForUpdates(  # noqa: N802
+        self,
+        object_handle: int,
+        attributes_and_regions: dict[int, list[int]] | None = None,
+    ) -> None:
+        from rti1516e.ddm import AttributeRegions
+
+        bindings: list[AttributeRegions] | None
+        if attributes_and_regions is None:
+            bindings = None
+        else:
+            bindings = [
+                AttributeRegions(
+                    attribute_handle=int(a), region_handles=[int(r) for r in regs]
+                )
+                for a, regs in attributes_and_regions.items()
+            ]
+        self._run(self._fed().ddm.unassociate_regions_for_updates(object_handle, bindings))
+
+    def unsubscribeObjectClassAttributesWithRegions(  # noqa: N802
+        self,
+        object_class_handle: int,
+        attribute_handles: list[int],
+        region_handles: list[int],
+    ) -> None:
+        self._run(
+            self._fed().ddm.unsubscribe_object_class_attributes_with_regions(
+                object_class_handle, attribute_handles, region_handles
+            )
+        )
+
+    def unsubscribeInteractionClassWithRegions(  # noqa: N802
+        self, interaction_class_handle: int, region_handles: list[int]
+    ) -> None:
+        self._run(
+            self._fed().ddm.unsubscribe_interaction_class_with_regions(
+                interaction_class_handle, region_handles
+            )
+        )
+
+    def sendInteractionWithRegions(  # noqa: N802
+        self,
+        interaction_class_handle: int,
+        parameters: dict[int, bytes],
+        region_handles: list[int],
+        timestamp: float | None = None,
+    ) -> None:
+        self._run(
+            self._fed().ddm.send_interaction_with_regions(
+                interaction_class_handle,
+                parameters,
+                region_handles,
+                timestamp=timestamp,
+            )
+        )
+
+    def requestAttributeValueUpdateWithRegions(  # noqa: N802
+        self,
+        object_class_handle: int,
+        attribute_handles: list[int],
+        region_handles: list[int],
+        tag: bytes = b"",
+    ) -> None:
+        self._run(
+            self._fed().ddm.request_attribute_value_update_with_regions(
+                object_class_handle, attribute_handles, region_handles, tag=tag
+            )
+        )
+
     # --- Callbacks: subclass overrides these ---
 
     def discoverObjectInstance(  # noqa: N802
@@ -286,6 +600,72 @@ class Rti1516eAmbassador:
 
     def federationHalted(self, cause: str, stalled_federate_handle: int) -> None:  # noqa: N802
         """Override to handle FederationHalted."""
+
+    # --- M25 Phase D — additional FederateAmbassador callbacks ---
+    # Each is a no-op by default; federates ported from Pitch
+    # override the ones they care about. The Layer-1 event types
+    # were already wired through pysdk/rti1516e/events.py.
+
+    def removeObjectInstance(  # noqa: N802
+        self, object_handle: int, tag: bytes, timestamp: float | None
+    ) -> None:
+        """§6.16 — an instance was deleted by its owner."""
+
+    def provideAttributeValueUpdate(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...], tag: bytes
+    ) -> None:
+        """§6.26 — peer requested fresh values; owner should respond."""
+
+    def synchronizationPointRegistrationSucceeded(self, label: str) -> None:  # noqa: N802
+        """§4.5 — sync-point registration succeeded.
+
+        Currently fires via the Federate.events() stream as
+        SynchronizationPointAnnounced for the registrant; this
+        callback is provided for Pitch symmetry.
+        """
+
+    def announceSynchronizationPoint(self, label: str, tag: bytes) -> None:  # noqa: N802
+        """§4.6 — a sync point was announced to this federate.
+
+        Pitch's announceSynchronizationPoint matches our internal
+        SynchronizationPointAnnounced event.
+        """
+
+    def federationSynchronized(self, label: str) -> None:  # noqa: N802
+        """§4.7 — all required federates have achieved the sync point."""
+
+    def requestAttributeOwnershipAssumption(  # noqa: N802
+        self,
+        object_handle: int,
+        attribute_handles: tuple[int, ...],
+        divesting_federate: int,
+        tag: bytes,
+    ) -> None:
+        """§7.3 — current owner offered ownership; this federate may acquire."""
+
+    def attributeOwnershipAcquisitionNotification(  # noqa: N802
+        self,
+        object_handle: int,
+        attribute_handles: tuple[int, ...],
+        owning_federate: int,
+    ) -> None:
+        """§7.4 — this federate's acquisition succeeded; it now owns the attrs."""
+
+    def requestDivestitureConfirmation(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...]
+    ) -> None:
+        """§7.3 (divester half) — pending divest was matched and transferred."""
+
+    def initiateFederateSave(  # noqa: N802
+        self, label: str, save_time: float | None
+    ) -> None:
+        """§4.8 — federation save has started; federate must save state."""
+
+    def federationSaved(self, label: str) -> None:  # noqa: N802
+        """§4.9 — federation save completed successfully."""
+
+    def federationNotSaved(self, label: str) -> None:  # noqa: N802
+        """§4.9 — federation save was aborted; bundle was NOT written."""
 
     # --- Internals ---
 
@@ -359,6 +739,47 @@ class Rti1516eAmbassador:
                     target.timeAdvanceGrant(event.time)
                 elif isinstance(event, FederationHalted):
                     target.federationHalted(event.cause, event.stalled_federate_handle)
+                # M25 Phase D — broaden dispatch to cover the full
+                # FederateAmbassador callback surface. Each branch
+                # forwards directly to the override slot; the base
+                # class no-ops mean unhandled callbacks are silently
+                # dropped, matching Pitch's "subscribe to what you
+                # care about" model.
+                elif isinstance(event, RemoveObjectInstance):
+                    target.removeObjectInstance(
+                        event.object_handle, event.tag, event.timestamp
+                    )
+                elif isinstance(event, ProvideAttributeValueUpdate):
+                    target.provideAttributeValueUpdate(
+                        event.object_handle, event.attribute_handles, event.tag
+                    )
+                elif isinstance(event, SynchronizationPointAnnounced):
+                    target.announceSynchronizationPoint(event.label, event.tag)
+                elif isinstance(event, FederationSynchronized):
+                    target.federationSynchronized(event.label)
+                elif isinstance(event, RequestAttributeOwnershipAssumption):
+                    target.requestAttributeOwnershipAssumption(
+                        event.object_handle,
+                        event.attribute_handles,
+                        event.divesting_federate,
+                        event.tag,
+                    )
+                elif isinstance(event, AttributeOwnershipAcquisitionNotification):
+                    target.attributeOwnershipAcquisitionNotification(
+                        event.object_handle,
+                        event.attribute_handles,
+                        event.owning_federate,
+                    )
+                elif isinstance(event, RequestDivestitureConfirmation):
+                    target.requestDivestitureConfirmation(
+                        event.object_handle, event.attribute_handles
+                    )
+                elif isinstance(event, InitiateFederateSave):
+                    target.initiateFederateSave(event.label, event.save_time)
+                elif isinstance(event, FederationSaved):
+                    target.federationSaved(event.label)
+                elif isinstance(event, FederationNotSaved):
+                    target.federationNotSaved(event.label)
                 # Unknown event types are silently ignored — Layer 1 owns
                 # the closed-set of dataclasses, so this branch is dead in
                 # practice but defensive against future additions.

@@ -18,22 +18,26 @@ authors = [{ name = "gorti contributors" }]
 #   here so the orchestrator pre-work doesn't pre-empt that task's decision.
 dependencies = [
     "grpcio>=1.60",
-    # protobuf >= 6.31.1 matches the floor that grpcio-tools 1.74+
-    # specifies for its emitted gencode. Earlier 4.x / 5.x / 6.x
-    # (pre-6.31.1) runtimes raise VersionError at import on any
-    # module that ran through the new gencode — fresh pip envs that
-    # resolve to an old protobuf without this floor will hit it.
-    # The upper bound is left to grpcio-tools (currently <7.0.0); when
-    # grpcio-tools ships protobuf-7 support, this floor can be raised.
-    # An earlier revision pinned protobuf>=7.34 anticipating a
-    # protobuf 7 release, but no shipped grpcio-tools targets 7.x —
-    # the result was an unsatisfiable pin in fresh venvs.
-    "protobuf>=6.31.1",
+    # protobuf>=7 is required by gencode emitted from buf 1.34+ with
+    # the buf.build/protocolbuffers/python remote plugin (M25 Phase B
+    # regen, 2026-05-21). The gencode header pins
+    # `gencode 7.35.0 runtime 6.33.6 — Runtime version cannot be
+    # older than the linked gencode version`; loading any *_pb2.py
+    # under protobuf 6.x raises `runtime_version.VersionError` at
+    # import. The `make proto` (buf) path is canonical; the
+    # `make py-codegen` (grpcio-tools.protoc) fallback is currently
+    # broken against protobuf 7 because grpcio-tools<=1.80 still pins
+    # protobuf<7. When grpcio-tools ships protobuf-7 support, the
+    # `dev` extra below can re-include it without conflict.
+    "protobuf>=7.35",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "grpcio-tools>=1.60",         # codegen for _generated/
+    # NOTE: grpcio-tools<=1.80 pins protobuf<7, conflicting with the
+    # runtime floor above. The canonical codegen path is `make proto`
+    # (buf); `make py-codegen` (grpcio-tools.protoc) is currently
+    # broken until upstream supports protobuf 7. Re-add when fixed.
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "mypy>=1.8",

@@ -955,6 +955,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		DDSEnabled:         cfg.EnableDDS,
 		DDSDefaultDomainID: cfg.DDSDomainID,
 		TransportLookup:    fedMgr.TransportFor,
+		// M25 Phase B (§10.2): SupportService — read-only handle /
+		// name / dimension / order / transport lookups against the
+		// per-federation FOM. Same repository the federation manager
+		// already uses.
+		FOMs: foms,
 	})
 	if err != nil {
 		return nil, err

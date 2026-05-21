@@ -28,3 +28,20 @@ type FOMHandle interface {
 	LookupAttribute(cls ObjectClassHandle, name string) (AttributeHandle, bool)
 	LookupParameter(cls InteractionClassHandle, name string) (ParameterHandle, bool)
 }
+
+// FOMHandleNameLookup is the reverse-lookup half of FOMHandle, split into
+// its own interface so existing stubs that only need forward lookup are
+// not forced to implement the reverse direction. Production fomHandle
+// satisfies both. M25 Phase B (§10.2 handle-name services).
+type FOMHandleNameLookup interface {
+	ObjectClassName(ObjectClassHandle) (string, bool)
+	InteractionClassName(InteractionClassHandle) (string, bool)
+	AttributeName(ObjectClassHandle, AttributeHandle) (string, bool)
+	ParameterName(InteractionClassHandle, ParameterHandle) (string, bool)
+
+	// Dimension services (§10.2). DimensionHandle is a uint64 alias
+	// declared in handles.go.
+	LookupDimension(name string) (DimensionHandle, bool)
+	DimensionName(DimensionHandle) (string, bool)
+	DimensionUpperBound(DimensionHandle) (uint64, bool)
+}

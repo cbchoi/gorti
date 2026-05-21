@@ -32,28 +32,41 @@ type bufferedTSOEvent struct {
 // is at-or-before the federate's currentTime. Otherwise the event
 // must be buffered via BufferTSO.
 //
-// Default state: per IEEE 1516.1 §8.17, asyncDelivery starts OFF. A
-// federate with no recorded time-state (ns == nil) is treated as
-// currentTime=0 + asyncDelivery=false; events with ts > 0 buffer. To
-// preserve gorti's pre-M22 always-async behavior, federates that don't
-// use time advance must call EnableAsynchronousDelivery on join (see
-// the migration audit in docs/M22_DISPATCH_PLAN.md §8).
+// Per IEEE 1516.1 §8.16-8.17, asynchronous delivery governs TSO
+// delivery only for federates that participate in time coordination
+// (regulating or constrained). A federate that has never enabled
+// either has no logical-time progression, so TSO ordering is
+// meaningless and events deliver immediately. M25 Phase A: this
+// removes the M22 "all federates must opt-in to async on join" trap
+// that silently dropped TSO events for non-time-aware subscribers
+// (regression in M5 verbose-mode test).
 //
-// Concurrency: takes nerStore.mu for the state read; brief.
+// For federates that ARE time-engaged, asyncDelivery starts OFF (the
+// IEEE 1516.1 §8.17 default); events at-or-before currentTime
+// deliver, later events buffer until grant.
+//
+// Concurrency: lock order is stateStore.mu BEFORE nerStore.mu (see
+// nerStore docs). Both are released before return.
 func (m *Manager) ShouldDeliverNow(fed core.FederationName, h core.FederateHandle, ts core.LogicalTime) bool {
+	m.states.mu.Lock()
+	fs := m.states.getLocked(fed, h)
+	timeEngaged := fs != nil && (fs.regulating || fs.constrained)
+	m.states.mu.Unlock()
+	if !timeEngaged {
+		return true
+	}
 	ext := extOf(m)
 	ext.mu.Lock()
 	defer ext.mu.Unlock()
 	ns := ext.getLocked(fed, h)
 	if ns == nil {
-		// Implicit defaults: currentTime=0, asyncDelivery=false.
-		// Deliver only at-or-before t=0.
+		// Time-engaged federate but no advance-request state yet:
+		// per §8.17 default, currentTime=0 + asyncDelivery=false.
 		return float64(ts) <= 0
 	}
 	if ns.asyncDelivery {
 		return true
 	}
-	// Async OFF: deliver only when the federate has caught up.
 	return float64(ts) <= float64(ns.currentTime)
 }
 

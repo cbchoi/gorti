@@ -1,0 +1,85 @@
+"""M25 Phase C — Layer-2 Rti1516eAmbassador surface contract.
+
+Asserts every Pitch-style method this milestone promises is present
+on the ambassador class as a callable. Does NOT exercise the wire —
+the corresponding service-module tests already do that. The point
+here is to lock the surface so a future refactor can't silently
+remove a method a ported Pitch federate relies on.
+"""
+
+from __future__ import annotations
+
+import inspect
+
+import pytest
+
+from rti1516e.standard import Rti1516eAmbassador
+
+
+# Pitch-style method names the M25 ambassador must expose. Grouped
+# by spec section for navigability. If you remove a name here, also
+# remove it from standard.py; if you add a name to standard.py for
+# Pitch parity, append it here so the surface is locked.
+PITCH_SURFACE_METHODS = [
+    # §10.2 Support services (M25 Phase B)
+    "getObjectClassHandle", "getObjectClassName",
+    "getAttributeHandle", "getAttributeName",
+    "getInteractionClassHandle", "getInteractionClassName",
+    "getParameterHandle", "getParameterName",
+    "getDimensionHandle", "getDimensionName", "getDimensionUpperBound",
+    "getOrderType", "getOrderName",
+    "getTransportationType", "getTransportationName",
+    # §4.11-4.13 Sync points (M25 Phase C)
+    "registerFederationSynchronizationPoint",
+    "synchronizationPointAchieved",
+    # §7 Ownership (M25 Phase C)
+    "unconditionalAttributeOwnershipDivestiture",
+    "negotiatedAttributeOwnershipDivestiture",
+    "attributeOwnershipAcquisition",
+    "cancelNegotiatedAttributeOwnershipDivestiture",
+    "cancelAttributeOwnershipAcquisition",
+    "attributeOwnershipDivestitureIfWanted",
+    "queryAttributeOwnership",
+    "isAttributeOwnedByFederate",
+    # §4.8-4.15 Save / Restore (M25 Phase C)
+    "requestFederationSave",
+    "federateSaveComplete", "federateSaveNotComplete",
+    "queryFederationSaveStatus",
+    "requestFederationRestore",
+    "federateRestoreComplete",
+    "queryFederationRestoreStatus",
+    # §9 DDM (M25 Phase C)
+    "createRegion", "setRangeBounds",
+    "commitRegionModifications", "deleteRegion",
+    "subscribeObjectClassAttributesWithRegions",
+    "subscribeInteractionClassWithRegions",
+    "registerObjectInstanceWithRegions",
+    "associateRegionsForUpdates", "unassociateRegionsForUpdates",
+    "unsubscribeObjectClassAttributesWithRegions",
+    "unsubscribeInteractionClassWithRegions",
+    "sendInteractionWithRegions",
+    "requestAttributeValueUpdateWithRegions",
+]
+
+
+@pytest.mark.spec
+@pytest.mark.parametrize("method_name", PITCH_SURFACE_METHODS)
+def test_spec_m25_ambassador_exposes_pitch_method(method_name: str) -> None:
+    """Each Pitch-style method exists on Rti1516eAmbassador as a callable."""
+    attr = getattr(Rti1516eAmbassador, method_name, None)
+    assert attr is not None, f"Rti1516eAmbassador is missing {method_name}"
+    assert callable(attr), f"Rti1516eAmbassador.{method_name} exists but is not callable"
+
+
+@pytest.mark.spec
+def test_spec_m25_ambassador_methods_are_instance_bound() -> None:
+    """All Pitch-style methods take self as first arg (instance methods, not
+    classmethods or staticmethods)."""
+    for name in PITCH_SURFACE_METHODS:
+        attr = getattr(Rti1516eAmbassador, name)
+        sig = inspect.signature(attr)
+        first = next(iter(sig.parameters), None)
+        assert first == "self", (
+            f"{name}: first parameter is {first!r}; want 'self' "
+            "(instance methods only)"
+        )
