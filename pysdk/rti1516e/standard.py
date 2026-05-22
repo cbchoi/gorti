@@ -129,14 +129,37 @@ class Rti1516eAmbassador:
         self._fom_modules = list(fom_modules)
 
     def joinFederationExecution(  # noqa: N802
-        self, federate_name: str, federation_name: str
+        self,
+        federate_name: str,
+        federation_name: str,
+        additional_fom_modules: list[str] | None = None,
     ) -> None:
+        """§4.9 — join an existing federation.
+
+        M27 Phase D: ``additional_fom_modules`` matches Pitch's
+        IEEE 1516.1 ``additionalFomModules`` parameter. A federate
+        that joins an already-created federation should pass the
+        same FOM modules the creator used, so the local handle
+        cache is populated. Without this, event translation falls
+        back to stringified handles (Discover / Reflect / Receive
+        callbacks see the handle as a decimal string instead of
+        the FOM class name).
+
+        If a prior ``createFederationExecution`` recorded modules,
+        those are used unless ``additional_fom_modules`` is passed
+        explicitly (the explicit form wins, matching Pitch).
+        """
         if self._connection is None:
             raise RuntimeError("connect() must be called before joinFederationExecution()")
         # Honor a prior createFederationExecution; otherwise default to the
         # passed federation_name with no FOM modules.
         name = self._federation_name if self._federation_name is not None else federation_name
-        spec = FederationSpec(name=name, fom_modules=list(self._fom_modules))
+        modules: list[str]
+        if additional_fom_modules is not None:
+            modules = list(additional_fom_modules)
+        else:
+            modules = list(self._fom_modules)
+        spec = FederationSpec(name=name, fom_modules=modules)
         cm = self._connection.join_federation(spec, federate_name=federate_name)
         self._federate_cm = cm
         self._federate = self._run(cm.__aenter__())
@@ -174,10 +197,12 @@ class Rti1516eAmbassador:
         int|str semantics."""
         self._run(self._fed().subscribe_object_class(class_name, attributes=list(attributes)))
 
-    def publishInteractionClass(self, class_name: str) -> None:  # noqa: N802
+    def publishInteractionClass(self, class_name: int | str) -> None:  # noqa: N802
+        """M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or ``str``."""
         self._run(self._fed().publish_interaction_class(class_name))
 
-    def subscribeInteractionClass(self, class_name: str) -> None:  # noqa: N802
+    def subscribeInteractionClass(self, class_name: int | str) -> None:  # noqa: N802
+        """M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or ``str``."""
         self._run(self._fed().subscribe_interaction_class(class_name))
 
     # --- Object management ---
@@ -621,6 +646,39 @@ class Rti1516eAmbassador:
                 object_class_handle, attribute_handles, region_handles, tag=tag
             )
         )
+
+    # --- §11 Management Object Model (M27 Phase D) ---
+    # gorti exposes the MOM tracking surface via a query API rather than
+    # via the MIM interaction set. The three methods below delegate to
+    # fed.mom.* and are typed as Any to avoid pulling the dataclass
+    # definitions into the standard.py top of file (the caller imports
+    # FederationAttributes / FederateAttributes / MomInstance from
+    # rti1516e.mom if they want to pattern-match).
+
+    def queryFederationAttributes(self) -> Any:  # noqa: N802
+        """§11 — return the HLAfederation MOM object snapshot.
+
+        Returns :class:`rti1516e.mom.FederationAttributes`.
+        """
+        return self._run(self._fed().mom.query_federation_attributes())
+
+    def queryFederateAttributes(self, federate_handle: int) -> Any:  # noqa: N802
+        """§11 — return the HLAfederate MOM object snapshot for one federate.
+
+        Returns :class:`rti1516e.mom.FederateAttributes`. The
+        ``.found`` flag distinguishes "tracked + populated" from
+        "no record (resigned or never joined)".
+        """
+        return self._run(self._fed().mom.query_federate_attributes(federate_handle))
+
+    def enumerateMomInstances(self) -> Any:  # noqa: N802
+        """§11 — list every active MOM instance in the federation.
+
+        Returns ``list[rti1516e.mom.MomInstance]`` covering the
+        HLAfederation singleton and one HLAfederate per joined
+        federate.
+        """
+        return self._run(self._fed().mom.enumerate_mom_instances())
 
     # --- §6.1-6.5 Object instance name reservation (M26 Phase F) ---
 

@@ -369,8 +369,12 @@ class Federate:
             attributes=list(attributes),
         )
 
-    async def publish_interaction_class(self, class_name: str) -> None:
-        """Declare publication of an interaction class."""
+    async def publish_interaction_class(self, class_name: int | str) -> None:
+        """Declare publication of an interaction class.
+
+        M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or
+        ``str`` (FOM name).
+        """
         await _dispatch(
             self._transport,
             "publish_interaction_class",
@@ -378,8 +382,14 @@ class Federate:
             class_name=class_name,
         )
 
-    async def subscribe_interaction_class(self, class_name: str) -> None:
-        """Declare subscription to an interaction class."""
+    async def subscribe_interaction_class(self, class_name: int | str) -> None:
+        """Declare subscription to an interaction class.
+
+        M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or
+        ``str`` (FOM name). Subscriber federates that joined an
+        already-created federation should prefer the int form
+        (handle resolved via :meth:`support.get_interaction_class_handle`).
+        """
         await _dispatch(
             self._transport,
             "subscribe_interaction_class",

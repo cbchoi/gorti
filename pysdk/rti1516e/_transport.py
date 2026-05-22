@@ -432,11 +432,16 @@ class GrpcTransport:
         return
 
     async def _publish_interaction(
-        self, federate_handle: int, class_name: str
+        self, federate_handle: int, class_arg: int | str
     ) -> None:
+        """M27 Phase D: ``class_arg`` accepts ``int`` (FOM handle) or
+        ``str`` (FOM name). Subscriber federates that joined an
+        already-created federation may have an empty local FOM cache;
+        passing the handle directly (resolved via SupportService) is
+        the safe path."""
         from rti.v1 import common_pb2, declaration_pb2
 
-        cls = self._interaction_handle_for(class_name)
+        cls = self._resolve_interaction_class_handle(class_arg)
         req = declaration_pb2.PubInterRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name or "",
@@ -447,11 +452,12 @@ class GrpcTransport:
         return
 
     async def _subscribe_interaction(
-        self, federate_handle: int, class_name: str
+        self, federate_handle: int, class_arg: int | str
     ) -> None:
+        """M27 Phase D: see _publish_interaction."""
         from rti.v1 import common_pb2, declaration_pb2
 
-        cls = self._interaction_handle_for(class_name)
+        cls = self._resolve_interaction_class_handle(class_arg)
         req = declaration_pb2.SubInterRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name or "",

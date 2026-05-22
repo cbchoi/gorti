@@ -66,6 +66,9 @@ PITCH_SURFACE_METHODS = [
     "reserveMultipleObjectInstanceNames",
     # §6.30-6.31 runtime instance handle services (M27 Phase C)
     "getObjectInstanceHandle", "getObjectInstanceName",
+    # §11 MOM (M27 Phase D)
+    "queryFederationAttributes", "queryFederateAttributes",
+    "enumerateMomInstances",
 ]
 
 

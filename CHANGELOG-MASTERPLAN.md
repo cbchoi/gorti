@@ -299,6 +299,41 @@ Test state at close:
 - Ruff: clean.
 - Mypy strict: clean.
 
+#### M27 Phase D — MOM ambassador delegates + cross-federate Pitch smoke (closed 2026-05-22)
+
+Closes the last queued item from the M27 plan.
+
+D.1 — MOM delegates on `Rti1516eAmbassador` (§11):
+- `queryFederationAttributes() -> FederationAttributes`
+- `queryFederateAttributes(federate_handle: int) -> FederateAttributes`
+- `enumerateMomInstances() -> list[MomInstance]`
+- Each delegates to the existing `Federate.mom.*` async client via `self._run(...)`. Ambassador surface lockfile updated.
+- 4 new e2e tests in `pysdk/tests/spec/m27/test_mom_ambassador.py`: federation snapshot includes the joined federate's handle; federate snapshot reports joined federate's name; enumeration lists HLAfederation + one HLAfederate per joined federate; unknown handle returns `FederateAttributes(found=False)`.
+
+D.2 — Cross-federate Pitch-shape smoke:
+- `examples/pitch-shape-smoke/smoke_federate.py` gains `run_subscriber(url, *, evoke_seconds, subscribed_event)`. The subscriber uses ONLY Pitch-style ambassador methods (override slots `discoverObjectInstance` / `reflectAttributeValues` / `receiveInteraction`, dispatched via `evokeMultipleCallbacks` loop). No reach-around into `Federate.events()` async iteration.
+- `run_publisher` gains optional coordination hooks (`joined_event`, `proceed_event`, `resign_when_done`) so the test thread can sync publisher↔subscriber.
+- New spec test `test_pitch_shape_smoke_cross.py` runs publisher + subscriber on separate threads against the same rtid; asserts the subscriber observed Discover ("car-7"), Reflect (Position/Velocity), and Receive (Honk).
+
+While implementing D.2 surfaced two follow-on gaps that landed in the same commit:
+
+- **`publishInteractionClass` / `subscribeInteractionClass` widened to `int | str`** (M27 Phase B extended). Pre-D, only the ObjectClass declarations accepted handle-form. Subscriber federates that join an already-created federation often have an empty local FOM cache and must pass the int handle (resolved via `getInteractionClassHandle`) to subscribe successfully — string-form would resolve to handle 0 (invalid) and silently no-op.
+- **`joinFederationExecution` gains `additional_fom_modules`** (matches Pitch's IEEE 1516.1 spec signature). A federate joining an already-created federation should pass the same FOM modules the creator used, so the local handle cache is populated for event translation. Without this, `discoverObjectInstance` / `receiveInteraction` callbacks fire with `class_name` as a stringified handle (`'86'`) instead of the FOM class name (`'Honk'`).
+
+Test state at M27 D close:
+- Go: 39 packages green under `-race` (default count).
+- Python: 710 pass / 4 skipped / 1 flaky-under-load (the `pyjevsim_runner_is_deterministic_across_10_runs` test passes 3/3 standalone but occasionally fails when the full sweep runs many rtid subprocesses concurrently; not a regression).
+- M25–M27 inclusive: **93/93 spec tests green**.
+- Ruff + mypy `--strict`: clean.
+
+M27 close (all 5 phases):
+- Phase A: outbox pre-bind race fix (`1cf9b4e`).
+- Phase B+C: handle-keyed overloads + instance handle services + callback toggle (`57f4e9a`).
+- Phase E: quality cleanup (`3fc5756`).
+- Phase D: MOM delegates + cross-federate smoke (this commit).
+
+Pitch-API parity story is now fully closed. The Layer 2 `Rti1516eAmbassador` is a viable porting target for federate code from Pitch / Portico / MAK, modulo the strict HLA_EVOKED divergence documented in `docs/PITCH_PARITY.md`.
+
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
 Out of scope (deferred to M25+):

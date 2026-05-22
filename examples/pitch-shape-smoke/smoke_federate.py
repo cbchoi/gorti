@@ -92,12 +92,34 @@ class SmokeFederate(Rti1516eAmbassador):
         self.removes.append(object_handle)
 
 
-def run_publisher(url: str) -> dict[str, Any]:
-    """Federate that creates the federation + registers + publishes."""
+def run_publisher(
+    url: str,
+    *,
+    joined_event: Any | None = None,
+    proceed_event: Any | None = None,
+    resign_when_done: bool = True,
+) -> dict[str, Any]:
+    """Federate that creates the federation + registers + publishes.
+
+    M27 Phase D: optional coordination hooks for the cross-federate
+    smoke. If ``joined_event`` is provided, ``.set()`` is called once
+    the publisher has joined (lets a subscriber thread synchronize on
+    "federation exists"). If ``proceed_event`` is provided, the
+    publisher waits on ``.wait()`` after joining + declaring its
+    publish set, before the register / update / interact phase — so
+    the subscriber has a chance to subscribe before the data flows.
+
+    ``resign_when_done`` controls the cleanup phase. Default behavior
+    is to resign the federate, which the test wants when the call is
+    standalone. The cross-federate smoke disables resign and lets the
+    main test thread own the federation lifecycle.
+    """
     pub = SmokeFederate()
     pub.connect(pub, url)
     pub.createFederationExecution(FEDERATION_NAME, [FOM])
     pub.joinFederationExecution("publisher", FEDERATION_NAME)
+    if joined_event is not None:
+        joined_event.set()
     try:
         # 1. Look up handles (Pitch-style: name → handle before pub/sub).
         vehicle_class = pub.getObjectClassHandle("Vehicle")
@@ -108,6 +130,11 @@ def run_publisher(url: str) -> dict[str, Any]:
         # 2. Publish using string class name (pysdk convenience).
         pub.publishObjectClassAttributes("Vehicle", ["Position", "Velocity"])
         pub.publishInteractionClass("Honk")
+
+        # M27 Phase D — let the subscriber catch up before the
+        # publish-side work fires. Cross-federate smoke uses this.
+        if proceed_event is not None:
+            proceed_event.wait(timeout=10.0)
 
         # 3. Reserve an instance name (Pitch-required flow).
         pub.reserveObjectInstanceName("car-7")
@@ -146,8 +173,82 @@ def run_publisher(url: str) -> dict[str, Any]:
             "sync_announcements": list(pub.sync_announcements),
         }
     finally:
-        pub.resignFederationExecution()
-        pub.disconnect()
+        if resign_when_done:
+            pub.resignFederationExecution()
+            pub.disconnect()
+
+
+def run_subscriber(
+    url: str,
+    *,
+    evoke_seconds: float = 3.0,
+    subscribed_event: Any | None = None,
+) -> dict[str, Any]:
+    """Pitch-style subscriber federate. M27 Phase D.
+
+    Joins the same federation the publisher created, subscribes to
+    Vehicle.Position/Velocity + Honk by HANDLE (Pitch idiom), and
+    drives callback dispatch via ``evokeMultipleCallbacks`` for
+    ``evoke_seconds``. Returns the captured callback state.
+
+    The subscriber uses ONLY Pitch-style ambassador methods — no
+    reach-around into ``self._fed().events()`` async iteration, no
+    direct SDK module access. This is the test that gorti's Layer 2
+    is usable as a Pitch-style federate harness.
+    """
+    sub = SmokeFederate()
+    sub.connect(sub, url)
+    # The publisher created the federation; subscriber only joins —
+    # but the subscriber must pass the same FOM modules so the
+    # local handle cache is populated for event translation
+    # (Discover / Reflect / Receive callbacks would otherwise see
+    # the stringified handle instead of the FOM class name).
+    sub.joinFederationExecution(
+        "subscriber",
+        FEDERATION_NAME,
+        additional_fom_modules=[FOM],
+    )
+    try:
+        # 1. Handle lookups (Pitch idiom: resolve once, reuse).
+        vehicle_class = sub.getObjectClassHandle("Vehicle")
+        position_attr = sub.getAttributeHandle(vehicle_class, "Position")
+        velocity_attr = sub.getAttributeHandle(vehicle_class, "Velocity")
+        honk_class = sub.getInteractionClassHandle("Honk")
+
+        # 2. Subscribe by handle (Pitch idiom — by-handle subscription
+        # works even when the subscriber joined an already-created
+        # federation and has no local FOM cache).
+        sub.subscribeObjectClassAttributes(
+            vehicle_class, [position_attr, velocity_attr]
+        )
+        sub.subscribeInteractionClass(honk_class)
+        if subscribed_event is not None:
+            subscribed_event.set()
+
+        # 3. Drive callback dispatch via the Pitch evoke loop. The
+        #    publisher should produce Discover + Reflect + Receive
+        #    events that fire the corresponding override slots.
+        import time as _time
+        deadline = _time.monotonic() + evoke_seconds
+        while _time.monotonic() < deadline:
+            sub.evokeMultipleCallbacks(approx_min_time=0.05, approx_max_time=0.1)
+            # Early-out: we expect ≥1 discover, ≥1 reflect, ≥1 interaction.
+            if sub.discovered and sub.reflections and sub.interactions:
+                break
+
+        return {
+            "vehicle_class": vehicle_class,
+            "position_attr": position_attr,
+            "velocity_attr": velocity_attr,
+            "honk_class": honk_class,
+            "discovered": list(sub.discovered),
+            "reflections": list(sub.reflections),
+            "interactions": list(sub.interactions),
+            "sync_announcements": list(sub.sync_announcements),
+        }
+    finally:
+        sub.resignFederationExecution()
+        sub.disconnect()
 
 
 if __name__ == "__main__":
