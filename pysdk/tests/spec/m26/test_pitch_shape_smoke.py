@@ -108,7 +108,7 @@ def test_spec_m26_pitch_shape_smoke() -> None:
         # thread isolate the test from pytest's loop machinery.
         sys.path.insert(0, str(REPO_ROOT / "examples" / "pitch-shape-smoke"))
         try:
-            from smoke_federate import run_publisher
+            from smoke_federate import run_publisher  # type: ignore[import-not-found]
         finally:
             sys.path.pop(0)
 

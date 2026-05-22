@@ -28,7 +28,7 @@ import inspect
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Self, cast
 
 from rti1516e._transport import build_grpc_transport as _build_grpc_transport
 from rti1516e._transport import lookup as _lookup_transport
@@ -412,11 +412,15 @@ class Federate:
     async def update_attributes(
         self,
         object_handle: int,
-        values: dict[str, Any],
+        values: dict[int | str, Any],
         *,
         timestamp: float | None = None,
     ) -> None:
-        """Update one or more attribute values on an object instance."""
+        """Update one or more attribute values on an object instance.
+
+        M27 Phase B: dict keys accept ``int`` (already-resolved
+        attribute handle, Pitch-style) or ``str`` (FOM name).
+        """
         await _dispatch(
             self._transport,
             "update_attributes",
@@ -542,26 +546,29 @@ class Federate:
 
     async def query_logical_time(self) -> float:
         """Return the federate's current logical time."""
-        return await _dispatch(
+        result = await _dispatch(
             self._transport,
             "query_logical_time",
             federate_handle=self.handle,
         )
+        return float(result)
 
     async def query_lookahead(self) -> float:
         """Return the federate's current lookahead. Errors if not regulating."""
-        return await _dispatch(
+        result = await _dispatch(
             self._transport,
             "query_lookahead",
             federate_handle=self.handle,
         )
+        return float(result)
 
     async def query_lbts(self) -> tuple[float, bool]:
         """Return ``(lbts, finite)``. ``finite=False`` ⇒ no regulators."""
-        return await _dispatch(
+        result = await _dispatch(
             self._transport,
             "query_lbts",
         )
+        return cast("tuple[float, bool]", result)
 
     async def enable_asynchronous_delivery(self) -> None:
         """Enable async TSO delivery. ``TimeAlreadyAsynchronous`` if already on.

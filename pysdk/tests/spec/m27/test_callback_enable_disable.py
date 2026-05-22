@@ -11,8 +11,9 @@ federation / rtid required.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -47,12 +48,12 @@ class _RecordingAmbassador(Rti1516eAmbassador):
         self.received.append(class_name)
 
 
-def _install():  # type: ignore[no-untyped-def]
+def _install() -> tuple[_RecordingAmbassador, _PushFederate, asyncio.Task[None]]:
     amb = _RecordingAmbassador()
     amb._start_loop()
     loop = amb._loop_required()
     ready = threading.Event()
-    fake_box: dict[str, Any] = {}
+    fake_box: dict[str, _PushFederate] = {}
 
     async def _build() -> None:
         fake_box["fed"] = _PushFederate(loop)
@@ -61,7 +62,7 @@ def _install():  # type: ignore[no-untyped-def]
     asyncio.run_coroutine_threadsafe(_build(), loop).result()
     ready.wait()
     fake = fake_box["fed"]
-    amb._federate = fake  # type: ignore[assignment]
+    amb._federate = cast(Any, fake)
     pump_box: dict[str, asyncio.Task[None]] = {}
 
     async def _start_pump() -> None:
@@ -71,15 +72,13 @@ def _install():  # type: ignore[no-untyped-def]
     return amb, fake, pump_box["task"]
 
 
-def _teardown(amb, pump):  # type: ignore[no-untyped-def]
+def _teardown(amb: _RecordingAmbassador, pump: asyncio.Task[None]) -> None:
     loop = amb._loop_required()
 
     async def _cancel() -> None:
         pump.cancel()
-        try:
+        with contextlib.suppress(BaseException):
             await pump
-        except BaseException:  # noqa: BLE001
-            pass
 
     asyncio.run_coroutine_threadsafe(_cancel(), loop).result()
     amb._stop_loop()

@@ -196,15 +196,21 @@ def test_spec_m25_pump_events_dispatches_full_surface() -> None:
 
 @pytest.mark.spec
 def test_spec_m25_base_ambassador_callbacks_are_noops() -> None:
-    """Base-class no-op callbacks return None and don't raise."""
+    """Base-class no-op callbacks don't raise.
+
+    Each method is typed -> None, so asserting `== None` would be
+    redundant under mypy --strict. The test value is "calling these
+    on a fresh ambassador doesn't blow up" — the absence of an
+    exception is the assertion.
+    """
     amb = Rti1516eAmbassador()
-    assert amb.removeObjectInstance(1, b"", None) is None
-    assert amb.provideAttributeValueUpdate(1, (1,), b"") is None
-    assert amb.announceSynchronizationPoint("x", b"") is None
-    assert amb.federationSynchronized("x") is None
-    assert amb.requestAttributeOwnershipAssumption(1, (1,), 2, b"") is None
-    assert amb.attributeOwnershipAcquisitionNotification(1, (1,), 2) is None
-    assert amb.requestDivestitureConfirmation(1, (1,)) is None
-    assert amb.initiateFederateSave("x", None) is None
-    assert amb.federationSaved("x") is None
-    assert amb.federationNotSaved("x") is None
+    amb.removeObjectInstance(1, b"", None)
+    amb.provideAttributeValueUpdate(1, (1,), b"")
+    amb.announceSynchronizationPoint("x", b"")
+    amb.federationSynchronized("x")
+    amb.requestAttributeOwnershipAssumption(1, (1,), 2, b"")
+    amb.attributeOwnershipAcquisitionNotification(1, (1,), 2)
+    amb.requestDivestitureConfirmation(1, (1,))
+    amb.initiateFederateSave("x", None)
+    amb.federationSaved("x")
+    amb.federationNotSaved("x")

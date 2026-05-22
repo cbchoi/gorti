@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from concurrent.futures import Future
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.events import (
@@ -250,13 +250,13 @@ class Rti1516eAmbassador:
         self._run(self._fed().flush_queue_request(time))
 
     def queryLogicalTime(self) -> float:  # noqa: N802
-        return self._run(self._fed().query_logical_time())
+        return float(self._run(self._fed().query_logical_time()))
 
     def queryLookahead(self) -> float:  # noqa: N802
-        return self._run(self._fed().query_lookahead())
+        return float(self._run(self._fed().query_lookahead()))
 
     def queryLBTS(self) -> tuple[float, bool]:  # noqa: N802
-        return self._run(self._fed().query_lbts())
+        return cast("tuple[float, bool]", self._run(self._fed().query_lbts()))
 
     def enableAsynchronousDelivery(self) -> None:  # noqa: N802
         self._run(self._fed().enable_asynchronous_delivery())
@@ -282,17 +282,29 @@ class Rti1516eAmbassador:
     def requestClassAttributeValueUpdate(  # noqa: N802
         self, object_class_handle: int, attribute_handles: list[int], tag: bytes = b"",
     ) -> None:
-        self._run(self._fed().request_class_attribute_value_update(object_class_handle, attribute_handles, tag))
+        self._run(
+            self._fed().request_class_attribute_value_update(
+                object_class_handle, attribute_handles, tag,
+            )
+        )
 
     def changeAttributeTransportationType(  # noqa: N802
         self, object_handle: int, attribute_handles: list[int], transport: int,
     ) -> None:
-        self._run(self._fed().change_attribute_transportation_type(object_handle, attribute_handles, transport))
+        self._run(
+            self._fed().change_attribute_transportation_type(
+                object_handle, attribute_handles, transport,
+            )
+        )
 
     def changeInteractionTransportationType(  # noqa: N802
         self, interaction_class_handle: int, transport: int,
     ) -> None:
-        self._run(self._fed().change_interaction_transportation_type(interaction_class_handle, transport))
+        self._run(
+            self._fed().change_interaction_transportation_type(
+                interaction_class_handle, transport,
+            )
+        )
 
     # --- §10.2 Support services (M25 Phase B) ---
     # Pitch-style sync wrappers around the async SupportClient. Each
@@ -416,8 +428,11 @@ class Rti1516eAmbassador:
     def queryAttributeOwnership(  # noqa: N802
         self, object_handle: int, attribute_handle: int
     ) -> tuple[int, bool]:
-        return self._run(
-            self._fed().ownership.query_attribute_ownership(object_handle, attribute_handle)
+        return cast(
+            "tuple[int, bool]",
+            self._run(
+                self._fed().ownership.query_attribute_ownership(object_handle, attribute_handle)
+            ),
         )
 
     def isAttributeOwnedByFederate(  # noqa: N802

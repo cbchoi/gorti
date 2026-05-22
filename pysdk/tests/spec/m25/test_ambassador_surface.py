@@ -15,7 +15,6 @@ import pytest
 
 from rti1516e.standard import Rti1516eAmbassador
 
-
 # Pitch-style method names the M25 ambassador must expose. Grouped
 # by spec section for navigability. If you remove a name here, also
 # remove it from standard.py; if you add a name to standard.py for

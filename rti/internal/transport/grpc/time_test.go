@@ -11,6 +11,7 @@ package grpc
 import (
 	"context"
 	"math"
+	"sync"
 	"testing"
 	stdtime "time"
 
@@ -23,10 +24,16 @@ import (
 )
 
 // recordingOutbox captures grants emitted by the manager during tests.
-// Tests inspect grants[(fed, h)] to verify per-primitive grant
+// Tests inspect grants via snapshot() to verify per-primitive grant
 // semantics on the wire path (the wire->stream boundary is W2B's
 // concern; here we only verify the grant payload reaches the outbox).
+//
+// M27 Phase E — Send is invoked from manager goroutines and from test
+// goroutines (cross-federate NER tests fire on multiple goroutines).
+// The mutex makes append + snapshot() race-clean under
+// `go test -race`.
 type recordingOutbox struct {
+	mu     sync.Mutex
 	grants []recordedGrant
 }
 
@@ -38,9 +45,21 @@ type recordedGrant struct {
 
 func (o *recordingOutbox) Send(_ context.Context, fed core.FederationName, h core.FederateHandle, evt core.OutboundEvent) error {
 	if g, ok := evt.(*timepkg.TimeAdvanceGrant); ok && g != nil {
+		o.mu.Lock()
 		o.grants = append(o.grants, recordedGrant{fed: fed, h: h, t: g.Time})
+		o.mu.Unlock()
 	}
 	return nil
+}
+
+// snapshot returns a copy of grants under lock. Tests use this for
+// any inspection (read access without the lock races with Send).
+func (o *recordingOutbox) snapshot() []recordedGrant {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	out := make([]recordedGrant, len(o.grants))
+	copy(out, o.grants)
+	return out
 }
 
 // timeServiceFixture builds a fresh timeService backed by a real
@@ -248,7 +267,7 @@ func TestNERStrictGate(t *testing.T) {
 	// Sole-pending forced-grant DOES apply here (fed 2 has not requested),
 	// so we expect a forced grant. We don't pin the boundary; instead
 	// verify the federate's eventual logical time is bounded by t.
-	for _, g := range out.grants {
+	for _, g := range out.snapshot() {
 		if g.h == 1 && g.t > 1.0 {
 			t.Errorf("NER grant time = %v, exceeds requested t=1.0", g.t)
 		}
@@ -269,7 +288,7 @@ func TestNMRAInclusiveGate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("NMRA: %v", err)
 	}
-	for _, g := range out.grants {
+	for _, g := range out.snapshot() {
 		if g.h == 1 && g.t > 1.0 {
 			t.Errorf("NMRA grant time = %v, exceeds requested t=1.0", g.t)
 		}
@@ -295,9 +314,10 @@ func TestTARMultiPendingIncremental(t *testing.T) {
 	// Each pending TAR should produce a grant at LBTS (= 1.0 initially —
 	// the smallest currentTime+lookahead). The grants converge as
 	// federates advance; verify at least 3 grants overall.
-	if len(out.grants) < 3 {
+	snap := out.snapshot()
+	if len(snap) < 3 {
 		t.Errorf("TAR multi-pending: got %d grants, want >= 3 (one per federate). grants=%+v",
-			len(out.grants), out.grants)
+			len(snap), snap)
 	}
 }
 
@@ -314,7 +334,7 @@ func TestTARAGate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("TARA: %v", err)
 	}
-	for _, g := range out.grants {
+	for _, g := range out.snapshot() {
 		if g.h == 1 && g.t > 1.0 {
 			t.Errorf("TARA grant time = %v, exceeds requested t=1.0", g.t)
 		}
@@ -334,7 +354,7 @@ func TestFQRGrants(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("FQR: %v", err)
 	}
-	if len(out.grants) == 0 {
+	if len(out.snapshot()) == 0 {
 		t.Errorf("FQR: expected at least one grant; got none")
 	}
 }
@@ -352,7 +372,7 @@ func TestFQRGrantTimeBoundedByLBTS(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("FQR: %v", err)
 	}
-	for _, g := range out.grants {
+	for _, g := range out.snapshot() {
 		if g.h == 1 && g.t > 100.0 {
 			t.Errorf("FQR grant time = %v, exceeds requested t=100.0", g.t)
 		}

@@ -15,7 +15,9 @@ import socket
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -115,9 +117,17 @@ async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: 
     raise TimeoutError(f"rtid did not accept connections on :{port} within {timeout}s")
 
 
-async def _drain_until(fed, predicate, timeout=2.0):  # type: ignore[no-untyped-def]
-    """Drain events until predicate(event) is True. Returns that event."""
-    async def _inner():  # type: ignore[no-untyped-def]
+async def _drain_until(
+    fed: Any,
+    predicate: Callable[[Any], bool],
+    timeout: float = 2.0,  # noqa: ASYNC109
+) -> Any:
+    """Drain events until predicate(event) is True. Returns that event.
+
+    ``timeout`` is the deadline for the whole drain loop, not a per-call
+    I/O timeout — ASYNC109 (use asyncio.timeout) doesn't apply here.
+    """
+    async def _inner() -> Any:
         async for ev in fed.events():
             if predicate(ev):
                 return ev

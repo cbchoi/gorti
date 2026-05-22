@@ -14,6 +14,7 @@ tracks whether _pump_events fired a callback during the window.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from typing import Any
 
@@ -83,7 +84,7 @@ def _install_ambassador_with_fake_federate() -> tuple[
     asyncio.run_coroutine_threadsafe(_build(), loop).result()
     ready.wait()
     fake = fake_box["fed"]
-    amb._federate = fake  # type: ignore[assignment]
+    amb._federate = fake
 
     # Start the pump as a loop-side task.
     pump_box: dict[str, asyncio.Task[None]] = {}
@@ -100,10 +101,8 @@ def _teardown(amb: _RecordingAmbassador, pump_task: asyncio.Task[None]) -> None:
 
     async def _cancel() -> None:
         pump_task.cancel()
-        try:
+        with contextlib.suppress(BaseException):
             await pump_task
-        except (asyncio.CancelledError, BaseException):  # noqa: BLE001
-            pass
 
     asyncio.run_coroutine_threadsafe(_cancel(), loop).result()
     amb._stop_loop()

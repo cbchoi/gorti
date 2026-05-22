@@ -88,7 +88,8 @@ def test_helper_uses_correct_stub_and_request(
 ) -> None:
     """Each helper invokes self.time.<stub_method> with the correct
     proto request type. Source-level check, not behavioral."""
-    src = open(tr.__file__, encoding="utf-8").read()
+    with open(tr.__file__, encoding="utf-8") as fh:
+        src = fh.read()
     assert f"self.time.{stub_method}(" in src, (
         f"helper does not call self.time.{stub_method}(...)"
     )

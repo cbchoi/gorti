@@ -27,29 +27,35 @@ if str(EXAMPLE_DIR) not in sys.path:
 def _witness(result: dict[str, object]) -> str:
     """sha256 over the deterministic byproducts of one ``run_once`` call.
 
-    Hashing ``repr`` of a tuple of (consumer.received, producer.published,
-    send_interaction_count) catches three independent failure modes:
-    drift in the wire payload bytes, drift in the producer's internal
-    counter, and drops/duplicates in the fake-RTI fan-out.
+    Hashes the (consumer.received, producer.published) pair. The
+    M27 Phase E cleanup removed a speculative third element
+    ``send_interactions`` that never landed on the runner contract;
+    ``len(published)`` is the canonical send count, so the two-tuple
+    catches every determinism-failure mode this test ought to detect:
+    drift in the wire payload bytes, drift in the producer counter,
+    and drops/duplicates in the RTI fan-out.
     """
-    blob = repr(
-        (
-            result["received"],
-            result["published"],
-            result["send_interactions"],
-        )
-    ).encode()
+    blob = repr((result["received"], result["published"])).encode()
     return hashlib.sha256(blob).hexdigest()
 
 
 @pytest.mark.spec
 def test_spec_m4_determinism_10x_same_seed() -> None:
-    """Run examples/pyjevsim 10× with the same seed; assert all hashes match."""
+    """Run examples/pyjevsim 10× with the same inputs; assert all hashes match.
+
+    M27 Phase E: the test name retains "same seed" for the
+    orchestrator-frozen identifier, but ``run_once`` takes no
+    seed parameter — the runner is deterministic by construction
+    (pyjevsim has no random source the bridge exposes). The original
+    ``seed=`` kwarg was speculative API that never landed; passing
+    identical ``ticks`` already satisfies the M4 exit criterion's
+    "same inputs → same outputs" property.
+    """
     # Imported lazily — the example dir is appended to sys.path above so
     # this resolves without installing the package.
     from runner import run_once  # type: ignore[import-not-found]
 
-    sigs = [_witness(asyncio.run(run_once(ticks=10, seed=42))) for _ in range(10)]
+    sigs = [_witness(asyncio.run(run_once(ticks=10))) for _ in range(10)]
     assert all(sig == sigs[0] for sig in sigs), (
         "non-deterministic across 10 runs; distinct sha256s observed:\n  "
         + "\n  ".join(sorted(set(sigs)))

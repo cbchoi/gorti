@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -200,15 +201,15 @@ def test_spec_m25_support_service_end_to_end() -> None:
             proc.kill()
             proc.wait(timeout=5)
 
-    assert result["vehicle_h"] > 0
+    assert cast(int, result["vehicle_h"]) > 0
     assert result["vehicle_name"] == "Vehicle"
-    assert result["pos_h"] > 0
+    assert cast(int, result["pos_h"]) > 0
     assert result["pos_name"] == "Position"
-    assert result["honk_h"] > 0
+    assert cast(int, result["honk_h"]) > 0
     assert result["honk_name"] == "Honk"
-    assert result["vol_h"] > 0
+    assert cast(int, result["vol_h"]) > 0
     assert result["vol_name"] == "Volume"
-    assert result["x_h"] > 0
+    assert cast(int, result["x_h"]) > 0
     assert result["x_name"] == "X"
     assert result["x_ub"] == 1000
     assert result["ts_type"] == ORDER_TYPE_TIMESTAMP

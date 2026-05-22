@@ -1085,7 +1085,11 @@ class GrpcTransport:
                 out.append(int(a))
                 continue
             if class_name is None:
-                class_name = class_arg if isinstance(class_arg, str) else self._object_class_name_for(class_arg)
+                class_name = (
+                    class_arg
+                    if isinstance(class_arg, str)
+                    else self._object_class_name_for(class_arg)
+                )
             if class_name is None:
                 continue
             h = self._attribute_handle_for(class_name, a)
@@ -1491,12 +1495,16 @@ async def build_grpc_transport(
     )
 
 
-def _bearer_token_plugin(token: str):
+def _bearer_token_plugin(token: str) -> Any:
     """Return a grpc.AuthMetadataPlugin that attaches authorization:
     Bearer <token> to every RPC. M14 W3.
+
+    Typed as ``Any`` because grpc.AuthMetadataPlugin is duck-typed at
+    the call site; declaring the precise type would force a hard
+    dependency on grpc's stubs.
     """
 
-    def plugin(_context, callback):  # noqa: ANN001
+    def plugin(_context: Any, callback: Any) -> None:
         callback((("authorization", f"Bearer {token}"),), None)
 
     return plugin

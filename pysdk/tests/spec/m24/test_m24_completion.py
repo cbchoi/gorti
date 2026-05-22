@@ -38,7 +38,7 @@ def test_ac_3_8_resign_dispatch_accepts_action() -> None:
 def test_ac_3_8_resign_action_proto_enum_complete() -> None:
     """AC §3.10 — proto ResignAction enum has all 7 values."""
     pytest.importorskip("rti.v1.common_pb2")
-    from rti.v1 import common_pb2  # type: ignore[import-not-found]
+    from rti.v1 import common_pb2
 
     expected = {
         "RESIGN_ACTION_UNSPECIFIED",
@@ -58,7 +58,7 @@ def test_ac_3_8_resign_action_proto_enum_complete() -> None:
 def test_ac_3_5_list_federation_members_proto_present() -> None:
     """AC §3.5 — ListFederationMembers RPC declared in proto stubs."""
     pytest.importorskip("rti.v1.federation_pb2")
-    from rti.v1 import federation_pb2  # type: ignore[import-not-found]
+    from rti.v1 import federation_pb2
 
     assert hasattr(federation_pb2, "ListFederationMembersRequest")
     assert hasattr(federation_pb2, "ListFederationMembersResponse")
@@ -69,7 +69,7 @@ def test_ac_3_5_list_federation_members_proto_present() -> None:
 def test_ac_3_6_3_7_abort_save_restore_proto_present() -> None:
     """AC §3.6 + §3.7 — Abort RPCs declared in savepoint proto."""
     pytest.importorskip("rti.v1.savepoint_pb2")
-    from rti.v1 import savepoint_pb2  # type: ignore[import-not-found]
+    from rti.v1 import savepoint_pb2
 
     assert hasattr(savepoint_pb2, "AbortFederationSaveRequest")
     assert hasattr(savepoint_pb2, "AbortFederationRestoreRequest")

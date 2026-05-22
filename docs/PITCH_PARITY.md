@@ -7,19 +7,41 @@ Portico, MAK RTI) should bind against.
 
 This document records the places where gorti's Layer-2 surface
 diverges from a strict reading of the spec, what's compatible
-anyway, and what's explicitly out of scope.
+anyway, and what's explicitly out of scope. Last updated for M27.
 
 ## Compatible (gorti behaves as Pitch would)
 
 - IEEE 1516.1 §4 Federation Management, §5 Declaration Management,
-  §6 Object Management (minus reserveObjectInstanceName before M26 F),
+  §6 Object Management (including the §6.1-6.5 reservation flow per
+  M26 F and §6.30-6.31 instance handle services per M27 C),
   §7 Ownership Management, §8 Time Management, §9 DDM, §10.2 handle
-  services. Method names follow Pitch's camelCase (`publishObjectClassAttributes`,
+  services. Method names follow Pitch's camelCase
+  (`publishObjectClassAttributes`,
   `unconditionalAttributeOwnershipDivestiture`, etc.).
 - FOM XML — gorti's parser accepts the IEEE 1516.2 standard form
   Pitch ships. Cross-language handle alignment is locked.
 - mTLS + OIDC client authentication (M14) — bearer-token / cert
   args on `connect()`.
+- M27 Phase B: methods that take class / attribute / parameter
+  identifiers accept either **`int`** (Pitch-style FOM handle, e.g.
+  from `getObjectClassHandle`) **or `str`** (FOM name, pysdk
+  convenience). Mixed lists are supported.
+
+## Method-shape divergence table
+
+| Spec method | Pitch shape | gorti shape | Status |
+|---|---|---|---|
+| `publishObjectClassAttributes` | `(ObjectClassHandle, AttributeHandleSet)` | `(int \| str, list[int \| str])` | Compatible |
+| `subscribeObjectClassAttributes` | `(ObjectClassHandle, AttributeHandleSet)` | `(int \| str, list[int \| str])` | Compatible |
+| `registerObjectInstance` | `(ObjectClassHandle[, String])` | `(int \| str, str \| None)` | Compatible |
+| `updateAttributeValues` | `(ObjectInstanceHandle, Map<AttributeHandle, byte[]>[, LogicalTime])` | `(int, dict[int \| str, bytes], float \| None)` | Compatible |
+| `sendInteraction` | `(InteractionClassHandle, Map<ParameterHandle, byte[]>, ...)` | `(int \| str, dict[int \| str, bytes], ...)` | Compatible |
+| `getObjectClassHandle(name)` | `(String) -> ObjectClassHandle` | `(str) -> int` | Compatible (M25 B) |
+| `getAttributeHandle` | `(ObjectClassHandle, String) -> AttributeHandle` | `(int, str) -> int` | Compatible (M25 B) |
+| `getObjectInstanceHandle(name)` | runtime query | wire RPC + SDK accessor | Compatible (M27 C) |
+| `reserveObjectInstanceName` | async callback | async event + Pitch callback slot | Compatible (M26 F) |
+| `evokeCallback` | strict HLA_EVOKED buffering | cheap yield-to-loop | **Diverging (see below)** |
+| `enableCallbacks` / `disableCallbacks` | toggles dispatch | toggles dispatch (buffered when off) | Compatible (M27 C) |
 
 ## Diverging (compatible API, different runtime behavior)
 
@@ -35,17 +57,33 @@ compatibility. It yields to the loop for `approx_min_time`
 seconds (up to `approx_max_time` if no callback fires in the
 minimum), and returns `True` iff a callback fired in the window.
 
-**The cheap implementation does not buffer callbacks.** A Pitch
-federate that relies on "no callbacks fire outside evokeCallback"
-will see callbacks at unexpected times under gorti. In practice,
-federate code that just loops on `evokeMultipleCallbacks` and
-dispatches overrides works correctly — the divergence is
-observable only by federates that race on shared mutable state
-across `evokeCallback` calls.
+**The cheap implementation does not buffer callbacks unless
+`disableCallbacks()` is in effect.** A Pitch federate that relies
+on "no callbacks fire outside `evokeCallback`" will see callbacks
+at unexpected times under gorti unless it calls `disableCallbacks()`
+when not actively evoking. Workaround pattern:
 
-If a ported federate requires strict HLA_EVOKED semantics, raise
-an issue and we'll add buffered-drain mode (the design is sketched
-in `docs/M26_DISPATCH_PLAN.md` under "deferred to M27").
+```python
+amb.disableCallbacks()
+while running:
+    do_my_work()
+    amb.evokeMultipleCallbacks(0.0, 0.1)  # callbacks dispatch here
+amb.enableCallbacks()
+```
+
+If a ported federate requires the strict HLA_EVOKED semantics
+without the explicit disable/evoke discipline, raise an issue —
+buffered-drain mode would land in a future milestone.
+
+### Outbox post-join window — closed in M27 A
+
+Pre-M27, a service-group RPC fired immediately after
+`joinFederation` returned could have its callback dropped because
+rtid's outbox didn't have a channel for the federate yet. Fixed
+in M27 Phase A via server-side pre-binding from
+`OnFederateJoined`. Federates should NO LONGER need the
+`await asyncio.sleep(0.1)` workaround that the M26 tests originally
+shipped with.
 
 ## Out of scope
 
@@ -59,3 +97,29 @@ in `docs/M26_DISPATCH_PLAN.md` under "deferred to M27").
 - **`getUpdateRateValueForAttribute`** (§10.2): rate-throttling is
   not implemented; per-class declared rates in the FOM are
   informational.
+- **MOM delegate methods on `Rti1516eAmbassador`**: §11 MOM
+  introspection is available via `fed.mom.*` accessors but not yet
+  surfaced as ambassador methods. Tracked for a future milestone
+  (M27 Phase D — deferred).
+- **`getAvailableDimensionsFor*`** (§10.2 advanced dimension queries):
+  not implemented. Dimensions are enumerated via the FOM parser at
+  load time; runtime enumeration RPCs are tracked for a future cut.
+
+## Verification
+
+See `examples/pitch-shape-smoke/` for a federate written using
+ONLY the Pitch-style ambassador methods (no reach-around into
+`sdk.ownership.*` / `sdk.ddm.*`). It exercises handle lookup →
+publish-by-handle → reserve-name → register-by-handle → update →
+send-interaction → sync point → resign. The smoke test at
+`pysdk/tests/spec/m26/test_pitch_shape_smoke.py` runs it
+end-to-end against rtid.
+
+`pysdk/tests/spec/m27/test_handle_keyed_api.py` adds the
+cross-federate Pitch-style scenario (publisher + subscriber both
+using handles) including Discover, Reflect, and Receive callback
+verification.
+
+`pysdk/tests/spec/m25/test_ambassador_surface.py` is the lockfile:
+every Pitch-style method the ambassador promises is asserted to
+exist as a callable with `self` as first parameter.

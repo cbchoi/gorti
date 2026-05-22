@@ -13,7 +13,6 @@ import pytest
 from rti1516e.connection import Federate
 from rti1516e.standard import Rti1516eAmbassador
 
-
 # Snake_case methods on Federate. Order: 4 enable/disable, modify,
 # 5 advance primitives, 3 queries, 2 async toggles. Total = 15.
 FEDERATE_METHODS = (

@@ -257,6 +257,48 @@ Tests:
 
 Known latent issue (not from M27): `rti/internal/transport/grpc/time_test.go::recordingOutbox.grants` is a slice mutated from multiple goroutines without a mutex. Passes on default `-count=1` (CI baseline) but fails under `-race -count=N` for N>=3. Pre-existing across M25/M26/M27 Phase A; deferred to M27 Phase E (quality).
 
+#### M27 Phase E — quality cleanup (closed 2026-05-22)
+
+Closes the four quality items identified at end of M27 B+C.
+
+1. **`recordingOutbox` race fixed** (`rti/internal/transport/grpc/time_test.go`):
+   - Added `sync.Mutex` protecting the `grants` slice.
+   - Added `snapshot()` method returning a locked copy.
+   - All 7 read sites in time_test.go switched from direct `out.grants` access to `out.snapshot()`.
+   - Verified `go test -race -count=10` clean on `TestConcurrentNERsThreeFederates`.
+
+2. **8 pre-existing Python failures triaged + fixed (now 0 failures)**:
+   - 5 `pyjevsim_determinism` failures + 1 `m4/test_spec_m4_determinism`: tests passed `seed=` kwarg to `examples/pyjevsim/runner.py::run_once`, which doesn't accept it (runner is deterministic by construction). Tests also read `result["send_interactions"]` from the runner's return dict, which doesn't exist (the canonical send count is `len(result["published"])`). Both were speculative API that never landed. Fixed: drop `seed=` from test calls, simplify `_witness` to hash `(received, published)` only, and switch `consumer_count_matches_producer` to assert `received == published` (the no-drops property) instead of `len(received) == ticks` (which never held because the runner ticks `ticks + drain_ticks` cycles).
+   - `test_lint_strict::test_ruff_clean`: 16 ruff errors → 0. Fixed:
+     - 3× E501 line-too-long in `_transport.py` + `standard.py` (split long calls)
+     - SIM105 + S110 + BLE001 in 2 M27 test helpers (replaced `try/except/pass` with `contextlib.suppress`)
+     - F401 unused `typing.Any` import in M27 test (ruff auto-fix)
+     - B017 blind `pytest.raises(Exception)` → `pytest.raises(RtiError)` in M27 instance handles test
+     - SIM115 in 2 pre-existing M21/M22 tests (use `with open(...)`)
+     - N818 in 1 pre-existing fake-error class (added `noqa` with reason)
+     - ASYNC109 in `_drain_until` helper (added `noqa` with reason — the timeout is the whole-loop deadline, not per-call)
+   - `test_lint_strict::test_mypy_strict_clean`: 48 errors → 0. Fixed:
+     - SDK `Any`-return drift through `self._run()` in `standard.py` (queryLogicalTime, queryLookahead, queryLBTS, queryAttributeOwnership) and `connection.py` (query_*); wrapped returns with `float()` casts and `typing.cast` for tuple shapes.
+     - M27 Phase B's `update_attributes` signature on `Federate` widened to `dict[int | str, Any]` (`Rti1516eAmbassador.updateAttributeValues` already accepted that — the Federate-side mismatch surfaced once `dict(values)` propagated the union type).
+     - Typed M27 test helpers (`_install`, `_teardown`, `_drain_until`, `_inner`) — replaced `# type: ignore[no-untyped-def]` with proper signatures using `Callable` and `Any`.
+     - Removed stale `# type: ignore[import-not-found]` markers from M24 spec tests (mypy version got smarter about pytest.importorskip-guarded imports).
+     - Removed stale `# type: ignore[assignment]` in M26 evoke callback test (the assignment to `amb._federate` is duck-typed legitimately).
+     - Typed `_transport.py::_bearer_token_plugin` (was `def plugin(_context, callback): ...` with `# noqa: ANN001`).
+     - Fixed `tests/spec/m25/test_callback_dispatch.py` `func-returns-value` errors (the no-op-callback assertions were `assert amb.x() is None` against typed-None methods; just call the method).
+     - Fixed `tests/spec/m25/test_support_service.py` operator errors on `result[k] > 0` (result is `dict[str, object]`; added `cast(int, ...)` at the comparison sites).
+
+3. **`docs/PITCH_PARITY.md` expanded**:
+   - Added a method-shape divergence table covering every Pitch-style method that took a union of types post-M25/M26/M27.
+   - Added a note on the M27 A outbox race fix (post-join `asyncio.sleep(0.1)` workaround no longer needed).
+   - Documented the `disableCallbacks() + evokeMultipleCallbacks()` pattern for federates that need strict HLA_EVOKED-like behavior.
+   - Listed remaining out-of-scope items (MOM ambassador delegates, advanced dimension queries, wire-format interop).
+
+Test state at close:
+- Go: 39 packages green under `-race -count=3` (race fix proven).
+- Python: 703 pass / 4 skipped / **0 failed** (down from 8 pre-existing failures).
+- Ruff: clean.
+- Mypy strict: clean.
+
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
 Out of scope (deferred to M25+):

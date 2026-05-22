@@ -26,6 +26,7 @@ if str(_PYSDK) not in sys.path:
 
 # ruff: noqa: E402
 from rti1516e.connection import FederationSpec, RtiConnection
+from rti1516e.errors import RtiError
 
 BIN_DIR = REPO_ROOT / "bin"
 RTID_BINARY = BIN_DIR / "rtid"
@@ -184,11 +185,17 @@ async def test_spec_m27c_late_joiner_can_resolve_handle() -> None:
 @pytest.mark.spec
 @pytest.mark.integration
 async def test_spec_m27c_unknown_instance_returns_not_found() -> None:
-    """Looking up a name that was never registered returns an SDK error."""
+    """Looking up a name that was never registered returns an SDK error.
+
+    The gRPC NotFound from the server is translated by
+    ``translate_rpc_error`` into a subclass of ``RtiError``; catching
+    the base class is the right granularity here — the test asserts
+    "raises", not "raises this specific type".
+    """
     async with _rtid_subprocess() as url:
         fom = _make_fom()
         spec = FederationSpec(name="m27c-miss", fom_modules=[str(fom)])
         async with RtiConnection.connect(url) as rti:
             async with rti.join_federation(spec, federate_name="fed1") as fed:
-                with pytest.raises(Exception):  # noqa: BLE001, PT011
+                with pytest.raises(RtiError):
                     await fed.support.get_object_instance_handle("does-not-exist")

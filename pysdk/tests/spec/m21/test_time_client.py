@@ -65,7 +65,8 @@ def test_209_time_stub_constructed() -> None:
     """209-stub — GrpcTransport.__init__ wires self.time as a TimeServiceStub."""
     # We don't dial a real channel — just verify the construction path
     # references the time service stub. Static check via import + AST scan.
-    src = open(tr.__file__, encoding="utf-8").read()
+    with open(tr.__file__, encoding="utf-8") as fh:
+        src = fh.read()
     assert "self.time = time_pb2_grpc.TimeServiceStub" in src, (
         "GrpcTransport doesn't construct time stub — TASK-208 incomplete"
     )
@@ -77,7 +78,7 @@ def test_209_translate_recognizes_time_details() -> None:
     for each time-mgmt detail string. Indirectly tested through the
     full translate_rpc_error path with a fake exc."""
     # Synthesize a minimal exc-like object with code() + details().
-    class FakeExc(Exception):
+    class FakeExc(Exception):  # noqa: N818 — test fixture, not a real error type
         def __init__(self, code_name: str, detail: str) -> None:
             super().__init__(detail)
             self._code_name = code_name
