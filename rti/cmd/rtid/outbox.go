@@ -81,6 +81,12 @@ type multiRecipientState struct {
 	// to the counter — that matches the per-event semantics callers
 	// expect from "drops_total".
 	dropsTotal uint64
+	// readerAttached: M27 Phase A — set to true when a Subscribe call
+	// attaches a reader (the gRPC streamService.Events loop). Used to
+	// reject a duplicate Subscribe for the same (fed, h) while
+	// permitting the Bind→Subscribe sequence that pre-creates the
+	// channel before the federate's stream opens. Held under mu.
+	readerAttached bool
 }
 
 // newMultiOutbox constructs an outbox where the per-federate batch
@@ -189,26 +195,29 @@ func (m *multiOutbox) flushScratch(state *multiRecipientState) {
 	}
 }
 
-// Subscribe implements grpc.SubscribableOutbox. Returns the read-side
-// batch channel and a cancel func that unregisters the subscriber,
-// performs a final flush of any pending scratch, and closes the
-// channel.
+// Bind pre-creates the per-(fed, h) recipient state so events sent
+// before the federate opens its outbound stream are buffered instead
+// of silently dropped. M27 Phase A — closes the race where a
+// service-group RPC (e.g. ReserveObjectInstanceName) fires immediately
+// after JoinFederation returns but before StreamService.Events
+// connects.
 //
-// A second Subscribe for the same (fed, h) pair is rejected — the
-// federate already owns the stream, and a duplicate subscribe would
-// silently drop events on one of the two readers.
+// Idempotent: if state already exists for (fed, h), Bind is a no-op.
+// Called from the federation manager's OnFederateJoined hook so the
+// state exists by the time the JoinFederation RPC returns to the
+// client.
 //
-// The ctx parameter is preserved for symmetry with the gRPC handler;
-// cancellation of the subscription is via the returned cancel func, not
-// ctx, because the lifetime is owned by the streamService loop, not by
-// the request context.
-func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan []core.OutboundEvent, func() error, error) {
+// No reader is attached by Bind itself; Subscribe still has to fire
+// for events to be drained off state.ch. While unread, the channel
+// fills to bufferSize batches then overflows per the existing Send
+// contract (ErrFederateOverflow) — bounded memory.
+func (m *multiOutbox) Bind(fed core.FederationName, h core.FederateHandle) {
 	key := fedHandleKey{fed: fed, h: h}
 	m.writeMu.Lock()
 	defer m.writeMu.Unlock()
 	current := *m.subs.Load()
-	if _, dup := current[key]; dup {
-		return nil, nil, fmt.Errorf("rtid: subscriber already registered for federation %q federate %d", fed, h)
+	if _, exists := current[key]; exists {
+		return
 	}
 	state := &multiRecipientState{
 		ch:      make(chan []core.OutboundEvent, m.bufferSize),
@@ -220,6 +229,85 @@ func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h co
 	}
 	next[key] = state
 	m.subs.Store(&next)
+}
+
+// Unbind drops the per-(fed, h) recipient state without going through
+// a Subscribe cancel func. M27 Phase A — wired from the federation
+// manager's OnFederateResigned hook so a federate that joined but
+// never opened its Events stream still has its state cleaned up.
+//
+// Idempotent. Safe even when a Subscribe is currently active — the
+// cancel func from Subscribe stays in scope via the streamService
+// loop and runs its own cleanup; this Unbind just unmaps the state
+// from the table so a subsequent Bind for the same (fed, h) won't
+// collide. The buffered channel is left to be garbage-collected by
+// the still-running reader.
+func (m *multiOutbox) Unbind(fed core.FederationName, h core.FederateHandle) {
+	key := fedHandleKey{fed: fed, h: h}
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
+	current := *m.subs.Load()
+	if _, exists := current[key]; !exists {
+		return
+	}
+	next := make(map[fedHandleKey]*multiRecipientState, len(current)-1)
+	for k, v := range current {
+		if k != key {
+			next[k] = v
+		}
+	}
+	m.subs.Store(&next)
+}
+
+// Subscribe implements grpc.SubscribableOutbox. Returns the read-side
+// batch channel and a cancel func that unregisters the subscriber,
+// performs a final flush of any pending scratch, and closes the
+// channel.
+//
+// M27 Phase A: if Bind was called first for the (fed, h) pair, this
+// attaches a reader to the pre-existing state and returns its
+// channel — so any events sent during the post-join, pre-stream
+// window are delivered. A second Subscribe call while a reader is
+// already attached is rejected — duplicate readers would split the
+// event stream.
+//
+// The ctx parameter is preserved for symmetry with the gRPC handler;
+// cancellation of the subscription is via the returned cancel func, not
+// ctx, because the lifetime is owned by the streamService loop, not by
+// the request context.
+func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h core.FederateHandle) (<-chan []core.OutboundEvent, func() error, error) {
+	key := fedHandleKey{fed: fed, h: h}
+	m.writeMu.Lock()
+	current := *m.subs.Load()
+	state, exists := current[key]
+	if exists {
+		// Pre-bound state (or a leftover from a previous Subscribe
+		// that hasn't called cancel yet). Reject duplicate readers.
+		state.mu.Lock()
+		if state.readerAttached {
+			state.mu.Unlock()
+			m.writeMu.Unlock()
+			return nil, nil, fmt.Errorf("rtid: subscriber already registered for federation %q federate %d", fed, h)
+		}
+		state.readerAttached = true
+		state.mu.Unlock()
+		m.writeMu.Unlock()
+	} else {
+		// Backwards-compat path: tests / cmd/rtid pingpong / load tests
+		// that don't wire the Bind hook still get an on-demand state.
+		state = &multiRecipientState{
+			ch:             make(chan []core.OutboundEvent, m.bufferSize),
+			scratch:        make([]core.OutboundEvent, 0, m.batchSize),
+			readerAttached: true,
+		}
+		next := make(map[fedHandleKey]*multiRecipientState, len(current)+1)
+		for k, v := range current {
+			next[k] = v
+		}
+		next[key] = state
+		m.subs.Store(&next)
+		m.writeMu.Unlock()
+	}
 
 	var cancelOnce sync.Once
 	cancel := func() error {
@@ -244,6 +332,7 @@ func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h co
 			// after the table mutation so the table is unblocked even
 			// if a slow receiver still holds the channel full.
 			state.mu.Lock()
+			state.readerAttached = false
 			if state.flushTimer != nil {
 				state.flushTimer.Stop()
 				state.flushTimer = nil

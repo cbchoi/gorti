@@ -204,6 +204,22 @@ Outbox race note: tests that drive a Pitch-style federate against rtid sometimes
 
 19 new spec tests (10 Go + 9 Python).
 
+#### M27 Phase A — outbox pre-bind / close the post-join race (closed 2026-05-22)
+- Closes the race that M26 papered over with `await asyncio.sleep(0.1)` in test fixtures: a service-group RPC (e.g. `ReserveObjectInstanceName`) fired immediately after `JoinFederation` returned could have its callback event silently dropped because `rti/cmd/rtid/multiOutbox.Send` returned nil for unknown subscribers, and the federate's `StreamService.Events` stream took non-zero wall-clock time to land on rtid and call `Subscribe`. The race had affected every M12+ callback-bearing service-group RPC (sync, ownership, save, reservation); M26 just made the symptom visible.
+
+Fix shape (server-side pre-bind):
+- `multiOutbox` gains `Bind(fed, h)` and `Unbind(fed, h)` methods that create/drop the per-(fed, h) recipient state idempotently. Wired into the federation manager's `OnFederateJoined` / `OnFederateResigned` hooks (via a new `chainOnFederateJoined` helper, mirroring the existing `chainOnFederateResigned`).
+- By the time `JoinFederation` returns the handle to the client, the outbox channel exists. Events sent in the post-join, pre-stream-attach window buffer in the channel (bounded — same `ErrFederateOverflow` contract if it fills).
+- `Subscribe` updated: if state already exists (pre-bound), attach a reader to it instead of rejecting; track `readerAttached` flag so a duplicate Subscribe while a reader is live still rejects (split-stream guard).
+- Backwards-compat: tests / pingpong / load harnesses that don't go through the join hook still get on-demand state via the existing Subscribe path.
+
+Tests:
+- 5 new Go unit tests in `rti/cmd/rtid/outbox_test.go`: Bind-then-Subscribe drains buffered events; Bind is idempotent; Unbind cleans up; duplicate Subscribe still rejected; Subscribe-after-cancel works.
+- 3 new Python regression tests in `pysdk/tests/spec/m27/test_outbox_race.py`: zero-delay reserve after join delivers callback; 5-burst reservations all delivered; 10× repeat run for timing-window confidence.
+- M26 reservation tests had their `await asyncio.sleep(0.1)` workarounds removed and still pass.
+
+No proto changes. No client-side changes. Pure server-side composition fix.
+
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
 Out of scope (deferred to M25+):

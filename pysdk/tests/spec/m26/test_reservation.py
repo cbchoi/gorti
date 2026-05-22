@@ -174,11 +174,6 @@ async def test_spec_m26_reserve_then_register() -> None:
         spec = FederationSpec(name="m26-reserve-ok", fom_modules=[str(fom)])
         async with RtiConnection.connect(url) as rti:
             async with rti.join_federation(spec, federate_name="fed1") as fed:
-                # Give the StreamService.Events stream time to establish
-                # on rtid before the reservation RPC fires — without
-                # this, the outbox may not have a channel for the
-                # federate yet and the success event is dropped.
-                await asyncio.sleep(0.1)
                 await fed.reservation.reserve("vehicle-1")
                 ev = await _drain_until(
                     fed,
@@ -203,7 +198,6 @@ async def test_spec_m26_double_reserve_fails() -> None:
         spec = FederationSpec(name="m26-double", fom_modules=[str(fom)])
         async with RtiConnection.connect(url) as rti:
             async with rti.join_federation(spec, federate_name="fed1") as fed:
-                await asyncio.sleep(0.1)
                 await fed.reservation.reserve("dup")
                 ok = await _drain_until(
                     fed,
@@ -235,7 +229,6 @@ async def test_spec_m26_multi_reserve_success() -> None:
         spec = FederationSpec(name="m26-multi-ok", fom_modules=[str(fom)])
         async with RtiConnection.connect(url) as rti:
             async with rti.join_federation(spec, federate_name="fed1") as fed:
-                await asyncio.sleep(0.1)
                 await fed.reservation.reserve_multiple(["a", "b", "c"])
                 ev = await _drain_until(
                     fed,
@@ -260,7 +253,6 @@ async def test_spec_m26_multi_reserve_partial_collision_fails() -> None:
         spec = FederationSpec(name="m26-multi-fail", fom_modules=[str(fom)])
         async with RtiConnection.connect(url) as rti:
             async with rti.join_federation(spec, federate_name="fed1") as fed:
-                await asyncio.sleep(0.1)
                 # Pre-reserve "b" to force a batch collision.
                 await fed.reservation.reserve("b")
                 await _drain_until(

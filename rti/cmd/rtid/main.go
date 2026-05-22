@@ -710,9 +710,26 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		Clock:              clock,
 		EventLog:           multi,
 		FOMs:               foms,
-		OnFederateJoined: momFederateJoinedHook(momMgr, cfg.Logger),
+		OnFederateJoined: chainOnFederateJoined(
+			// M27 Phase A — pre-bind the outbox channel for the
+			// federate so events emitted by a service-group RPC fired
+			// immediately after JoinFederation returns are buffered
+			// rather than dropped. Runs before MOM so the channel
+			// exists by the time the join RPC returns.
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle, _ string, _ string) {
+				outbox.Bind(fed, h)
+			},
+			momFederateJoinedHook(momMgr, cfg.Logger),
+		),
 		OnFederateResigned: chainOnFederateResigned(
 			momFederateResignedHook(momMgr, cfg.Logger),
+			// M27 Phase A — drop the outbox state if the federate
+			// resigned without ever opening its Events stream. The
+			// stream subscribe path's cancel func handles the case
+			// where a stream WAS opened (idempotent vs Unbind).
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+				outbox.Unbind(fed, h)
+			},
 			// M21 TASK-204c: drop time-mgr pending state on resign so a
 			// pending NER/TAR/TARA/NMRA/FQR doesn't leak in nerStore.
 			timeMgr.OnFederateResign,
@@ -1506,6 +1523,21 @@ func chainOnFederateResigned(
 		for _, h2 := range hs {
 			if h2 != nil {
 				h2(ctx, fed, h)
+			}
+		}
+	}
+}
+
+// chainOnFederateJoined composes multiple OnFederateJoined hooks
+// in declaration order. M27 Phase A — needed once the outbox-bind
+// hook joined MOM as a second registrant on the join-side.
+func chainOnFederateJoined(
+	hs ...func(context.Context, core.FederationName, core.FederateHandle, string, string),
+) func(context.Context, core.FederationName, core.FederateHandle, string, string) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle, name string, fedType string) {
+		for _, h2 := range hs {
+			if h2 != nil {
+				h2(ctx, fed, h, name, fedType)
 			}
 		}
 	}

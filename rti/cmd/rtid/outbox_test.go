@@ -177,3 +177,147 @@ func TestMultiOutbox_ConcurrentSendSubscribe(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestMultiOutbox_BindBuffersEventsBeforeSubscribe — M27 Phase A.
+// After Bind, Send for that (fed, h) buffers into the per-recipient
+// channel. A later Subscribe attaches a reader and drains the buffered
+// events. Closes the race where service-group RPCs fire between
+// JoinFederation returning and StreamService.Events connecting.
+func TestMultiOutbox_BindBuffersEventsBeforeSubscribe(t *testing.T) {
+	mo := newMultiOutboxWithBatch(8, 1, 0)
+	const fed = core.FederationName("alpha")
+	const h = core.FederateHandle(3)
+
+	// 1. Bind first — simulates the federation join hook firing
+	//    before the federate opens its Events stream.
+	mo.Bind(fed, h)
+
+	// 2. Send several events. With the pre-M27 behaviour these would
+	//    be silently dropped. With Bind, they buffer into the channel.
+	for i := 1; i <= 3; i++ {
+		if err := mo.Send(context.Background(), fed, h, &fakeOutboundEvent{seq: uint64(i)}); err != nil {
+			t.Fatalf("Send #%d: %v", i, err)
+		}
+	}
+
+	// 3. Subscribe — should attach to the existing state and the
+	//    reader sees the buffered events.
+	ch, cancel, err := mo.Subscribe(context.Background(), fed, h)
+	if err != nil {
+		t.Fatalf("Subscribe after Bind: %v", err)
+	}
+	defer func() { _ = cancel() }()
+
+	got := make([]uint64, 0, 3)
+	deadline := time.After(2 * time.Second)
+	for len(got) < 3 {
+		select {
+		case batch, ok := <-ch:
+			if !ok {
+				t.Fatalf("channel closed early; got=%v", got)
+			}
+			for _, ev := range batch {
+				got = append(got, ev.Seq())
+			}
+		case <-deadline:
+			t.Fatalf("did not drain 3 events within 2s; got=%v", got)
+		}
+	}
+	wantSet := map[uint64]bool{1: true, 2: true, 3: true}
+	for _, s := range got {
+		if !wantSet[s] {
+			t.Errorf("unexpected seq %d delivered; want one of {1,2,3}", s)
+		}
+	}
+}
+
+// TestMultiOutbox_BindIsIdempotent — calling Bind twice for the same
+// (fed, h) is a no-op (second call does not destroy the existing
+// state or its buffered events).
+func TestMultiOutbox_BindIsIdempotent(t *testing.T) {
+	mo := newMultiOutboxWithBatch(8, 1, 0)
+	const fed = core.FederationName("alpha")
+	const h = core.FederateHandle(1)
+
+	mo.Bind(fed, h)
+	_ = mo.Send(context.Background(), fed, h, &fakeOutboundEvent{seq: 1})
+	mo.Bind(fed, h) // second Bind must not lose the buffered event
+
+	ch, cancel, err := mo.Subscribe(context.Background(), fed, h)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer func() { _ = cancel() }()
+
+	select {
+	case batch := <-ch:
+		if len(batch) != 1 || batch[0].Seq() != 1 {
+			t.Errorf("delivered=%v; want [seq=1]", batch)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("event lost after second Bind")
+	}
+}
+
+// TestMultiOutbox_UnbindDropsBufferedEvents — Unbind without a prior
+// Subscribe cleans up the state. A later Subscribe gets a fresh
+// channel (the old buffered events are dropped, intended — the
+// federate that bound but resigned without subscribing wouldn't
+// have wanted those events anyway).
+func TestMultiOutbox_UnbindDropsBufferedEvents(t *testing.T) {
+	mo := newMultiOutboxWithBatch(8, 1, 0)
+	const fed = core.FederationName("alpha")
+	const h = core.FederateHandle(2)
+
+	mo.Bind(fed, h)
+	_ = mo.Send(context.Background(), fed, h, &fakeOutboundEvent{seq: 99})
+	mo.Unbind(fed, h)
+
+	// After Unbind, a Send for the same (fed, h) drops silently
+	// (back to pre-Bind behaviour).
+	if err := mo.Send(context.Background(), fed, h, &fakeOutboundEvent{seq: 100}); err != nil {
+		t.Errorf("Send after Unbind: err=%v, want nil (silent drop)", err)
+	}
+}
+
+// TestMultiOutbox_DuplicateSubscribeStillRejected — even with Bind,
+// a second Subscribe while the first reader is attached must reject.
+// Two readers would split the event stream.
+func TestMultiOutbox_DuplicateSubscribeStillRejected(t *testing.T) {
+	mo := newMultiOutboxWithBatch(8, 1, 0)
+	const fed = core.FederationName("alpha")
+	const h = core.FederateHandle(4)
+
+	mo.Bind(fed, h)
+	_, cancel, err := mo.Subscribe(context.Background(), fed, h)
+	if err != nil {
+		t.Fatalf("first Subscribe: %v", err)
+	}
+	defer func() { _ = cancel() }()
+
+	_, _, err = mo.Subscribe(context.Background(), fed, h)
+	if err == nil {
+		t.Fatal("second Subscribe: nil error; want duplicate-subscriber rejection")
+	}
+}
+
+// TestMultiOutbox_SubscribeAfterCancelWorks — cancel releases the
+// reader slot, so a subsequent Subscribe for the same (fed, h)
+// succeeds (it's a fresh subscription on a fresh state).
+func TestMultiOutbox_SubscribeAfterCancelWorks(t *testing.T) {
+	mo := newMultiOutboxWithBatch(8, 1, 0)
+	const fed = core.FederationName("alpha")
+	const h = core.FederateHandle(5)
+
+	_, cancel1, err := mo.Subscribe(context.Background(), fed, h)
+	if err != nil {
+		t.Fatalf("Subscribe 1: %v", err)
+	}
+	_ = cancel1()
+
+	_, cancel2, err := mo.Subscribe(context.Background(), fed, h)
+	if err != nil {
+		t.Fatalf("Subscribe 2 after cancel: %v", err)
+	}
+	_ = cancel2()
+}
