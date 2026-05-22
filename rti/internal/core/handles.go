@@ -36,6 +36,22 @@ type ObjectInstanceNameReserver interface {
 	ReserveMultipleObjectInstanceNames(ctx context.Context, fed FederationName, holder FederateHandle, names []string) error
 }
 
+// ObjectInstanceQuery is the §6.30 / §6.31 runtime instance-handle
+// lookup contract. Split from core.ObjectRegistry for the same
+// reason as ObjectInstanceNameReserver — test stubs aren't forced
+// to implement it. M27 Phase C. Production *object.Registry
+// satisfies this.
+type ObjectInstanceQuery interface {
+	// LookupObjectInstanceByName returns the handle of the registered
+	// instance with the given name, or InvalidObjectHandle + false
+	// if no such instance is registered in the federation.
+	LookupObjectInstanceByName(fed FederationName, name string) (ObjectHandle, bool)
+
+	// LookupObjectInstanceName returns the registered name for an
+	// object handle, or "" + false if no such instance exists.
+	LookupObjectInstanceName(fed FederationName, handle ObjectHandle) (string, bool)
+}
+
 const (
 	InvalidFederateHandle         FederateHandle         = 0
 	InvalidObjectHandle           ObjectHandle           = 0

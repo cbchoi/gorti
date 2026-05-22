@@ -337,9 +337,15 @@ class Federate:
     # --- Declaration management (TASK-064) ---
 
     async def publish_object_class(
-        self, class_name: str, *, attributes: list[str]
+        self, class_name: int | str, *, attributes: list[int | str]
     ) -> None:
-        """Declare publication of an object class + its attributes."""
+        """Declare publication of an object class + its attributes.
+
+        M27 Phase B: ``class_name`` and ``attributes`` accept either
+        ``int`` (already-resolved FOM handle, Pitch-style) or ``str``
+        (FOM name, pysdk convenience). The parameter is still named
+        ``class_name`` for source-compat with pre-M27 callers.
+        """
         await _dispatch(
             self._transport,
             "publish_object_class",
@@ -349,9 +355,12 @@ class Federate:
         )
 
     async def subscribe_object_class(
-        self, class_name: str, *, attributes: list[str]
+        self, class_name: int | str, *, attributes: list[int | str]
     ) -> None:
-        """Declare subscription to an object class + its attributes."""
+        """Declare subscription to an object class + its attributes.
+
+        See :meth:`publish_object_class` for the M27 Phase B union types.
+        """
         await _dispatch(
             self._transport,
             "subscribe_object_class",
@@ -381,13 +390,13 @@ class Federate:
     # --- Object management (TASK-065) ---
 
     async def register_object_instance(
-        self, class_name: str, *, instance_name: str | None = None
+        self, class_name: int | str, *, instance_name: str | None = None
     ) -> int:
         """Register an instance and return its handle.
 
-        If the transport returns a non-None canned response, treat it as
-        the handle (lets tests pin handles). Otherwise, allocate a fresh
-        monotonic handle from the transport.
+        M27 Phase B: ``class_name`` accepts ``int`` (FOM handle) or
+        ``str`` (FOM name). Pitch federates that pre-resolved the
+        class handle via getObjectClassHandle should pass the int.
         """
         response = await _dispatch(
             self._transport,
@@ -421,12 +430,16 @@ class Federate:
 
     async def send_interaction(
         self,
-        class_name: str,
-        parameters: dict[str, Any],
+        class_name: int | str,
+        parameters: dict[int | str, Any],
         *,
         timestamp: float | None = None,
     ) -> None:
-        """Send an interaction with the given parameters."""
+        """Send an interaction with the given parameters.
+
+        M27 Phase B: ``class_name`` and parameter dict keys accept
+        ``int`` (handle) or ``str`` (FOM name).
+        """
         await _dispatch(
             self._transport,
             "send_interaction",

@@ -220,6 +220,43 @@ Tests:
 
 No proto changes. No client-side changes. Pure server-side composition fix.
 
+#### M27 Phases B+C — handle-keyed Pitch overloads + runtime instance handle services + §10.4 callback toggle (closed 2026-05-22)
+
+Phase B — handle-keyed ambassador overloads:
+- `Rti1516eAmbassador` methods accept `int` (FOM handle, Pitch idiom) OR `str` (FOM name, pysdk convenience):
+  - `publishObjectClassAttributes(class_name: int | str, attributes: list[int | str])`
+  - `subscribeObjectClassAttributes` same
+  - `registerObjectInstance(class_name: int | str, ...)`
+  - `updateAttributeValues(handle, dict[int | str, bytes])` (handle keys + name keys)
+  - `sendInteraction(class_name: int | str, dict[int | str, bytes])`
+- Mixed lists supported (some attribute handles as int, others as name).
+- Internal: `_transport.py` gains `_resolve_object_class_handle` / `_resolve_interaction_class_handle` / `_resolve_attribute_handles` / `_object_class_name_for` / `_interaction_class_name_for` — bidirectional FOM lookup that handles int→identity and str→FOM-table dispatch.
+- `Federate` methods updated to the same union types so SDK consumers below the ambassador also benefit.
+- Pre-M27 string-only API path keeps working unchanged (covered by `test_spec_m27b_string_path_still_works`).
+
+Phase C — runtime instance handle services + §10.4 callback enable/disable:
+- §6.30 / §6.31 — `getObjectInstanceHandle(name)` / `getObjectInstanceName(handle)`:
+  - New `core.ObjectInstanceQuery` interface (split from `core.ObjectRegistry` so test stubs aren't forced to implement; production `*object.Registry` satisfies it via `LookupObjectInstanceByName` / `LookupObjectInstanceName`).
+  - New RPCs `GetObjectInstanceHandle` / `GetObjectInstanceName` on `SupportService`.
+  - Server composition (`server.go`) type-asserts `opts.Objects` to `ObjectInstanceQuery`; if so, wires through (production); if not, the two RPCs return `Unimplemented` (test fixtures).
+  - Pysdk `SupportClient` + Pitch-style `Rti1516eAmbassador` methods.
+  - Late-joiner use case verified: federate B can resolve "car-7" without having received the Discover callback.
+- §10.4 `enableCallbacks` / `disableCallbacks` toggle on `Rti1516eAmbassador`:
+  - `_callbacks_enabled` flag (default True); `_callback_buffer` list for held-back events.
+  - `_dispatch_event` short-circuits to buffer when disabled (still bumps `_callback_fired_count` so `evokeCallback` reports activity consistently).
+  - `enableCallbacks` drains the buffer through the normal dispatch path; double-count guard subtracts buffer length from counter before re-dispatching.
+  - Unbounded buffer — federates that disable for long stretches under high event rates should consider memory impact.
+
+Tests:
+- 5 new Go: no — Go side untested directly (server compose is wire-asserted via Python e2e).
+- 16 new Python in `pysdk/tests/spec/m27/`:
+  - `test_handle_keyed_api.py` (5 tests): publish/register/update by handle; cross-federate Discover+Reflect; send/receive interaction; mixed handle+name attributes; legacy string path.
+  - `test_instance_handles.py` (3 tests): name↔handle round-trip; late-joiner can resolve; unknown instance returns NotFound.
+  - `test_callback_enable_disable.py` (5 tests): disable buffers; enable drains; subsequent events fire live; enable-when-enabled is no-op; counter consistency across toggle (no double-count).
+- `pysdk/tests/spec/m25/test_ambassador_surface.py` updated to lock in the new ambassador methods (`evokeCallback`/`evokeMultipleCallbacks`/`enableCallbacks`/`disableCallbacks` + reservation + instance-handle methods).
+
+Known latent issue (not from M27): `rti/internal/transport/grpc/time_test.go::recordingOutbox.grants` is a slice mutated from multiple goroutines without a mutex. Passes on default `-count=1` (CI baseline) but fails under `-race -count=N` for N>=3. Pre-existing across M25/M26/M27 Phase A; deferred to M27 Phase E (quality).
+
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
 Out of scope (deferred to M25+):

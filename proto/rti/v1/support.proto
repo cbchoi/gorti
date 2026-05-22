@@ -36,6 +36,14 @@ service SupportService {
   rpc GetOrderName(GetOrderNameRequest) returns (GetOrderNameResponse);
   rpc GetTransportationType(GetTransportationTypeRequest) returns (GetTransportationTypeResponse);
   rpc GetTransportationName(GetTransportationNameRequest) returns (GetTransportationNameResponse);
+
+  // §6.30 / §6.31 runtime object-instance handle services (M27 Phase C).
+  // Unlike the FOM-driven lookups above, these queries hit the runtime
+  // object registry — a federate that joins after another federate
+  // registered "car-7" can call GetObjectInstanceHandle("car-7") to
+  // recover the handle without having received the Discover callback.
+  rpc GetObjectInstanceHandle(GetObjectInstanceHandleRequest) returns (GetObjectInstanceHandleResponse);
+  rpc GetObjectInstanceName(GetObjectInstanceNameRequest) returns (GetObjectInstanceNameResponse);
 }
 
 message GetObjectClassHandleRequest {
@@ -171,4 +179,24 @@ message GetTransportationNameRequest {
 }
 message GetTransportationNameResponse {
   string transportation_name = 1;
+}
+
+// §6.30 — resolve an object instance name to its runtime handle.
+message GetObjectInstanceHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string object_name = 3;
+}
+message GetObjectInstanceHandleResponse {
+  uint64 object_handle = 1;
+}
+
+// §6.31 — resolve an object instance handle to its registered name.
+message GetObjectInstanceNameRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 object_handle = 3;
+}
+message GetObjectInstanceNameResponse {
+  string object_name = 1;
 }

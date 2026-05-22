@@ -282,3 +282,38 @@ class SupportClient:
             translate_rpc_error(exc)
             raise
         return str(resp.transportation_name)
+
+    async def get_object_instance_handle(self, object_name: str) -> int:
+        """§6.30 — resolve a runtime object instance name to its handle.
+
+        M27 Phase C. Raises if no instance with that name is registered.
+        """
+        from rti.v1 import common_pb2, support_pb2
+
+        req = support_pb2.GetObjectInstanceHandleRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            object_name=object_name,
+        )
+        try:
+            resp = await self._stub.GetObjectInstanceHandle(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+            raise
+        return int(resp.object_handle)
+
+    async def get_object_instance_name(self, object_handle: int) -> str:
+        """§6.31 — resolve a runtime object instance handle to its name."""
+        from rti.v1 import common_pb2, support_pb2
+
+        req = support_pb2.GetObjectInstanceNameRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            object_handle=int(object_handle),
+        )
+        try:
+            resp = await self._stub.GetObjectInstanceName(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+            raise
+        return str(resp.object_name)

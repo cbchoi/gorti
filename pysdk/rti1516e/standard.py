@@ -84,6 +84,12 @@ class Rti1516eAmbassador:
         # exactly once per dispatched event by _pump_events; read by
         # evokeCallback to compute its bool return.
         self._callback_fired_count: int = 0
+        # M27 Phase C — §10.4 callback enable/disable. When False,
+        # _dispatch_event buffers events to self._callback_buffer
+        # instead of firing override slots; enableCallbacks drains
+        # the buffer through the normal dispatch path.
+        self._callbacks_enabled: bool = True
+        self._callback_buffer: list[Any] = []
 
     # --- Connection / federation lifecycle ---
 
@@ -154,13 +160,18 @@ class Rti1516eAmbassador:
     # --- Declaration management ---
 
     def publishObjectClassAttributes(  # noqa: N802
-        self, class_name: str, attributes: list[str]
+        self, class_name: int | str, attributes: list[int | str]
     ) -> None:
+        """M27 Phase B: ``class_name`` accepts ``int`` (Pitch-style FOM
+        handle, e.g. from ``getObjectClassHandle``) or ``str`` (FOM name).
+        Each entry of ``attributes`` is independently ``int`` or ``str``."""
         self._run(self._fed().publish_object_class(class_name, attributes=list(attributes)))
 
     def subscribeObjectClassAttributes(  # noqa: N802
-        self, class_name: str, attributes: list[str]
+        self, class_name: int | str, attributes: list[int | str]
     ) -> None:
+        """See :meth:`publishObjectClassAttributes` for the M27 Phase B
+        int|str semantics."""
         self._run(self._fed().subscribe_object_class(class_name, attributes=list(attributes)))
 
     def publishInteractionClass(self, class_name: str) -> None:  # noqa: N802
@@ -172,8 +183,11 @@ class Rti1516eAmbassador:
     # --- Object management ---
 
     def registerObjectInstance(  # noqa: N802
-        self, class_name: str, instance_name: str | None = None
+        self, class_name: int | str, instance_name: str | None = None
     ) -> int:
+        """M27 Phase B: ``class_name`` accepts ``int`` (Pitch-style FOM
+        handle) or ``str`` (FOM name). The parameter is still named
+        ``class_name`` for source-compat with pre-M27 callers."""
         result = self._run(
             self._fed().register_object_instance(class_name, instance_name=instance_name)
         )
@@ -182,19 +196,23 @@ class Rti1516eAmbassador:
     def updateAttributeValues(  # noqa: N802
         self,
         object_handle: int,
-        values: dict[str, Any],
+        values: dict[int | str, Any],
         timestamp: float | None = None,
     ) -> None:
+        """M27 Phase B: ``values`` dict keys accept ``int`` (Pitch-style
+        attribute handle) or ``str`` (FOM attribute name)."""
         self._run(
             self._fed().update_attributes(object_handle, dict(values), timestamp=timestamp)
         )
 
     def sendInteraction(  # noqa: N802
         self,
-        class_name: str,
-        parameters: dict[str, Any],
+        class_name: int | str,
+        parameters: dict[int | str, Any],
         timestamp: float | None = None,
     ) -> None:
+        """M27 Phase B: ``class_name`` and ``parameters`` dict keys
+        accept ``int`` (handle) or ``str`` (FOM name)."""
         self._run(
             self._fed().send_interaction(class_name, dict(parameters), timestamp=timestamp)
         )
@@ -333,6 +351,15 @@ class Rti1516eAmbassador:
 
     def getTransportationName(self, transportation_type: int) -> str:  # noqa: N802
         return str(self._run(self._fed().support.get_transportation_name(transportation_type)))
+
+    def getObjectInstanceHandle(self, object_name: str) -> int:  # noqa: N802
+        """§6.30 — resolve a runtime object instance name to its handle.
+        M27 Phase C."""
+        return int(self._run(self._fed().support.get_object_instance_handle(object_name)))
+
+    def getObjectInstanceName(self, object_handle: int) -> str:  # noqa: N802
+        """§6.31 — resolve a runtime object instance handle to its name."""
+        return str(self._run(self._fed().support.get_object_instance_name(object_handle)))
 
     # --- §4.11-4.13 Synchronization points (M25 Phase C) ---
 
@@ -696,6 +723,40 @@ class Rti1516eAmbassador:
         """
         return self.evokeCallback(approx_min_time, approx_max_time)
 
+    def enableCallbacks(self) -> None:  # noqa: N802
+        """§10.4 — resume callback dispatch.
+
+        M27 Phase C. While disabled, _pump_events buffered events
+        instead of firing override slots; calling enableCallbacks
+        flushes the buffered events through the normal dispatch
+        path. Idempotent — calling enable while already enabled is
+        a no-op.
+        """
+        if self._callbacks_enabled:
+            return
+        self._callbacks_enabled = True
+        # Drain the buffer through the normal dispatch path. We bump
+        # _callback_fired_count via _dispatch_event, but since we
+        # already counted these events on the way IN to the buffer
+        # (the disabled path also bumps the counter), avoid double-
+        # counting: subtract the buffer length from the counter
+        # before dispatching, then let dispatch re-bump it.
+        buffered = self._callback_buffer
+        self._callback_buffer = []
+        self._callback_fired_count -= len(buffered)
+        for event in buffered:
+            self._dispatch_event(event)
+
+    def disableCallbacks(self) -> None:  # noqa: N802
+        """§10.4 — suspend callback dispatch.
+
+        M27 Phase C. While disabled, events from the event pump are
+        buffered. Re-enable via enableCallbacks to drain. Buffer is
+        unbounded — federates that disable for long stretches under
+        high event rates should consider memory impact.
+        """
+        self._callbacks_enabled = False
+
     # --- M25 Phase D — additional FederateAmbassador callbacks ---
     # Each is a no-op by default; federates ported from Pitch
     # override the ones they care about. The Layer-1 event types
@@ -834,7 +895,17 @@ class Rti1516eAmbassador:
         Factored out of _pump_events so evokeCallback (M26 Phase E) can
         share the dispatch path, and so the callback-fired counter is
         bumped exactly once per recognized event regardless of source.
+
+        M27 Phase C: when callbacks are disabled, buffer the event for
+        later replay via enableCallbacks. Returns True (buffered counts
+        as recognized) so evokeCallback's counter still increments —
+        the federate sees "a callback fired" semantically even though
+        the override slot didn't run yet.
         """
+        if not self._callbacks_enabled:
+            self._callback_buffer.append(event)
+            self._callback_fired_count += 1
+            return True
         target = self._callback_target
         if isinstance(event, DiscoverObjectInstance):
             target.discoverObjectInstance(

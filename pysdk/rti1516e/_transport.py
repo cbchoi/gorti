@@ -464,27 +464,30 @@ class GrpcTransport:
     async def _send_interaction(
         self,
         federate_handle: int,
-        class_name: str,
-        parameters: dict[str, Any],
+        class_arg: int | str,
+        parameters: dict[int | str, Any],
         timestamp: float | None,
     ) -> None:
+        """M27 Phase B: ``class_arg`` and parameter dict keys accept
+        ``int`` (handle, Pitch-style) or ``str`` (FOM name)."""
         from rti.v1 import common_pb2, object_pb2
 
-        cls = self._interaction_handle_for(class_name)
-        # The SDK's higher layers pass parameters as a dict keyed by
-        # name with arbitrary payloads; cut-1 collapses every payload
-        # to bytes via repr-encoding when not already bytes, then maps
-        # name → 1-based parameter handle (sorted-by-name; same scheme
-        # as the FOM class handles).
+        cls = self._resolve_interaction_class_handle(class_arg)
+        # Resolve parameter keys: int → use directly; str → look up.
         param_map: dict[int, bytes] = {}
-        param_index = self._parameter_indices_for(class_name)
-        for name, payload in parameters.items():
-            if name not in param_index:
-                # Unknown parameter — squash into handle 0 so the
-                # message still goes out. The Go side rejects unknown
-                # handles; this is just defensive.
+        class_name_for_index: str | None = None
+        for key, payload in parameters.items():
+            if isinstance(key, int):
+                param_map[int(key)] = _coerce_payload(payload)
                 continue
-            param_map[param_index[name]] = _coerce_payload(payload)
+            if class_name_for_index is None:
+                class_name_for_index = self._interaction_class_name_for(class_arg)
+            if class_name_for_index is None:
+                continue  # unknown class; can't resolve names
+            param_index = self._parameter_indices_for(class_name_for_index)
+            if key not in param_index:
+                continue
+            param_map[param_index[key]] = _coerce_payload(payload)
         req = object_pb2.SendInteractionRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name or "",
@@ -898,25 +901,23 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _publish_object_class(
-        self, federate_handle: int, class_name: str, attributes: list[str]
+        self,
+        federate_handle: int,
+        class_arg: int | str,
+        attributes: list[int | str],
     ) -> None:
         """Dispatch DeclarationService.PublishObjectClassAttributes (M12 W2).
 
-        Resolves attribute names → 1-based handles via the FOM (same
-        sorted-by-name convention as the Go side; see
-        :meth:`_populate_handle_tables`). Unknown attribute names are
-        silently dropped — the Go side rejects unknown handles, which
-        is the test's signal that something is misconfigured. Empty
-        attribute lists are allowed (the manager records the publish
-        intent without binding any attributes).
+        M27 Phase B: ``class_arg`` and each entry of ``attributes`` accept
+        either ``int`` (already-resolved handle, Pitch-style) or ``str``
+        (FOM name, pysdk convenience). Mixed lists are allowed. Unknown
+        names resolve to handle 0 and are silently dropped — the Go side
+        rejects unknown handles at the wire layer.
         """
         from rti.v1 import common_pb2, declaration_pb2
 
-        cls = self._object_class_handle_for(class_name)
-        attr_handles = [
-            h for h in (self._attribute_handle_for(class_name, n) for n in attributes)
-            if h != 0
-        ]
+        cls = self._resolve_object_class_handle(class_arg)
+        attr_handles = self._resolve_attribute_handles(class_arg, attributes)
         req = declaration_pb2.PubObjAttrsRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name or "",
@@ -928,16 +929,19 @@ class GrpcTransport:
         return
 
     async def _subscribe_object_class(
-        self, federate_handle: int, class_name: str, attributes: list[str]
+        self,
+        federate_handle: int,
+        class_arg: int | str,
+        attributes: list[int | str],
     ) -> None:
-        """Dispatch DeclarationService.SubscribeObjectClassAttributes (M12 W2)."""
+        """Dispatch DeclarationService.SubscribeObjectClassAttributes.
+
+        See _publish_object_class for the M27 Phase B int|str semantics.
+        """
         from rti.v1 import common_pb2, declaration_pb2
 
-        cls = self._object_class_handle_for(class_name)
-        attr_handles = [
-            h for h in (self._attribute_handle_for(class_name, n) for n in attributes)
-            if h != 0
-        ]
+        cls = self._resolve_object_class_handle(class_arg)
+        attr_handles = self._resolve_attribute_handles(class_arg, attributes)
         req = declaration_pb2.SubObjAttrsRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name or "",
@@ -949,17 +953,19 @@ class GrpcTransport:
         return
 
     async def _register_object_instance(
-        self, federate_handle: int, class_name: str, instance_name: str | None
+        self,
+        federate_handle: int,
+        class_arg: int | str,
+        instance_name: str | None,
     ) -> int:
         """Dispatch ObjectService.RegisterObjectInstance (M12 W2).
 
-        Returns the minted object handle from the rtid response. The
-        SDK's higher layers can pass this handle to subsequent
-        update_attributes / query / ownership RPCs.
+        M27 Phase B: ``class_arg`` accepts ``int`` (Pitch-style handle)
+        or ``str`` (FOM name). Returns the minted object handle.
         """
         from rti.v1 import common_pb2, object_pb2
 
-        cls = self._object_class_handle_for(class_name)
+        cls = self._resolve_object_class_handle(class_arg)
         req = object_pb2.RegisterObjectRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name or "",
@@ -1021,6 +1027,71 @@ class GrpcTransport:
     def _object_class_handle_for(self, class_name: str) -> int:
         """Return the numeric object-class handle for ``class_name``; 0 on miss."""
         return self._object_class_handles.get(class_name, 0)
+
+    def _object_class_name_for(self, handle: int) -> str | None:
+        """Return the FOM name for an object-class handle, or None on miss.
+        M27 Phase B — inverse lookup for handle-keyed dispatch paths
+        that still need to resolve attribute names. Linear over the
+        cached map; the map is small enough (handful of classes) that
+        the cost is negligible vs caching an inverse dict."""
+        for name, h in self._object_class_handles.items():
+            if h == handle:
+                return name
+        return None
+
+    def _interaction_class_name_for(self, class_arg: int | str) -> str | None:
+        """Return the FOM name for an interaction class identifier.
+
+        M27 Phase B helper. Accepts either ``int`` (handle, reverse-
+        looked-up via the existing inverse map) or ``str`` (passes
+        through if known to the FOM). Returns None if the identifier
+        does not resolve.
+        """
+        if isinstance(class_arg, int):
+            return self._inverse_interaction_handles.get(class_arg)
+        if class_arg in self._interaction_handles:
+            return class_arg
+        return None
+
+    def _resolve_object_class_handle(self, class_arg: int | str) -> int:
+        """M27 Phase B: int → identity; str → FOM lookup; 0 on miss."""
+        if isinstance(class_arg, int):
+            return int(class_arg)
+        return self._object_class_handle_for(class_arg)
+
+    def _resolve_interaction_class_handle(self, class_arg: int | str) -> int:
+        """M27 Phase B: int → identity; str → FOM lookup; 0 on miss."""
+        if isinstance(class_arg, int):
+            return int(class_arg)
+        return self._interaction_handle_for(class_arg)
+
+    def _resolve_attribute_handles(
+        self,
+        class_arg: int | str,
+        attributes: list[int | str],
+    ) -> list[int]:
+        """M27 Phase B: resolve mixed-type attribute list to handles.
+
+        For ``int`` entries: pass through as already-resolved handles.
+        For ``str`` entries: look up via the FOM, using ``class_arg`` to
+        scope the lookup. If ``class_arg`` is an ``int`` (handle), the
+        class name is inverse-looked-up first; failure to resolve the
+        class skips all string-keyed attribute lookups.
+        """
+        out: list[int] = []
+        class_name: str | None = None
+        for a in attributes:
+            if isinstance(a, int):
+                out.append(int(a))
+                continue
+            if class_name is None:
+                class_name = class_arg if isinstance(class_arg, str) else self._object_class_name_for(class_arg)
+            if class_name is None:
+                continue
+            h = self._attribute_handle_for(class_name, a)
+            if h != 0:
+                out.append(h)
+        return out
 
     def _attribute_handle_for(self, class_name: str, attr_name: str) -> int:
         """Return the numeric attribute handle for (class, attr); 0 on miss.

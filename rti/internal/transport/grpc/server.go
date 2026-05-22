@@ -208,7 +208,16 @@ func NewServer(opts Options) (*Server, error) {
 		srv.momService = newMomService(opts.MOM)
 	}
 	if opts.FOMs != nil {
-		srv.supportService = newSupportService(opts.FOMs)
+		// M27 Phase C: if the composed Objects registry also satisfies
+		// core.ObjectInstanceQuery (production *object.Registry does),
+		// wire it through so GetObjectInstanceHandle / Name work. Test
+		// fixtures that pass a stub ObjectRegistry get the FOM-only
+		// SupportService and the two new RPCs return Unimplemented.
+		if q, ok := opts.Objects.(core.ObjectInstanceQuery); ok {
+			srv.supportService = newSupportServiceWithInstances(opts.FOMs, q)
+		} else {
+			srv.supportService = newSupportService(opts.FOMs)
+		}
 	}
 	return srv, nil
 }

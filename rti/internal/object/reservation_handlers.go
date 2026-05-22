@@ -126,6 +126,41 @@ func (r *Registry) OnFederationDestroyed(fed core.FederationName) {
 	r.reservations.OnFederationDestroyed(fed)
 }
 
+// LookupObjectInstanceByName implements core.ObjectInstanceQuery
+// (§6.30). M27 Phase C — runtime handle resolution.
+func (r *Registry) LookupObjectInstanceByName(fed core.FederationName, name string) (core.ObjectHandle, bool) {
+	r.mu.RLock()
+	st, ok := r.federations[fed]
+	r.mu.RUnlock()
+	if !ok {
+		return core.InvalidObjectHandle, false
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	h, exists := st.nameToHandle[name]
+	if !exists {
+		return core.InvalidObjectHandle, false
+	}
+	return h, true
+}
+
+// LookupObjectInstanceName implements core.ObjectInstanceQuery (§6.31).
+func (r *Registry) LookupObjectInstanceName(fed core.FederationName, handle core.ObjectHandle) (string, bool) {
+	r.mu.RLock()
+	st, ok := r.federations[fed]
+	r.mu.RUnlock()
+	if !ok {
+		return "", false
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	inst, exists := st.instances[handle]
+	if !exists {
+		return "", false
+	}
+	return inst.name, true
+}
+
 // Compile-time guard: the reservation flow uses core.ErrObjectInstanceNameReservedByOther
 // in Register's collision path; keep the import live.
 var _ = errors.Is

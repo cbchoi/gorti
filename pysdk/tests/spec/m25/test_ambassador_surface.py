@@ -59,6 +59,14 @@ PITCH_SURFACE_METHODS = [
     "unsubscribeInteractionClassWithRegions",
     "sendInteractionWithRegions",
     "requestAttributeValueUpdateWithRegions",
+    # §10.4 Callback evocation + enable/disable (M26 Phase E, M27 Phase C)
+    "evokeCallback", "evokeMultipleCallbacks",
+    "enableCallbacks", "disableCallbacks",
+    # §6.1-6.5 reservation (M26 Phase F)
+    "reserveObjectInstanceName", "releaseObjectInstanceName",
+    "reserveMultipleObjectInstanceNames",
+    # §6.30-6.31 runtime instance handle services (M27 Phase C)
+    "getObjectInstanceHandle", "getObjectInstanceName",
 ]
 
 

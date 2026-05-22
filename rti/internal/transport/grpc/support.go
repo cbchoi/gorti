@@ -32,13 +32,23 @@ const (
 
 // supportService is the SupportServiceServer impl. Embeds the
 // Unimplemented* shim per generated-code requirement.
+//
+// M27 Phase C: the optional instances field is the runtime object
+// registry consulted by GetObjectInstanceHandle / Name. When nil,
+// those RPCs return Unimplemented — preserves test fixtures that
+// don't wire a registry.
 type supportService struct {
 	rtiv1.UnimplementedSupportServiceServer
-	foms core.FOMRepository
+	foms      core.FOMRepository
+	instances core.ObjectInstanceQuery
 }
 
 func newSupportService(foms core.FOMRepository) *supportService {
 	return &supportService{foms: foms}
+}
+
+func newSupportServiceWithInstances(foms core.FOMRepository, instances core.ObjectInstanceQuery) *supportService {
+	return &supportService{foms: foms, instances: instances}
 }
 
 // resolveLookup gets the FOM for a federation and asserts the reverse-
@@ -353,4 +363,60 @@ func (s *supportService) GetTransportationName(_ context.Context, req *rtiv1.Get
 	default:
 		return nil, status.Errorf(codes.NotFound, "transportation type %d not recognised", req.GetTransportationType())
 	}
+}
+
+// GetObjectInstanceHandle implements §6.30 (M27 Phase C). Runtime
+// query against the object registry; returns NotFound if the name
+// has not been registered in the federation. Returns Unimplemented
+// if the SupportService was constructed without an ObjectInstanceQuery
+// (test fixtures).
+func (s *supportService) GetObjectInstanceHandle(_ context.Context, req *rtiv1.GetObjectInstanceHandleRequest) (*rtiv1.GetObjectInstanceHandleResponse, error) {
+	if req == nil {
+		return nil, nilRequest("GetObjectInstanceHandle")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if s.instances == nil {
+		return nil, status.Error(codes.Unimplemented, "object instance query not wired")
+	}
+	if strings.TrimSpace(req.GetFederationName()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "federation_name is required")
+	}
+	h, ok := s.instances.LookupObjectInstanceByName(
+		core.FederationName(req.GetFederationName()),
+		req.GetObjectName(),
+	)
+	if !ok {
+		return nil, status.Errorf(codes.NotFound,
+			"object instance name %q not registered in federation %q",
+			req.GetObjectName(), req.GetFederationName())
+	}
+	return &rtiv1.GetObjectInstanceHandleResponse{ObjectHandle: uint64(h)}, nil
+}
+
+// GetObjectInstanceName implements §6.31 (M27 Phase C).
+func (s *supportService) GetObjectInstanceName(_ context.Context, req *rtiv1.GetObjectInstanceNameRequest) (*rtiv1.GetObjectInstanceNameResponse, error) {
+	if req == nil {
+		return nil, nilRequest("GetObjectInstanceName")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	if s.instances == nil {
+		return nil, status.Error(codes.Unimplemented, "object instance query not wired")
+	}
+	if strings.TrimSpace(req.GetFederationName()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "federation_name is required")
+	}
+	name, ok := s.instances.LookupObjectInstanceName(
+		core.FederationName(req.GetFederationName()),
+		core.ObjectHandle(req.GetObjectHandle()),
+	)
+	if !ok {
+		return nil, status.Errorf(codes.NotFound,
+			"object instance handle %d not found in federation %q",
+			req.GetObjectHandle(), req.GetFederationName())
+	}
+	return &rtiv1.GetObjectInstanceNameResponse{ObjectName: name}, nil
 }
