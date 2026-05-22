@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cbchoi/gorti/rti/cmd/rti-top/internal/client"
+	"github.com/cbchoi/gorti/rti/internal/buildinfo"
 )
 
 const (
@@ -33,6 +34,7 @@ const (
 )
 
 func main() {
+	showVersion := flag.Bool("version", false, "print rti-top version and exit")
 	addr := flag.String("rtid-addr", "localhost:8443",
 		"AdminService listener address on rtid (host:port). Plaintext only — Phase 1 admin listener is plaintext (mTLS deferred).")
 	refresh := flag.Duration("refresh", 1*time.Second,
@@ -40,6 +42,11 @@ func main() {
 	smoke := flag.Bool("smoke", false,
 		"Smoke-test mode: dial + call Status + print the response, then exit. Used by CI; does not enter the TUI.")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("rti-top", buildinfo.String())
+		return
+	}
 
 	if err := validateRefresh(*refresh); err != nil {
 		fmt.Fprintf(os.Stderr, "rti-top: %v\n", err)

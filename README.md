@@ -13,6 +13,30 @@ What's in the box:
 
 ## Quickstart
 
+### Install from a release (no Go toolchain required)
+
+One-liner — fetches the latest release, verifies the SHA256, installs `rtid` + `rti-top` to `/usr/local/bin`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh | sh
+```
+
+Pin a version or override the install directory via env vars:
+
+```bash
+# Pin a specific tag
+curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh | VERSION=v0.1.0 sh
+
+# Install to ~/.local/bin (no sudo required)
+curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh | INSTALL_DIR=$HOME/.local/bin sh
+```
+
+Supported platforms: `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`. The script uses `curl` or `wget`, and `sha256sum` or `shasum -a 256` — whichever is available.
+
+Prefer to do it by hand? Download a tarball + the matching `gorti_<version>_SHA256SUMS` from the [releases page](https://github.com/cbchoi/gorti/releases) and `tar -xz` the binaries.
+
+The release tarball is CGo-free (statically linked), so it has no runtime system dependencies. The DDS-capable `rtid-dds` variant is **not** in the release tarball — it requires Cyclone DDS and is built from source via `make build-dds` (see [M19 design doc](docs/m19-dds-adapter.md)).
+
 ### Run the Go reference example
 
 ```bash
@@ -53,6 +77,147 @@ DDS's discovery / multicast properties — see
 and `make build-dds` for the DDS-capable variant. M19 is a multi-phase
 deliverable; Phase 1a (foundation, no CGo) has landed; Phase 1b adds
 the actual Cyclone DDS interop.
+
+## Using `rtid`
+
+### Listener model
+
+`rtid` opens up to three TCP listeners. They are independent — bind any of them to `0.0.0.0` only when you understand the auth posture (see "Security caveats" below).
+
+| Port | Flag | Default | Purpose |
+|---|---|---|---|
+| Federate | `--listen` | `:8442` | gRPC for federates (`grpc://` or `grpcs://`). |
+| Admin | `--admin-listen` | `localhost:8443` | Read-only `AdminService` (Snapshot / TailEvents / Status) — backs `rti-top`. Loopback by default. Empty string disables. |
+| Metrics | `--metrics-listen` | `:9090` | Prometheus scrape endpoint at `/metrics`. |
+
+### Run a server
+
+```bash
+# Plaintext (dev / trusted network)
+rtid --listen :8442 --log-dir ./eventlogs --save-dir ./gorti-saves
+
+# TLS (federates dial grpcs://host:8442)
+rtid --listen :8442 \
+     --tls-cert ./certs/server.pem --tls-key ./certs/server.key \
+     --log-dir ./eventlogs
+
+# Best-effort federation mode (lower latency, no per-federate ack accounting)
+rtid --federation-mode best-effort
+```
+
+`--log-dir` is required for any federation that should persist its event log to disk — leave empty and the federation will refuse to start. `--save-dir` is the on-disk root for federation save bundles (M9, FR-SR-1..5).
+
+### Demo modes (no federate code required)
+
+`rtid --mode=` runs an in-process federation against itself for smoke testing:
+
+```bash
+rtid --mode=pingpong-demo --pingpong-rounds 1000 --log-dir ./eventlogs
+rtid --mode=timed-demo    --timed-ticks 100      --log-dir ./eventlogs
+rtid --mode=replay-from-log --replay-input ./eventlogs/<federation>.eventlog
+```
+
+Pair `--pingpong-deterministic` / `--timed-deterministic` with the same `--log-dir` across runs to get byte-identical event logs (the determinism harness in `make determinism`).
+
+### Useful flags
+
+| Flag | Purpose |
+|---|---|
+| `--version` | Print version + commit + build date and exit. |
+| `--log-level` | `debug`/`info`/`warn`/`error` (default `info`). |
+| `--log-format` | `json` (default) or `text`. |
+| `--federation-mode` | `verbose` (default; ack-accounted) or `best-effort`. |
+| `--research-config` | TOML file selecting alternative LBTS/Grant/Negotiation strategies (see [`docs/research-platform-howto.md`](docs/research-platform-howto.md)). |
+| `--admin-mutating` | Enable `ForceResign`/`DestroyFederation` on the admin port. Refuses non-loopback bind unless `--admin-mutating-allow-non-loopback=true`. |
+
+Full flag list: `rtid --help`.
+
+### Security caveats
+
+- The federate port supports server-side TLS only. **mTLS + OIDC client auth is M14 and not yet shipped** — treat `--listen` as a trusted-network port.
+- `--admin-listen` is plaintext. Keep it on loopback; if you must expose it, front it with an ACL.
+- `--admin-mutating` performs irreversible operations (force-resign, destroy-federation). Off by default; the binary refuses to start with `--admin-mutating` on a non-loopback bind unless you explicitly opt in.
+
+## Writing a federate
+
+### Python (idiomatic, supported)
+
+`rti1516e` is the supported federate SDK. Install from the source tree:
+
+```bash
+cd pysdk && pip install -e '.[dev]' pyjevsim==2.0.1
+make py-codegen   # one-time: generates gRPC stubs into pysdk/rti1516e/_generated/
+```
+
+A minimal federate that joins, publishes one interaction, advances logical time, and resigns:
+
+```python
+import asyncio
+from rti1516e.connection import RtiConnection, FederationSpec
+
+async def main() -> None:
+    spec = FederationSpec(
+        name="demo",
+        fom_modules=["./fom/HLAstandardMIM.xml", "./fom/demo.xml"],
+        mode="verbose",
+    )
+    async with RtiConnection.connect("grpc://localhost:8442") as rti:
+        async with rti.join_federation(spec, federate_name="alice") as fed:
+            await fed.publish_interaction_class("HLAinteractionRoot.Ping")
+            await fed.subscribe_interaction_class("HLAinteractionRoot.Ping")
+
+            await fed.enable_time_regulation(lookahead=1.0)
+            await fed.enable_time_constrained()
+
+            await fed.send_interaction("HLAinteractionRoot.Ping", {"seq": 1})
+            await fed.next_message_request(time=10.0)
+            # ... drain grants/events from fed.events() ...
+
+asyncio.run(main())
+```
+
+Connect URLs:
+
+- `grpc://host:port` — plaintext.
+- `grpcs://host:port` — TLS; pass `ca_cert=Path("ca.pem").read_bytes()` to `connect()` for a private CA.
+- `memory://name` — in-process driver for tests (no network, deterministic).
+
+Cut-3 service groups (`fed.sync`, `fed.ownership`, `fed.ddm`, `fed.savepoint`, `fed.mom`) are lazy properties — use them only when you need those service surfaces. Reference federates live under [`examples/`](examples/) (`pyjevsim`, `pyjevsim-relay`, `pyjevsim-time-advance`, `pyjevsim-sync-points`).
+
+### Go (raw gRPC)
+
+There is no idiomatic Go federate SDK — the in-tree Go examples (`go-pingpong`, `go-timed`) drive `rtid` in `--mode=pingpong-demo`/`timed-demo`. External Go federates connect by generating gRPC stubs from [`proto/rti/v1/*.proto`](proto/rti/v1/) directly. The proto contracts are orchestrator-frozen; cross-language handle alignment landed at M6.
+
+## Observing with `rti-top`
+
+`rti-top` is a top-style TUI that polls `rtid`'s read-only AdminService.
+
+```bash
+# rtid running with default --admin-listen=localhost:8443
+rti-top                                     # 1 Hz refresh, default address
+rti-top --rtid-addr remote.example:8443     # remote daemon (loopback default; expose with care)
+rti-top --refresh 250ms                     # 100 ms .. 60 s
+```
+
+Keybindings:
+
+| Key | Action |
+|---|---|
+| `f` | Federations view (roster) |
+| `o` | drill down into the selected federation |
+| `t` | Time view — LBTS sparkline + grants |
+| `w` | Wire view — per-RPC rate / sort / column-toggle (`s` / `c`) |
+| `i` | Events view — `TailEvents` stream |
+| `f` (in Events view) | filter input |
+| `p` (in Events view) | pause / resume the stream |
+| `/` | filter the current table |
+| `↑`/`↓` or `j`/`k` | move selection |
+| `enter` | drill into selection · `esc` step back |
+| `r` | cycle refresh interval (100 ms ↔ 60 s) |
+| `q` or `ctrl+c` | quit |
+| `x` / `d` | (mutating-only) ForceResign federate / DestroyFederation |
+
+Mutating keys (`x`, `d`) only appear when `rtid` was started with `--admin-mutating=true`; they're hidden by default.
 
 ## Performance
 
