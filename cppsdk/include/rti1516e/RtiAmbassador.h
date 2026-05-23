@@ -159,6 +159,18 @@ class RTIambassador {
   std::string getParameterName(InteractionClassHandle cls,
                                ParameterHandle handle);
 
+  // §6.30 / §6.31 — runtime instance-handle services. Unlike the
+  // FOM-driven handles above, these query the live object registry
+  // — they let a late-joining federate resolve "car-7" to its
+  // ObjectInstanceHandle without waiting for the Discover callback.
+  //
+  // Errors: NameNotFound if the instance hasn't been registered.
+  // The result is NOT cached client-side: instances come and go
+  // during a federation's lifetime, so a query should always reflect
+  // current state.
+  ObjectInstanceHandle getObjectInstanceHandle(const std::string& name);
+  std::string getObjectInstanceName(ObjectInstanceHandle handle);
+
   // §5 — publish / subscribe declarations.
   //
   // Pitch shape: handles only. The federate must have resolved the

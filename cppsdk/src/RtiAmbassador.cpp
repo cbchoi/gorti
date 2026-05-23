@@ -599,6 +599,43 @@ std::string RTIambassador::getParameterName(InteractionClassHandle cls,
   return name;
 }
 
+// --- M17.9 §6.30 / §6.31 runtime instance handle services ----------------
+
+ObjectInstanceHandle RTIambassador::getObjectInstanceHandle(
+    const std::string& name) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "getObjectInstanceHandle: federate not joined to any federation");
+  }
+  rti::v1::GetObjectInstanceHandleRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_object_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::GetObjectInstanceHandleResponse resp;
+  const auto s = impl_->support_stub->GetObjectInstanceHandle(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "getObjectInstanceHandle(" + name + ")");
+  return ObjectInstanceHandle(resp.object_handle());
+}
+
+std::string RTIambassador::getObjectInstanceName(ObjectInstanceHandle handle) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "getObjectInstanceName: federate not joined to any federation");
+  }
+  rti::v1::GetObjectInstanceNameRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_object_handle(handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::GetObjectInstanceNameResponse resp;
+  const auto s = impl_->support_stub->GetObjectInstanceName(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "getObjectInstanceName");
+  return resp.object_name();
+}
+
 // --- M17.4 §5 publish / subscribe declarations -----------------------------
 
 namespace {
