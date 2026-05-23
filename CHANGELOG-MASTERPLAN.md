@@ -336,6 +336,47 @@ Pitch-API parity story is now fully closed. The Layer 2 `Rti1516eAmbassador` is 
 
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
+#### M17 Cut-1 — C++ SDK MVP (closed 2026-05-23)
+
+First language binding beyond Python. The `rti1516e::` namespace
+mirrors Pitch's reference C++ SDK so federate code ported from
+Pitch / Portico / MAK compiles with minimal call-site change.
+Cut-1 ships the surface a typical Pitch publisher/subscriber pair
+uses; time mgmt / ownership / DDM / save-restore / reservation /
+MOM defer to Cut-2.
+
+Seven TDD milestones, each ending in a commit + push:
+- M17.1 (`a4364d3`) scaffold + gRPC plumbing — `cppsdk/CMakeLists.txt`, `buf.gen.yaml` cpp plugins, strong-typedef handles, Annex C exceptions, pimpl `RTIambassador` with connect/disconnect. 11 unit tests.
+- M17.2 (`a7cce32`) federation lifecycle — createFederationExecution / joinFederationExecution / resignFederationExecution / destroyFederationExecution. `RtidProcess` RAII fixture spawns rtid for integration tests. 9 integration tests.
+- M17.3 (`4e5aecd`) §10.2 handle services — getObjectClassHandle / Attribute / Interaction / Parameter (forward + reverse), via `SupportService` over the wire. Client-side cache so repeat lookups don't churn the wire. 9 integration tests.
+- M17.4 (`f7a572d`) §5 declarations — publish/subscribe object class attributes + interaction class, handle-keyed (Pitch idiom). 9 integration tests.
+- M17.5 (`6cbb51d`) §6 register/update/send — registerObjectInstance, updateAttributeValues (AttributeHandleValueMap), sendInteraction (ParameterHandleValueMap). Cut-1 ships only the RO variants. 7 integration tests.
+- M17.6 (`88ad167`) §10.4 callback dispatch — `FederateAmbassador` virtual base with discoverObjectInstance / reflectAttributeValues / receiveInteraction. Background thread owns the `StreamService.Events` streaming RPC; `tickCallback(min, max)` drains the queue and dispatches override slots ("cheap evoke" semantics, matching pysdk M26 Phase E). 2 integration tests including end-to-end Discover+Reflect+Receive.
+- M17.7 (`5186dfc`) cross-language Pitch smoke — `examples/cpp-pitch-smoke/publisher.cpp` builds a C++ federate using ONLY rti1516e:: ambassador methods. `pysdk/tests/spec/m17/test_cpp_python_interop.py` spawns rtid + the C++ publisher and verifies a Python subscriber (using M25-M27 Pitch-style API + M27 D additional_fom_modules) observes Discover('cpp-car-1') + Reflect + Receive. 1 cross-language test.
+
+Build chain
+- C++17, CMake 3.18+, gRPC++ + protobuf + GoogleTest via Conan (`conanfile.txt`) or system packages. Distributed binaries are CGo-free by default.
+- Proto stubs generated locally via the Conan-provided protoc; `buf generate`'s remote cpp plugin emits protobuf 7.x gencode which doesn't match conan-center's protobuf 5.27 runtime. Documented in `cppsdk/README.md`.
+- `cppsdk/_generated/` gitignored (same convention as Go genproto and Python _generated).
+
+Verification
+- 6 ctest executables across the cppsdk tests dir: ambassador_unit + 5 integration suites (lifecycle, handles, declarations, objects, callbacks). 46+ GoogleTest cases, ~7.5 s end-to-end.
+- 1 Python interop test in `pysdk/tests/spec/m17/`. ~3.7 s.
+
+Out of scope (deferred to M17 Cut-2 / Cut-3):
+- §8 Time Management (TAR/TARA/NER/NMRA/FQR + enable/disable regulating + constrained)
+- §7 Ownership Management
+- §9 Data Distribution Management
+- §4.8-15 Save/Restore
+- §6.1-5 Object instance name reservation flow
+- §6.30-31 runtime instance handle services
+- §11 MOM ambassador delegates
+- §10.4 strict HLA_EVOKED buffered-drain (Cut-1 ships cheap evoke)
+- `enableCallbacks` / `disableCallbacks` toggle
+- HLA datatype encoding library (Cut-1 federates encode bytes by hand; an `rti1516e::encoding::HLAfloat64BE` etc. library lands in Cut-2)
+- Async/non-blocking ambassador variants — Cut-1 ships sync-only methods
+- Java SDK (M18 — separate milestone)
+
 Out of scope (deferred to M25+):
 - §4.2 connect / §4.4 disconnect — gRPC channel handles implicitly.
 - Wider §7 ownership — only the resign-related releases land in M24.
