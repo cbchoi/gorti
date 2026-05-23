@@ -18,6 +18,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "Types.h"
 
@@ -48,6 +49,28 @@ class FederateAmbassador {
       InteractionClassHandle /*interaction_class*/,
       const ParameterHandleValueMap& /*parameters*/,
       std::optional<double> /*timestamp*/) {}
+
+  // §6.2 — a previously-requested name reservation succeeded.
+  // M17.10 (Cut-2). The federate may now call registerObjectInstance
+  // with the reserved name.
+  virtual void objectInstanceNameReservationSucceeded(
+      const std::string& /*object_name*/) {}
+
+  // §6.2 — a name reservation request was rejected (already in use).
+  virtual void objectInstanceNameReservationFailed(
+      const std::string& /*object_name*/) {}
+
+  // §6.5 — an atomic batch reservation succeeded (every name in the
+  // request was accepted).
+  virtual void multipleObjectInstanceNameReservationSucceeded(
+      const std::vector<std::string>& /*object_names*/) {}
+
+  // §6.5 — an atomic batch reservation was rejected. NONE of the
+  // requested names were reserved; `colliding_names` lists which
+  // specific names collided.
+  virtual void multipleObjectInstanceNameReservationFailed(
+      const std::vector<std::string>& /*requested_names*/,
+      const std::vector<std::string>& /*colliding_names*/) {}
 };
 
 }  // namespace rti1516e

@@ -171,6 +171,26 @@ class RTIambassador {
   ObjectInstanceHandle getObjectInstanceHandle(const std::string& name);
   std::string getObjectInstanceName(ObjectInstanceHandle handle);
 
+  // §6.1-5 — object instance name reservation flow. Pitch federates
+  // that pre-reserve names before calling registerObjectInstance use
+  // these. Result is delivered as a callback on the bound
+  // FederateAmbassador (objectInstanceNameReservationSucceeded /
+  // Failed); the RPCs themselves return promptly.
+  //
+  // After Succeeded, the federate may call
+  // registerObjectInstance(class_handle, name) with that name.
+  void reserveObjectInstanceName(const std::string& name);
+
+  // §6.5 — atomic batch reservation. All names succeed or none do;
+  // the Failed callback's colliding_names lists the specific names
+  // that caused the batch to fail.
+  void reserveMultipleObjectInstanceNames(
+      const std::vector<std::string>& names);
+
+  // §6.4 — release a previously-reserved name. Synchronous error if
+  // the federate doesn't hold the reservation.
+  void releaseObjectInstanceName(const std::string& name);
+
   // §5 — publish / subscribe declarations.
   //
   // Pitch shape: handles only. The federate must have resolved the

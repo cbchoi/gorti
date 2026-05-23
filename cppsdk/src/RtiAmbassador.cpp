@@ -636,6 +636,63 @@ std::string RTIambassador::getObjectInstanceName(ObjectInstanceHandle handle) {
   return resp.object_name();
 }
 
+// --- M17.10 §6.1-5 object instance name reservation ----------------------
+
+void RTIambassador::reserveObjectInstanceName(const std::string& name) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "reserveObjectInstanceName: federate not joined to any federation");
+  }
+  rti::v1::ReserveObjectInstanceNameRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->ReserveObjectInstanceName(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "reserveObjectInstanceName");
+}
+
+void RTIambassador::reserveMultipleObjectInstanceNames(
+    const std::vector<std::string>& names) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "reserveMultipleObjectInstanceNames: federate not joined");
+  }
+  rti::v1::ReserveMultipleObjectInstanceNamesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  for (const auto& n : names) {
+    req.add_object_names(n);
+  }
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->object_stub->ReserveMultipleObjectInstanceNames(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "reserveMultipleObjectInstanceNames");
+}
+
+void RTIambassador::releaseObjectInstanceName(const std::string& name) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "releaseObjectInstanceName: federate not joined to any federation");
+  }
+  rti::v1::ReleaseObjectInstanceNameRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->ReleaseObjectInstanceName(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "releaseObjectInstanceName");
+}
+
 // --- M17.4 §5 publish / subscribe declarations -----------------------------
 
 namespace {
@@ -950,10 +1007,36 @@ bool RTIambassador::tickCallback(double approx_min_time,
             InteractionClassHandle(i.interaction_class_handle()), params, ts);
         return true;
       }
+      case rti::v1::FederateEvent::kReservationSucceeded:
+        impl_->fed_ambassador->objectInstanceNameReservationSucceeded(
+            evt.reservation_succeeded().object_name());
+        return true;
+      case rti::v1::FederateEvent::kReservationFailed:
+        impl_->fed_ambassador->objectInstanceNameReservationFailed(
+            evt.reservation_failed().object_name());
+        return true;
+      case rti::v1::FederateEvent::kReservationMultiSucceeded: {
+        const auto& m = evt.reservation_multi_succeeded();
+        std::vector<std::string> names(m.object_names().begin(),
+                                       m.object_names().end());
+        impl_->fed_ambassador->multipleObjectInstanceNameReservationSucceeded(
+            names);
+        return true;
+      }
+      case rti::v1::FederateEvent::kReservationMultiFailed: {
+        const auto& m = evt.reservation_multi_failed();
+        std::vector<std::string> req_names(m.requested_names().begin(),
+                                           m.requested_names().end());
+        std::vector<std::string> col_names(m.colliding_names().begin(),
+                                           m.colliding_names().end());
+        impl_->fed_ambassador->multipleObjectInstanceNameReservationFailed(
+            req_names, col_names);
+        return true;
+      }
       default:
-        // Cut-1 ignores events outside the discover/reflect/receive
-        // set (remove/provide/sync/ownership/save) — they're queued
-        // by the stream but not dispatched. Cut-2 adds matching slots.
+        // Cut-1 / Cut-2 ignore events outside the supported slots
+        // (remove/provide/sync/ownership/save/halted). Cut-3 adds
+        // the remaining cases.
         return true;
     }
   };
