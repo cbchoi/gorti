@@ -4,8 +4,8 @@ IEEE 1516.1-2010 Layer-2 ambassador (Pitch-style) for the gorti RTI.
 Federate code ported from Pitch / Portico / MAK should compile against
 this SDK with minimal call-site change.
 
-**Status:** M17 Cut-1 in progress. See `docs/PITCH_PARITY.md` for the
-API divergence table.
+**Status:** M17 Cut-2 closed (2026-05-21). See `docs/PITCH_PARITY.md`
+for the API divergence table.
 
 ## Build
 
@@ -57,6 +57,8 @@ cppsdk/
 ├── conanfile.txt               Conan deps (Cut-1: gRPC + protobuf + gtest)
 ├── include/rti1516e/
 │   ├── RtiAmbassador.h         Layer-2 ambassador
+│   ├── FederateAmbassador.h    callback override slots
+│   ├── Encoding.h              Annex B basic encoding (Cut-2)
 │   ├── Exceptions.h            Annex C exception hierarchy
 │   └── Types.h                 strong handles + value maps
 ├── src/
@@ -68,7 +70,8 @@ cppsdk/
 
 ## Milestones
 
-- **M17.1 — scaffold + gRPC plumbing.** Connection lifecycle (this file).
+Cut-1 (closed 2026-05-23):
+- M17.1 — scaffold + gRPC plumbing. Connection lifecycle.
 - M17.2 — federation lifecycle (createFederationExecution, join, resign).
 - M17.3 — §10.2 handle services (getObjectClassHandle, etc.).
 - M17.4 — §5 publish/subscribe declarations.
@@ -76,14 +79,19 @@ cppsdk/
 - M17.6 — §10.4 tickCallback + FederateAmbassador callback dispatch.
 - M17.7 — cross-language Pitch smoke (C++ pub ↔ Python sub).
 
-## Out of scope for Cut-1
+Cut-2 (closed 2026-05-21):
+- M17.8 — HLA Annex B basic encoding (`<rti1516e/Encoding.h>`).
+- M17.9 — §6.30/§6.31 runtime instance handle services.
+- M17.10 — §6.1-5 object instance name reservation flow.
+- M17.11 — §8 Time Management (TAR/TARA/NER/NMRA/FQR + queries).
 
-Cut-2/3+ deferrals:
-- §8 Time Management (TAR/TARA/NER/NMRA/FQR)
+## Out of scope (deferred to Cut-3)
+
 - §7 Ownership Management
 - §9 Data Distribution Management
 - §4.8-15 Save/Restore
-- §6.1-5 Object instance name reservation flow
 - §11 MOM ambassador methods
 - §10.4 strict HLA_EVOKED buffered-drain (M27 Phase E noted gorti's
   cheap-evoke divergence; that carries over to C++)
+- Variable / fixed record + enumerated + array encodings (Cut-2 ships
+  only the basic Annex B set)

@@ -377,6 +377,60 @@ Out of scope (deferred to M17 Cut-2 / Cut-3):
 - Async/non-blocking ambassador variants — Cut-1 ships sync-only methods
 - Java SDK (M18 — separate milestone)
 
+#### M17 Cut-2 — C++ SDK encoding + reservation + time mgmt (closed 2026-05-21)
+
+Closes the Cut-1 gaps that block a typical Pitch federate port. Cut-2
+ships the Annex B basic encoding library, the §6.30/§6.31 instance
+handle services, the §6.1-5 reservation flow, and the full §8 Time
+Management surface. After Cut-2, a regulating publisher and a
+constrained subscriber written against `rti1516e::` can drive a
+co-simulation end-to-end against the gorti server — no per-byte
+encoding hand-rolling, no missing reservation/grant callbacks.
+
+- M17.8 (`be0e7c2`) HLA Annex B encoding library — header-only
+  `<rti1516e/Encoding.h>` with HLAfloat64BE/32BE, HLAinteger32BE/64BE,
+  HLAoctet, HLAunicodeString. Templated detail::packBE/unpackBE
+  centralizes the host-endian → big-endian flip. 16 unit tests cover
+  byte-layout invariants against IEEE 1516.2 §B.1 reference vectors.
+- M17.9 (`2296385`) §6.30-31 instance handle services —
+  getObjectInstanceHandle(name) / getObjectInstanceName(handle).
+  Late-joiner scenario: a federate joining AFTER another federate
+  registers can resolve the instance handle without receiving the
+  Discover callback. No client-side cache (unlike support_stub
+  caching for class/attr handles) because instances are runtime
+  state. 4 integration tests + pre-join guard.
+- M17.10 (`e01d361`) §6.1-5 object instance name reservation —
+  reserveObjectInstanceName, reserveMultipleObjectInstanceNames
+  (atomic batch), releaseObjectInstanceName. 4 new
+  FederateAmbassador override slots: objectInstanceNameReservation
+  Succeeded/Failed + Multiple variants. 4 new FederateEvent oneof
+  cases dispatched by tickCallback. 5 integration tests including
+  release-then-rereserve.
+- M17.11 (`b08523b`) §8 Time Management — 16 new ambassador methods
+  (enable/disable Regulating + Constrained, modifyLookahead,
+  TAR/TARA/NER/NMRA/FQR, queryLogicalTime / queryLookahead /
+  queryLBTS, enable/disableAsynchronousDelivery) + timeAdvanceGrant
+  override slot + FederateEvent::kGrant dispatch. LBTSResult struct
+  for the {time, finite} pair. 19 integration tests covering policy
+  transitions, advance grants, queries, and pre-join guards.
+
+Verification
+- 10 ctest executables: 2 unit (ambassador_unit + encoding_unit) +
+  8 integration (lifecycle, handles, declarations, objects,
+  callbacks, instance_handles, reservation, time). ~14 s end-to-end.
+- 90+ GoogleTest cases.
+
+Out of scope (deferred to M17 Cut-3):
+- §7 Ownership Management
+- §9 Data Distribution Management
+- §4.8-15 Save/Restore
+- §11 MOM ambassador delegates
+- §10.4 strict HLA_EVOKED buffered-drain (still cheap evoke)
+- `enableCallbacks` / `disableCallbacks` toggle
+- Variable / fixed record + enumerated + opaque data + array
+  encodings (Cut-2 ships only the basic Annex B set)
+- Async / non-blocking ambassador variants
+
 Out of scope (deferred to M25+):
 - §4.2 connect / §4.4 disconnect — gRPC channel handles implicitly.
 - Wider §7 ownership — only the resign-related releases land in M24.
