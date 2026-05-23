@@ -18,6 +18,16 @@ target_link_libraries(test_ambassador_unit PRIVATE
 )
 add_test(NAME ambassador_unit COMMAND test_ambassador_unit)
 
+add_executable(test_encoding_unit
+  test_encoding_unit.cpp
+)
+target_link_libraries(test_encoding_unit PRIVATE
+  rti1516e
+  GTest::gtest
+  GTest::gtest_main
+)
+add_test(NAME encoding_unit COMMAND test_encoding_unit)
+
 # --- Integration tests (real rtid subprocess) -------------------------
 #
 # RTID_REPO_ROOT lets the RtidProcess fixture find the rtid binary
