@@ -27,6 +27,8 @@
 #include "rti/v1/declaration.grpc.pb.h"
 #include "rti/v1/declaration.pb.h"
 #include "rti/v1/federation.grpc.pb.h"
+#include "rti/v1/object.grpc.pb.h"
+#include "rti/v1/object.pb.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
 #include "rti/v1/support.pb.h"
@@ -131,6 +133,7 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::FederationService::Stub> federation_stub;
   std::unique_ptr<rti::v1::SupportService::Stub> support_stub;
   std::unique_ptr<rti::v1::DeclarationService::Stub> declaration_stub;
+  std::unique_ptr<rti::v1::ObjectService::Stub> object_stub;
   std::string url;
   bool connected = false;
 
@@ -213,6 +216,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->federation_stub = rti::v1::FederationService::NewStub(impl_->channel);
   impl_->support_stub = rti::v1::SupportService::NewStub(impl_->channel);
   impl_->declaration_stub = rti::v1::DeclarationService::NewStub(impl_->channel);
+  impl_->object_stub = rti::v1::ObjectService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -221,6 +225,7 @@ void RTIambassador::disconnect() {
   impl_->federation_stub.reset();
   impl_->support_stub.reset();
   impl_->declaration_stub.reset();
+  impl_->object_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -698,6 +703,61 @@ void RTIambassador::unsubscribeInteractionClass(InteractionClassHandle cls) {
   const auto s =
       impl_->declaration_stub->UnsubscribeInteractionClass(&ctx, req, &resp);
   if (!s.ok()) throwFromStatus(s, "unsubscribeInteractionClass");
+}
+
+// --- M17.5 §6 register / update / send -----------------------------------
+
+ObjectInstanceHandle RTIambassador::registerObjectInstance(
+    ObjectClassHandle cls, const std::string& instance_name) {
+  requireJoined(*impl_, "registerObjectInstance");
+  rti::v1::RegisterObjectRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_class_handle(cls.raw());
+  req.set_object_name(instance_name);
+  grpc::ClientContext ctx;
+  rti::v1::RegisterObjectResponse resp;
+  const auto s = impl_->object_stub->RegisterObjectInstance(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "registerObjectInstance");
+  return ObjectInstanceHandle(resp.object_handle());
+}
+
+void RTIambassador::updateAttributeValues(
+    ObjectInstanceHandle obj, const AttributeHandleValueMap& values) {
+  requireJoined(*impl_, "updateAttributeValues");
+  rti::v1::UpdateAttributeValuesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(obj.raw());
+  // proto map<uint64, bytes> — copy each value into the map entry.
+  auto* m = req.mutable_attributes();
+  for (const auto& kv : values) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->UpdateAttributeValues(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
+}
+
+void RTIambassador::sendInteraction(
+    InteractionClassHandle cls, const ParameterHandleValueMap& parameters) {
+  requireJoined(*impl_, "sendInteraction");
+  rti::v1::SendInteractionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  auto* m = req.mutable_parameters();
+  for (const auto& kv : parameters) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "sendInteraction");
 }
 
 }  // namespace rti1516e

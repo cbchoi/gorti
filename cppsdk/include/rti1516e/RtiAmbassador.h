@@ -179,6 +179,29 @@ class RTIambassador {
   void subscribeInteractionClass(InteractionClassHandle cls);
   void unsubscribeInteractionClass(InteractionClassHandle cls);
 
+  // §6 — object / interaction surface.
+  //
+  // Cut-1 ships the RO (no logical time) variants. Time-managed
+  // overloads land with §8 in Cut-2. Tag support is captured by the
+  // wire request shape but exposed only via the no-tag default to
+  // keep Cut-1 surface small.
+
+  // §6.4 — register an object instance of ``cls``. ``instance_name``
+  // is optional; an empty string asks rtid to generate one. Returns
+  // the assigned ObjectInstanceHandle.
+  ObjectInstanceHandle registerObjectInstance(
+      ObjectClassHandle cls,
+      const std::string& instance_name = "");
+
+  // §6.10 — update attribute values on a registered instance. Empty
+  // map is rejected by rtid as a malformed update.
+  void updateAttributeValues(ObjectInstanceHandle obj,
+                             const AttributeHandleValueMap& values);
+
+  // §6.12 — send an interaction. Empty parameter map is allowed.
+  void sendInteraction(InteractionClassHandle cls,
+                       const ParameterHandleValueMap& parameters);
+
  private:
   std::unique_ptr<RTIambassadorImpl> impl_;
 };
