@@ -14,3 +14,9 @@ plugins:
     out: pysdk/rti1516e/_generated
   - remote: buf.build/grpc/python
     out: pysdk/rti1516e/_generated
+  # M17 — C++ SDK. Generated stubs land under cppsdk/_generated/ (gitignored).
+  # CMake builds cppsdk against these + the installed grpc/protobuf.
+  - remote: buf.build/protocolbuffers/cpp
+    out: cppsdk/_generated
+  - remote: buf.build/grpc/cpp
+    out: cppsdk/_generated

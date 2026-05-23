@@ -9,6 +9,11 @@ coverage.out
 # Generated proto bindings
 rti/internal/genproto/
 pysdk/rti1516e/_generated/
+cppsdk/_generated/
+
+# C++ SDK build artifacts (CMake out-of-source builds)
+cppsdk/build/
+cppsdk/build-*/
 
 # Python
 __pycache__/
