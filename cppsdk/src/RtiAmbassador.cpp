@@ -24,6 +24,8 @@
 #include <utility>
 
 #include "rti/v1/common.pb.h"
+#include "rti/v1/declaration.grpc.pb.h"
+#include "rti/v1/declaration.pb.h"
 #include "rti/v1/federation.grpc.pb.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
@@ -128,6 +130,7 @@ class RTIambassadorImpl {
   std::shared_ptr<grpc::Channel> channel;
   std::unique_ptr<rti::v1::FederationService::Stub> federation_stub;
   std::unique_ptr<rti::v1::SupportService::Stub> support_stub;
+  std::unique_ptr<rti::v1::DeclarationService::Stub> declaration_stub;
   std::string url;
   bool connected = false;
 
@@ -209,6 +212,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
   impl_->federation_stub = rti::v1::FederationService::NewStub(impl_->channel);
   impl_->support_stub = rti::v1::SupportService::NewStub(impl_->channel);
+  impl_->declaration_stub = rti::v1::DeclarationService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -216,6 +220,7 @@ void RTIambassador::connect(const std::string& url) {
 void RTIambassador::disconnect() {
   impl_->federation_stub.reset();
   impl_->support_stub.reset();
+  impl_->declaration_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -552,6 +557,147 @@ std::string RTIambassador::getParameterName(InteractionClassHandle cls,
   impl_->param_by_handle[rk] = name;
   impl_->param_by_name[{cls.raw(), name}] = handle.raw();
   return name;
+}
+
+// --- M17.4 §5 publish / subscribe declarations -----------------------------
+
+namespace {
+
+// Helper — the four object-class declaration RPCs share a request
+// shape (federation/federate/class_handle + attribute_handles[]).
+// Templated wrapper that returns the gRPC Status; caller dispatches
+// to the appropriate stub method via a function pointer.
+template <typename Req>
+void fillObjAttrReq(Req& req,
+                    const std::string& federation_name,
+                    HandleValue federate_handle,
+                    HandleValue class_handle,
+                    const AttributeHandleSet& attrs) {
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(federation_name);
+  req.set_federate_handle(federate_handle);
+  req.set_object_class_handle(class_handle);
+  for (const auto& a : attrs) {
+    req.add_attribute_handles(a.raw());
+  }
+}
+
+void requireJoined(const RTIambassadorImpl& impl, std::string_view op) {
+  impl.requireConnected();
+  if (!impl.joined) {
+    throw FederateNotExecutionMember(
+        std::string(op) + ": federate not joined to any federation");
+  }
+}
+
+}  // namespace
+
+void RTIambassador::publishObjectClassAttributes(
+    ObjectClassHandle cls, const AttributeHandleSet& attributes) {
+  requireJoined(*impl_, "publishObjectClassAttributes");
+  rti::v1::PubObjAttrsRequest req;
+  fillObjAttrReq(req, impl_->joined_federation,
+                 impl_->federate_handle.raw(), cls.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->declaration_stub->PublishObjectClassAttributes(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "publishObjectClassAttributes");
+}
+
+void RTIambassador::unpublishObjectClassAttributes(
+    ObjectClassHandle cls, const AttributeHandleSet& attributes) {
+  requireJoined(*impl_, "unpublishObjectClassAttributes");
+  rti::v1::UnpubObjAttrsRequest req;
+  fillObjAttrReq(req, impl_->joined_federation,
+                 impl_->federate_handle.raw(), cls.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->declaration_stub->UnpublishObjectClassAttributes(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "unpublishObjectClassAttributes");
+}
+
+void RTIambassador::subscribeObjectClassAttributes(
+    ObjectClassHandle cls, const AttributeHandleSet& attributes) {
+  requireJoined(*impl_, "subscribeObjectClassAttributes");
+  rti::v1::SubObjAttrsRequest req;
+  fillObjAttrReq(req, impl_->joined_federation,
+                 impl_->federate_handle.raw(), cls.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->declaration_stub->SubscribeObjectClassAttributes(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "subscribeObjectClassAttributes");
+}
+
+void RTIambassador::unsubscribeObjectClassAttributes(
+    ObjectClassHandle cls, const AttributeHandleSet& attributes) {
+  requireJoined(*impl_, "unsubscribeObjectClassAttributes");
+  rti::v1::UnsubObjAttrsRequest req;
+  fillObjAttrReq(req, impl_->joined_federation,
+                 impl_->federate_handle.raw(), cls.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->declaration_stub->UnsubscribeObjectClassAttributes(
+      &ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "unsubscribeObjectClassAttributes");
+}
+
+void RTIambassador::publishInteractionClass(InteractionClassHandle cls) {
+  requireJoined(*impl_, "publishInteractionClass");
+  rti::v1::PubInterRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->declaration_stub->PublishInteractionClass(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "publishInteractionClass");
+}
+
+void RTIambassador::unpublishInteractionClass(InteractionClassHandle cls) {
+  requireJoined(*impl_, "unpublishInteractionClass");
+  rti::v1::UnpubInterRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->declaration_stub->UnpublishInteractionClass(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "unpublishInteractionClass");
+}
+
+void RTIambassador::subscribeInteractionClass(InteractionClassHandle cls) {
+  requireJoined(*impl_, "subscribeInteractionClass");
+  rti::v1::SubInterRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->declaration_stub->SubscribeInteractionClass(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "subscribeInteractionClass");
+}
+
+void RTIambassador::unsubscribeInteractionClass(InteractionClassHandle cls) {
+  requireJoined(*impl_, "unsubscribeInteractionClass");
+  rti::v1::UnsubInterRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->declaration_stub->UnsubscribeInteractionClass(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "unsubscribeInteractionClass");
 }
 
 }  // namespace rti1516e

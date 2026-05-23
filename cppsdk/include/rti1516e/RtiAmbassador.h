@@ -155,6 +155,30 @@ class RTIambassador {
   std::string getParameterName(InteractionClassHandle cls,
                                ParameterHandle handle);
 
+  // §5 — publish / subscribe declarations.
+  //
+  // Pitch shape: handles only. The federate must have resolved the
+  // class/attribute handles via the §10.2 services first. Empty
+  // AttributeHandleSet is allowed — the manager records the
+  // publish/subscribe intent without any attribute bindings.
+  //
+  // All four methods require the ambassador to be joined to a
+  // federation; calling pre-join throws FederateNotExecutionMember.
+
+  void publishObjectClassAttributes(ObjectClassHandle cls,
+                                    const AttributeHandleSet& attributes);
+  void unpublishObjectClassAttributes(ObjectClassHandle cls,
+                                      const AttributeHandleSet& attributes);
+  void subscribeObjectClassAttributes(ObjectClassHandle cls,
+                                      const AttributeHandleSet& attributes);
+  void unsubscribeObjectClassAttributes(ObjectClassHandle cls,
+                                        const AttributeHandleSet& attributes);
+
+  void publishInteractionClass(InteractionClassHandle cls);
+  void unpublishInteractionClass(InteractionClassHandle cls);
+  void subscribeInteractionClass(InteractionClassHandle cls);
+  void unsubscribeInteractionClass(InteractionClassHandle cls);
+
  private:
   std::unique_ptr<RTIambassadorImpl> impl_;
 };
