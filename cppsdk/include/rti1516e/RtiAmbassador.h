@@ -130,6 +130,31 @@ class RTIambassador {
   //   NotConnected                      connect() not called
   void resignFederationExecution();
 
+  // §10.2 — handle / name lookup services. All go over SupportService
+  // and are cached client-side after the first lookup. Repeated
+  // queries for the same name return the cached handle without a
+  // wire round-trip.
+  //
+  // Errors:
+  //   NameNotFound       lookup target does not exist in the FOM
+  //   RTIinternalError   any other rtid failure (e.g. not joined)
+
+  ObjectClassHandle getObjectClassHandle(const std::string& name);
+  std::string getObjectClassName(ObjectClassHandle handle);
+
+  AttributeHandle getAttributeHandle(ObjectClassHandle cls,
+                                     const std::string& name);
+  std::string getAttributeName(ObjectClassHandle cls,
+                               AttributeHandle handle);
+
+  InteractionClassHandle getInteractionClassHandle(const std::string& name);
+  std::string getInteractionClassName(InteractionClassHandle handle);
+
+  ParameterHandle getParameterHandle(InteractionClassHandle cls,
+                                     const std::string& name);
+  std::string getParameterName(InteractionClassHandle cls,
+                               ParameterHandle handle);
+
  private:
   std::unique_ptr<RTIambassadorImpl> impl_;
 };

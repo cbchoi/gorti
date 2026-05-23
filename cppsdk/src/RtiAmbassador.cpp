@@ -19,9 +19,15 @@
 #include <string>
 #include <string_view>
 
+#include <mutex>
+#include <unordered_map>
+#include <utility>
+
 #include "rti/v1/common.pb.h"
 #include "rti/v1/federation.grpc.pb.h"
 #include "rti/v1/federation.pb.h"
+#include "rti/v1/support.grpc.pb.h"
+#include "rti/v1/support.pb.h"
 #include "rti1516e/Exceptions.h"
 
 namespace rti1516e {
@@ -94,6 +100,14 @@ std::string readFomBytes(const std::string& path) {
     case grpc::StatusCode::ALREADY_EXISTS:
       throw FederationExecutionAlreadyExists(msg);
     case grpc::StatusCode::NOT_FOUND:
+      // M17.3 — SupportService returns NotFound for unknown class /
+      // attribute / parameter names. The Annex C exception is
+      // NameNotFound.
+      if (operation.find("get") != std::string::npos &&
+          (operation.find("Handle") != std::string::npos ||
+           operation.find("Name") != std::string::npos)) {
+        throw NameNotFound(msg);
+      }
       throw FederationExecutionDoesNotExist(msg);
     case grpc::StatusCode::FAILED_PRECONDITION:
       // Could be a not-joined error or other state issue. The detail
@@ -113,6 +127,7 @@ class RTIambassadorImpl {
  public:
   std::shared_ptr<grpc::Channel> channel;
   std::unique_ptr<rti::v1::FederationService::Stub> federation_stub;
+  std::unique_ptr<rti::v1::SupportService::Stub> support_stub;
   std::string url;
   bool connected = false;
 
@@ -124,11 +139,57 @@ class RTIambassadorImpl {
   FederateHandle federate_handle{};
   bool joined = false;
 
+  // M17.3 — handle / name caches. The cache key composes federation
+  // name with the lookup target so resignFederationExecution +
+  // rejoin to a different federation can't reuse stale handles.
+  // Locking is coarse (one mutex for all caches); acceptable because
+  // a federate typically resolves handles at init time, not in the
+  // hot path.
+  mutable std::mutex cache_mu;
+
+  using ObjClassByName = std::unordered_map<std::string, HandleValue>;
+  using ObjClassByHandle = std::unordered_map<HandleValue, std::string>;
+  using IntClassByName = std::unordered_map<std::string, HandleValue>;
+  using IntClassByHandle = std::unordered_map<HandleValue, std::string>;
+  using AttrKey = std::pair<HandleValue, std::string>;  // (class, attr_name)
+  using ParamKey = std::pair<HandleValue, std::string>;
+  struct PairHash {
+    size_t operator()(const std::pair<HandleValue, std::string>& p) const noexcept {
+      return std::hash<HandleValue>{}(p.first) ^
+             (std::hash<std::string>{}(p.second) << 1);
+    }
+  };
+  using AttrByName = std::unordered_map<AttrKey, HandleValue, PairHash>;
+  using AttrByHandle = std::unordered_map<AttrKey, std::string, PairHash>;
+  using ParamByName = std::unordered_map<ParamKey, HandleValue, PairHash>;
+  using ParamByHandle = std::unordered_map<ParamKey, std::string, PairHash>;
+
+  ObjClassByName obj_class_by_name;
+  ObjClassByHandle obj_class_by_handle;
+  IntClassByName int_class_by_name;
+  IntClassByHandle int_class_by_handle;
+  AttrByName attr_by_name;
+  AttrByHandle attr_by_handle;
+  ParamByName param_by_name;
+  ParamByHandle param_by_handle;
+
   void requireConnected() const {
     if (!connected) {
       throw NotConnected(
           "RTIambassador: operation requires a prior connect()");
     }
+  }
+
+  void clearHandleCaches() {
+    std::lock_guard<std::mutex> g(cache_mu);
+    obj_class_by_name.clear();
+    obj_class_by_handle.clear();
+    int_class_by_name.clear();
+    int_class_by_handle.clear();
+    attr_by_name.clear();
+    attr_by_handle.clear();
+    param_by_name.clear();
+    param_by_handle.clear();
   }
 };
 
@@ -147,18 +208,21 @@ void RTIambassador::connect(const std::string& url) {
   const auto target = parseGrpcUrl(url);
   impl_->channel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
   impl_->federation_stub = rti::v1::FederationService::NewStub(impl_->channel);
+  impl_->support_stub = rti::v1::SupportService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
 
 void RTIambassador::disconnect() {
   impl_->federation_stub.reset();
+  impl_->support_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
   impl_->joined_federation.clear();
   impl_->federate_handle = FederateHandle{};
   impl_->joined = false;
+  impl_->clearHandleCaches();
 }
 
 bool RTIambassador::isConnected() const noexcept {
@@ -257,6 +321,237 @@ void RTIambassador::resignFederationExecution() {
   impl_->joined = false;
   impl_->joined_federation.clear();
   impl_->federate_handle = FederateHandle{};
+  // Drop handle caches — a subsequent join may be to a different
+  // federation with different FOM, so stale caches would lie.
+  impl_->clearHandleCaches();
+}
+
+// --- M17.3 §10.2 handle services ------------------------------------------
+
+ObjectClassHandle RTIambassador::getObjectClassHandle(
+    const std::string& name) {
+  impl_->requireConnected();
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->obj_class_by_name.find(name);
+    if (it != impl_->obj_class_by_name.end()) {
+      return ObjectClassHandle(it->second);
+    }
+  }
+
+  rti::v1::GetObjectClassHandleRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::GetObjectClassHandleResponse resp;
+  const auto status = impl_->support_stub->GetObjectClassHandle(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getObjectClassHandle(" + name + ")");
+  }
+  const auto h = resp.class_handle();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->obj_class_by_name[name] = h;
+  impl_->obj_class_by_handle[h] = name;
+  return ObjectClassHandle(h);
+}
+
+std::string RTIambassador::getObjectClassName(ObjectClassHandle handle) {
+  impl_->requireConnected();
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->obj_class_by_handle.find(handle.raw());
+    if (it != impl_->obj_class_by_handle.end()) {
+      return it->second;
+    }
+  }
+  rti::v1::GetObjectClassNameRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_handle(handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::GetObjectClassNameResponse resp;
+  const auto status = impl_->support_stub->GetObjectClassName(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getObjectClassName");
+  }
+  const auto& name = resp.class_name();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->obj_class_by_name[name] = handle.raw();
+  impl_->obj_class_by_handle[handle.raw()] = name;
+  return name;
+}
+
+AttributeHandle RTIambassador::getAttributeHandle(ObjectClassHandle cls,
+                                                  const std::string& name) {
+  impl_->requireConnected();
+  const RTIambassadorImpl::AttrKey key{cls.raw(), name};
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->attr_by_name.find(key);
+    if (it != impl_->attr_by_name.end()) {
+      return AttributeHandle(it->second);
+    }
+  }
+  rti::v1::GetAttributeHandleRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_handle(cls.raw());
+  req.set_attribute_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::GetAttributeHandleResponse resp;
+  const auto status = impl_->support_stub->GetAttributeHandle(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getAttributeHandle(" + name + ")");
+  }
+  const auto h = resp.attribute_handle();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->attr_by_name[key] = h;
+  impl_->attr_by_handle[{cls.raw(), std::to_string(h)}] = name;  // cheap reverse
+  return AttributeHandle(h);
+}
+
+std::string RTIambassador::getAttributeName(ObjectClassHandle cls,
+                                            AttributeHandle handle) {
+  impl_->requireConnected();
+  const RTIambassadorImpl::AttrKey rk{cls.raw(), std::to_string(handle.raw())};
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->attr_by_handle.find(rk);
+    if (it != impl_->attr_by_handle.end()) {
+      return it->second;
+    }
+  }
+  rti::v1::GetAttributeNameRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_handle(cls.raw());
+  req.set_attribute_handle(handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::GetAttributeNameResponse resp;
+  const auto status = impl_->support_stub->GetAttributeName(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getAttributeName");
+  }
+  const auto& name = resp.attribute_name();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->attr_by_handle[rk] = name;
+  impl_->attr_by_name[{cls.raw(), name}] = handle.raw();
+  return name;
+}
+
+InteractionClassHandle RTIambassador::getInteractionClassHandle(
+    const std::string& name) {
+  impl_->requireConnected();
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->int_class_by_name.find(name);
+    if (it != impl_->int_class_by_name.end()) {
+      return InteractionClassHandle(it->second);
+    }
+  }
+  rti::v1::GetInteractionClassHandleRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::GetInteractionClassHandleResponse resp;
+  const auto status =
+      impl_->support_stub->GetInteractionClassHandle(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getInteractionClassHandle(" + name + ")");
+  }
+  const auto h = resp.class_handle();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->int_class_by_name[name] = h;
+  impl_->int_class_by_handle[h] = name;
+  return InteractionClassHandle(h);
+}
+
+std::string RTIambassador::getInteractionClassName(
+    InteractionClassHandle handle) {
+  impl_->requireConnected();
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->int_class_by_handle.find(handle.raw());
+    if (it != impl_->int_class_by_handle.end()) {
+      return it->second;
+    }
+  }
+  rti::v1::GetInteractionClassNameRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_handle(handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::GetInteractionClassNameResponse resp;
+  const auto status =
+      impl_->support_stub->GetInteractionClassName(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getInteractionClassName");
+  }
+  const auto& name = resp.class_name();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->int_class_by_name[name] = handle.raw();
+  impl_->int_class_by_handle[handle.raw()] = name;
+  return name;
+}
+
+ParameterHandle RTIambassador::getParameterHandle(
+    InteractionClassHandle cls, const std::string& name) {
+  impl_->requireConnected();
+  const RTIambassadorImpl::ParamKey key{cls.raw(), name};
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->param_by_name.find(key);
+    if (it != impl_->param_by_name.end()) {
+      return ParameterHandle(it->second);
+    }
+  }
+  rti::v1::GetParameterHandleRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_handle(cls.raw());
+  req.set_parameter_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::GetParameterHandleResponse resp;
+  const auto status = impl_->support_stub->GetParameterHandle(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getParameterHandle(" + name + ")");
+  }
+  const auto h = resp.parameter_handle();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->param_by_name[key] = h;
+  impl_->param_by_handle[{cls.raw(), std::to_string(h)}] = name;
+  return ParameterHandle(h);
+}
+
+std::string RTIambassador::getParameterName(InteractionClassHandle cls,
+                                            ParameterHandle handle) {
+  impl_->requireConnected();
+  const RTIambassadorImpl::ParamKey rk{cls.raw(), std::to_string(handle.raw())};
+  {
+    std::lock_guard<std::mutex> g(impl_->cache_mu);
+    const auto it = impl_->param_by_handle.find(rk);
+    if (it != impl_->param_by_handle.end()) {
+      return it->second;
+    }
+  }
+  rti::v1::GetParameterNameRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_class_handle(cls.raw());
+  req.set_parameter_handle(handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::GetParameterNameResponse resp;
+  const auto status = impl_->support_stub->GetParameterName(&ctx, req, &resp);
+  if (!status.ok()) {
+    throwFromStatus(status, "getParameterName");
+  }
+  const auto& name = resp.parameter_name();
+  std::lock_guard<std::mutex> g(impl_->cache_mu);
+  impl_->param_by_handle[rk] = name;
+  impl_->param_by_name[{cls.raw(), name}] = handle.raw();
+  return name;
 }
 
 }  // namespace rti1516e
