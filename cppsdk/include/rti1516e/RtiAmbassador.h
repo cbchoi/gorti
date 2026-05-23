@@ -26,6 +26,10 @@
 
 namespace rti1516e {
 
+// Forward-declare so the public header doesn't require the
+// FederateAmbassador.h include for callers that don't subclass it.
+class FederateAmbassador;
+
 // Forward-declare the impl class so callers don't see grpc++ headers
 // transitively. The pimpl lives in src/RtiAmbassador.cpp.
 class RTIambassadorImpl;
@@ -201,6 +205,31 @@ class RTIambassador {
   // §6.12 — send an interaction. Empty parameter map is allowed.
   void sendInteraction(InteractionClassHandle cls,
                        const ParameterHandleValueMap& parameters);
+
+  // §10.4 — bind a FederateAmbassador for callback delivery. Must
+  // be called BEFORE joinFederationExecution; the join triggers the
+  // server-streaming Events RPC which feeds the callback queue.
+  // Passing nullptr unbinds — useful for clean shutdown ordering.
+  //
+  // The bound FederateAmbassador's lifetime must exceed the
+  // RTIambassador's last tickCallback / resignFederationExecution
+  // call. The simplest pattern: stack-allocate both in the same
+  // scope, RtiAmbassador second so it tears down first.
+  void setFederateAmbassador(FederateAmbassador* fed);
+
+  // §10.4 — drive callback dispatch. Yields to the event-stream
+  // drain for at least ``approx_min_time`` seconds; returns early
+  // once a callback fires AND that minimum elapsed, or returns at
+  // ``approx_max_time`` if no callback arrived. Returns true if at
+  // least one callback fired during the window.
+  //
+  // Cut-1 "cheap evoke" semantics: same as the Python ambassador's
+  // M26 Phase E behavior. Callbacks may fire OUTSIDE the window
+  // (the background stream drain doesn't pause when tickCallback
+  // isn't running). Strict HLA_EVOKED buffered-drain mode is Cut-2.
+  // Documented in docs/PITCH_PARITY.md.
+  bool tickCallback(double approx_min_time = 0.0,
+                    double approx_max_time = 0.0);
 
  private:
   std::unique_ptr<RTIambassadorImpl> impl_;

@@ -13,11 +13,16 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include <mutex>
 #include <unordered_map>
@@ -29,6 +34,9 @@
 #include "rti/v1/federation.grpc.pb.h"
 #include "rti/v1/object.grpc.pb.h"
 #include "rti/v1/object.pb.h"
+#include "rti/v1/stream.grpc.pb.h"
+#include "rti/v1/stream.pb.h"
+#include "rti1516e/FederateAmbassador.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
 #include "rti/v1/support.pb.h"
@@ -134,6 +142,23 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::SupportService::Stub> support_stub;
   std::unique_ptr<rti::v1::DeclarationService::Stub> declaration_stub;
   std::unique_ptr<rti::v1::ObjectService::Stub> object_stub;
+  std::unique_ptr<rti::v1::StreamService::Stub> stream_stub;
+
+  // --- M17.6 callback state ---
+  // Bound FederateAmbassador (nullable). tickCallback dispatches
+  // queued events onto this. Set via setFederateAmbassador.
+  FederateAmbassador* fed_ambassador = nullptr;
+
+  // Event queue + the background thread that drains the streaming RPC.
+  std::mutex event_mu;
+  std::condition_variable event_cv;
+  std::deque<rti::v1::FederateEvent> event_queue;
+  std::atomic<bool> stream_running{false};
+  std::thread stream_thread;
+  std::unique_ptr<grpc::ClientContext> stream_ctx;
+
+  void startEventStream();
+  void stopEventStream();
   std::string url;
   bool connected = false;
 
@@ -217,15 +242,18 @@ void RTIambassador::connect(const std::string& url) {
   impl_->support_stub = rti::v1::SupportService::NewStub(impl_->channel);
   impl_->declaration_stub = rti::v1::DeclarationService::NewStub(impl_->channel);
   impl_->object_stub = rti::v1::ObjectService::NewStub(impl_->channel);
+  impl_->stream_stub = rti::v1::StreamService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
 
 void RTIambassador::disconnect() {
+  impl_->stopEventStream();
   impl_->federation_stub.reset();
   impl_->support_stub.reset();
   impl_->declaration_stub.reset();
   impl_->object_stub.reset();
+  impl_->stream_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -303,6 +331,9 @@ FederateHandle RTIambassador::joinFederationExecution(
   impl_->federate_handle = FederateHandle(resp.federate_handle());
   impl_->joined_federation = federation_name;
   impl_->joined = true;
+  // Start the background stream drain so callbacks queue up
+  // immediately. tickCallback will pop them.
+  impl_->startEventStream();
   return impl_->federate_handle;
 }
 
@@ -312,6 +343,10 @@ void RTIambassador::resignFederationExecution() {
     throw FederateNotExecutionMember(
         "resignFederationExecution: not currently joined to any federation");
   }
+  // Stop draining the event stream before the wire resign. The
+  // server closes the stream once the federate resigns; tearing
+  // down our side first avoids a benign cancellation log line.
+  impl_->stopEventStream();
 
   rti::v1::ResignFederationRequest req;
   req.set_wire_version(rti::v1::WIRE_VERSION_V1);
@@ -758,6 +793,157 @@ void RTIambassador::sendInteraction(
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
   if (!s.ok()) throwFromStatus(s, "sendInteraction");
+}
+
+// --- M17.6 §10.4 tickCallback + FederateAmbassador ------------------------
+
+void RTIambassador::setFederateAmbassador(FederateAmbassador* fed) {
+  impl_->fed_ambassador = fed;
+}
+
+void RTIambassadorImpl::startEventStream() {
+  if (stream_running.exchange(true)) {
+    return;  // already running
+  }
+  stream_ctx = std::make_unique<grpc::ClientContext>();
+  rti::v1::EventsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(joined_federation);
+  req.set_federate_handle(federate_handle.raw());
+
+  // Capture by value where the lambda needs to outlive the stack
+  // frame; the request + reader live inside the thread.
+  stream_thread = std::thread([this, req]() {
+    auto reader = stream_stub->Events(stream_ctx.get(), req);
+    rti::v1::FederateEvent evt;
+    while (reader->Read(&evt)) {
+      {
+        std::lock_guard<std::mutex> g(event_mu);
+        event_queue.push_back(evt);
+      }
+      event_cv.notify_one();
+    }
+    // Reader::Finish discards Status — the stream closes on
+    // resign/disconnect/federation-halt. M17.6 doesn't surface
+    // halt to user code; a future cut adds federationHalted.
+    static_cast<void>(reader->Finish());
+  });
+}
+
+void RTIambassadorImpl::stopEventStream() {
+  if (!stream_running.exchange(false)) {
+    return;
+  }
+  if (stream_ctx) {
+    stream_ctx->TryCancel();
+  }
+  if (stream_thread.joinable()) {
+    stream_thread.join();
+  }
+  stream_ctx.reset();
+  {
+    std::lock_guard<std::mutex> g(event_mu);
+    event_queue.clear();
+  }
+}
+
+bool RTIambassador::tickCallback(double approx_min_time,
+                                 double approx_max_time) {
+  using clock = std::chrono::steady_clock;
+  using std::chrono::duration;
+  using std::chrono::duration_cast;
+  using std::chrono::milliseconds;
+
+  if (approx_max_time < approx_min_time) approx_max_time = approx_min_time;
+  const auto start = clock::now();
+  const auto min_deadline =
+      start + duration_cast<clock::duration>(duration<double>(approx_min_time));
+  const auto max_deadline =
+      start + duration_cast<clock::duration>(duration<double>(approx_max_time));
+
+  bool any_fired = false;
+
+  auto drainOne = [&]() -> bool {
+    rti::v1::FederateEvent evt;
+    {
+      std::unique_lock<std::mutex> lk(impl_->event_mu);
+      if (impl_->event_queue.empty()) return false;
+      evt = std::move(impl_->event_queue.front());
+      impl_->event_queue.pop_front();
+    }
+    if (impl_->fed_ambassador == nullptr) {
+      // No ambassador bound — drop. The cppsdk doesn't buffer events
+      // for a late-bound callback target in Cut-1.
+      return true;
+    }
+    switch (evt.event_case()) {
+      case rti::v1::FederateEvent::kDiscover: {
+        const auto& d = evt.discover();
+        impl_->fed_ambassador->discoverObjectInstance(
+            ObjectInstanceHandle(d.object_handle()),
+            ObjectClassHandle(d.object_class_handle()),
+            d.object_name());
+        return true;
+      }
+      case rti::v1::FederateEvent::kReflect: {
+        const auto& r = evt.reflect();
+        AttributeHandleValueMap values;
+        for (const auto& kv : r.attributes()) {
+          VariableLengthData v(kv.second.begin(), kv.second.end());
+          values.emplace(AttributeHandle(kv.first), std::move(v));
+        }
+        std::optional<double> ts =
+            r.has_logical_time() ? std::optional<double>(r.logical_time())
+                                 : std::nullopt;
+        impl_->fed_ambassador->reflectAttributeValues(
+            ObjectInstanceHandle(r.object_handle()), values, ts);
+        return true;
+      }
+      case rti::v1::FederateEvent::kReceive: {
+        const auto& i = evt.receive();
+        ParameterHandleValueMap params;
+        for (const auto& kv : i.parameters()) {
+          VariableLengthData v(kv.second.begin(), kv.second.end());
+          params.emplace(ParameterHandle(kv.first), std::move(v));
+        }
+        std::optional<double> ts =
+            i.has_logical_time() ? std::optional<double>(i.logical_time())
+                                 : std::nullopt;
+        impl_->fed_ambassador->receiveInteraction(
+            InteractionClassHandle(i.interaction_class_handle()), params, ts);
+        return true;
+      }
+      default:
+        // Cut-1 ignores events outside the discover/reflect/receive
+        // set (remove/provide/sync/ownership/save) — they're queued
+        // by the stream but not dispatched. Cut-2 adds matching slots.
+        return true;
+    }
+  };
+
+  // Honor the min/max window. Sleep in small increments so a callback
+  // arriving early can still fire promptly.
+  while (clock::now() < min_deadline) {
+    if (drainOne()) any_fired = true;
+    if (clock::now() < min_deadline) {
+      std::unique_lock<std::mutex> lk(impl_->event_mu);
+      impl_->event_cv.wait_for(lk, milliseconds(5),
+                               [&] { return !impl_->event_queue.empty(); });
+    }
+  }
+  // Drain anything else queued.
+  while (drainOne()) any_fired = true;
+  // If max_time > min_time and nothing has fired yet, wait until
+  // either an event arrives or the max deadline elapses.
+  while (!any_fired && clock::now() < max_deadline) {
+    std::unique_lock<std::mutex> lk(impl_->event_mu);
+    impl_->event_cv.wait_for(lk, milliseconds(5),
+                             [&] { return !impl_->event_queue.empty(); });
+    lk.unlock();
+    if (drainOne()) any_fired = true;
+  }
+
+  return any_fired;
 }
 
 }  // namespace rti1516e
