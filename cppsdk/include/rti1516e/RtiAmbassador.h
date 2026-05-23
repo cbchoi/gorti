@@ -238,6 +238,65 @@ class RTIambassador {
   void sendInteraction(InteractionClassHandle cls,
                        const ParameterHandleValueMap& parameters);
 
+  // §8 — Time Management.
+  //
+  // M17.11 (Cut-2). The federate opts into time policies (regulating,
+  // constrained) and then drives advance requests (TAR / TARA / NER /
+  // NMRA / FQR). The manager arbitrates and emits a single
+  // TimeAdvanceGrant callback per request.
+  //
+  // Wire compat: the gorti manager uses double for logical time —
+  // matches IEEE 1516.1 HLAfloat64Time. Lookahead is non-negative
+  // and finite. Calling any of these pre-join throws
+  // FederateNotExecutionMember.
+
+  // §8.2 — opt into time regulation. ``lookahead`` is the federate's
+  // minimum time-stamp delta; must be >= 0 and finite. Manager
+  // rejects already-regulating federates synchronously.
+  void enableTimeRegulation(double lookahead);
+  // §8.4 — opt out of time regulation.
+  void disableTimeRegulation();
+  // §8.5 — opt into time constraint.
+  void enableTimeConstrained();
+  // §8.7 — opt out of time constraint.
+  void disableTimeConstrained();
+  // §8.13 — modify lookahead while regulating. Synchronous error if
+  // the federate isn't regulating.
+  void modifyLookahead(double lookahead);
+
+  // §8.8 — request advance to ``time`` (TAR). The manager fires
+  // timeAdvanceGrant once the federate is eligible.
+  void timeAdvanceRequest(double time);
+  // §8.9 — TARA: same as TAR but the manager may grant a time
+  // earlier than ``time`` if a TSO message is queued.
+  void timeAdvanceRequestAvailable(double time);
+  // §8.10 — Next Message Request. Grant fires at the time of the
+  // next TSO message at or below ``time``, or at ``time`` if none.
+  void nextMessageRequest(double time);
+  // §8.11 — NMRA: NMR with the "available" relaxation.
+  void nextMessageRequestAvailable(double time);
+  // §8.12 — Flush Queue Request. Empties the TSO queue up to
+  // ``time``; manager grants ``time`` immediately.
+  void flushQueueRequest(double time);
+
+  // §8.14 — query the federate's current logical time.
+  double queryLogicalTime();
+  // §8.15 — query the federate's current lookahead. Synchronous
+  // error if the federate isn't regulating.
+  double queryLookahead();
+  // §8.16 — query LBTS (lower bound time stamp) across the
+  // regulating set. ``finite`` indicates whether LBTS is bounded;
+  // when no federate is regulating, ``finite`` is false and the
+  // returned value is unspecified.
+  struct LBTSResult { double time; bool finite; };
+  LBTSResult queryLBTS();
+
+  // §8.17 — opt into asynchronous (unbuffered) delivery. RO
+  // callbacks fire immediately rather than at the next grant.
+  void enableAsynchronousDelivery();
+  // §8.18 — opt out of asynchronous delivery.
+  void disableAsynchronousDelivery();
+
   // §10.4 — bind a FederateAmbassador for callback delivery. Must
   // be called BEFORE joinFederationExecution; the join triggers the
   // server-streaming Events RPC which feeds the callback queue.

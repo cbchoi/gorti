@@ -71,6 +71,12 @@ class FederateAmbassador {
   virtual void multipleObjectInstanceNameReservationFailed(
       const std::vector<std::string>& /*requested_names*/,
       const std::vector<std::string>& /*colliding_names*/) {}
+
+  // §8.8-12 — the manager has granted a time advance request. ``time``
+  // is the granted logical time; per IEEE 1516.1 §8.8 this may be
+  // earlier than the requested time (for NER / TARA).
+  // M17.11 (Cut-2). Fires once per outstanding advance request.
+  virtual void timeAdvanceGrant(double /*time*/) {}
 };
 
 }  // namespace rti1516e

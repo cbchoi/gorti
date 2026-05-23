@@ -36,6 +36,8 @@
 #include "rti/v1/object.pb.h"
 #include "rti/v1/stream.grpc.pb.h"
 #include "rti/v1/stream.pb.h"
+#include "rti/v1/time.grpc.pb.h"
+#include "rti/v1/time.pb.h"
 #include "rti1516e/FederateAmbassador.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
@@ -143,6 +145,7 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::DeclarationService::Stub> declaration_stub;
   std::unique_ptr<rti::v1::ObjectService::Stub> object_stub;
   std::unique_ptr<rti::v1::StreamService::Stub> stream_stub;
+  std::unique_ptr<rti::v1::TimeService::Stub> time_stub;
 
   // --- M17.6 callback state ---
   // Bound FederateAmbassador (nullable). tickCallback dispatches
@@ -243,6 +246,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->declaration_stub = rti::v1::DeclarationService::NewStub(impl_->channel);
   impl_->object_stub = rti::v1::ObjectService::NewStub(impl_->channel);
   impl_->stream_stub = rti::v1::StreamService::NewStub(impl_->channel);
+  impl_->time_stub = rti::v1::TimeService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -254,6 +258,7 @@ void RTIambassador::disconnect() {
   impl_->declaration_stub.reset();
   impl_->object_stub.reset();
   impl_->stream_stub.reset();
+  impl_->time_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -693,6 +698,238 @@ void RTIambassador::releaseObjectInstanceName(const std::string& name) {
   if (!s.ok()) throwFromStatus(s, "releaseObjectInstanceName");
 }
 
+// --- M17.11 §8 Time Management ---------------------------------------------
+//
+// Each method (a) checks join, (b) fills a typed request with
+// federation_name / federate_handle (and time / lookahead where
+// applicable), (c) invokes the TimeService stub, (d) translates a
+// non-OK status into an Annex C exception via throwFromStatus.
+//
+// Grants are async — TAR / TARA / NER / NMRA / FQR return Empty;
+// the manager emits a TimeAdvanceGrant on the event stream which
+// tickCallback dispatches as timeAdvanceGrant().
+
+namespace {
+// All time RPCs share the same join precondition; this helper keeps
+// each method readable. Inlined rather than calling requireJoined()
+// because that helper sits later in the file as an anon-namespace
+// member (visibility scope from M17.9).
+void requireJoinedForTime(bool joined, const char* method) {
+  if (!joined) {
+    throw FederateNotExecutionMember(std::string(method) +
+                                     ": federate not joined to any federation");
+  }
+}
+}  // namespace
+
+void RTIambassador::enableTimeRegulation(double lookahead) {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "enableTimeRegulation");
+  rti::v1::EnableRegulationRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_lookahead(lookahead);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->EnableTimeRegulation(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "enableTimeRegulation");
+}
+
+void RTIambassador::disableTimeRegulation() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "disableTimeRegulation");
+  rti::v1::DisableRegulationRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->DisableTimeRegulation(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "disableTimeRegulation");
+}
+
+void RTIambassador::enableTimeConstrained() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "enableTimeConstrained");
+  rti::v1::EnableConstrainedRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->EnableTimeConstrained(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "enableTimeConstrained");
+}
+
+void RTIambassador::disableTimeConstrained() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "disableTimeConstrained");
+  rti::v1::DisableConstrainedRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->DisableTimeConstrained(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "disableTimeConstrained");
+}
+
+void RTIambassador::modifyLookahead(double lookahead) {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "modifyLookahead");
+  rti::v1::ModifyLookaheadRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_lookahead(lookahead);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->ModifyLookahead(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "modifyLookahead");
+}
+
+void RTIambassador::timeAdvanceRequest(double time) {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "timeAdvanceRequest");
+  rti::v1::TARRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_logical_time(time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->TimeAdvanceRequest(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "timeAdvanceRequest");
+}
+
+void RTIambassador::timeAdvanceRequestAvailable(double time) {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "timeAdvanceRequestAvailable");
+  rti::v1::TARARequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_logical_time(time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->time_stub->TimeAdvanceRequestAvailable(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "timeAdvanceRequestAvailable");
+}
+
+void RTIambassador::nextMessageRequest(double time) {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "nextMessageRequest");
+  rti::v1::NERRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_logical_time(time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->NextMessageRequest(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "nextMessageRequest");
+}
+
+void RTIambassador::nextMessageRequestAvailable(double time) {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "nextMessageRequestAvailable");
+  rti::v1::NMRARequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_logical_time(time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->time_stub->NextMessageRequestAvailable(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "nextMessageRequestAvailable");
+}
+
+void RTIambassador::flushQueueRequest(double time) {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "flushQueueRequest");
+  rti::v1::FQRRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_logical_time(time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->time_stub->FlushQueueRequest(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "flushQueueRequest");
+}
+
+double RTIambassador::queryLogicalTime() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "queryLogicalTime");
+  rti::v1::QueryFederateTimeRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::QueryFederateTimeResponse resp;
+  const auto s = impl_->time_stub->QueryLogicalTime(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryLogicalTime");
+  return resp.logical_time();
+}
+
+double RTIambassador::queryLookahead() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "queryLookahead");
+  rti::v1::QueryFederateTimeRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::QueryLookaheadResponse resp;
+  const auto s = impl_->time_stub->QueryLookahead(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryLookahead");
+  return resp.lookahead();
+}
+
+RTIambassador::LBTSResult RTIambassador::queryLBTS() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "queryLBTS");
+  rti::v1::QueryLBTSRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  grpc::ClientContext ctx;
+  rti::v1::QueryLBTSResponse resp;
+  const auto s = impl_->time_stub->QueryLBTS(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryLBTS");
+  return LBTSResult{resp.lbts(), resp.finite()};
+}
+
+void RTIambassador::enableAsynchronousDelivery() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "enableAsynchronousDelivery");
+  rti::v1::EnableAsynchronousDeliveryRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->time_stub->EnableAsynchronousDelivery(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "enableAsynchronousDelivery");
+}
+
+void RTIambassador::disableAsynchronousDelivery() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "disableAsynchronousDelivery");
+  rti::v1::DisableAsynchronousDeliveryRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->time_stub->DisableAsynchronousDelivery(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "disableAsynchronousDelivery");
+}
+
 // --- M17.4 §5 publish / subscribe declarations -----------------------------
 
 namespace {
@@ -1031,6 +1268,11 @@ bool RTIambassador::tickCallback(double approx_min_time,
                                            m.colliding_names().end());
         impl_->fed_ambassador->multipleObjectInstanceNameReservationFailed(
             req_names, col_names);
+        return true;
+      }
+      case rti::v1::FederateEvent::kGrant: {
+        const auto& g = evt.grant();
+        impl_->fed_ambassador->timeAdvanceGrant(g.logical_time());
         return true;
       }
       default:
