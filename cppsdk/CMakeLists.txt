@@ -85,3 +85,9 @@ target_link_libraries(rti1516e PUBLIC
 
 enable_testing()
 add_subdirectory(tests)
+
+# --- Examples -------------------------------------------------------------
+# Built into ${CMAKE_BINARY_DIR}/examples/cpp-pitch-smoke/cpp_pitch_publisher
+# so the Python interop test (pysdk/tests/spec/m17/) can spawn it.
+
+add_subdirectory("${CMAKE_SOURCE_DIR}/../examples/cpp-pitch-smoke" cpp-pitch-smoke)
