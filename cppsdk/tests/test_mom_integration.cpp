@@ -79,17 +79,20 @@ TEST_F(MomIntegration, QueryFederateAttributesUnknownNotFound) {
   EXPECT_FALSE(attrs.found);
 }
 
-TEST_F(MomIntegration, QueryFederateAttributesAccessibleAfterTimePolicy) {
-  // The MOM tracks time-state via a separate TimeStateChanged hook
-  // that gorti hasn't wired through yet (see proto/rti/v1/mom.proto
-  // comment on QueryFederateAttributesResponse). For now just
-  // verify the call succeeds after enabling regulation; assertion
-  // on the time fields lands when the manager hook ships.
+TEST_F(MomIntegration, QueryFederateReflectsRegulatingState) {
+  // M17.26 — the rtid composition root now wires the time.Manager's
+  // OnTimeStateChanged hook into mom.Manager.TimeStateChanged. After
+  // enableTimeRegulation(1.5) the MOM snapshot mirrors the state.
   amb.enableTimeRegulation(1.5);
-  EXPECT_NO_THROW({
-    const auto attrs = amb.queryFederateAttributes(fed_);
-    (void)attrs;
-  });
+  const auto attrs = amb.queryFederateAttributes(fed_);
+  EXPECT_TRUE(attrs.time_regulating);
+  EXPECT_DOUBLE_EQ(attrs.lookahead, 1.5);
+}
+
+TEST_F(MomIntegration, QueryFederateReflectsConstrainedState) {
+  amb.enableTimeConstrained();
+  const auto attrs = amb.queryFederateAttributes(fed_);
+  EXPECT_TRUE(attrs.time_constrained);
 }
 
 TEST_F(MomIntegration, EnumerateMomInstancesIncludesFederationSingleton) {

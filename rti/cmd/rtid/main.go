@@ -689,10 +689,28 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	// so the federation's OnFederateResigned hook can call into
 	// timeMgr.OnFederateResign (TASK-204c) — pending NER/TAR/TARA/
 	// NMRA/FQR state must drop when the federate leaves.
+	// M17.26 — capture momMgr (constructed earlier) in the
+	// OnTimeStateChanged hook so HLAfederate.HLAtimeRegulating /
+	// HLAtimeConstrained / HLAlookahead / HLAlogicalTime mirror
+	// the time.Manager's state.
 	timeMgr, err := timepkg.New(timepkg.Options{
 		Clock:    clock,
 		Outbox:   outbox,
 		EventLog: multi,
+		OnTimeStateChanged: func(
+			ctx context.Context,
+			fed core.FederationName,
+			h core.FederateHandle,
+			regulating bool,
+			constrained bool,
+			lookahead core.LogicalTime,
+			logicalTime core.LogicalTime,
+		) {
+			_ = momMgr.TimeStateChanged(
+				ctx, fed, h, regulating, constrained,
+				lookahead, logicalTime,
+			)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("rtid: time manager init: %w", err)
