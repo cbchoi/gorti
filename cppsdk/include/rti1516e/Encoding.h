@@ -369,4 +369,73 @@ inline std::vector<VariableLengthData> decodeHLAfixedRecord(
   return out;
 }
 
+// --- HLAfixedRecord auto-alignment (M17.24) ---------------------------------
+//
+// IEEE 1516.2 §B.4.1: each field starts at the next multiple of
+// its declared alignment ("octetBoundary"). The padding bytes are
+// zero. Common octet boundaries:
+//   HLAoctet                 1
+//   HLAinteger16BE / 32BE    2 / 4
+//   HLAinteger64BE           8
+//   HLAfloat32BE / 64BE      4 / 8
+//   HLAunicodeString         1
+//   HLA(variable|fixed)Array max alignment of element type
+//
+// The federate code passes a list of {field_bytes, alignment} pairs.
+// The helper inserts zero-pad bytes before each field whose start
+// offset isn't already a multiple of its alignment.
+//
+// Decode-side: takes the alignment list and the field widths
+// (variable-width fields supply std::nullopt and a decode callback
+// — Cut-4 ships the fixed-width variant; the variable case is
+// left for federate composition with HLAvariableArrayVarWidth).
+
+struct AlignedField {
+  VariableLengthData bytes;
+  std::size_t alignment;
+};
+
+inline VariableLengthData encodeHLAfixedRecordAligned(
+    const std::vector<AlignedField>& fields) {
+  VariableLengthData out;
+  for (const auto& f : fields) {
+    if (f.alignment > 1) {
+      while (out.size() % f.alignment != 0) out.push_back(0);
+    }
+    out.insert(out.end(), f.bytes.begin(), f.bytes.end());
+  }
+  return out;
+}
+
+// Decode-side: walks the record left-to-right inserting alignment
+// padding between fields, then slices each field at its known
+// width. Used when the FOM declares fixed-width fields with
+// non-trivial alignment. ``widths[i]`` is the byte width of
+// field i.
+inline std::vector<VariableLengthData> decodeHLAfixedRecordAligned(
+    const VariableLengthData& bytes,
+    const std::vector<std::size_t>& widths,
+    const std::vector<std::size_t>& alignments) {
+  if (widths.size() != alignments.size()) {
+    throw EncodingError(
+        "decodeHLAfixedRecordAligned: widths/alignments length mismatch");
+  }
+  std::vector<VariableLengthData> out;
+  out.reserve(widths.size());
+  std::size_t pos = 0;
+  for (std::size_t i = 0; i < widths.size(); ++i) {
+    if (alignments[i] > 1) {
+      while (pos % alignments[i] != 0) ++pos;
+    }
+    if (pos + widths[i] > bytes.size()) {
+      throw EncodingError(
+          "decodeHLAfixedRecordAligned: field " + std::to_string(i) +
+          " runs past end of record");
+    }
+    out.emplace_back(bytes.begin() + pos, bytes.begin() + pos + widths[i]);
+    pos += widths[i];
+  }
+  return out;
+}
+
 }  // namespace rti1516e::encoding

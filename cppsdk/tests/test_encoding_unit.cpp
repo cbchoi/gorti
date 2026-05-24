@@ -326,4 +326,52 @@ TEST(HLAfixedRecord, DecodeBadOffsetsThrows) {
                EncodingError);
 }
 
+// --- HLAfixedRecord auto-alignment (M17.24) --------------------------------
+
+TEST(HLAfixedRecordAligned, EncodePadsToAlignment) {
+  // Field 1: HLAoctet (1 byte, align 1)
+  // Field 2: HLAfloat64BE (8 bytes, align 8) — needs 7 pad bytes
+  AlignedField f1{encodeHLAoctet(0xAB), 1};
+  AlignedField f2{encodeHLAfloat64BE(1.0), 8};
+  const auto rec = encodeHLAfixedRecordAligned({f1, f2});
+  ASSERT_EQ(rec.size(), 1u + 7u + 8u);
+  EXPECT_EQ(rec[0], 0xABu);
+  for (std::size_t i = 1; i < 8; ++i) EXPECT_EQ(rec[i], 0u) << "pad at " << i;
+  // Bytes 8..16 are the float.
+  EXPECT_EQ(rec[8], 0x3Fu);
+  EXPECT_EQ(rec[9], 0xF0u);
+}
+
+TEST(HLAfixedRecordAligned, NoPadWhenNaturallyAligned) {
+  // Two HLAinteger32BE fields back-to-back: both 4-aligned, no pad.
+  AlignedField f1{encodeHLAinteger32BE(10), 4};
+  AlignedField f2{encodeHLAinteger32BE(20), 4};
+  const auto rec = encodeHLAfixedRecordAligned({f1, f2});
+  EXPECT_EQ(rec.size(), 8u);
+}
+
+TEST(HLAfixedRecordAligned, DecodeRoundTripWithPadding) {
+  AlignedField f1{encodeHLAoctet(7), 1};
+  AlignedField f2{encodeHLAfloat64BE(2.5), 8};
+  const auto rec = encodeHLAfixedRecordAligned({f1, f2});
+  const auto slices = decodeHLAfixedRecordAligned(rec, {1, 8}, {1, 8});
+  ASSERT_EQ(slices.size(), 2u);
+  EXPECT_EQ(decodeHLAoctet(slices[0]), 7u);
+  EXPECT_DOUBLE_EQ(decodeHLAfloat64BE(slices[1]), 2.5);
+}
+
+TEST(HLAfixedRecordAligned, WidthsAlignmentsMismatchThrows) {
+  VariableLengthData bytes(16, 0);
+  EXPECT_THROW(
+      decodeHLAfixedRecordAligned(bytes, {1, 8}, {1}),
+      EncodingError);
+}
+
+TEST(HLAfixedRecordAligned, OvershootThrows) {
+  VariableLengthData bytes(4, 0);
+  EXPECT_THROW(
+      decodeHLAfixedRecordAligned(bytes, {8}, {8}),
+      EncodingError);
+}
+
 }  // namespace
