@@ -77,6 +77,19 @@ class FederateAmbassador {
   // earlier than the requested time (for NER / TARA).
   // M17.11 (Cut-2). Fires once per outstanding advance request.
   virtual void timeAdvanceGrant(double /*time*/) {}
+
+  // §4.7 — a synchronization point was registered by some federate.
+  // ``tag`` is opaque user data echoed verbatim from the register
+  // call. M17.14 (Cut-3). After receiving this the federate MUST
+  // eventually call synchronizationPointAchieved(label) to unblock
+  // the federation.
+  virtual void announceSynchronizationPoint(
+      const std::string& /*label*/,
+      const VariableLengthData& /*tag*/) {}
+
+  // §4.7 — every required federate has achieved the sync point; the
+  // federation is now synchronized at ``label``. M17.14 (Cut-3).
+  virtual void federationSynchronized(const std::string& /*label*/) {}
 };
 
 }  // namespace rti1516e

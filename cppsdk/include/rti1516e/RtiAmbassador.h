@@ -297,6 +297,28 @@ class RTIambassador {
   // §8.18 — opt out of asynchronous delivery.
   void disableAsynchronousDelivery();
 
+  // §4.7 — Federation synchronization points.
+  //
+  // M17.14 (Cut-3). A federate registers a sync point with an
+  // optional ``required_federates`` set (empty = "all currently
+  // joined"). The manager broadcasts SynchronizationPointAnnounced
+  // to every required federate; each calls
+  // synchronizationPointAchieved when its local condition is met.
+  // Once all required federates have achieved, the manager fires
+  // FederationSynchronized on every required federate.
+
+  // §4.7 — register a federation sync point. ``tag`` is opaque user
+  // data echoed in the announce callback. Pass an empty
+  // ``required_federates`` to default to "all currently joined".
+  void registerFederationSynchronizationPoint(
+      const std::string& label,
+      const VariableLengthData& tag,
+      const std::vector<FederateHandle>& required_federates = {});
+
+  // §4.7 — this federate has achieved the sync point. Idempotent
+  // server-side; double-achieve doesn't error.
+  void synchronizationPointAchieved(const std::string& label);
+
   // §11 — Management Object Model (MOM) ambassador delegates.
   //
   // M17.13 (Cut-3). Read-only introspection of the

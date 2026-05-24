@@ -40,6 +40,8 @@
 #include "rti/v1/time.pb.h"
 #include "rti/v1/mom.grpc.pb.h"
 #include "rti/v1/mom.pb.h"
+#include "rti/v1/sync.grpc.pb.h"
+#include "rti/v1/sync.pb.h"
 #include "rti1516e/FederateAmbassador.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
@@ -149,6 +151,7 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::StreamService::Stub> stream_stub;
   std::unique_ptr<rti::v1::TimeService::Stub> time_stub;
   std::unique_ptr<rti::v1::MomService::Stub> mom_stub;
+  std::unique_ptr<rti::v1::SyncService::Stub> sync_stub;
 
   // --- M17.6 callback state ---
   // Bound FederateAmbassador (nullable). tickCallback dispatches
@@ -251,6 +254,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->stream_stub = rti::v1::StreamService::NewStub(impl_->channel);
   impl_->time_stub = rti::v1::TimeService::NewStub(impl_->channel);
   impl_->mom_stub = rti::v1::MomService::NewStub(impl_->channel);
+  impl_->sync_stub = rti::v1::SyncService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -264,6 +268,7 @@ void RTIambassador::disconnect() {
   impl_->stream_stub.reset();
   impl_->time_stub.reset();
   impl_->mom_stub.reset();
+  impl_->sync_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -1034,6 +1039,60 @@ RTIambassador::enumerateMomInstances() {
   return out;
 }
 
+// --- M17.14 §4.7 Synchronization points ----------------------------------
+//
+// Register → server broadcasts SynchronizationPointAnnounced to each
+// required federate. Each federate eventually calls Achieve →
+// once the last required federate achieves, server broadcasts
+// FederationSynchronized to the whole required set.
+//
+// Both events drop into tickCallback dispatch as
+// announceSynchronizationPoint(label, tag) and
+// federationSynchronized(label) overrides.
+
+void RTIambassador::registerFederationSynchronizationPoint(
+    const std::string& label,
+    const VariableLengthData& tag,
+    const std::vector<FederateHandle>& required_federates) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "registerFederationSynchronizationPoint: federate not joined");
+  }
+  rti::v1::RegisterSyncPointRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_label(label);
+  req.set_tag(tag.data(), tag.size());
+  for (auto h : required_federates) {
+    req.add_required_federates(h.raw());
+  }
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->sync_stub->RegisterFederationSynchronizationPoint(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "registerFederationSynchronizationPoint");
+}
+
+void RTIambassador::synchronizationPointAchieved(const std::string& label) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "synchronizationPointAchieved: federate not joined");
+  }
+  rti::v1::AchieveSyncPointRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_label(label);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->sync_stub->SynchronizationPointAchieved(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
+}
+
 // --- M17.4 §5 publish / subscribe declarations -----------------------------
 
 namespace {
@@ -1379,6 +1438,16 @@ bool RTIambassador::tickCallback(double approx_min_time,
         impl_->fed_ambassador->timeAdvanceGrant(g.logical_time());
         return true;
       }
+      case rti::v1::FederateEvent::kSyncAnnounced: {
+        const auto& a = evt.sync_announced();
+        VariableLengthData tag(a.tag().begin(), a.tag().end());
+        impl_->fed_ambassador->announceSynchronizationPoint(a.label(), tag);
+        return true;
+      }
+      case rti::v1::FederateEvent::kSyncSynchronized:
+        impl_->fed_ambassador->federationSynchronized(
+            evt.sync_synchronized().label());
+        return true;
       default:
         // Cut-1 / Cut-2 ignore events outside the supported slots
         // (remove/provide/sync/ownership/save/halted). Cut-3 adds
