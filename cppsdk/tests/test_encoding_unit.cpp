@@ -230,6 +230,71 @@ TEST(HLAvariableArray, DecodeMissingPrefixThrows) {
       EncodingError);
 }
 
+// --- HLAvariableArrayVarWidth (M17.23) -------------------------------------
+
+namespace {
+// Helper: decode an HLAunicodeString from a slice and report bytes
+// consumed (4-byte prefix + 2*N body).
+inline std::pair<std::u16string, std::size_t> decodeUnicodeWithLen(
+    const VariableLengthData& slice) {
+  if (slice.size() < 4) {
+    throw EncodingError("decodeUnicodeWithLen: short prefix");
+  }
+  const std::uint32_t n = (static_cast<std::uint32_t>(slice[0]) << 24) |
+                          (static_cast<std::uint32_t>(slice[1]) << 16) |
+                          (static_cast<std::uint32_t>(slice[2]) << 8) |
+                          static_cast<std::uint32_t>(slice[3]);
+  // Build a copy of just the unicode encoding's bytes for the
+  // existing decoder.
+  VariableLengthData this_one(slice.begin(), slice.begin() + 4 + 2 * n);
+  return {decodeHLAunicodeString(this_one), 4 + 2 * n};
+}
+}  // namespace
+
+TEST(HLAvariableArrayVarWidth, RoundTripUnicodeStrings) {
+  // Encode {"hi", "world"} into a variable array of HLAunicodeString.
+  const auto s1 = encodeHLAunicodeString(u"hi");
+  const auto s2 = encodeHLAunicodeString(u"world");
+  VariableLengthData bytes;
+  // Length prefix (BE): 2 elements.
+  bytes.push_back(0); bytes.push_back(0); bytes.push_back(0); bytes.push_back(2);
+  bytes.insert(bytes.end(), s1.begin(), s1.end());
+  bytes.insert(bytes.end(), s2.begin(), s2.end());
+
+  const auto out =
+      decodeHLAvariableArrayVarWidth<std::u16string>(bytes,
+                                                     decodeUnicodeWithLen);
+  ASSERT_EQ(out.size(), 2u);
+  EXPECT_EQ(out[0], u"hi");
+  EXPECT_EQ(out[1], u"world");
+}
+
+TEST(HLAvariableArrayVarWidth, EmptyArrayDecodesToEmptyVector) {
+  VariableLengthData bytes{0, 0, 0, 0};  // length = 0
+  const auto out =
+      decodeHLAvariableArrayVarWidth<std::u16string>(bytes,
+                                                     decodeUnicodeWithLen);
+  EXPECT_TRUE(out.empty());
+}
+
+TEST(HLAvariableArrayVarWidth, MissingPrefixThrows) {
+  VariableLengthData bytes{0, 1};  // not even 4 bytes
+  EXPECT_THROW(
+      (decodeHLAvariableArrayVarWidth<std::u16string>(bytes,
+                                                      decodeUnicodeWithLen)),
+      EncodingError);
+}
+
+TEST(HLAvariableArrayVarWidth, CallbackConsumingZeroThrows) {
+  VariableLengthData bytes{0, 0, 0, 1, 0xAA};  // claim 1 element
+  auto bad_decoder = [](const VariableLengthData&) {
+    return std::make_pair(0, std::size_t{0});  // pretend consumed nothing
+  };
+  EXPECT_THROW(
+      (decodeHLAvariableArrayVarWidth<int>(bytes, bad_decoder)),
+      EncodingError);
+}
+
 // --- HLAfixedRecord ---------------------------------------------------------
 
 TEST(HLAfixedRecord, EncodeConcatenatesFields) {

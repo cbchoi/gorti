@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "Types.h"
@@ -265,6 +266,58 @@ inline std::vector<T> decodeHLAvariableArray(
     VariableLengthData slice(bytes.begin() + 4 + i * element_stride,
                              bytes.begin() + 4 + (i + 1) * element_stride);
     out.push_back(decode_fn(slice));
+  }
+  return out;
+}
+
+// Variable-width variant — for arrays of types whose encoded width
+// depends on the value (HLAunicodeString, nested HLAvariableArray,
+// HLAvariantRecord). M17.23 (Cut-4).
+//
+// The DecodeFn callback takes the byte slice STARTING at the
+// element and returns {decoded value, bytes consumed}. The helper
+// uses the returned consumed-count to advance to the next element.
+//
+// Federate-side example (vector of HLAunicodeString):
+//   auto names = decodeHLAvariableArrayVarWidth<std::u16string>(
+//       bytes, [](auto slice) -> std::pair<std::u16string, std::size_t> {
+//         auto s = decodeHLAunicodeString(slice);
+//         // HLAunicodeString consumes 4 + 2*N where N is from the prefix.
+//         std::size_t n = (slice[0] << 24) | (slice[1] << 16) |
+//                         (slice[2] << 8)  | slice[3];
+//         return {s, 4 + 2 * n};
+//       });
+
+template <typename T, typename DecodeFn>
+inline std::vector<T> decodeHLAvariableArrayVarWidth(
+    const VariableLengthData& bytes, DecodeFn decode_fn) {
+  if (bytes.size() < 4) {
+    throw EncodingError(
+        "decodeHLAvariableArrayVarWidth: missing length prefix");
+  }
+  const std::uint32_t n = (static_cast<std::uint32_t>(bytes[0]) << 24) |
+                          (static_cast<std::uint32_t>(bytes[1]) << 16) |
+                          (static_cast<std::uint32_t>(bytes[2]) << 8) |
+                          static_cast<std::uint32_t>(bytes[3]);
+  std::vector<T> out;
+  out.reserve(n);
+  std::size_t pos = 4;
+  for (std::uint32_t i = 0; i < n; ++i) {
+    if (pos > bytes.size()) {
+      throw EncodingError(
+          "decodeHLAvariableArrayVarWidth: read past end at element " +
+          std::to_string(i));
+    }
+    VariableLengthData slice(bytes.begin() + pos, bytes.end());
+    auto [value, consumed] = decode_fn(slice);
+    if (consumed == 0) {
+      throw EncodingError(
+          "decodeHLAvariableArrayVarWidth: callback consumed 0 bytes "
+          "at element " +
+          std::to_string(i));
+    }
+    out.push_back(std::move(value));
+    pos += consumed;
   }
   return out;
 }
