@@ -89,11 +89,17 @@ while (running) {
 amb.enableCallbacks();
 ```
 
-`evokeCallback` / `evokeMultipleCallbacks` are aliases over
-`tickCallback` in Cut-3 — a single call may dispatch MORE than
-one buffered callback. Strict at-most-one `evokeCallback`
-semantics defer to a Cut-4 refactor that extracts the dispatch
-switch from `tickCallback` into a shared private helper.
+As of M17.22 (Cut-4) the C++ `evokeCallback` is strict
+at-most-one: it dispatches EXACTLY ONE buffered callback per
+call and returns `true` iff more events remain queued.
+`evokeMultipleCallbacks` remains a `tickCallback` alias
+(drain-everything semantics). Federate code that wants the Pitch
+"one callback at a time" discipline should use `evokeCallback`
+in a `while` loop:
+
+```cpp
+while (amb.evokeCallback(0.0, 0.1)) { /* more queued */ }
+```
 
 ### Outbox post-join window — closed in M27 A
 

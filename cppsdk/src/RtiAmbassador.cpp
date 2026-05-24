@@ -2213,19 +2213,21 @@ bool RTIambassadorImpl::dispatchOneEvent() {
   }
 }
 
-// --- M17.18 §10.4 strict HLA_EVOKED + callback toggle --------------------
+// --- M17.18 / M17.22 §10.4 HLA_EVOKED + callback toggle ------------------
 //
-// Cut-3 ships evokeCallback / evokeMultipleCallbacks as Pitch-name
-// aliases over tickCallback's drain loop. The "cheap evoke"
-// divergence carried over from Cut-1 still applies: a single call
-// may dispatch MORE than one buffered callback. Strict
-// at-most-one semantics defer to a Cut-4 milestone that refactors
-// the dispatch switch out of tickCallback into a shared impl
-// helper. Documented in docs/PITCH_PARITY.md.
+// evokeMultipleCallbacks: same as tickCallback. Drains the
+// entire buffered queue up to approx_min_time, then waits up to
+// approx_max_time for an additional event if none fired yet.
+//
+// evokeCallback: strict at-most-one (M17.22). Waits up to
+// approx_max_time for at least one event AND for approx_min_time
+// to elapse, then dispatches EXACTLY ONE event. Returns true if
+// a callback fired AND more events remain queued — federate uses
+// this to loop with explicit per-event control.
 //
 // disableCallbacks/enableCallbacks toggle the dispatch gate.
-// Background reader keeps filling the event queue when disabled —
-// no events are lost across the toggle. Matches pysdk M27 Phase C.
+// Background reader keeps filling the event queue when disabled;
+// no events are lost across the toggle.
 
 bool RTIambassador::evokeMultipleCallbacks(double approx_min_time,
                                            double approx_max_time) {
@@ -2234,7 +2236,42 @@ bool RTIambassador::evokeMultipleCallbacks(double approx_min_time,
 
 bool RTIambassador::evokeCallback(double approx_min_time,
                                   double approx_max_time) {
-  return tickCallback(approx_min_time, approx_max_time);
+  using clock = std::chrono::steady_clock;
+  using std::chrono::duration;
+  using std::chrono::duration_cast;
+  using std::chrono::milliseconds;
+
+  if (!impl_->callbacks_enabled.load()) return false;
+  if (approx_max_time < approx_min_time) approx_max_time = approx_min_time;
+  const auto start = clock::now();
+  const auto min_deadline =
+      start + duration_cast<clock::duration>(duration<double>(approx_min_time));
+  const auto max_deadline =
+      start + duration_cast<clock::duration>(duration<double>(approx_max_time));
+
+  // Wait for at least one event OR for the max deadline.
+  while (true) {
+    {
+      std::unique_lock<std::mutex> lk(impl_->event_mu);
+      if (!impl_->event_queue.empty()) break;
+    }
+    if (clock::now() >= max_deadline) return false;
+    std::unique_lock<std::mutex> lk(impl_->event_mu);
+    impl_->event_cv.wait_for(lk, milliseconds(5),
+                             [&] { return !impl_->event_queue.empty(); });
+  }
+  // Hold off dispatch until min_deadline elapses (Pitch contract:
+  // evokeCallback blocks at least min_time before returning).
+  while (clock::now() < min_deadline) {
+    std::this_thread::sleep_for(milliseconds(1));
+  }
+  // Dispatch exactly one event.
+  const bool fired = impl_->dispatchOneEvent();
+  // Return true iff a callback fired AND more events remain — the
+  // signal Pitch federates use to keep looping.
+  if (!fired) return false;
+  std::lock_guard<std::mutex> g(impl_->event_mu);
+  return !impl_->event_queue.empty();
 }
 
 void RTIambassador::disableCallbacks() {

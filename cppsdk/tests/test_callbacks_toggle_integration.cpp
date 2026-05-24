@@ -101,6 +101,41 @@ TEST_F(CallbacksToggleIntegration, ReEnableDeliversBufferedEvents) {
   EXPECT_EQ(fed.announced[0], "phase-buffered");
 }
 
+// --- M17.22 strict at-most-one evokeCallback --------------------------------
+
+TEST_F(CallbacksToggleIntegration, EvokeCallbackDispatchesExactlyOnePerCall) {
+  // Register 3 distinct sync points back-to-back. Each fires an
+  // announce event server-side. evokeCallback should pop EXACTLY
+  // ONE per call and return true while more are queued.
+  rti1516e::VariableLengthData tag;
+  amb.registerFederationSynchronizationPoint("one", tag);
+  amb.registerFederationSynchronizationPoint("two", tag);
+  amb.registerFederationSynchronizationPoint("three", tag);
+
+  // Drain via single-event evokeCallback. Give each call up to 1s
+  // to receive the buffered event. Track how many fired per call.
+  std::vector<std::size_t> sizes_after;
+  for (int i = 0; i < 3; ++i) {
+    const bool more = amb.evokeCallback(0.0, 1.0);
+    sizes_after.push_back(fed.announced.size());
+    // After the third dispatch the queue should be empty; ``more``
+    // tells the federate whether to keep looping.
+    if (i < 2) EXPECT_TRUE(more) << "expected more events queued after call " << i;
+  }
+  // Each call must have added EXACTLY ONE event.
+  ASSERT_EQ(sizes_after.size(), 3u);
+  EXPECT_EQ(sizes_after[0], 1u);
+  EXPECT_EQ(sizes_after[1], 2u);
+  EXPECT_EQ(sizes_after[2], 3u);
+}
+
+TEST_F(CallbacksToggleIntegration,
+       EvokeCallbackReturnsFalseWhenNothingArrives) {
+  // No events queued; evokeCallback waits up to max_time and
+  // returns false.
+  EXPECT_FALSE(amb.evokeCallback(0.0, 0.05));
+}
+
 TEST_F(CallbacksToggleIntegration, ToggleCyclePreservesEventOrder) {
   rti1516e::VariableLengthData tag;
   // First event — fires through tickCallback path.

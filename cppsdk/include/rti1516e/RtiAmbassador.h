@@ -587,11 +587,21 @@ class RTIambassador {
   bool tickCallback(double approx_min_time = 0.0,
                     double approx_max_time = 0.0);
 
-  // §10.4 — Pitch-name alias for tickCallback. M17.18 (Cut-3).
-  // Cut-3 ships these with cheap-evoke semantics (same as
-  // tickCallback — a single call may drain MORE than one buffered
-  // callback). Strict at-most-one HLA_EVOKED defers to a Cut-4
-  // refactor of the dispatch switch.
+  // §10.4 — strict HLA_EVOKED at-most-one. M17.22 (Cut-4).
+  //
+  // Waits up to ``approx_max_time`` for at least one event (and
+  // blocks until ``approx_min_time`` elapses), then dispatches
+  // EXACTLY ONE buffered callback. Returns true iff a callback
+  // fired AND more events remain queued — federates use this as
+  // the signal to keep evoking:
+  //
+  //   while (amb.evokeCallback(0.0, 0.1)) {
+  //     // a callback just fired and more are queued
+  //   }
+  //
+  // Strict semantics rely on M17.21's dispatchOneEvent helper.
+  // Distinct from evokeMultipleCallbacks (alias for tickCallback,
+  // drains the whole queue).
   bool evokeCallback(double approx_min_time = 0.0,
                      double approx_max_time = 0.0);
 
