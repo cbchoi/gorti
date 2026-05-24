@@ -42,6 +42,8 @@
 #include "rti/v1/mom.pb.h"
 #include "rti/v1/sync.grpc.pb.h"
 #include "rti/v1/sync.pb.h"
+#include "rti/v1/ownership.grpc.pb.h"
+#include "rti/v1/ownership.pb.h"
 #include "rti1516e/FederateAmbassador.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
@@ -152,6 +154,7 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::TimeService::Stub> time_stub;
   std::unique_ptr<rti::v1::MomService::Stub> mom_stub;
   std::unique_ptr<rti::v1::SyncService::Stub> sync_stub;
+  std::unique_ptr<rti::v1::OwnershipService::Stub> ownership_stub;
 
   // --- M17.6 callback state ---
   // Bound FederateAmbassador (nullable). tickCallback dispatches
@@ -255,6 +258,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->time_stub = rti::v1::TimeService::NewStub(impl_->channel);
   impl_->mom_stub = rti::v1::MomService::NewStub(impl_->channel);
   impl_->sync_stub = rti::v1::SyncService::NewStub(impl_->channel);
+  impl_->ownership_stub = rti::v1::OwnershipService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -269,6 +273,7 @@ void RTIambassador::disconnect() {
   impl_->time_stub.reset();
   impl_->mom_stub.reset();
   impl_->sync_stub.reset();
+  impl_->ownership_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -1093,6 +1098,173 @@ void RTIambassador::synchronizationPointAchieved(const std::string& label) {
   if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
 }
 
+// --- M17.15 §7 Ownership Management ---------------------------------------
+//
+// Eight RPCs over the OwnershipService. All require join; all
+// fill a (federation/federate/object/attributes) request and
+// translate non-OK status into Annex C exceptions. The negotiated
+// transfer outcomes arrive on the event stream as
+// kOwnershipAssumption / kOwnershipAcquired / kOwnershipDivestConfirmed.
+
+namespace {
+
+template <typename Req>
+void fillObjectAttrsReq(Req& req,
+                        const std::string& federation,
+                        HandleValue federate,
+                        HandleValue object,
+                        const AttributeHandleSet& attrs) {
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(federation);
+  req.set_federate_handle(federate);
+  req.set_object_handle(object);
+  for (const auto& a : attrs) req.add_attribute_handles(a.raw());
+}
+
+void requireJoinedForOwnership(bool joined, const char* method) {
+  if (!joined) {
+    throw FederateNotExecutionMember(std::string(method) +
+                                     ": federate not joined to any federation");
+  }
+}
+
+}  // namespace
+
+void RTIambassador::unconditionalAttributeOwnershipDivestiture(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined,
+                            "unconditionalAttributeOwnershipDivestiture");
+  rti::v1::UnconditionalDivestRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ownership_stub->UnconditionalAttributeOwnershipDivestiture(
+      &ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "unconditionalAttributeOwnershipDivestiture");
+}
+
+void RTIambassador::negotiatedAttributeOwnershipDivestiture(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes,
+    const VariableLengthData& tag) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined,
+                            "negotiatedAttributeOwnershipDivestiture");
+  rti::v1::NegotiatedDivestRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  req.set_tag(tag.data(), tag.size());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ownership_stub->NegotiatedAttributeOwnershipDivestiture(
+      &ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "negotiatedAttributeOwnershipDivestiture");
+}
+
+void RTIambassador::attributeOwnershipAcquisition(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined, "attributeOwnershipAcquisition");
+  rti::v1::AcquireRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ownership_stub->AttributeOwnershipAcquisition(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisition");
+}
+
+void RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined,
+                            "cancelNegotiatedAttributeOwnershipDivestiture");
+  rti::v1::CancelDivestRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ownership_stub->CancelNegotiatedAttributeOwnershipDivestiture(
+          &ctx, req, &resp);
+  if (!s.ok())
+    throwFromStatus(s, "cancelNegotiatedAttributeOwnershipDivestiture");
+}
+
+void RTIambassador::cancelAttributeOwnershipAcquisition(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined,
+                            "cancelAttributeOwnershipAcquisition");
+  rti::v1::CancelAcquireRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ownership_stub->CancelAttributeOwnershipAcquisition(
+      &ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "cancelAttributeOwnershipAcquisition");
+}
+
+void RTIambassador::attributeOwnershipDivestitureIfWanted(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined,
+                            "attributeOwnershipDivestitureIfWanted");
+  rti::v1::DivestIfWantedRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ownership_stub->AttributeOwnershipDivestitureIfWanted(
+      &ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "attributeOwnershipDivestitureIfWanted");
+}
+
+RTIambassador::OwnershipQueryResult RTIambassador::queryAttributeOwnership(
+    ObjectInstanceHandle object,
+    AttributeHandle attribute) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined, "queryAttributeOwnership");
+  rti::v1::QueryOwnershipRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_object_handle(object.raw());
+  req.set_attribute_handle(attribute.raw());
+  grpc::ClientContext ctx;
+  rti::v1::QueryOwnershipResponse resp;
+  const auto s = impl_->ownership_stub->QueryAttributeOwnership(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryAttributeOwnership");
+  return OwnershipQueryResult{FederateHandle(resp.owner_federate_handle()),
+                              resp.owned()};
+}
+
+bool RTIambassador::isAttributeOwnedByFederate(
+    ObjectInstanceHandle object,
+    AttributeHandle attribute) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined, "isAttributeOwnedByFederate");
+  rti::v1::IsOwnedRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(object.raw());
+  req.set_attribute_handle(attribute.raw());
+  grpc::ClientContext ctx;
+  rti::v1::IsOwnedResponse resp;
+  const auto s = impl_->ownership_stub->IsAttributeOwnedByFederate(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "isAttributeOwnedByFederate");
+  return resp.owned();
+}
+
 // --- M17.4 §5 publish / subscribe declarations -----------------------------
 
 namespace {
@@ -1448,6 +1620,36 @@ bool RTIambassador::tickCallback(double approx_min_time,
         impl_->fed_ambassador->federationSynchronized(
             evt.sync_synchronized().label());
         return true;
+      case rti::v1::FederateEvent::kOwnershipAssumption: {
+        const auto& a = evt.ownership_assumption();
+        AttributeHandleSet attrs;
+        for (auto h : a.attribute_handles()) attrs.emplace(h);
+        VariableLengthData tag(a.tag().begin(), a.tag().end());
+        impl_->fed_ambassador->requestAttributeOwnershipAssumption(
+            ObjectInstanceHandle(a.object_handle()),
+            attrs,
+            FederateHandle(a.divesting_federate()),
+            tag);
+        return true;
+      }
+      case rti::v1::FederateEvent::kOwnershipAcquired: {
+        const auto& a = evt.ownership_acquired();
+        AttributeHandleSet attrs;
+        for (auto h : a.attribute_handles()) attrs.emplace(h);
+        impl_->fed_ambassador->attributeOwnershipAcquisitionNotification(
+            ObjectInstanceHandle(a.object_handle()),
+            attrs,
+            FederateHandle(a.owning_federate()));
+        return true;
+      }
+      case rti::v1::FederateEvent::kOwnershipDivestConfirmed: {
+        const auto& a = evt.ownership_divest_confirmed();
+        AttributeHandleSet attrs;
+        for (auto h : a.attribute_handles()) attrs.emplace(h);
+        impl_->fed_ambassador->requestDivestitureConfirmation(
+            ObjectInstanceHandle(a.object_handle()), attrs);
+        return true;
+      }
       default:
         // Cut-1 / Cut-2 ignore events outside the supported slots
         // (remove/provide/sync/ownership/save/halted). Cut-3 adds

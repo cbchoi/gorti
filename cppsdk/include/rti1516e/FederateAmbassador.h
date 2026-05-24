@@ -90,6 +90,31 @@ class FederateAmbassador {
   // §4.7 — every required federate has achieved the sync point; the
   // federation is now synchronized at ``label``. M17.14 (Cut-3).
   virtual void federationSynchronized(const std::string& /*label*/) {}
+
+  // §7.3 — an owner has called negotiatedAttributeOwnershipDivestiture
+  // and the federation is asking this federate (a subscriber of the
+  // attribute) whether it wants to assume ownership. To accept, call
+  // attributeOwnershipAcquisition. M17.15 (Cut-3).
+  virtual void requestAttributeOwnershipAssumption(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/,
+      FederateHandle /*divesting_federate*/,
+      const VariableLengthData& /*tag*/) {}
+
+  // §7.4 — this federate has just acquired ownership of the listed
+  // attributes (the manager moved them here from the previous owner).
+  // M17.15 (Cut-3).
+  virtual void attributeOwnershipAcquisitionNotification(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/,
+      FederateHandle /*owning_federate*/) {}
+
+  // §7.3 — a divesting federate is informed that the transfer it
+  // requested via negotiatedAttributeOwnershipDivestiture has
+  // completed (some acquirer took over). M17.15 (Cut-3).
+  virtual void requestDivestitureConfirmation(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/) {}
 };
 
 }  // namespace rti1516e

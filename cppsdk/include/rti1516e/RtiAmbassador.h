@@ -297,6 +297,63 @@ class RTIambassador {
   // §8.18 — opt out of asynchronous delivery.
   void disableAsynchronousDelivery();
 
+  // §7 — Ownership Management.
+  //
+  // M17.15 (Cut-3). Negotiated transfer: an owner divests, candidate
+  // subscribers may acquire. Sync transfer: unconditional divest +
+  // immediate acquire. All RPCs return Empty synchronously; the
+  // transfer outcomes arrive via FederateAmbassador callbacks
+  // (requestAttributeOwnershipAssumption / Notification /
+  // requestDivestitureConfirmation).
+
+  // §7.2 — drop ownership without waiting for an acquirer. Subscribers
+  // see an attribute with no owner until somebody acquires it.
+  void unconditionalAttributeOwnershipDivestiture(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
+
+  // §7.3 — offer ownership to subscribers. ``tag`` is opaque user
+  // data echoed in the announce callback on each subscriber.
+  void negotiatedAttributeOwnershipDivestiture(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes,
+      const VariableLengthData& tag);
+
+  // §7.4 — request to acquire attributes from the current owner.
+  void attributeOwnershipAcquisition(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
+
+  // §7.5 — withdraw a previously-issued negotiated divest.
+  void cancelNegotiatedAttributeOwnershipDivestiture(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
+
+  // §7.5 — withdraw a pending acquisition.
+  void cancelAttributeOwnershipAcquisition(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
+
+  // §7.5 — drop ownership IF some acquirer wants it; no-op otherwise.
+  void attributeOwnershipDivestitureIfWanted(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
+
+  // §7.7 — query the current owner of an attribute. Returns the
+  // FederateHandle (raw==0 indicates mid-transfer / unowned).
+  struct OwnershipQueryResult {
+    FederateHandle owner;
+    bool owned;
+  };
+  OwnershipQueryResult queryAttributeOwnership(
+      ObjectInstanceHandle object,
+      AttributeHandle attribute);
+
+  // §7.7 — is the named attribute owned by THIS federate?
+  bool isAttributeOwnedByFederate(
+      ObjectInstanceHandle object,
+      AttributeHandle attribute);
+
   // §4.7 — Federation synchronization points.
   //
   // M17.14 (Cut-3). A federate registers a sync point with an
