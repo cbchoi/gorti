@@ -44,6 +44,8 @@
 #include "rti/v1/sync.pb.h"
 #include "rti/v1/ownership.grpc.pb.h"
 #include "rti/v1/ownership.pb.h"
+#include "rti/v1/savepoint.grpc.pb.h"
+#include "rti/v1/savepoint.pb.h"
 #include "rti1516e/FederateAmbassador.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
@@ -155,6 +157,7 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::MomService::Stub> mom_stub;
   std::unique_ptr<rti::v1::SyncService::Stub> sync_stub;
   std::unique_ptr<rti::v1::OwnershipService::Stub> ownership_stub;
+  std::unique_ptr<rti::v1::SavepointService::Stub> savepoint_stub;
 
   // --- M17.6 callback state ---
   // Bound FederateAmbassador (nullable). tickCallback dispatches
@@ -259,6 +262,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->mom_stub = rti::v1::MomService::NewStub(impl_->channel);
   impl_->sync_stub = rti::v1::SyncService::NewStub(impl_->channel);
   impl_->ownership_stub = rti::v1::OwnershipService::NewStub(impl_->channel);
+  impl_->savepoint_stub = rti::v1::SavepointService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -274,6 +278,7 @@ void RTIambassador::disconnect() {
   impl_->mom_stub.reset();
   impl_->sync_stub.reset();
   impl_->ownership_stub.reset();
+  impl_->savepoint_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -1265,6 +1270,148 @@ bool RTIambassador::isAttributeOwnedByFederate(
   return resp.owned();
 }
 
+// --- M17.16 §4.8-15 Save / Restore -----------------------------------------
+//
+// Save: requester→manager (RequestFederationSave); manager fans out
+// InitiateFederateSave events; federates respond
+// (FederateSaveComplete/NotComplete); manager fans out
+// FederationSaved/NotSaved. Restore: federates can drive the RPCs +
+// query state, but gorti's stream.proto only emits SAVE events —
+// the restore-side InitiateFederateRestore / FederationRestored
+// events aren't wired server-side yet.
+
+namespace {
+void requireJoinedForSavepoint(bool joined, const char* method) {
+  if (!joined) {
+    throw FederateNotExecutionMember(std::string(method) +
+                                     ": federate not joined to any federation");
+  }
+}
+}  // namespace
+
+void RTIambassador::requestFederationSave(
+    const std::string& label,
+    std::optional<double> save_time) {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "requestFederationSave");
+  rti::v1::RequestFederationSaveRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_label(label);
+  if (save_time.has_value()) req.set_save_time(*save_time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->savepoint_stub->RequestFederationSave(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "requestFederationSave");
+}
+
+void RTIambassador::federateSaveComplete() {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "federateSaveComplete");
+  rti::v1::FederateSaveResponseRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->savepoint_stub->FederateSaveComplete(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "federateSaveComplete");
+}
+
+void RTIambassador::federateSaveNotComplete() {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "federateSaveNotComplete");
+  rti::v1::FederateSaveResponseRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->savepoint_stub->FederateSaveNotComplete(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "federateSaveNotComplete");
+}
+
+void RTIambassador::abortFederationSave() {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "abortFederationSave");
+  rti::v1::AbortFederationSaveRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->savepoint_stub->AbortFederationSave(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "abortFederationSave");
+}
+
+RTIambassador::SaveState RTIambassador::querySaveState(const std::string& label) {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "querySaveState");
+  rti::v1::QuerySaveStateRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_label(label);
+  grpc::ClientContext ctx;
+  rti::v1::QuerySaveStateResponse resp;
+  const auto s = impl_->savepoint_stub->QuerySaveState(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "querySaveState");
+  return static_cast<SaveState>(resp.state());
+}
+
+void RTIambassador::requestFederationRestore(const std::string& label) {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "requestFederationRestore");
+  rti::v1::RequestFederationRestoreRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_label(label);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->savepoint_stub->RequestFederationRestore(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "requestFederationRestore");
+}
+
+void RTIambassador::federateRestoreComplete() {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "federateRestoreComplete");
+  rti::v1::FederateRestoreResponseRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->savepoint_stub->FederateRestoreComplete(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "federateRestoreComplete");
+}
+
+void RTIambassador::abortFederationRestore() {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "abortFederationRestore");
+  rti::v1::AbortFederationRestoreRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->savepoint_stub->AbortFederationRestore(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "abortFederationRestore");
+}
+
+RTIambassador::RestoreState RTIambassador::queryRestoreState(
+    const std::string& label) {
+  impl_->requireConnected();
+  requireJoinedForSavepoint(impl_->joined, "queryRestoreState");
+  rti::v1::QueryRestoreStateRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_label(label);
+  grpc::ClientContext ctx;
+  rti::v1::QueryRestoreStateResponse resp;
+  const auto s = impl_->savepoint_stub->QueryRestoreState(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryRestoreState");
+  return static_cast<RestoreState>(resp.state());
+}
+
 // --- M17.4 §5 publish / subscribe declarations -----------------------------
 
 namespace {
@@ -1650,6 +1797,20 @@ bool RTIambassador::tickCallback(double approx_min_time,
             ObjectInstanceHandle(a.object_handle()), attrs);
         return true;
       }
+      case rti::v1::FederateEvent::kSaveInitiate: {
+        const auto& s = evt.save_initiate();
+        std::optional<double> save_time =
+            s.has_save_time() ? std::optional<double>(s.save_time())
+                              : std::nullopt;
+        impl_->fed_ambassador->initiateFederateSave(s.label(), save_time);
+        return true;
+      }
+      case rti::v1::FederateEvent::kSaveCompleted:
+        impl_->fed_ambassador->federationSaved(evt.save_completed().label());
+        return true;
+      case rti::v1::FederateEvent::kSaveFailed:
+        impl_->fed_ambassador->federationNotSaved(evt.save_failed().label());
+        return true;
       default:
         // Cut-1 / Cut-2 ignore events outside the supported slots
         // (remove/provide/sync/ownership/save/halted). Cut-3 adds

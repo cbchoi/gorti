@@ -18,6 +18,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -296,6 +297,54 @@ class RTIambassador {
   void enableAsynchronousDelivery();
   // §8.18 — opt out of asynchronous delivery.
   void disableAsynchronousDelivery();
+
+  // §4.8-15 — Save / Restore.
+  //
+  // M17.16 (Cut-3). Two phases:
+  //   1. Save: requester calls requestFederationSave; manager
+  //      broadcasts InitiateFederateSave to every federate; each
+  //      federate serializes its state and reports back via
+  //      federateSaveComplete or federateSaveNotComplete; manager
+  //      broadcasts FederationSaved or FederationNotSaved.
+  //   2. Restore: requester calls requestFederationRestore; manager
+  //      loads from a prior labeled save. Restore callbacks are NOT
+  //      yet wired on the gorti server side — federates can drive
+  //      the RPCs and poll queryRestoreState but won't receive
+  //      initiateFederateRestore / federationRestored events. See
+  //      stream.proto's comment near InitiateFederateSave.
+
+  // §4.8 — request a federation save. ``save_time`` is the optional
+  // logical-time pin; pass std::nullopt for "save now".
+  void requestFederationSave(
+      const std::string& label,
+      std::optional<double> save_time = std::nullopt);
+  // §4.9 — this federate has completed its serialization phase.
+  void federateSaveComplete();
+  // §4.9 — this federate failed to serialize; the save will abort.
+  void federateSaveNotComplete();
+  // §4.28 — abort an in-progress save federation-wide.
+  void abortFederationSave();
+  // §4.15 — current save state for ``label`` (queue/idle/initiated/
+  // saved/failed).
+  enum class SaveState {
+    Unspecified = 0, Idle = 1, Initiated = 2, Saved = 3, NotSaved = 4,
+  };
+  SaveState querySaveState(const std::string& label);
+
+  // §4.10 — request a federation restore from a prior labeled save.
+  void requestFederationRestore(const std::string& label);
+  // §4.11 — this federate completed its restore phase. (Restore
+  // callbacks aren't yet emitted server-side, but the RPCs are
+  // accepted so federates can drive the protocol manually.)
+  void federateRestoreComplete();
+  // §4.30 — abort an in-progress restore federation-wide.
+  void abortFederationRestore();
+  // §4.15 — current restore state for ``label``.
+  enum class RestoreState {
+    Unspecified = 0, Idle = 1, Loading = 2, Initiated = 3,
+    Completed = 4, Failed = 5,
+  };
+  RestoreState queryRestoreState(const std::string& label);
 
   // §7 — Ownership Management.
   //

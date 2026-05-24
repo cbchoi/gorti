@@ -115,6 +115,23 @@ class FederateAmbassador {
   virtual void requestDivestitureConfirmation(
       ObjectInstanceHandle /*object*/,
       const AttributeHandleSet& /*attributes*/) {}
+
+  // §4.8 — the manager has begun a federation save. Each federate
+  // serializes its state and calls federateSaveComplete or
+  // federateSaveNotComplete. ``save_time`` (when set) is the logical
+  // time pin from the original requestFederationSave call.
+  // M17.16 (Cut-3).
+  virtual void initiateFederateSave(
+      const std::string& /*label*/,
+      std::optional<double> /*save_time*/) {}
+
+  // §4.9 — every federate completed; the federation save is
+  // finalized. M17.16 (Cut-3).
+  virtual void federationSaved(const std::string& /*label*/) {}
+
+  // §4.9 — at least one federate failed; the save was aborted.
+  // M17.16 (Cut-3).
+  virtual void federationNotSaved(const std::string& /*label*/) {}
 };
 
 }  // namespace rti1516e
