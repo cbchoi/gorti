@@ -46,6 +46,8 @@
 #include "rti/v1/ownership.pb.h"
 #include "rti/v1/savepoint.grpc.pb.h"
 #include "rti/v1/savepoint.pb.h"
+#include "rti/v1/ddm.grpc.pb.h"
+#include "rti/v1/ddm.pb.h"
 #include "rti1516e/FederateAmbassador.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
@@ -158,6 +160,7 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::SyncService::Stub> sync_stub;
   std::unique_ptr<rti::v1::OwnershipService::Stub> ownership_stub;
   std::unique_ptr<rti::v1::SavepointService::Stub> savepoint_stub;
+  std::unique_ptr<rti::v1::DDMService::Stub> ddm_stub;
 
   // --- M17.6 callback state ---
   // Bound FederateAmbassador (nullable). tickCallback dispatches
@@ -263,6 +266,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->sync_stub = rti::v1::SyncService::NewStub(impl_->channel);
   impl_->ownership_stub = rti::v1::OwnershipService::NewStub(impl_->channel);
   impl_->savepoint_stub = rti::v1::SavepointService::NewStub(impl_->channel);
+  impl_->ddm_stub = rti::v1::DDMService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -279,6 +283,7 @@ void RTIambassador::disconnect() {
   impl_->sync_stub.reset();
   impl_->ownership_stub.reset();
   impl_->savepoint_stub.reset();
+  impl_->ddm_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -1410,6 +1415,355 @@ RTIambassador::RestoreState RTIambassador::queryRestoreState(
   const auto s = impl_->savepoint_stub->QueryRestoreState(&ctx, req, &resp);
   if (!s.ok()) throwFromStatus(s, "queryRestoreState");
   return static_cast<RestoreState>(resp.state());
+}
+
+// --- M17.17 §9 Data Distribution Management --------------------------------
+//
+// 16 RPCs over DDMService. Routing-space and dimension lookups are
+// O(1) FOM-name resolution (similar to support_stub class/attr
+// handle services but no client-side cache — DDM names are
+// typically resolved once at federate startup). Regions are
+// runtime objects scoped to the calling federate; commit/delete
+// require join.
+
+namespace {
+
+void requireJoinedForDDM(bool joined, const char* method) {
+  if (!joined) {
+    throw FederateNotExecutionMember(std::string(method) +
+                                     ": federate not joined to any federation");
+  }
+}
+
+// Pack an rti1516e::AttributeRegionMap into the repeated
+// AttributeRegions proto field used by Register / Associate /
+// Unassociate.
+template <typename Req>
+void packAttributeRegions(Req& req, const AttributeRegionMap& map) {
+  for (const auto& [attr, regions] : map) {
+    auto* ar = req.add_attribute_regions();
+    ar->set_attribute_handle(attr.raw());
+    for (const auto& r : regions) ar->add_region_handles(r.raw());
+  }
+}
+
+}  // namespace
+
+RoutingSpaceHandle RTIambassador::getRoutingSpaceHandle(
+    const std::string& name) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "getRoutingSpaceHandle");
+  rti::v1::LookupRoutingSpaceRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::LookupRoutingSpaceResponse resp;
+  const auto s = impl_->ddm_stub->LookupRoutingSpace(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "getRoutingSpaceHandle");
+  if (!resp.found()) {
+    throw NameNotFound("getRoutingSpaceHandle: unknown routing space '" +
+                       name + "'");
+  }
+  return RoutingSpaceHandle(resp.routing_space_handle());
+}
+
+DimensionHandle RTIambassador::getDimensionHandle(
+    RoutingSpaceHandle routing_space,
+    const std::string& name) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "getDimensionHandle");
+  rti::v1::LookupDimensionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_routing_space_handle(routing_space.raw());
+  req.set_name(name);
+  grpc::ClientContext ctx;
+  rti::v1::LookupDimensionResponse resp;
+  const auto s = impl_->ddm_stub->LookupDimension(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "getDimensionHandle");
+  if (!resp.found()) {
+    throw NameNotFound("getDimensionHandle: unknown dimension '" + name +
+                       "' in routing space");
+  }
+  return DimensionHandle(resp.dimension_handle());
+}
+
+RegionHandle RTIambassador::createRegion(
+    RoutingSpaceHandle routing_space,
+    const std::vector<DimensionHandle>& dimensions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "createRegion");
+  rti::v1::CreateRegionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_routing_space_handle(routing_space.raw());
+  for (auto d : dimensions) req.add_dimension_handles(d.raw());
+  grpc::ClientContext ctx;
+  rti::v1::CreateRegionResponse resp;
+  const auto s = impl_->ddm_stub->CreateRegion(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "createRegion");
+  return RegionHandle(resp.region_handle());
+}
+
+void RTIambassador::setRangeBounds(RegionHandle region,
+                                   DimensionHandle dimension,
+                                   const DimensionRange& bounds) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "setRangeBounds");
+  rti::v1::SetRangeBoundsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_region_handle(region.raw());
+  req.set_dimension_handle(dimension.raw());
+  auto* r = req.mutable_bounds();
+  r->set_lower(bounds.lower);
+  r->set_upper(bounds.upper);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ddm_stub->SetRangeBounds(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "setRangeBounds");
+}
+
+void RTIambassador::commitRegionModifications(
+    const std::vector<RegionHandle>& regions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "commitRegionModifications");
+  rti::v1::CommitRegionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  for (auto r : regions) req.add_region_handles(r.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ddm_stub->CommitRegionModifications(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "commitRegionModifications");
+}
+
+void RTIambassador::deleteRegion(RegionHandle region) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "deleteRegion");
+  rti::v1::DeleteRegionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_region_handle(region.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ddm_stub->DeleteRegion(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "deleteRegion");
+}
+
+RTIambassador::QueryBoundsResult RTIambassador::queryBounds(
+    RegionHandle region, DimensionHandle dimension) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "queryBounds");
+  rti::v1::QueryBoundsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_region_handle(region.raw());
+  req.set_dimension_handle(dimension.raw());
+  grpc::ClientContext ctx;
+  rti::v1::QueryBoundsResponse resp;
+  const auto s = impl_->ddm_stub->QueryBounds(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryBounds");
+  QueryBoundsResult out;
+  out.found = resp.found();
+  if (resp.has_bounds()) {
+    out.bounds.lower = resp.bounds().lower();
+    out.bounds.upper = resp.bounds().upper();
+  } else {
+    out.bounds = {0, 0};
+  }
+  return out;
+}
+
+void RTIambassador::subscribeObjectClassAttributesWithRegions(
+    ObjectClassHandle object_class,
+    const AttributeHandleSet& attributes,
+    const RegionHandleSet& regions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined,
+                      "subscribeObjectClassAttributesWithRegions");
+  rti::v1::SubscribeOCAWithRegionsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_class_handle(object_class.raw());
+  for (auto a : attributes) req.add_attribute_handles(a.raw());
+  for (auto r : regions) req.add_region_handles(r.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ddm_stub->SubscribeObjectClassAttributesWithRegions(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "subscribeObjectClassAttributesWithRegions");
+}
+
+void RTIambassador::subscribeInteractionClassWithRegions(
+    InteractionClassHandle interaction_class,
+    const RegionHandleSet& regions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined,
+                      "subscribeInteractionClassWithRegions");
+  rti::v1::SubscribeICWithRegionsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(interaction_class.raw());
+  for (auto r : regions) req.add_region_handles(r.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ddm_stub->SubscribeInteractionClassWithRegions(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "subscribeInteractionClassWithRegions");
+}
+
+void RTIambassador::unsubscribeObjectClassAttributesWithRegions(
+    ObjectClassHandle object_class,
+    const AttributeHandleSet& attributes,
+    const RegionHandleSet& regions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined,
+                      "unsubscribeObjectClassAttributesWithRegions");
+  rti::v1::UnsubscribeOCAWithRegionsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_class_handle(object_class.raw());
+  for (auto a : attributes) req.add_attribute_handles(a.raw());
+  for (auto r : regions) req.add_region_handles(r.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ddm_stub->UnsubscribeObjectClassAttributesWithRegions(&ctx, req, &resp);
+  if (!s.ok())
+    throwFromStatus(s, "unsubscribeObjectClassAttributesWithRegions");
+}
+
+void RTIambassador::unsubscribeInteractionClassWithRegions(
+    InteractionClassHandle interaction_class,
+    const RegionHandleSet& regions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined,
+                      "unsubscribeInteractionClassWithRegions");
+  rti::v1::UnsubscribeICWithRegionsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(interaction_class.raw());
+  for (auto r : regions) req.add_region_handles(r.raw());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ddm_stub->UnsubscribeInteractionClassWithRegions(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "unsubscribeInteractionClassWithRegions");
+}
+
+RTIambassador::RegisterWithRegionsResult
+RTIambassador::registerObjectInstanceWithRegions(
+    ObjectClassHandle object_class,
+    const AttributeRegionMap& attribute_regions,
+    const std::string& object_name) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "registerObjectInstanceWithRegions");
+  rti::v1::RegisterObjectWithRegionsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_class_handle(object_class.raw());
+  req.set_object_name(object_name);
+  packAttributeRegions(req, attribute_regions);
+  grpc::ClientContext ctx;
+  rti::v1::RegisterObjectWithRegionsResponse resp;
+  const auto s =
+      impl_->ddm_stub->RegisterObjectInstanceWithRegions(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "registerObjectInstanceWithRegions");
+  return RegisterWithRegionsResult{
+      ObjectInstanceHandle(resp.object_handle()), resp.object_name()};
+}
+
+void RTIambassador::associateRegionsForUpdates(
+    ObjectInstanceHandle object,
+    const AttributeRegionMap& attribute_regions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "associateRegionsForUpdates");
+  rti::v1::AssociateRegionsForUpdatesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(object.raw());
+  packAttributeRegions(req, attribute_regions);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ddm_stub->AssociateRegionsForUpdates(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "associateRegionsForUpdates");
+}
+
+void RTIambassador::unassociateRegionsForUpdates(
+    ObjectInstanceHandle object,
+    const AttributeRegionMap& attribute_regions) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "unassociateRegionsForUpdates");
+  rti::v1::UnassociateRegionsForUpdatesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(object.raw());
+  packAttributeRegions(req, attribute_regions);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ddm_stub->UnassociateRegionsForUpdates(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "unassociateRegionsForUpdates");
+}
+
+void RTIambassador::sendInteractionWithRegions(
+    InteractionClassHandle interaction_class,
+    const ParameterHandleValueMap& parameters,
+    const RegionHandleSet& regions,
+    std::optional<double> logical_time) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined, "sendInteractionWithRegions");
+  rti::v1::SendInteractionWithRegionsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(interaction_class.raw());
+  for (const auto& [ph, bytes] : parameters) {
+    (*req.mutable_parameters())[ph.raw()] =
+        std::string(bytes.begin(), bytes.end());
+  }
+  for (auto r : regions) req.add_region_handles(r.raw());
+  if (logical_time.has_value()) req.set_logical_time(*logical_time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ddm_stub->SendInteractionWithRegions(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "sendInteractionWithRegions");
+}
+
+void RTIambassador::requestAttributeValueUpdateWithRegions(
+    ObjectClassHandle object_class,
+    const AttributeHandleSet& attributes,
+    const RegionHandleSet& regions,
+    const VariableLengthData& tag) {
+  impl_->requireConnected();
+  requireJoinedForDDM(impl_->joined,
+                      "requestAttributeValueUpdateWithRegions");
+  rti::v1::RequestAttributeValueUpdateWithRegionsRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_class_handle(object_class.raw());
+  for (auto a : attributes) req.add_attribute_handles(a.raw());
+  for (auto r : regions) req.add_region_handles(r.raw());
+  req.set_user_supplied_tag(tag.data(), tag.size());
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ddm_stub->RequestAttributeValueUpdateWithRegions(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "requestAttributeValueUpdateWithRegions");
 }
 
 // --- M17.4 §5 publish / subscribe declarations -----------------------------

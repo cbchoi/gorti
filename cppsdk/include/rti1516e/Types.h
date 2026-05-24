@@ -65,6 +65,8 @@ struct ParameterTag {};
 struct ObjectInstanceTag {};
 struct FederateTag {};
 struct DimensionTag {};
+struct RoutingSpaceTag {};
+struct RegionTag {};
 
 }  // namespace detail
 
@@ -75,6 +77,9 @@ using ParameterHandle = detail::StrongHandle<detail::ParameterTag>;
 using ObjectInstanceHandle = detail::StrongHandle<detail::ObjectInstanceTag>;
 using FederateHandle = detail::StrongHandle<detail::FederateTag>;
 using DimensionHandle = detail::StrongHandle<detail::DimensionTag>;
+// IEEE 1516.1 §9 Data Distribution Management — M17.17 (Cut-3).
+using RoutingSpaceHandle = detail::StrongHandle<detail::RoutingSpaceTag>;
+using RegionHandle = detail::StrongHandle<detail::RegionTag>;
 
 // IEEE 1516.1 §10.5 handle-set types. std::set keeps deterministic
 // iteration order, matching the Java/C++ ambassador's
@@ -82,6 +87,17 @@ using DimensionHandle = detail::StrongHandle<detail::DimensionTag>;
 using AttributeHandleSet = std::set<AttributeHandle>;
 using ParameterHandleSet = std::set<ParameterHandle>;
 using FederateHandleSet = std::set<FederateHandle>;
+using RegionHandleSet = std::set<RegionHandle>;
+
+// IEEE 1516.1 §9.5 — one dimension's lower/upper extent in a region.
+struct DimensionRange {
+  std::uint64_t lower;
+  std::uint64_t upper;
+};
+
+// Per-attribute region binding used by RegisterObjectWithRegions /
+// Associate / Unassociate / Unsubscribe.
+using AttributeRegionMap = std::map<AttributeHandle, RegionHandleSet>;
 
 // Variable-length opaque payload. Federates encode attribute /
 // parameter bytes via the FOM datatype rules (HLAfloat64BE etc.);

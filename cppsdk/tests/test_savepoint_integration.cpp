@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <thread>
@@ -50,16 +51,29 @@ class SavepointIntegration : public ::testing::Test {
     rtid = std::make_unique<RtidProcess>();
     amb.setFederateAmbassador(&fed);
     amb.connect(rtid->url());
-    amb.createFederationExecution("m17-16-save", {kFomPath});
-    amb.joinFederationExecution("alice", "m17-16-save");
+    // Per-test federation name: gorti's FSStorage rejects an
+    // already-on-disk bundle for (federation, label), so reusing
+    // a fixed name across runs flips outcomes to NotSaved on the
+    // second run. Use a unique federation name per test instance.
+    // Federation name has a 32-byte cap server-side, so we hex-pack
+    // a per-process counter that's short enough.
+    const auto ns = std::chrono::steady_clock::now()
+                        .time_since_epoch().count();
+    char suffix[24];
+    std::snprintf(suffix, sizeof(suffix), "m16-%llx",
+                  static_cast<unsigned long long>(ns));
+    federation_ = suffix;
+    amb.createFederationExecution(federation_, {kFomPath});
+    amb.joinFederationExecution("alice", federation_);
   }
   void TearDown() override {
     if (amb.isConnected()) {
       try { amb.resignFederationExecution(); } catch (...) {}
-      try { amb.destroyFederationExecution("m17-16-save"); } catch (...) {}
+      try { amb.destroyFederationExecution(federation_); } catch (...) {}
       amb.disconnect();
     }
   }
+  std::string federation_;
   SaveRecordingFed fed;
   std::unique_ptr<RtidProcess> rtid;
   rti1516e::RTIambassador amb;

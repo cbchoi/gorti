@@ -298,6 +298,99 @@ class RTIambassador {
   // §8.18 — opt out of asynchronous delivery.
   void disableAsynchronousDelivery();
 
+  // §9 — Data Distribution Management.
+  //
+  // M17.17 (Cut-3). Regions partition the value space of one or more
+  // dimensions so subscribers can express interest in narrower
+  // slices of a publisher's updates / interactions. Workflow:
+  //   1. Look up the FOM-declared routing space + dimensions by name.
+  //   2. Create a region in that routing space; set per-dimension
+  //      range bounds; commit.
+  //   3. Subscribe object class attributes / interaction classes
+  //      with the region; updates / interactions outside the bounds
+  //      don't reach this federate.
+  //   4. Publishers can also register objects bound to regions and
+  //      associate per-attribute regions for fine-grained filtering.
+
+  // §9.2 — look up a FOM-declared routing space by name. Returns an
+  // invalid handle if the name is unknown.
+  RoutingSpaceHandle getRoutingSpaceHandle(const std::string& name);
+  // §9.2 — look up a dimension by name within a routing space.
+  DimensionHandle getDimensionHandle(RoutingSpaceHandle routing_space,
+                                     const std::string& name);
+
+  // §9.5 — create a region in ``routing_space`` covering the given
+  // dimensions. Initial bounds are unset; use setRangeBounds + commit
+  // before the region is usable.
+  RegionHandle createRegion(RoutingSpaceHandle routing_space,
+                            const std::vector<DimensionHandle>& dimensions);
+  // §9.5 — set bounds for one dimension of a region.
+  void setRangeBounds(RegionHandle region,
+                      DimensionHandle dimension,
+                      const DimensionRange& bounds);
+  // §9.5 — commit pending range-bound changes to the federation. The
+  // region is only visible to subscribers / publishers AFTER commit.
+  void commitRegionModifications(const std::vector<RegionHandle>& regions);
+  // §9.5 — delete a region; subscribers / publishers using it are
+  // automatically un-bound.
+  void deleteRegion(RegionHandle region);
+  // §9.5 — query the current bounds of one dimension of a region.
+  // Returns a {DimensionRange, found} pair.
+  struct QueryBoundsResult { DimensionRange bounds; bool found; };
+  QueryBoundsResult queryBounds(RegionHandle region, DimensionHandle dimension);
+
+  // §9.6 — region-aware publish/subscribe.
+  void subscribeObjectClassAttributesWithRegions(
+      ObjectClassHandle object_class,
+      const AttributeHandleSet& attributes,
+      const RegionHandleSet& regions);
+  void subscribeInteractionClassWithRegions(
+      InteractionClassHandle interaction_class,
+      const RegionHandleSet& regions);
+  void unsubscribeObjectClassAttributesWithRegions(
+      ObjectClassHandle object_class,
+      const AttributeHandleSet& attributes,
+      const RegionHandleSet& regions);
+  void unsubscribeInteractionClassWithRegions(
+      InteractionClassHandle interaction_class,
+      const RegionHandleSet& regions);
+
+  // §9.6 — register an object with per-attribute region bindings.
+  // ``object_name`` may be empty for auto-generated. Returns the
+  // assigned object handle + final name (server-generated when
+  // ``object_name`` was empty).
+  struct RegisterWithRegionsResult {
+    ObjectInstanceHandle object;
+    std::string object_name;
+  };
+  RegisterWithRegionsResult registerObjectInstanceWithRegions(
+      ObjectClassHandle object_class,
+      const AttributeRegionMap& attribute_regions,
+      const std::string& object_name = "");
+
+  // §9.6 — associate / unassociate per-attribute regions on an
+  // existing object. Empty map on Unassociate drops all bindings.
+  void associateRegionsForUpdates(
+      ObjectInstanceHandle object,
+      const AttributeRegionMap& attribute_regions);
+  void unassociateRegionsForUpdates(
+      ObjectInstanceHandle object,
+      const AttributeRegionMap& attribute_regions);
+
+  // §9.12 — send an interaction filtered by region overlap.
+  void sendInteractionWithRegions(
+      InteractionClassHandle interaction_class,
+      const ParameterHandleValueMap& parameters,
+      const RegionHandleSet& regions,
+      std::optional<double> logical_time = std::nullopt);
+  // §9.13 — pull-style attribute update request, filtered by region
+  // overlap. ``tag`` is opaque user data.
+  void requestAttributeValueUpdateWithRegions(
+      ObjectClassHandle object_class,
+      const AttributeHandleSet& attributes,
+      const RegionHandleSet& regions,
+      const VariableLengthData& tag = {});
+
   // §4.8-15 — Save / Restore.
   //
   // M17.16 (Cut-3). Two phases:
