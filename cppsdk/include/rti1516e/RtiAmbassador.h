@@ -587,6 +587,27 @@ class RTIambassador {
   bool tickCallback(double approx_min_time = 0.0,
                     double approx_max_time = 0.0);
 
+  // §10.4 — Pitch-name alias for tickCallback. M17.18 (Cut-3).
+  // Cut-3 ships these with cheap-evoke semantics (same as
+  // tickCallback — a single call may drain MORE than one buffered
+  // callback). Strict at-most-one HLA_EVOKED defers to a Cut-4
+  // refactor of the dispatch switch.
+  bool evokeCallback(double approx_min_time = 0.0,
+                     double approx_max_time = 0.0);
+
+  // §10.4 — Pitch-name alias for tickCallback. Same semantic as
+  // tickCallback. M17.18 (Cut-3).
+  bool evokeMultipleCallbacks(double approx_min_time = 0.0,
+                              double approx_max_time = 0.0);
+
+  // §10.4 — pause callback dispatch. While disabled, tickCallback /
+  // evokeCallback / evokeMultipleCallbacks return immediately
+  // without draining; queued events buffer. The background event-
+  // stream reader continues to fill the buffer. M17.18 (Cut-3).
+  void disableCallbacks();
+  // §10.4 — resume callback dispatch.
+  void enableCallbacks();
+
  private:
   std::unique_ptr<RTIambassadorImpl> impl_;
 };

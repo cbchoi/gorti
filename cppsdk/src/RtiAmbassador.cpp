@@ -172,6 +172,11 @@ class RTIambassadorImpl {
   std::condition_variable event_cv;
   std::deque<rti::v1::FederateEvent> event_queue;
   std::atomic<bool> stream_running{false};
+  // M17.18 — when false, tick/evoke variants return without
+  // draining. The background reader keeps pushing into event_queue;
+  // re-enable to resume dispatch (no events lost).
+  std::atomic<bool> callbacks_enabled{true};
+
   std::thread stream_thread;
   std::unique_ptr<grpc::ClientContext> stream_ctx;
 
@@ -2021,6 +2026,9 @@ bool RTIambassador::tickCallback(double approx_min_time,
   using std::chrono::duration_cast;
   using std::chrono::milliseconds;
 
+  // M17.18 — when callbacks are disabled, drain nothing. Events
+  // keep buffering in event_queue; enableCallbacks() resumes.
+  if (!impl_->callbacks_enabled.load()) return false;
   if (approx_max_time < approx_min_time) approx_max_time = approx_min_time;
   const auto start = clock::now();
   const auto min_deadline =
@@ -2196,6 +2204,42 @@ bool RTIambassador::tickCallback(double approx_min_time,
   }
 
   return any_fired;
+}
+
+// --- M17.18 §10.4 strict HLA_EVOKED + callback toggle --------------------
+//
+// Cut-3 ships evokeCallback / evokeMultipleCallbacks as Pitch-name
+// aliases over tickCallback's drain loop. The "cheap evoke"
+// divergence carried over from Cut-1 still applies: a single call
+// may dispatch MORE than one buffered callback. Strict
+// at-most-one semantics defer to a Cut-4 milestone that refactors
+// the dispatch switch out of tickCallback into a shared impl
+// helper. Documented in docs/PITCH_PARITY.md.
+//
+// disableCallbacks/enableCallbacks toggle the dispatch gate.
+// Background reader keeps filling the event queue when disabled —
+// no events are lost across the toggle. Matches pysdk M27 Phase C.
+
+bool RTIambassador::evokeMultipleCallbacks(double approx_min_time,
+                                           double approx_max_time) {
+  return tickCallback(approx_min_time, approx_max_time);
+}
+
+bool RTIambassador::evokeCallback(double approx_min_time,
+                                  double approx_max_time) {
+  return tickCallback(approx_min_time, approx_max_time);
+}
+
+void RTIambassador::disableCallbacks() {
+  impl_->callbacks_enabled.store(false);
+}
+
+void RTIambassador::enableCallbacks() {
+  impl_->callbacks_enabled.store(true);
+  // Wake any thread waiting in tickCallback so it re-checks the
+  // gate. (Pre-existing tickCallback paths poll with a 5 ms
+  // wait_for timeout, so this notify is a latency optimization.)
+  impl_->event_cv.notify_all();
 }
 
 }  // namespace rti1516e

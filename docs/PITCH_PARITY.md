@@ -75,6 +75,26 @@ If a ported federate requires the strict HLA_EVOKED semantics
 without the explicit disable/evoke discipline, raise an issue —
 buffered-drain mode would land in a future milestone.
 
+### C++ SDK parity (M17 Cut-2 + Cut-3)
+
+The `rti1516e::` C++ SDK mirrors the same shape as the Python
+`Rti1516eAmbassador` and inherits the same cheap-evoke divergence:
+
+```cpp
+amb.disableCallbacks();
+while (running) {
+  do_my_work();
+  amb.evokeMultipleCallbacks(0.0, 0.1);  // callbacks dispatch here
+}
+amb.enableCallbacks();
+```
+
+`evokeCallback` / `evokeMultipleCallbacks` are aliases over
+`tickCallback` in Cut-3 — a single call may dispatch MORE than
+one buffered callback. Strict at-most-one `evokeCallback`
+semantics defer to a Cut-4 refactor that extracts the dispatch
+switch from `tickCallback` into a shared private helper.
+
 ### Outbox post-join window — closed in M27 A
 
 Pre-M27, a service-group RPC fired immediately after
