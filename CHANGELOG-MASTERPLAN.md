@@ -431,6 +431,89 @@ Out of scope (deferred to M17 Cut-3):
   encodings (Cut-2 ships only the basic Annex B set)
 - Async / non-blocking ambassador variants
 
+#### M17 Cut-3 — C++ SDK ownership / DDM / save+restore / MOM / encodings (closed 2026-05-24)
+
+The remaining IEEE 1516.1 services land in the C++ SDK. After
+Cut-3, the `rti1516e::` surface covers ALL the standard service
+groups Pitch federate code uses: ownership transfer (§7), DDM
+region filtering (§9), save / restore lifecycle (§4.8-15), MOM
+introspection (§11), federation sync points (§4.7), the
+disable/evoke callback discipline (§10.4), and the composed
+Annex B datatypes (enums + arrays + records).
+
+- M17.13 (`cfafa8d`) §11 MOM ambassador delegates — 3 read-only
+  RPCs (queryFederationAttributes, queryFederateAttributes,
+  enumerateMomInstances) with typed result structs nested on
+  RTIambassador. No callbacks; federates poll. 10 integration
+  tests. Known gorti gap: time-state fields on
+  FederateAttributes are server-side stubs (proto comment on
+  QueryFederateAttributesResponse).
+- M17.14 (`6431898`) §4.7 Federation synchronization points —
+  registerFederationSynchronizationPoint(label, tag, required={})
+  + synchronizationPointAchieved(label); 2 new
+  FederateAmbassador override slots (announceSynchronizationPoint,
+  federationSynchronized) + tickCallback dispatch for the kSync*
+  events (tags 20-21). 5 integration tests.
+- M17.15 (`43b4052`) §7 Ownership Management — 8 RPCs covering
+  unconditional + negotiated divest, acquire, the cancel
+  variants, divestIfWanted, queryAttributeOwnership,
+  isAttributeOwnedByFederate. 3 new FederateAmbassador override
+  slots (requestAttributeOwnershipAssumption,
+  attributeOwnershipAcquisitionNotification,
+  requestDivestitureConfirmation) + dispatch for kOwnership*
+  events (tags 30-32). Templated fillObjectAttrsReq helper
+  shrinks the 6 same-shape divest/acquire request fillers. 7
+  integration tests.
+- M17.16 (`0d2e583`) §4.8-15 Save / Restore — full save
+  protocol (request → initiate callback → per-federate complete
+  → federation-wide saved/notSaved) + restore-side RPCs without
+  events (gorti gap; restore event-stream tags not yet wired
+  server-side). 9 RPCs, 3 new override slots, 2 nested enums
+  (SaveState, RestoreState). 8 integration tests with per-test
+  unique federation name to dodge fsstorage's
+  ErrSaveBundleExists rejection.
+- M17.17 (`01abb03`) §9 Data Distribution Management — the
+  largest single milestone (16 RPCs): routing-space + dimension
+  lookups, region create/setRangeBounds/commit/delete/query,
+  region-aware subscribe/unsubscribe (both attribute and
+  interaction class), registerObjectInstanceWithRegions,
+  associate/unassociate, sendInteractionWithRegions,
+  requestAttributeValueUpdateWithRegions. 2 new strong typedefs
+  (RoutingSpaceHandle, RegionHandle), DimensionRange POD,
+  AttributeRegionMap alias. 12 integration tests against the
+  ddm-test conformance FOM.
+- M17.18 (`24c8cba`) strict HLA_EVOKED + callback toggle —
+  evokeCallback / evokeMultipleCallbacks ship as Pitch-name
+  tickCallback aliases (cheap-evoke semantics retained;
+  at-most-one defers to Cut-4). disableCallbacks /
+  enableCallbacks gate dispatch via an atomic flag; events
+  buffer through the disabled window and drain on the next
+  tickCallback after enable. 4 integration tests including
+  enable/disable cycle preserving event ordering. Updated
+  docs/PITCH_PARITY.md with C++ SDK subsection.
+- M17.19 (`3e70e78`) advanced HLA encodings — HLAenum32BE
+  (templated over enum class / integral), HLAfixedArray<T>,
+  HLAvariableArray<T> (4-byte BE length prefix), HLAfixedRecord
+  (concatenation + offset-based slice). Callback-based templates
+  so federates pass their existing per-element encoders as
+  lambdas. 12 new unit tests (28 total in test_encoding_unit).
+
+Verification
+- 16 ctest executables: 2 unit (ambassador_unit + encoding_unit)
+  + 14 integration. ~25 s end-to-end. 110+ GoogleTest cases.
+
+Out of scope (deferred to Cut-4)
+- Strict at-most-one HLA_EVOKED evokeCallback (requires
+  refactoring drainOne switch into a shared impl helper)
+- Variable-width element types in HLAvariableArray (e.g.
+  vector of HLAunicodeString)
+- HLAfixedRecord automatic alignment-padding
+- Save/restore event-stream callbacks (gorti server-side gap)
+- Time-state mirror in MOM FederateAttributes (gorti
+  TimeStateChanged hook not yet wired)
+- Async / non-blocking ambassador variants
+- Java SDK (M18 — separate milestone)
+
 Out of scope (deferred to M25+):
 - §4.2 connect / §4.4 disconnect — gRPC channel handles implicitly.
 - Wider §7 ownership — only the resign-related releases land in M24.

@@ -4,7 +4,7 @@ IEEE 1516.1-2010 Layer-2 ambassador (Pitch-style) for the gorti RTI.
 Federate code ported from Pitch / Portico / MAK should compile against
 this SDK with minimal call-site change.
 
-**Status:** M17 Cut-2 closed (2026-05-21). See `docs/PITCH_PARITY.md`
+**Status:** M17 Cut-3 closed (2026-05-24). See `docs/PITCH_PARITY.md`
 for the API divergence table.
 
 ## Build
@@ -85,13 +85,31 @@ Cut-2 (closed 2026-05-21):
 - M17.10 — §6.1-5 object instance name reservation flow.
 - M17.11 — §8 Time Management (TAR/TARA/NER/NMRA/FQR + queries).
 
-## Out of scope (deferred to Cut-3)
+Cut-3 (closed 2026-05-24):
+- M17.13 — §11 MOM ambassador delegates (queryFederation /
+  Federate Attributes, enumerateMomInstances).
+- M17.14 — §4.7 Federation synchronization points.
+- M17.15 — §7 Ownership Management (8 RPCs + 3 callbacks).
+- M17.16 — §4.8-15 Save / Restore.
+- M17.17 — §9 DDM region surface (16 RPCs).
+- M17.18 — strict HLA_EVOKED aliases + enableCallbacks /
+  disableCallbacks toggle.
+- M17.19 — Advanced encodings (enum, fixed/variable array,
+  fixed record).
 
-- §7 Ownership Management
-- §9 Data Distribution Management
-- §4.8-15 Save/Restore
-- §11 MOM ambassador methods
-- §10.4 strict HLA_EVOKED buffered-drain (M27 Phase E noted gorti's
-  cheap-evoke divergence; that carries over to C++)
-- Variable / fixed record + enumerated + array encodings (Cut-2 ships
-  only the basic Annex B set)
+## Out of scope (deferred to Cut-4)
+
+- Strict at-most-one HLA_EVOKED `evokeCallback` (Cut-3 ships
+  cheap-evoke alias; a Cut-4 refactor extracts the dispatch
+  switch into a shared impl helper)
+- Variable-width element types in `HLAvariableArray` (e.g.
+  vector of `HLAunicodeString`)
+- `HLAfixedRecord` automatic alignment-padding
+- Save / restore event-stream callbacks (gorti server-side gap)
+- Time-state mirror in MOM `FederateAttributes` (gorti
+  `TimeStateChanged` hook not yet wired)
+- Async / non-blocking ambassador variants
+- Two-federate ownership transfer integration tests (single-
+  federate baseline shipped; cross-federate transfer scenarios
+  need a shared "two ambassadors against one rtid" fixture)
+- Java SDK (M18 — separate milestone)
