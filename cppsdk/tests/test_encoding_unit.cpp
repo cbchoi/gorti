@@ -131,4 +131,134 @@ TEST(HLAunicodeString, DecodeMalformedThrows) {
   EXPECT_THROW(decodeHLAunicodeString(malformed), EncodingError);
 }
 
+// --- HLAenumeratedType ------------------------------------------------------
+
+enum class Color : std::int32_t {
+  Red = 1,
+  Green = 2,
+  Blue = 0x7FFFFFFF,
+};
+
+TEST(HLAenum32BE, EncodeMatchesInteger32BE) {
+  const auto bytes = encodeHLAenum32BE(Color::Green);
+  EXPECT_EQ(bytes, encodeHLAinteger32BE(2));
+}
+
+TEST(HLAenum32BE, RoundTripUserEnum) {
+  for (auto v : {Color::Red, Color::Green, Color::Blue}) {
+    const auto bytes = encodeHLAenum32BE(v);
+    EXPECT_EQ(decodeHLAenum32BE<Color>(bytes), v);
+  }
+}
+
+// --- HLAfixedArray ----------------------------------------------------------
+
+TEST(HLAfixedArray, ThreeDoublesEncodesAs24Bytes) {
+  std::vector<double> xs{1.0, 2.0, 3.0};
+  const auto bytes = encodeHLAfixedArray<double>(
+      xs, [](double v) { return encodeHLAfloat64BE(v); });
+  ASSERT_EQ(bytes.size(), 24u);
+  // First element matches HLAfloat64BE(1.0).
+  EXPECT_EQ(bytes[0], 0x3Fu);
+  EXPECT_EQ(bytes[1], 0xF0u);
+}
+
+TEST(HLAfixedArray, RoundTripThreeInts) {
+  std::vector<std::int32_t> xs{10, -20, 30};
+  const auto bytes = encodeHLAfixedArray<std::int32_t>(
+      xs, [](std::int32_t v) { return encodeHLAinteger32BE(v); });
+  const auto round = decodeHLAfixedArray<std::int32_t>(
+      bytes, 3, 4, [](const VariableLengthData& b) {
+        return decodeHLAinteger32BE(b);
+      });
+  EXPECT_EQ(round, xs);
+}
+
+TEST(HLAfixedArray, DecodeTruncatedThrows) {
+  VariableLengthData bytes{0x00, 0x00, 0x00, 0x01};  // 4 bytes, want 8
+  EXPECT_THROW(
+      (decodeHLAfixedArray<std::int32_t>(bytes, /*N=*/2, /*stride=*/4,
+                                          [](const VariableLengthData& b) {
+                                            return decodeHLAinteger32BE(b);
+                                          })),
+      EncodingError);
+}
+
+// --- HLAvariableArray -------------------------------------------------------
+
+TEST(HLAvariableArray, EncodeHasLengthPrefix) {
+  std::vector<std::int32_t> xs{42};
+  const auto bytes = encodeHLAvariableArray<std::int32_t>(
+      xs, [](std::int32_t v) { return encodeHLAinteger32BE(v); });
+  ASSERT_EQ(bytes.size(), 8u);  // 4 prefix + 4 body
+  EXPECT_EQ(bytes[0], 0x00u);
+  EXPECT_EQ(bytes[1], 0x00u);
+  EXPECT_EQ(bytes[2], 0x00u);
+  EXPECT_EQ(bytes[3], 0x01u);  // count = 1
+}
+
+TEST(HLAvariableArray, RoundTripEmpty) {
+  std::vector<std::int32_t> empty;
+  const auto bytes = encodeHLAvariableArray<std::int32_t>(
+      empty, [](std::int32_t v) { return encodeHLAinteger32BE(v); });
+  ASSERT_EQ(bytes.size(), 4u);
+  const auto round = decodeHLAvariableArray<std::int32_t>(
+      bytes, 4, [](const VariableLengthData& b) {
+        return decodeHLAinteger32BE(b);
+      });
+  EXPECT_TRUE(round.empty());
+}
+
+TEST(HLAvariableArray, RoundTripDoubles) {
+  std::vector<double> xs{1.5, 2.5, 3.5, 4.5};
+  const auto bytes = encodeHLAvariableArray<double>(
+      xs, [](double v) { return encodeHLAfloat64BE(v); });
+  const auto round = decodeHLAvariableArray<double>(
+      bytes, 8, [](const VariableLengthData& b) {
+        return decodeHLAfloat64BE(b);
+      });
+  EXPECT_EQ(round, xs);
+}
+
+TEST(HLAvariableArray, DecodeMissingPrefixThrows) {
+  VariableLengthData empty;
+  EXPECT_THROW(
+      (decodeHLAvariableArray<std::int32_t>(
+          empty, 4, [](const VariableLengthData& b) {
+            return decodeHLAinteger32BE(b);
+          })),
+      EncodingError);
+}
+
+// --- HLAfixedRecord ---------------------------------------------------------
+
+TEST(HLAfixedRecord, EncodeConcatenatesFields) {
+  const auto f1 = encodeHLAinteger32BE(42);
+  const auto f2 = encodeHLAfloat64BE(3.14);
+  const auto rec = encodeHLAfixedRecord({f1, f2});
+  ASSERT_EQ(rec.size(), 12u);  // 4 + 8
+  // First 4 bytes are the integer; bytes[4..12] are the double.
+  EXPECT_EQ(std::vector<std::uint8_t>(rec.begin(), rec.begin() + 4),
+            std::vector<std::uint8_t>(f1.begin(), f1.end()));
+  EXPECT_EQ(std::vector<std::uint8_t>(rec.begin() + 4, rec.end()),
+            std::vector<std::uint8_t>(f2.begin(), f2.end()));
+}
+
+TEST(HLAfixedRecord, DecodeWithOffsetsRecoversFields) {
+  const auto f1 = encodeHLAinteger32BE(7);
+  const auto f2 = encodeHLAfloat64BE(2.5);
+  const auto rec = encodeHLAfixedRecord({f1, f2});
+  // f1 starts at offset 0, f2 at offset 4.
+  const auto slices = decodeHLAfixedRecord(rec, {0, 4});
+  ASSERT_EQ(slices.size(), 2u);
+  EXPECT_EQ(decodeHLAinteger32BE(slices[0]), 7);
+  EXPECT_DOUBLE_EQ(decodeHLAfloat64BE(slices[1]), 2.5);
+}
+
+TEST(HLAfixedRecord, DecodeBadOffsetsThrows) {
+  VariableLengthData bytes(8, 0);
+  EXPECT_THROW(decodeHLAfixedRecord(bytes, {0, 99}),
+               EncodingError);
+}
+
 }  // namespace

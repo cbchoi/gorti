@@ -20,6 +20,8 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <vector>
 
 #include "Types.h"
 
@@ -151,6 +153,165 @@ inline std::u16string decodeHLAunicodeString(const VariableLengthData& bytes) {
     const auto lo = bytes[4 + 2 * i + 1];
     out.push_back(static_cast<char16_t>((static_cast<std::uint16_t>(hi) << 8) |
                                         static_cast<std::uint16_t>(lo)));
+  }
+  return out;
+}
+
+// --- HLAenumeratedType -------------------------------------------------------
+//
+// IEEE 1516.2 §B.2 enumerated types are encoded as their underlying
+// numeric representation (typically HLAinteger32BE for cross-vendor
+// compat). Federate code passes enum class values; the helpers
+// reuse the integer encoders.
+
+template <typename Enum>
+inline VariableLengthData encodeHLAenum32BE(Enum e) {
+  static_assert(std::is_enum_v<Enum> || std::is_integral_v<Enum>,
+                "encodeHLAenum32BE requires an enum or integral type");
+  return encodeHLAinteger32BE(static_cast<std::int32_t>(e));
+}
+
+template <typename Enum>
+inline Enum decodeHLAenum32BE(const VariableLengthData& bytes) {
+  static_assert(std::is_enum_v<Enum> || std::is_integral_v<Enum>,
+                "decodeHLAenum32BE requires an enum or integral type");
+  return static_cast<Enum>(decodeHLAinteger32BE(bytes));
+}
+
+// --- HLAfixedArray<T> --------------------------------------------------------
+//
+// IEEE 1516.2 §B.3.2 — N elements of T encoded back-to-back. No
+// length prefix (consumers know N from the FOM declaration).
+//
+// The federate supplies an encoder for one element (encodeFn(T) ->
+// VariableLengthData); the helper concatenates the per-element
+// byte streams. Decode is symmetric: federate supplies decodeFn
+// and the per-element stride.
+
+template <typename T, typename EncodeFn>
+inline VariableLengthData encodeHLAfixedArray(
+    const std::vector<T>& items, EncodeFn encode_fn) {
+  VariableLengthData out;
+  for (const auto& item : items) {
+    const auto enc = encode_fn(item);
+    out.insert(out.end(), enc.begin(), enc.end());
+  }
+  return out;
+}
+
+template <typename T, typename DecodeFn>
+inline std::vector<T> decodeHLAfixedArray(
+    const VariableLengthData& bytes,
+    std::size_t element_count,
+    std::size_t element_stride,
+    DecodeFn decode_fn) {
+  if (bytes.size() < element_count * element_stride) {
+    throw EncodingError(
+        "decodeHLAfixedArray: truncated payload (need " +
+        std::to_string(element_count * element_stride) + ", have " +
+        std::to_string(bytes.size()) + ")");
+  }
+  std::vector<T> out;
+  out.reserve(element_count);
+  for (std::size_t i = 0; i < element_count; ++i) {
+    VariableLengthData slice(bytes.begin() + i * element_stride,
+                             bytes.begin() + (i + 1) * element_stride);
+    out.push_back(decode_fn(slice));
+  }
+  return out;
+}
+
+// --- HLAvariableArray<T> -----------------------------------------------------
+//
+// IEEE 1516.2 §B.3.3 — 4-byte BE length prefix + N elements of T.
+
+template <typename T, typename EncodeFn>
+inline VariableLengthData encodeHLAvariableArray(
+    const std::vector<T>& items, EncodeFn encode_fn) {
+  const std::uint32_t n = static_cast<std::uint32_t>(items.size());
+  VariableLengthData out;
+  out.push_back(static_cast<std::uint8_t>((n >> 24) & 0xff));
+  out.push_back(static_cast<std::uint8_t>((n >> 16) & 0xff));
+  out.push_back(static_cast<std::uint8_t>((n >> 8) & 0xff));
+  out.push_back(static_cast<std::uint8_t>(n & 0xff));
+  for (const auto& item : items) {
+    const auto enc = encode_fn(item);
+    out.insert(out.end(), enc.begin(), enc.end());
+  }
+  return out;
+}
+
+template <typename T, typename DecodeFn>
+inline std::vector<T> decodeHLAvariableArray(
+    const VariableLengthData& bytes,
+    std::size_t element_stride,
+    DecodeFn decode_fn) {
+  if (bytes.size() < 4) {
+    throw EncodingError("decodeHLAvariableArray: missing length prefix");
+  }
+  const std::uint32_t n = (static_cast<std::uint32_t>(bytes[0]) << 24) |
+                          (static_cast<std::uint32_t>(bytes[1]) << 16) |
+                          (static_cast<std::uint32_t>(bytes[2]) << 8) |
+                          static_cast<std::uint32_t>(bytes[3]);
+  if (bytes.size() < 4u + n * element_stride) {
+    throw EncodingError(
+        "decodeHLAvariableArray: truncated payload (need " +
+        std::to_string(4u + n * element_stride) + ", have " +
+        std::to_string(bytes.size()) + ")");
+  }
+  std::vector<T> out;
+  out.reserve(n);
+  for (std::uint32_t i = 0; i < n; ++i) {
+    VariableLengthData slice(bytes.begin() + 4 + i * element_stride,
+                             bytes.begin() + 4 + (i + 1) * element_stride);
+    out.push_back(decode_fn(slice));
+  }
+  return out;
+}
+
+// --- HLAfixedRecord ----------------------------------------------------------
+//
+// IEEE 1516.2 §B.4.1 — a fixed-shape record concatenates its
+// field encodings in declaration order. Per-field padding to the
+// next alignment boundary is the field's responsibility in this
+// Cut-3 surface — federates encode each field, then call
+// encodeHLAfixedRecord with the pre-encoded list.
+//
+// Most cross-language FOMs use natural alignment (HLAfloat64BE
+// is 8-aligned, HLAinteger32BE is 4-aligned). The simplest pattern
+// is to declare records with naturally-ordered fields so no
+// padding is needed; for awkward orderings, federates encode a
+// zero-byte HLAoctet between fields.
+
+inline VariableLengthData encodeHLAfixedRecord(
+    const std::vector<VariableLengthData>& fields) {
+  VariableLengthData out;
+  for (const auto& f : fields) {
+    out.insert(out.end(), f.begin(), f.end());
+  }
+  return out;
+}
+
+// Slice a fixed record into per-field VariableLengthData windows.
+// The federate supplies the byte-offset of each field's start;
+// the helper returns the slices in the same order. Last field's
+// extent runs to end-of-input.
+inline std::vector<VariableLengthData> decodeHLAfixedRecord(
+    const VariableLengthData& bytes,
+    const std::vector<std::size_t>& field_offsets) {
+  std::vector<VariableLengthData> out;
+  out.reserve(field_offsets.size());
+  for (std::size_t i = 0; i < field_offsets.size(); ++i) {
+    const std::size_t start = field_offsets[i];
+    const std::size_t end = (i + 1 < field_offsets.size())
+                                ? field_offsets[i + 1]
+                                : bytes.size();
+    if (start > bytes.size() || end > bytes.size() || end < start) {
+      throw EncodingError(
+          "decodeHLAfixedRecord: invalid offsets for field " +
+          std::to_string(i));
+    }
+    out.emplace_back(bytes.begin() + start, bytes.begin() + end);
   }
   return out;
 }
