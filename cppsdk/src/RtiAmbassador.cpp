@@ -182,6 +182,13 @@ class RTIambassadorImpl {
 
   void startEventStream();
   void stopEventStream();
+
+  // M17.21 — pop ONE event and dispatch via the bound
+  // FederateAmbassador. Returns true if an event was popped
+  // (regardless of whether the case had a matching slot —
+  // unsupported cases drop silently). Holds event_mu only while
+  // popping; the FederateAmbassador slot runs OUTSIDE the lock.
+  bool dispatchOneEvent();
   std::string url;
   bool connected = false;
 
@@ -2038,153 +2045,10 @@ bool RTIambassador::tickCallback(double approx_min_time,
 
   bool any_fired = false;
 
-  auto drainOne = [&]() -> bool {
-    rti::v1::FederateEvent evt;
-    {
-      std::unique_lock<std::mutex> lk(impl_->event_mu);
-      if (impl_->event_queue.empty()) return false;
-      evt = std::move(impl_->event_queue.front());
-      impl_->event_queue.pop_front();
-    }
-    if (impl_->fed_ambassador == nullptr) {
-      // No ambassador bound — drop. The cppsdk doesn't buffer events
-      // for a late-bound callback target in Cut-1.
-      return true;
-    }
-    switch (evt.event_case()) {
-      case rti::v1::FederateEvent::kDiscover: {
-        const auto& d = evt.discover();
-        impl_->fed_ambassador->discoverObjectInstance(
-            ObjectInstanceHandle(d.object_handle()),
-            ObjectClassHandle(d.object_class_handle()),
-            d.object_name());
-        return true;
-      }
-      case rti::v1::FederateEvent::kReflect: {
-        const auto& r = evt.reflect();
-        AttributeHandleValueMap values;
-        for (const auto& kv : r.attributes()) {
-          VariableLengthData v(kv.second.begin(), kv.second.end());
-          values.emplace(AttributeHandle(kv.first), std::move(v));
-        }
-        std::optional<double> ts =
-            r.has_logical_time() ? std::optional<double>(r.logical_time())
-                                 : std::nullopt;
-        impl_->fed_ambassador->reflectAttributeValues(
-            ObjectInstanceHandle(r.object_handle()), values, ts);
-        return true;
-      }
-      case rti::v1::FederateEvent::kReceive: {
-        const auto& i = evt.receive();
-        ParameterHandleValueMap params;
-        for (const auto& kv : i.parameters()) {
-          VariableLengthData v(kv.second.begin(), kv.second.end());
-          params.emplace(ParameterHandle(kv.first), std::move(v));
-        }
-        std::optional<double> ts =
-            i.has_logical_time() ? std::optional<double>(i.logical_time())
-                                 : std::nullopt;
-        impl_->fed_ambassador->receiveInteraction(
-            InteractionClassHandle(i.interaction_class_handle()), params, ts);
-        return true;
-      }
-      case rti::v1::FederateEvent::kReservationSucceeded:
-        impl_->fed_ambassador->objectInstanceNameReservationSucceeded(
-            evt.reservation_succeeded().object_name());
-        return true;
-      case rti::v1::FederateEvent::kReservationFailed:
-        impl_->fed_ambassador->objectInstanceNameReservationFailed(
-            evt.reservation_failed().object_name());
-        return true;
-      case rti::v1::FederateEvent::kReservationMultiSucceeded: {
-        const auto& m = evt.reservation_multi_succeeded();
-        std::vector<std::string> names(m.object_names().begin(),
-                                       m.object_names().end());
-        impl_->fed_ambassador->multipleObjectInstanceNameReservationSucceeded(
-            names);
-        return true;
-      }
-      case rti::v1::FederateEvent::kReservationMultiFailed: {
-        const auto& m = evt.reservation_multi_failed();
-        std::vector<std::string> req_names(m.requested_names().begin(),
-                                           m.requested_names().end());
-        std::vector<std::string> col_names(m.colliding_names().begin(),
-                                           m.colliding_names().end());
-        impl_->fed_ambassador->multipleObjectInstanceNameReservationFailed(
-            req_names, col_names);
-        return true;
-      }
-      case rti::v1::FederateEvent::kGrant: {
-        const auto& g = evt.grant();
-        impl_->fed_ambassador->timeAdvanceGrant(g.logical_time());
-        return true;
-      }
-      case rti::v1::FederateEvent::kSyncAnnounced: {
-        const auto& a = evt.sync_announced();
-        VariableLengthData tag(a.tag().begin(), a.tag().end());
-        impl_->fed_ambassador->announceSynchronizationPoint(a.label(), tag);
-        return true;
-      }
-      case rti::v1::FederateEvent::kSyncSynchronized:
-        impl_->fed_ambassador->federationSynchronized(
-            evt.sync_synchronized().label());
-        return true;
-      case rti::v1::FederateEvent::kOwnershipAssumption: {
-        const auto& a = evt.ownership_assumption();
-        AttributeHandleSet attrs;
-        for (auto h : a.attribute_handles()) attrs.emplace(h);
-        VariableLengthData tag(a.tag().begin(), a.tag().end());
-        impl_->fed_ambassador->requestAttributeOwnershipAssumption(
-            ObjectInstanceHandle(a.object_handle()),
-            attrs,
-            FederateHandle(a.divesting_federate()),
-            tag);
-        return true;
-      }
-      case rti::v1::FederateEvent::kOwnershipAcquired: {
-        const auto& a = evt.ownership_acquired();
-        AttributeHandleSet attrs;
-        for (auto h : a.attribute_handles()) attrs.emplace(h);
-        impl_->fed_ambassador->attributeOwnershipAcquisitionNotification(
-            ObjectInstanceHandle(a.object_handle()),
-            attrs,
-            FederateHandle(a.owning_federate()));
-        return true;
-      }
-      case rti::v1::FederateEvent::kOwnershipDivestConfirmed: {
-        const auto& a = evt.ownership_divest_confirmed();
-        AttributeHandleSet attrs;
-        for (auto h : a.attribute_handles()) attrs.emplace(h);
-        impl_->fed_ambassador->requestDivestitureConfirmation(
-            ObjectInstanceHandle(a.object_handle()), attrs);
-        return true;
-      }
-      case rti::v1::FederateEvent::kSaveInitiate: {
-        const auto& s = evt.save_initiate();
-        std::optional<double> save_time =
-            s.has_save_time() ? std::optional<double>(s.save_time())
-                              : std::nullopt;
-        impl_->fed_ambassador->initiateFederateSave(s.label(), save_time);
-        return true;
-      }
-      case rti::v1::FederateEvent::kSaveCompleted:
-        impl_->fed_ambassador->federationSaved(evt.save_completed().label());
-        return true;
-      case rti::v1::FederateEvent::kSaveFailed:
-        impl_->fed_ambassador->federationNotSaved(evt.save_failed().label());
-        return true;
-      default:
-        // Cut-1 / Cut-2 ignore events outside the supported slots
-        // (remove/provide/sync/ownership/save/halted). Cut-3 adds
-        // the remaining cases.
-        return true;
-    }
-  };
-
   // Honor the min/max window. Sleep in small increments so a callback
   // arriving early can still fire promptly.
   while (clock::now() < min_deadline) {
-    if (drainOne()) any_fired = true;
+    if (impl_->dispatchOneEvent()) any_fired = true;
     if (clock::now() < min_deadline) {
       std::unique_lock<std::mutex> lk(impl_->event_mu);
       impl_->event_cv.wait_for(lk, milliseconds(5),
@@ -2192,7 +2056,7 @@ bool RTIambassador::tickCallback(double approx_min_time,
     }
   }
   // Drain anything else queued.
-  while (drainOne()) any_fired = true;
+  while (impl_->dispatchOneEvent()) any_fired = true;
   // If max_time > min_time and nothing has fired yet, wait until
   // either an event arrives or the max deadline elapses.
   while (!any_fired && clock::now() < max_deadline) {
@@ -2200,10 +2064,153 @@ bool RTIambassador::tickCallback(double approx_min_time,
     impl_->event_cv.wait_for(lk, milliseconds(5),
                              [&] { return !impl_->event_queue.empty(); });
     lk.unlock();
-    if (drainOne()) any_fired = true;
+    if (impl_->dispatchOneEvent()) any_fired = true;
   }
 
   return any_fired;
+}
+
+// M17.21 — single-event dispatch helper. Shared by tickCallback's
+// drain loop and (M17.22) the strict at-most-one evokeCallback.
+bool RTIambassadorImpl::dispatchOneEvent() {
+  rti::v1::FederateEvent evt;
+  {
+    std::unique_lock<std::mutex> lk(event_mu);
+    if (event_queue.empty()) return false;
+    evt = std::move(event_queue.front());
+    event_queue.pop_front();
+  }
+  if (fed_ambassador == nullptr) {
+    // No ambassador bound — drop. The cppsdk doesn't buffer events
+    // for a late-bound callback target.
+    return true;
+  }
+  switch (evt.event_case()) {
+    case rti::v1::FederateEvent::kDiscover: {
+      const auto& d = evt.discover();
+      fed_ambassador->discoverObjectInstance(
+          ObjectInstanceHandle(d.object_handle()),
+          ObjectClassHandle(d.object_class_handle()),
+          d.object_name());
+      return true;
+    }
+    case rti::v1::FederateEvent::kReflect: {
+      const auto& r = evt.reflect();
+      AttributeHandleValueMap values;
+      for (const auto& kv : r.attributes()) {
+        VariableLengthData v(kv.second.begin(), kv.second.end());
+        values.emplace(AttributeHandle(kv.first), std::move(v));
+      }
+      std::optional<double> ts =
+          r.has_logical_time() ? std::optional<double>(r.logical_time())
+                               : std::nullopt;
+      fed_ambassador->reflectAttributeValues(
+          ObjectInstanceHandle(r.object_handle()), values, ts);
+      return true;
+    }
+    case rti::v1::FederateEvent::kReceive: {
+      const auto& i = evt.receive();
+      ParameterHandleValueMap params;
+      for (const auto& kv : i.parameters()) {
+        VariableLengthData v(kv.second.begin(), kv.second.end());
+        params.emplace(ParameterHandle(kv.first), std::move(v));
+      }
+      std::optional<double> ts =
+          i.has_logical_time() ? std::optional<double>(i.logical_time())
+                               : std::nullopt;
+      fed_ambassador->receiveInteraction(
+          InteractionClassHandle(i.interaction_class_handle()), params, ts);
+      return true;
+    }
+    case rti::v1::FederateEvent::kReservationSucceeded:
+      fed_ambassador->objectInstanceNameReservationSucceeded(
+          evt.reservation_succeeded().object_name());
+      return true;
+    case rti::v1::FederateEvent::kReservationFailed:
+      fed_ambassador->objectInstanceNameReservationFailed(
+          evt.reservation_failed().object_name());
+      return true;
+    case rti::v1::FederateEvent::kReservationMultiSucceeded: {
+      const auto& m = evt.reservation_multi_succeeded();
+      std::vector<std::string> names(m.object_names().begin(),
+                                     m.object_names().end());
+      fed_ambassador->multipleObjectInstanceNameReservationSucceeded(names);
+      return true;
+    }
+    case rti::v1::FederateEvent::kReservationMultiFailed: {
+      const auto& m = evt.reservation_multi_failed();
+      std::vector<std::string> req_names(m.requested_names().begin(),
+                                         m.requested_names().end());
+      std::vector<std::string> col_names(m.colliding_names().begin(),
+                                         m.colliding_names().end());
+      fed_ambassador->multipleObjectInstanceNameReservationFailed(
+          req_names, col_names);
+      return true;
+    }
+    case rti::v1::FederateEvent::kGrant: {
+      const auto& g = evt.grant();
+      fed_ambassador->timeAdvanceGrant(g.logical_time());
+      return true;
+    }
+    case rti::v1::FederateEvent::kSyncAnnounced: {
+      const auto& a = evt.sync_announced();
+      VariableLengthData tag(a.tag().begin(), a.tag().end());
+      fed_ambassador->announceSynchronizationPoint(a.label(), tag);
+      return true;
+    }
+    case rti::v1::FederateEvent::kSyncSynchronized:
+      fed_ambassador->federationSynchronized(
+          evt.sync_synchronized().label());
+      return true;
+    case rti::v1::FederateEvent::kOwnershipAssumption: {
+      const auto& a = evt.ownership_assumption();
+      AttributeHandleSet attrs;
+      for (auto h : a.attribute_handles()) attrs.emplace(h);
+      VariableLengthData tag(a.tag().begin(), a.tag().end());
+      fed_ambassador->requestAttributeOwnershipAssumption(
+          ObjectInstanceHandle(a.object_handle()),
+          attrs,
+          FederateHandle(a.divesting_federate()),
+          tag);
+      return true;
+    }
+    case rti::v1::FederateEvent::kOwnershipAcquired: {
+      const auto& a = evt.ownership_acquired();
+      AttributeHandleSet attrs;
+      for (auto h : a.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->attributeOwnershipAcquisitionNotification(
+          ObjectInstanceHandle(a.object_handle()),
+          attrs,
+          FederateHandle(a.owning_federate()));
+      return true;
+    }
+    case rti::v1::FederateEvent::kOwnershipDivestConfirmed: {
+      const auto& a = evt.ownership_divest_confirmed();
+      AttributeHandleSet attrs;
+      for (auto h : a.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->requestDivestitureConfirmation(
+          ObjectInstanceHandle(a.object_handle()), attrs);
+      return true;
+    }
+    case rti::v1::FederateEvent::kSaveInitiate: {
+      const auto& s = evt.save_initiate();
+      std::optional<double> save_time =
+          s.has_save_time() ? std::optional<double>(s.save_time())
+                            : std::nullopt;
+      fed_ambassador->initiateFederateSave(s.label(), save_time);
+      return true;
+    }
+    case rti::v1::FederateEvent::kSaveCompleted:
+      fed_ambassador->federationSaved(evt.save_completed().label());
+      return true;
+    case rti::v1::FederateEvent::kSaveFailed:
+      fed_ambassador->federationNotSaved(evt.save_failed().label());
+      return true;
+    default:
+      // Unsupported events drop silently. Cut-4+ adds remaining
+      // slots (remove, provide-update, halted, etc.).
+      return true;
+  }
 }
 
 // --- M17.18 §10.4 strict HLA_EVOKED + callback toggle --------------------
