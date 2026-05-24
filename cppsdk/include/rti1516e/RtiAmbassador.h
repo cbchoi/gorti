@@ -297,6 +297,50 @@ class RTIambassador {
   // §8.18 — opt out of asynchronous delivery.
   void disableAsynchronousDelivery();
 
+  // §11 — Management Object Model (MOM) ambassador delegates.
+  //
+  // M17.13 (Cut-3). Read-only introspection of the
+  // HLAfederation + per-federate HLAfederate MOM object instances.
+  // No callbacks: federates poll. Returns typed result structs so
+  // the caller doesn't have to thread proto types through their
+  // code.
+
+  // Per IEEE 1516.1-2010 §10.2 — HLAfederation MOM snapshot.
+  struct FederationAttributes {
+    std::string federation_name;
+    std::vector<FederateHandle> federate_handles;
+    std::vector<std::string> fom_module_names;
+  };
+  FederationAttributes queryFederationAttributes();
+
+  // Per IEEE 1516.1-2010 §10.3 — HLAfederate MOM snapshot. ``found``
+  // is false when the federate is no longer tracked (resigned).
+  struct FederateAttributes {
+    bool found;
+    FederateHandle federate_handle;
+    std::string federate_name;
+    std::string federate_type;
+    bool time_regulating;
+    bool time_constrained;
+    double logical_time;
+    double lookahead;
+    std::uint32_t interactions_sent;
+    std::uint32_t interactions_received;
+    std::uint32_t updates_sent;
+    std::uint32_t reflections_received;
+  };
+  FederateAttributes queryFederateAttributes(FederateHandle federate);
+
+  // One entry in EnumerateMomInstances. ``class_name`` is either
+  // "HLAobjectRoot.HLAmanager.HLAfederation" (singleton, federate=0)
+  // or "HLAobjectRoot.HLAmanager.HLAfederate" (one per joined fed).
+  struct MomInstance {
+    std::string class_name;
+    FederateHandle federate_handle;
+    std::string instance_name;
+  };
+  std::vector<MomInstance> enumerateMomInstances();
+
   // §10.4 — bind a FederateAmbassador for callback delivery. Must
   // be called BEFORE joinFederationExecution; the join triggers the
   // server-streaming Events RPC which feeds the callback queue.

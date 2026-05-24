@@ -38,6 +38,8 @@
 #include "rti/v1/stream.pb.h"
 #include "rti/v1/time.grpc.pb.h"
 #include "rti/v1/time.pb.h"
+#include "rti/v1/mom.grpc.pb.h"
+#include "rti/v1/mom.pb.h"
 #include "rti1516e/FederateAmbassador.h"
 #include "rti/v1/federation.pb.h"
 #include "rti/v1/support.grpc.pb.h"
@@ -146,6 +148,7 @@ class RTIambassadorImpl {
   std::unique_ptr<rti::v1::ObjectService::Stub> object_stub;
   std::unique_ptr<rti::v1::StreamService::Stub> stream_stub;
   std::unique_ptr<rti::v1::TimeService::Stub> time_stub;
+  std::unique_ptr<rti::v1::MomService::Stub> mom_stub;
 
   // --- M17.6 callback state ---
   // Bound FederateAmbassador (nullable). tickCallback dispatches
@@ -247,6 +250,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->object_stub = rti::v1::ObjectService::NewStub(impl_->channel);
   impl_->stream_stub = rti::v1::StreamService::NewStub(impl_->channel);
   impl_->time_stub = rti::v1::TimeService::NewStub(impl_->channel);
+  impl_->mom_stub = rti::v1::MomService::NewStub(impl_->channel);
   impl_->url = url;
   impl_->connected = true;
 }
@@ -259,6 +263,7 @@ void RTIambassador::disconnect() {
   impl_->object_stub.reset();
   impl_->stream_stub.reset();
   impl_->time_stub.reset();
+  impl_->mom_stub.reset();
   impl_->channel.reset();
   impl_->url.clear();
   impl_->connected = false;
@@ -928,6 +933,105 @@ void RTIambassador::disableAsynchronousDelivery() {
   const auto s =
       impl_->time_stub->DisableAsynchronousDelivery(&ctx, req, &resp);
   if (!s.ok()) throwFromStatus(s, "disableAsynchronousDelivery");
+}
+
+// --- M17.13 §11 MOM ambassador delegates ---------------------------------
+//
+// Read-only introspection of the HLAfederation + per-federate
+// HLAfederate MOM objects. The Go server's MomService is itself a
+// snapshot of cut-2 mom.Manager state; the C++ surface returns
+// typed result structs (FederationAttributes / FederateAttributes /
+// MomInstance) so callers don't see the proto types.
+//
+// All three RPCs require the ambassador to be connected; per-
+// federate join is NOT required (a federate-handle-less observer
+// could in principle introspect a federation it isn't joined to,
+// matching the pysdk M27 D.1 behavior).
+
+RTIambassador::FederationAttributes
+RTIambassador::queryFederationAttributes() {
+  impl_->requireConnected();
+  if (impl_->joined_federation.empty()) {
+    throw FederateNotExecutionMember(
+        "queryFederationAttributes: federate not joined to any federation");
+  }
+  rti::v1::QueryFederationAttributesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  grpc::ClientContext ctx;
+  rti::v1::QueryFederationAttributesResponse resp;
+  const auto s = impl_->mom_stub->QueryFederationAttributes(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryFederationAttributes");
+  FederationAttributes out;
+  out.federation_name = resp.federation_name();
+  out.federate_handles.reserve(resp.federate_handles_size());
+  for (auto h : resp.federate_handles()) {
+    out.federate_handles.emplace_back(h);
+  }
+  out.fom_module_names.assign(resp.fom_module_names().begin(),
+                              resp.fom_module_names().end());
+  return out;
+}
+
+RTIambassador::FederateAttributes
+RTIambassador::queryFederateAttributes(FederateHandle federate) {
+  impl_->requireConnected();
+  if (impl_->joined_federation.empty()) {
+    throw FederateNotExecutionMember(
+        "queryFederateAttributes: federate not joined to any federation");
+  }
+  rti::v1::QueryFederateAttributesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(federate.raw());
+  grpc::ClientContext ctx;
+  rti::v1::QueryFederateAttributesResponse resp;
+  const auto s = impl_->mom_stub->QueryFederateAttributes(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryFederateAttributes");
+  FederateAttributes out;
+  out.found = resp.found();
+  out.federate_handle = FederateHandle(resp.federate_handle());
+  out.federate_name = resp.federate_name();
+  out.federate_type = resp.federate_type();
+  out.time_regulating = resp.time_regulating();
+  out.time_constrained = resp.time_constrained();
+  // LogicalTime wrapper — server returns the typed message; we
+  // unwrap to double. Empty message → 0.0.
+  out.logical_time =
+      resp.has_logical_time() ? resp.logical_time().value() : 0.0;
+  out.lookahead =
+      resp.has_lookahead() ? resp.lookahead().value() : 0.0;
+  out.interactions_sent = resp.interactions_sent();
+  out.interactions_received = resp.interactions_received();
+  out.updates_sent = resp.updates_sent();
+  out.reflections_received = resp.reflections_received();
+  return out;
+}
+
+std::vector<RTIambassador::MomInstance>
+RTIambassador::enumerateMomInstances() {
+  impl_->requireConnected();
+  if (impl_->joined_federation.empty()) {
+    throw FederateNotExecutionMember(
+        "enumerateMomInstances: federate not joined to any federation");
+  }
+  rti::v1::EnumerateMomInstancesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  grpc::ClientContext ctx;
+  rti::v1::EnumerateMomInstancesResponse resp;
+  const auto s = impl_->mom_stub->EnumerateMomInstances(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "enumerateMomInstances");
+  std::vector<MomInstance> out;
+  out.reserve(resp.instances_size());
+  for (const auto& inst : resp.instances()) {
+    MomInstance m;
+    m.class_name = inst.class_name();
+    m.federate_handle = FederateHandle(inst.federate_handle());
+    m.instance_name = inst.instance_name();
+    out.push_back(std::move(m));
+  }
+  return out;
 }
 
 // --- M17.4 §5 publish / subscribe declarations -----------------------------

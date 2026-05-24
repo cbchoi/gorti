@@ -202,3 +202,24 @@ set_tests_properties(time_integration PROPERTIES
   LABELS "integration"
   TIMEOUT 90
 )
+
+add_executable(test_mom_integration
+  test_mom_integration.cpp
+)
+target_compile_definitions(test_mom_integration PRIVATE
+  RTID_REPO_ROOT="${CMAKE_SOURCE_DIR}/.."
+  TEST_FOM_PATH="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/test_fom.xml"
+)
+target_include_directories(test_mom_integration PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(test_mom_integration PRIVATE
+  rti1516e
+  GTest::gtest
+  GTest::gtest_main
+)
+add_test(NAME mom_integration COMMAND test_mom_integration)
+set_tests_properties(mom_integration PROPERTIES
+  LABELS "integration"
+  TIMEOUT 60
+)
