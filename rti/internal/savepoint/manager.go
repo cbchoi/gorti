@@ -474,17 +474,26 @@ func (m *Manager) AbortSave(_ context.Context, fed core.FederationName) error {
 }
 
 // AbortRestore aborts an in-progress restore for fed. M24 W3 — IEEE
-// 1516.1-2010 §4.30 abortFederationRestore.
-func (m *Manager) AbortRestore(_ context.Context, fed core.FederationName) error {
+// 1516.1-2010 §4.30 abortFederationRestore. M17.25 (Cut-4) now also
+// fans out federationNotRestored to every federate that received the
+// initiateFederateRestore so they can clean up local state.
+func (m *Manager) AbortRestore(ctx context.Context, fed core.FederationName) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	ar, ok := m.restore[fed]
 	if !ok {
+		m.mu.Unlock()
 		return core.ErrRestoreNotInProgress
 	}
 	label := ar.label
+	recipients := sortedHandles(ar.required)
 	delete(m.restore, fed)
 	m.completedRestore[saveKey{fed, label}] = RestoreFailed
+	m.mu.Unlock()
+
+	for _, dst := range recipients {
+		evt := federationNotRestoredEvent(label)
+		_ = m.opts.Outbox.Send(ctx, fed, dst, evt)
+	}
 	return nil
 }
 
@@ -732,7 +741,7 @@ func (m *Manager) RequestFederationRestore(
 	}
 
 	for _, dst := range recipients {
-		evt := initiateFederateRestoreEvent(label)
+		evt := initiateFederateRestoreEvent(label, dst)
 		_ = m.opts.Outbox.Send(ctx, fed, dst, evt)
 	}
 	return nil

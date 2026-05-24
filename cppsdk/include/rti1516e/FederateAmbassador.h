@@ -132,6 +132,25 @@ class FederateAmbassador {
   // §4.9 — at least one federate failed; the save was aborted.
   // M17.16 (Cut-3).
   virtual void federationNotSaved(const std::string& /*label*/) {}
+
+  // §4.13 — the manager has begun a federation restore. The
+  // federate should reload its state from the named bundle and
+  // call federateRestoreComplete or federateRestoreNotComplete.
+  // ``federate_handle`` is the federate's pre-save handle (may
+  // differ from the current handle across rejoin); zero indicates
+  // no remap. M17.25 (Cut-4).
+  virtual void initiateFederateRestore(
+      const std::string& /*label*/,
+      FederateHandle /*federate_handle*/) {}
+
+  // §4.14 — every federate completed; the federation restore is
+  // finalized. M17.25 (Cut-4).
+  virtual void federationRestored(const std::string& /*label*/) {}
+
+  // §4.14 — at least one federate failed OR an explicit
+  // abortFederationRestore landed; the restore was aborted.
+  // M17.25 (Cut-4).
+  virtual void federationNotRestored(const std::string& /*label*/) {}
 };
 
 }  // namespace rti1516e

@@ -2206,6 +2206,18 @@ bool RTIambassadorImpl::dispatchOneEvent() {
     case rti::v1::FederateEvent::kSaveFailed:
       fed_ambassador->federationNotSaved(evt.save_failed().label());
       return true;
+    case rti::v1::FederateEvent::kRestoreInitiate: {
+      const auto& r = evt.restore_initiate();
+      fed_ambassador->initiateFederateRestore(
+          r.label(), FederateHandle(r.federate_handle()));
+      return true;
+    }
+    case rti::v1::FederateEvent::kRestoreCompleted:
+      fed_ambassador->federationRestored(evt.restore_completed().label());
+      return true;
+    case rti::v1::FederateEvent::kRestoreFailed:
+      fed_ambassador->federationNotRestored(evt.restore_failed().label());
+      return true;
     default:
       // Unsupported events drop silently. Cut-4+ adds remaining
       // slots (remove, provide-update, halted, etc.).

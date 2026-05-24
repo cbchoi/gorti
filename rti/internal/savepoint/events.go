@@ -167,16 +167,28 @@ func (o *federationNotSavedOutbound) Seq() uint64 {
 func (o *federationNotSavedOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
 func (o *federationNotSavedOutbound) Label() string               { return o.label }
 
-// initiateFederateRestoreOutbound is the placeholder for
-// initiateFederateRestore (§4.10). Cut-2 ships save callback variants
-// only; restore proto extension is a follow-up.
+// initiateFederateRestoreOutbound — initiateFederateRestore (§4.13).
+// M17.25 wires the wire-format payload that the M17 Cut-3 placeholder
+// left empty.
 type initiateFederateRestoreOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
 }
 
-func initiateFederateRestoreEvent(label string) *initiateFederateRestoreOutbound {
-	return &initiateFederateRestoreOutbound{pb: &rtiv1.FederateEvent{}, label: label}
+func initiateFederateRestoreEvent(
+	label string, federateHandle core.FederateHandle,
+) *initiateFederateRestoreOutbound {
+	return &initiateFederateRestoreOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_RestoreInitiate{
+				RestoreInitiate: &rtiv1.InitiateFederateRestore{
+					Label:          label,
+					FederateHandle: uint64(federateHandle),
+				},
+			},
+		},
+		label: label,
+	}
 }
 
 func (o *initiateFederateRestoreOutbound) Seq() uint64 {
@@ -185,17 +197,24 @@ func (o *initiateFederateRestoreOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
-func (o *initiateFederateRestoreOutbound) Label() string { return o.label }
+func (o *initiateFederateRestoreOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *initiateFederateRestoreOutbound) Label() string               { return o.label }
 
-// federationRestoredOutbound is the placeholder for federationRestored
-// (§4.12). See initiateFederateRestoreOutbound deferral note.
+// federationRestoredOutbound — federationRestored (§4.14).
 type federationRestoredOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
 }
 
 func federationRestoredEvent(label string) *federationRestoredOutbound {
-	return &federationRestoredOutbound{pb: &rtiv1.FederateEvent{}, label: label}
+	return &federationRestoredOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_RestoreCompleted{
+				RestoreCompleted: &rtiv1.FederationRestored{Label: label},
+			},
+		},
+		label: label,
+	}
 }
 
 func (o *federationRestoredOutbound) Seq() uint64 {
@@ -204,4 +223,32 @@ func (o *federationRestoredOutbound) Seq() uint64 {
 	}
 	return o.pb.Seq
 }
-func (o *federationRestoredOutbound) Label() string { return o.label }
+func (o *federationRestoredOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *federationRestoredOutbound) Label() string               { return o.label }
+
+// federationNotRestoredOutbound — federationNotRestored (§4.14 failure
+// half). M17.25 (Cut-4).
+type federationNotRestoredOutbound struct {
+	pb    *rtiv1.FederateEvent
+	label string
+}
+
+func federationNotRestoredEvent(label string) *federationNotRestoredOutbound {
+	return &federationNotRestoredOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_RestoreFailed{
+				RestoreFailed: &rtiv1.FederationNotRestored{Label: label},
+			},
+		},
+		label: label,
+	}
+}
+
+func (o *federationNotRestoredOutbound) Seq() uint64 {
+	if o == nil || o.pb == nil {
+		return 0
+	}
+	return o.pb.Seq
+}
+func (o *federationNotRestoredOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *federationNotRestoredOutbound) Label() string               { return o.label }

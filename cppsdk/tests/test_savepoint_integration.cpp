@@ -31,6 +31,10 @@ class SaveRecordingFed : public rti1516e::FederateAmbassador {
   std::vector<std::pair<std::string, std::optional<double>>> initiated;
   std::vector<std::string> saved;
   std::vector<std::string> not_saved;
+  // M17.25 — restore callbacks.
+  std::vector<std::pair<std::string, rti1516e::FederateHandle>> restore_initiated;
+  std::vector<std::string> restored;
+  std::vector<std::string> not_restored;
 
   void initiateFederateSave(
       const std::string& label,
@@ -42,6 +46,17 @@ class SaveRecordingFed : public rti1516e::FederateAmbassador {
   }
   void federationNotSaved(const std::string& label) override {
     not_saved.push_back(label);
+  }
+  void initiateFederateRestore(
+      const std::string& label,
+      rti1516e::FederateHandle fh) override {
+    restore_initiated.emplace_back(label, fh);
+  }
+  void federationRestored(const std::string& label) override {
+    restored.push_back(label);
+  }
+  void federationNotRestored(const std::string& label) override {
+    not_restored.push_back(label);
   }
 };
 
@@ -139,15 +154,48 @@ TEST_F(SavepointIntegration, QuerySaveStateTransitionsToSaved) {
 
 // --- Restore RPC surface (no callbacks emitted server-side) -----------------
 
-TEST_F(SavepointIntegration, RestoreRequestAcceptedForExistingLabel) {
-  // First land a successful save, then drive the restore RPC.
+TEST_F(SavepointIntegration, RestoreRequestFiresInitiate) {
+  // First land a successful save.
   amb.requestFederationSave("restorable");
   pumpUntil([&] { return !fed.initiated.empty(); });
   amb.federateSaveComplete();
   pumpUntil([&] { return !fed.saved.empty(); });
-  // Restore should succeed; callbacks aren't wired yet, only the
-  // state machine transitions.
-  EXPECT_NO_THROW(amb.requestFederationRestore("restorable"));
+
+  // M17.25 — restore now fires initiateFederateRestore.
+  amb.requestFederationRestore("restorable");
+  pumpUntil([&] { return !fed.restore_initiated.empty(); });
+  ASSERT_EQ(fed.restore_initiated.size(), 1u);
+  EXPECT_EQ(fed.restore_initiated[0].first, "restorable");
+}
+
+TEST_F(SavepointIntegration, RestoreCompleteFiresFederationRestored) {
+  amb.requestFederationSave("restore-complete");
+  pumpUntil([&] { return !fed.initiated.empty(); });
+  amb.federateSaveComplete();
+  pumpUntil([&] { return !fed.saved.empty(); });
+
+  amb.requestFederationRestore("restore-complete");
+  pumpUntil([&] { return !fed.restore_initiated.empty(); });
+  amb.federateRestoreComplete();
+  pumpUntil([&] { return !fed.restored.empty(); });
+  ASSERT_EQ(fed.restored.size(), 1u);
+  EXPECT_EQ(fed.restored[0], "restore-complete");
+  EXPECT_TRUE(fed.not_restored.empty());
+}
+
+TEST_F(SavepointIntegration, AbortRestoreFiresFederationNotRestored) {
+  amb.requestFederationSave("abort-restore");
+  pumpUntil([&] { return !fed.initiated.empty(); });
+  amb.federateSaveComplete();
+  pumpUntil([&] { return !fed.saved.empty(); });
+
+  amb.requestFederationRestore("abort-restore");
+  pumpUntil([&] { return !fed.restore_initiated.empty(); });
+  amb.abortFederationRestore();
+  pumpUntil([&] { return !fed.not_restored.empty(); });
+  ASSERT_EQ(fed.not_restored.size(), 1u);
+  EXPECT_EQ(fed.not_restored[0], "abort-restore");
+  EXPECT_TRUE(fed.restored.empty());
 }
 
 TEST_F(SavepointIntegration, QueryRestoreStateIdleForUnknown) {

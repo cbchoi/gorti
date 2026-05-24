@@ -42,11 +42,14 @@ message FederateEvent {
     RequestAttributeOwnershipAssumption ownership_assumption = 30;
     AttributeOwnershipAcquisitionNotification ownership_acquired = 31;
     RequestDivestitureConfirmation ownership_divest_confirmed = 32;
-    // Save (§4.8 / §4.9). Restore variants are deferred — see
-    // proto comment on InitiateFederateSave below.
+    // Save (§4.8 / §4.9).
     InitiateFederateSave save_initiate = 40;
     FederationSaved save_completed = 41;
     FederationNotSaved save_failed = 42;
+    // Restore (§4.13 / §4.14) — M17.25 (Cut-4).
+    InitiateFederateRestore restore_initiate = 43;
+    FederationRestored restore_completed = 44;
+    FederationNotRestored restore_failed = 45;
     // Object instance name reservation (§6.1 / §6.5 — M26 Phase F).
     ObjectInstanceNameReservationSucceeded reservation_succeeded = 50;
     ObjectInstanceNameReservationFailed reservation_failed = 51;
@@ -173,6 +176,32 @@ message FederationSaved {
 // FederationNotSaved — IEEE 1516.1-2010 §4.9 federationNotSaved. Fires
 // on every federate when the save aborts.
 message FederationNotSaved {
+  string label = 1;
+}
+
+// InitiateFederateRestore — IEEE 1516.1-2010 §4.13 initiateFederateRestore.
+// Fires on every joined federate when a federation restore begins. The
+// federate is expected to load its state from the named bundle and call
+// federateRestoreComplete / federateRestoreNotComplete. M17.25 (Cut-4).
+message InitiateFederateRestore {
+  string label = 1;
+  // The federate handle this federate had at save time. Federates
+  // that compute identity from their own handle use this to map
+  // back to the pre-save value; absent / zero indicates no remap.
+  uint64 federate_handle = 2;
+}
+
+// FederationRestored — IEEE 1516.1-2010 §4.14 federationRestored. Fires
+// on every federate when all restore-complete responses are in.
+// M17.25 (Cut-4).
+message FederationRestored {
+  string label = 1;
+}
+
+// FederationNotRestored — IEEE 1516.1-2010 §4.14 federationNotRestored.
+// Fires when the restore aborts (at least one federate reported
+// not-complete or the bundle couldn't be loaded). M17.25 (Cut-4).
+message FederationNotRestored {
   string label = 1;
 }
 
