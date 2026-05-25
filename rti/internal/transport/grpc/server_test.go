@@ -68,6 +68,15 @@ func (stubObjRegistryForServerTest) ChangeInteractionTransportType(_ context.Con
 func (stubObjRegistryForServerTest) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
+func (stubObjRegistryForServerTest) UpdateAttributesRetractable(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ map[core.AttributeHandle][]byte, _ *core.LogicalTime, _ uint64) error {
+	return errors.New("stub")
+}
+func (stubObjRegistryForServerTest) SendInteractionRetractable(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime, _ uint64) error {
+	return errors.New("stub")
+}
+func (stubObjRegistryForServerTest) RetractMessage(_ core.FederationName, _ core.FederateHandle, _ uint64) int {
+	return 0
+}
 
 type stubOutboxForServerTest struct{}
 

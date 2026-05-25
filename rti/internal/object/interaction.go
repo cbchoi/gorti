@@ -28,6 +28,7 @@ func (r *Registry) sendInteraction(
 	cls core.InteractionClassHandle,
 	params map[core.ParameterHandle][]byte,
 	ts *core.LogicalTime,
+	retractionHandle uint64,
 ) error {
 	if producer == core.InvalidFederateHandle {
 		return core.ErrFederateNotJoined
@@ -46,7 +47,7 @@ func (r *Registry) sendInteraction(
 	}
 
 	deliveryTs := r.deliveryTimestampForInteraction(fed, cls, ts)
-	r.fanoutReceive(ctx, fed, st, producer, cls, params, deliveryTs)
+	r.fanoutReceive(ctx, fed, st, producer, cls, params, deliveryTs, retractionHandle)
 	if r.opts.OnInteractionSent != nil {
 		r.opts.OnInteractionSent(fed, producer)
 	}
@@ -87,7 +88,7 @@ func (r *Registry) producerPublishesInteraction(ctx context.Context, fed core.Fe
 	return false
 }
 
-func (r *Registry) fanoutReceive(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, cls core.InteractionClassHandle, params map[core.ParameterHandle][]byte, ts *core.LogicalTime) {
+func (r *Registry) fanoutReceive(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, cls core.InteractionClassHandle, params map[core.ParameterHandle][]byte, ts *core.LogicalTime, retractionHandle uint64) {
 	subs := r.opts.Declarations.InteractionSubscribersFor(ctx, fed, cls)
 	// Hoist the inner proto and the param-map defensive copy out of
 	// the per-subscriber loop. The producer's input map is copied once
@@ -133,6 +134,10 @@ func (r *Registry) fanoutReceive(ctx context.Context, fed core.FederationName, s
 		if ts != nil && r.opts.TSOGate != nil {
 			if r.opts.TSOGate.ShouldDeliverNow(fed, sub, *ts) {
 				_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+			} else if retractionHandle != 0 {
+				_ = r.opts.TSOGate.BufferTSOWithRetraction(
+					ctx, fed, sub, *ts, evt, producer, retractionHandle,
+				)
 			} else {
 				_ = r.opts.TSOGate.BufferTSO(ctx, fed, sub, *ts, evt)
 			}

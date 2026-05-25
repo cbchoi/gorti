@@ -107,6 +107,43 @@ type ObjectRegistry interface {
 		tt TransportType,
 	) error
 
+	// --- M20.2 Message retraction (§8.21) ---------------------------------
+	//
+	// Retractable variants of UpdateAttributes / SendInteraction carry a
+	// federate-allocated MessageRetractionHandle. When the produced TSO
+	// event is buffered (recipient not yet at the event's timestamp),
+	// the handle is stored alongside the buffered event so a future
+	// RetractMessage call can find and remove it. RO messages and
+	// already-delivered TSO messages are not retractable — the handle
+	// is silently dropped in those paths.
+	UpdateAttributesRetractable(
+		ctx context.Context,
+		fed FederationName,
+		producer FederateHandle,
+		obj ObjectHandle,
+		attrs map[AttributeHandle][]byte,
+		ts *LogicalTime,
+		retractionHandle uint64,
+	) error
+	SendInteractionRetractable(
+		ctx context.Context,
+		fed FederationName,
+		producer FederateHandle,
+		cls InteractionClassHandle,
+		params map[ParameterHandle][]byte,
+		ts *LogicalTime,
+		retractionHandle uint64,
+	) error
+	// RetractMessage walks every recipient's TSO buffer and removes
+	// any entry matching (sender, retractionHandle). Returns the count
+	// removed (zero means the message was either RO, already delivered,
+	// or never tracked because retractionHandle was zero at send time).
+	RetractMessage(
+		fed FederationName,
+		sender FederateHandle,
+		retractionHandle uint64,
+	) int
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns aggregate object-instance counts for the

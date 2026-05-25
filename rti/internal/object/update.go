@@ -75,6 +75,7 @@ func (r *Registry) updateAttributes(
 	obj core.ObjectHandle,
 	attrs map[core.AttributeHandle][]byte,
 	ts *core.LogicalTime,
+	retractionHandle uint64,
 ) error {
 	if producer == core.InvalidFederateHandle {
 		return core.ErrFederateNotJoined
@@ -101,7 +102,7 @@ func (r *Registry) updateAttributes(
 	}
 
 	deliveryTs := r.deliveryTimestampForAttributes(fed, inst.cls, updateAttrs, ts)
-	r.fanoutReflect(ctx, fed, st, producer, inst, attrs, updateAttrs, deliveryTs)
+	r.fanoutReflect(ctx, fed, st, producer, inst, attrs, updateAttrs, deliveryTs, retractionHandle)
 	if r.opts.OnUpdateSent != nil {
 		r.opts.OnUpdateSent(fed, producer)
 	}
@@ -196,7 +197,7 @@ func sortedAttrHandles(attrs map[core.AttributeHandle][]byte) []core.AttributeHa
 // union (over updateAttrs) of DDM.SubscribersForUpdate. When no
 // associations exist for inst the registry takes the cut-1 path
 // unchanged — the FR-DDM-6 zero-cost contract.
-func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, inst *objectInstance, attrs map[core.AttributeHandle][]byte, updateAttrs []core.AttributeHandle, ts *core.LogicalTime) {
+func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, inst *objectInstance, attrs map[core.AttributeHandle][]byte, updateAttrs []core.AttributeHandle, ts *core.LogicalTime, retractionHandle uint64) {
 	subs := r.subscribersForReflect(ctx, fed, inst, updateAttrs)
 	// Hoist: see fanoutReceive for the rationale (single defensive
 	// copy + shared inner proto + batched seq allocation).
@@ -239,6 +240,10 @@ func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, s
 		if ts != nil && r.opts.TSOGate != nil {
 			if r.opts.TSOGate.ShouldDeliverNow(fed, sub, *ts) {
 				_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+			} else if retractionHandle != 0 {
+				_ = r.opts.TSOGate.BufferTSOWithRetraction(
+					ctx, fed, sub, *ts, evt, producer, retractionHandle,
+				)
 			} else {
 				_ = r.opts.TSOGate.BufferTSO(ctx, fed, sub, *ts, evt)
 			}

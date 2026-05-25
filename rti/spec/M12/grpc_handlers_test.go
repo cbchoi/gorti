@@ -124,6 +124,15 @@ func (stubObjRegistry) ChangeInteractionTransportType(_ context.Context, _ core.
 func (stubObjRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
+func (stubObjRegistry) UpdateAttributesRetractable(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ map[core.AttributeHandle][]byte, _ *core.LogicalTime, _ uint64) error {
+	return errors.New("stub")
+}
+func (stubObjRegistry) SendInteractionRetractable(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime, _ uint64) error {
+	return errors.New("stub")
+}
+func (stubObjRegistry) RetractMessage(_ core.FederationName, _ core.FederateHandle, _ uint64) int {
+	return 0
+}
 
 // memStore is an in-memory savepoint.Storage backend.
 type memStoreKey struct {

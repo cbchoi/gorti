@@ -52,6 +52,23 @@ func (s *objectService) UpdateAttributeValues(ctx context.Context, req *rtiv1.Up
 	for h, v := range req.GetAttributes() {
 		attrs[core.AttributeHandle(h)] = v
 	}
+	// M20.2 — if the client supplied a non-zero retraction handle, take
+	// the Retractable path so the TSO buffer carries the handle.
+	rh := req.GetMessageRetractionHandle()
+	if rh != 0 {
+		if err := s.obj.UpdateAttributesRetractable(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			core.ObjectHandle(req.GetObjectHandle()),
+			attrs,
+			toLogicalTime(req.LogicalTime),
+			rh,
+		); err != nil {
+			return nil, errToStatus(err)
+		}
+		return &rtiv1.Empty{}, nil
+	}
 	if err := s.obj.UpdateAttributes(
 		ctx,
 		core.FederationName(req.GetFederationName()),
@@ -74,6 +91,21 @@ func (s *objectService) SendInteraction(ctx context.Context, req *rtiv1.SendInte
 	for h, v := range req.GetParameters() {
 		params[core.ParameterHandle(h)] = v
 	}
+	rh := req.GetMessageRetractionHandle()
+	if rh != 0 {
+		if err := s.obj.SendInteractionRetractable(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			core.InteractionClassHandle(req.GetInteractionClassHandle()),
+			params,
+			toLogicalTime(req.LogicalTime),
+			rh,
+		); err != nil {
+			return nil, errToStatus(err)
+		}
+		return &rtiv1.Empty{}, nil
+	}
 	if err := s.obj.SendInteraction(
 		ctx,
 		core.FederationName(req.GetFederationName()),
@@ -84,6 +116,22 @@ func (s *objectService) SendInteraction(ctx context.Context, req *rtiv1.SendInte
 	); err != nil {
 		return nil, errToStatus(err)
 	}
+	return &rtiv1.Empty{}, nil
+}
+
+// Retract — IEEE 1516.1-2010 §8.21 (M20.2). Removes the buffered TSO
+// event identified by (federate, message_retraction_handle). Returns
+// OK whether or not a buffered event matched: the message may have
+// already been delivered or never sent with a tracking handle.
+func (s *objectService) Retract(ctx context.Context, req *rtiv1.RetractRequest) (*rtiv1.Empty, error) {
+	if !validWireVersion(req.GetWireVersion()) {
+		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
+	}
+	_ = s.obj.RetractMessage(
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+		req.GetMessageRetractionHandle(),
+	)
 	return &rtiv1.Empty{}, nil
 }
 

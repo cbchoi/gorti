@@ -2002,6 +2002,21 @@ void RTIambassador::sendInteraction(
   if (!s.ok()) throwFromStatus(s, "sendInteraction");
 }
 
+// --- M20.2 §8.21 retract ---------------------------------------------------
+
+void RTIambassador::retract(MessageRetractionHandle handle) {
+  requireJoined(*impl_, "retract");
+  rti::v1::RetractRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_message_retraction_handle(handle);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->Retract(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "retract");
+}
+
 // --- M17.6 §10.4 tickCallback + FederateAmbassador ------------------------
 
 void RTIambassador::setFederateAmbassador(FederateAmbassador* fed) {

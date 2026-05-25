@@ -104,6 +104,13 @@ using AttributeRegionMap = std::map<AttributeHandle, RegionHandleSet>;
 // the SDK passes them through unchanged.
 using VariableLengthData = std::vector<std::uint8_t>;
 
+// IEEE 1516.1-2010 §8.21 (M20.2) — federate-allocated handle for
+// message retraction. Gorti convention: a per-federate monotonic
+// counter; zero means "no retraction tracking". Federates that need
+// to retract a TSO message pass a non-zero handle in the original
+// send and the same handle to retract().
+using MessageRetractionHandle = std::uint64_t;
+
 // IEEE 1516.1 §10.5 value-map types. Order: AttributeHandle ->
 // payload bytes (or ParameterHandle -> bytes for interactions).
 using AttributeHandleValueMap = std::map<AttributeHandle, VariableLengthData>;

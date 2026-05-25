@@ -239,6 +239,15 @@ class RTIambassador {
   void sendInteraction(InteractionClassHandle cls,
                        const ParameterHandleValueMap& parameters);
 
+  // §8.21 (M20.2) — retract a previously-sent TSO message that has
+  // not yet been delivered. ``handle`` is the federate-allocated
+  // MessageRetractionHandle passed in the original send. Returns OK
+  // whether or not a buffered message matched (the message may have
+  // already been delivered). The Cut-1/2/3 C++ ambassador only ships
+  // RO send/update so this surface is forward-looking — federates
+  // driving TSO over the wire directly can already exercise it.
+  void retract(MessageRetractionHandle handle);
+
   // §8 — Time Management.
   //
   // M17.11 (Cut-2). The federate opts into time policies (regulating,

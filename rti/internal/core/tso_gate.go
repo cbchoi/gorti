@@ -37,4 +37,32 @@ type TSODeliveryGate interface {
 	// Buffer is per-federate, FIFO. M22 ships unbounded; bound is an
 	// M23 follow-up.
 	BufferTSO(ctx context.Context, fed FederationName, h FederateHandle, ts LogicalTime, evt OutboundEvent) error
+
+	// BufferTSOWithRetraction is BufferTSO + retraction-handle
+	// tracking (M20.2 §8.21). ``sender`` and ``retractionHandle``
+	// identify the originating send; a future Retract RPC walks
+	// every recipient's buffer looking for (sender, handle) and
+	// removes matching entries. Zero retractionHandle is treated
+	// as "no retraction wanted" — the event still buffers but
+	// won't be findable. Idempotent over the base BufferTSO when
+	// retractionHandle == 0.
+	BufferTSOWithRetraction(
+		ctx context.Context,
+		fed FederationName,
+		h FederateHandle,
+		ts LogicalTime,
+		evt OutboundEvent,
+		sender FederateHandle,
+		retractionHandle uint64,
+	) error
+
+	// RetractMessage removes every buffered TSO event matching
+	// (fed, sender, retractionHandle). Returns the count of events
+	// removed across all recipient buffers (zero when no buffered
+	// event matches — the message may have already been delivered).
+	RetractMessage(
+		fed FederationName,
+		sender FederateHandle,
+		retractionHandle uint64,
+	) int
 }

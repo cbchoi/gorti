@@ -25,6 +25,25 @@ service ObjectService {
   rpc ReserveObjectInstanceName(ReserveObjectInstanceNameRequest) returns (Empty);
   rpc ReleaseObjectInstanceName(ReleaseObjectInstanceNameRequest) returns (Empty);
   rpc ReserveMultipleObjectInstanceNames(ReserveMultipleObjectInstanceNamesRequest) returns (Empty);
+
+  // §8.21 (M20.2) — retract a previously-sent TSO message that
+  // has not yet been delivered. The federate identifies the
+  // message by the MessageRetractionHandle it passed in the
+  // original SendInteraction / UpdateAttributeValues call.
+  // Returns NotFound if no buffered message matches.
+  rpc Retract(RetractRequest) returns (Empty);
+}
+
+// §8.21 (M20.2) — Retract identifies the message by the
+// federate-allocated handle passed in the original send. The
+// server looks up (federation, federate, handle) in its per-
+// federate retraction map and removes the corresponding event
+// from the time manager's TSO buffer.
+message RetractRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 message_retraction_handle = 4;
 }
 
 message RegisterObjectRequest {
@@ -51,6 +70,14 @@ message UpdateAttributeValuesRequest {
   map<uint64, bytes> attributes = 5;
   // Optional. If absent, message is RO; if present, TSO with this timestamp.
   optional double logical_time = 6;
+  // §8.21 (M20.2) — federate-allocated MessageRetractionHandle.
+  // Gorti convention: federate uses a per-federate monotonic
+  // counter; the server stores the (fed, handle) tuple alongside
+  // the buffered TSO event so a future Retract RPC can pull it
+  // out of the queue. Ignored on RO messages and on TSO messages
+  // delivered immediately (no buffering happens). Zero (default)
+  // = "no handle, can't retract".
+  uint64 message_retraction_handle = 7;
 }
 
 message SendInteractionRequest {
@@ -62,6 +89,8 @@ message SendInteractionRequest {
   map<uint64, bytes> parameters = 5;
   // Optional. If absent, RO; if present, TSO with this timestamp.
   optional double logical_time = 6;
+  // §8.21 (M20.2) — see UpdateAttributeValuesRequest.
+  uint64 message_retraction_handle = 7;
 }
 
 // DeleteObjectInstance — IEEE 1516.1-2010 §6.16 (M23).

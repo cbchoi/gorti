@@ -140,6 +140,15 @@ func (stubObjectRegistry) ChangeInteractionTransportType(_ context.Context, _ co
 func (stubObjectRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
+func (stubObjectRegistry) UpdateAttributesRetractable(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.ObjectHandle, _ map[core.AttributeHandle][]byte, _ *core.LogicalTime, _ uint64) error {
+	return nil
+}
+func (stubObjectRegistry) SendInteractionRetractable(_ context.Context, _ core.FederationName, _ core.FederateHandle, _ core.InteractionClassHandle, _ map[core.ParameterHandle][]byte, _ *core.LogicalTime, _ uint64) error {
+	return nil
+}
+func (stubObjectRegistry) RetractMessage(_ core.FederationName, _ core.FederateHandle, _ uint64) int {
+	return 0
+}
 
 // TestSpec_M2_GRPC_Register_AttachesAllServices is the integration check
 // that the Server's Register method wires up all four service handlers

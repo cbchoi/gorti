@@ -25,6 +25,12 @@ import (
 type bufferedTSOEvent struct {
 	timestamp core.LogicalTime
 	event     core.OutboundEvent
+	// M20.2 — retraction tracking. ``sender`` + ``retractionHandle``
+	// identify the originating send so RetractMessage can find and
+	// drop this entry. Zero retractionHandle means "no retraction
+	// available" (caller didn't supply a handle).
+	sender           core.FederateHandle
+	retractionHandle uint64
 }
 
 // ShouldDeliverNow implements core.TSODeliveryGate. Returns true when
@@ -85,6 +91,68 @@ func (m *Manager) BufferTSO(_ context.Context, fed core.FederationName, h core.F
 	ns := ext.getOrCreateLocked(fed, h)
 	ns.tsoBuffer = append(ns.tsoBuffer, bufferedTSOEvent{timestamp: ts, event: evt})
 	return nil
+}
+
+// BufferTSOWithRetraction is BufferTSO + retraction-handle tracking.
+// M20.2 — see core.TSODeliveryGate interface comment.
+func (m *Manager) BufferTSOWithRetraction(
+	_ context.Context,
+	fed core.FederationName,
+	h core.FederateHandle,
+	ts core.LogicalTime,
+	evt core.OutboundEvent,
+	sender core.FederateHandle,
+	retractionHandle uint64,
+) error {
+	ext := extOf(m)
+	ext.mu.Lock()
+	defer ext.mu.Unlock()
+	ns := ext.getOrCreateLocked(fed, h)
+	ns.tsoBuffer = append(ns.tsoBuffer, bufferedTSOEvent{
+		timestamp:        ts,
+		event:            evt,
+		sender:           sender,
+		retractionHandle: retractionHandle,
+	})
+	return nil
+}
+
+// RetractMessage walks every recipient federate's buffer in fed and
+// removes any bufferedTSOEvent matching (sender, retractionHandle).
+// Returns the count removed. M20.2 (IEEE 1516.1 §8.21).
+//
+// Zero retractionHandle never matches — the caller didn't supply a
+// retraction handle on the original send.
+func (m *Manager) RetractMessage(
+	fed core.FederationName,
+	sender core.FederateHandle,
+	retractionHandle uint64,
+) int {
+	if retractionHandle == 0 {
+		return 0
+	}
+	ext := extOf(m)
+	ext.mu.Lock()
+	defer ext.mu.Unlock()
+	removed := 0
+	for key, ns := range ext.states {
+		if key.fed != fed {
+			continue
+		}
+		filtered := ns.tsoBuffer[:0]
+		for _, b := range ns.tsoBuffer {
+			if b.sender == sender && b.retractionHandle == retractionHandle {
+				removed++
+				continue
+			}
+			filtered = append(filtered, b)
+		}
+		// Same backing-array trick as releaseBufferedTSO: keep the
+		// filtered slice but allocate a fresh array so we don't pin
+		// the old capacity.
+		ns.tsoBuffer = append([]bufferedTSOEvent(nil), filtered...)
+	}
+	return removed
 }
 
 // releaseBufferedTSO drains any buffered TSO events with timestamp <= t

@@ -132,6 +132,15 @@ func (s *stubObjects) ChangeInteractionTransportType(_ context.Context, _ core.F
 func (s *stubObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
+func (s *stubObjects) UpdateAttributesRetractable(ctx context.Context, fed core.FederationName, producer core.FederateHandle, obj core.ObjectHandle, attrs map[core.AttributeHandle][]byte, ts *core.LogicalTime, _ uint64) error {
+	return s.UpdateAttributes(ctx, fed, producer, obj, attrs, ts)
+}
+func (s *stubObjects) SendInteractionRetractable(ctx context.Context, fed core.FederationName, producer core.FederateHandle, cls core.InteractionClassHandle, params map[core.ParameterHandle][]byte, ts *core.LogicalTime, _ uint64) error {
+	return s.SendInteraction(ctx, fed, producer, cls, params, ts)
+}
+func (s *stubObjects) RetractMessage(_ core.FederationName, _ core.FederateHandle, _ uint64) int {
+	return 0
+}
 
 // buildProtoSourceLog appends one or more *rtiv1.Event records
 // (production-shape) into a fresh writer and returns the bytes. Used to
@@ -862,6 +871,15 @@ func (e *errorObjects) ChangeInteractionTransportType(_ context.Context, _ core.
 }
 func (e *errorObjects) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
+}
+func (e *errorObjects) UpdateAttributesRetractable(ctx context.Context, fed core.FederationName, producer core.FederateHandle, obj core.ObjectHandle, attrs map[core.AttributeHandle][]byte, ts *core.LogicalTime, _ uint64) error {
+	return e.UpdateAttributes(ctx, fed, producer, obj, attrs, ts)
+}
+func (e *errorObjects) SendInteractionRetractable(ctx context.Context, fed core.FederationName, producer core.FederateHandle, cls core.InteractionClassHandle, params map[core.ParameterHandle][]byte, ts *core.LogicalTime, _ uint64) error {
+	return e.SendInteraction(ctx, fed, producer, cls, params, ts)
+}
+func (e *errorObjects) RetractMessage(_ core.FederationName, _ core.FederateHandle, _ uint64) int {
+	return 0
 }
 
 // TestReplayer_Replay_PropagatesSourceReadError: an I/O failure on

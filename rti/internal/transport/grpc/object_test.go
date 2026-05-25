@@ -91,6 +91,15 @@ func (s *stubObjectRegistry) ChangeInteractionTransportType(_ context.Context, _
 func (s *stubObjectRegistry) Snapshot(_ core.FederationName) core.ObjectSnapshot {
 	return core.ObjectSnapshot{}
 }
+func (s *stubObjectRegistry) UpdateAttributesRetractable(ctx context.Context, fed core.FederationName, producer core.FederateHandle, obj core.ObjectHandle, attrs map[core.AttributeHandle][]byte, ts *core.LogicalTime, _ uint64) error {
+	return s.UpdateAttributes(ctx, fed, producer, obj, attrs, ts)
+}
+func (s *stubObjectRegistry) SendInteractionRetractable(ctx context.Context, fed core.FederationName, producer core.FederateHandle, cls core.InteractionClassHandle, params map[core.ParameterHandle][]byte, ts *core.LogicalTime, _ uint64) error {
+	return s.SendInteraction(ctx, fed, producer, cls, params, ts)
+}
+func (s *stubObjectRegistry) RetractMessage(_ core.FederationName, _ core.FederateHandle, _ uint64) int {
+	return 0
+}
 
 // ----------------------------------------------------------------------------
 // RegisterObjectInstance

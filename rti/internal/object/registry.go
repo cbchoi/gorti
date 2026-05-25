@@ -428,7 +428,20 @@ func (r *Registry) UpdateAttributes(
 	attrs map[core.AttributeHandle][]byte,
 	ts *core.LogicalTime,
 ) error {
-	return r.updateAttributes(ctx, fed, producer, obj, attrs, ts)
+	return r.updateAttributes(ctx, fed, producer, obj, attrs, ts, 0)
+}
+
+// UpdateAttributesRetractable — M20.2. See core.ObjectRegistry doc.
+func (r *Registry) UpdateAttributesRetractable(
+	ctx context.Context,
+	fed core.FederationName,
+	producer core.FederateHandle,
+	obj core.ObjectHandle,
+	attrs map[core.AttributeHandle][]byte,
+	ts *core.LogicalTime,
+	retractionHandle uint64,
+) error {
+	return r.updateAttributes(ctx, fed, producer, obj, attrs, ts, retractionHandle)
 }
 
 // SendInteraction implements core.ObjectRegistry. Implemented in interaction.go.
@@ -440,7 +453,33 @@ func (r *Registry) SendInteraction(
 	params map[core.ParameterHandle][]byte,
 	ts *core.LogicalTime,
 ) error {
-	return r.sendInteraction(ctx, fed, producer, cls, params, ts)
+	return r.sendInteraction(ctx, fed, producer, cls, params, ts, 0)
+}
+
+// SendInteractionRetractable — M20.2. See core.ObjectRegistry doc.
+func (r *Registry) SendInteractionRetractable(
+	ctx context.Context,
+	fed core.FederationName,
+	producer core.FederateHandle,
+	cls core.InteractionClassHandle,
+	params map[core.ParameterHandle][]byte,
+	ts *core.LogicalTime,
+	retractionHandle uint64,
+) error {
+	return r.sendInteraction(ctx, fed, producer, cls, params, ts, retractionHandle)
+}
+
+// RetractMessage — M20.2. Delegates to the TSO gate. Returns 0 when
+// the gate is nil (in-process fixtures without a wired time manager).
+func (r *Registry) RetractMessage(
+	fed core.FederationName,
+	sender core.FederateHandle,
+	retractionHandle uint64,
+) int {
+	if r.opts.TSOGate == nil {
+		return 0
+	}
+	return r.opts.TSOGate.RetractMessage(fed, sender, retractionHandle)
 }
 
 // Snapshot returns aggregate object-instance counts for the
