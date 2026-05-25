@@ -393,6 +393,12 @@ func (m *Manager) Acquire(
 		owner core.FederateHandle
 	}
 	var readyAttrs []ready
+	// M17.27 — attributes that are currently UNOWNED transition
+	// directly to the acquirer (no prior owner → no divest
+	// confirmation, only an acquired notification). Distinct from
+	// readyAttrs which models the divest-then-acquire path with a
+	// concrete oldOwner.
+	var fromUnownedAttrs []core.AttributeHandle
 	for _, a := range attrs {
 		k := ownershipKey{obj: obj, attr: a}
 		ak := acquireKey{obj: obj, attr: a, acquirer: acquirer}
@@ -418,6 +424,16 @@ func (m *Manager) Acquire(
 			}
 			// Strategy declined immediate transfer; fall through to the
 			// queue-the-acquire path so the request stays pending.
+		} else if _, owned := st.owners[k]; !owned {
+			// M17.27 — attribute currently has no owner (someone
+			// unconditional-divested earlier, or it was never
+			// registered). Acquire on an unowned attribute completes
+			// IMMEDIATELY: the acquirer becomes the owner, and
+			// only the acquired notification fires (no prior owner
+			// to receive divest-confirmation).
+			st.owners[k] = ownershipRecord{owner: acquirer}
+			fromUnownedAttrs = append(fromUnownedAttrs, a)
+			continue
 		}
 		if _, dup := st.pendingAcquires[ak]; dup {
 			m.mu.Unlock()
@@ -443,6 +459,23 @@ func (m *Manager) Acquire(
 		if err := m.completeTransfer(ctx, fed, obj, oldAttrs, oldOwner, acquirer); err != nil {
 			return err
 		}
+	}
+	// M17.27 — fire acquired notification for attributes that
+	// transitioned from unowned. No divest-confirmation fan-out
+	// because there's no prior owner.
+	if len(fromUnownedAttrs) > 0 {
+		slices.Sort(fromUnownedAttrs)
+		attrCopy := cloneAttrs(fromUnownedAttrs)
+		if m.opts.EventLog != nil {
+			_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{
+				kind:  evtTransferred,
+				obj:   obj,
+				attrs: attrCopy,
+				to:    acquirer,
+			})
+		}
+		_ = m.opts.Outbox.Send(ctx, fed, acquirer,
+			acquireNotificationEvent(obj, attrCopy, acquirer))
 	}
 	return nil
 }

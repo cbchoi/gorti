@@ -279,6 +279,27 @@ func isNilInterface(v any) bool {
 	}
 }
 
+// ClassOf returns the object class handle of a registered object
+// instance, or zero if the (fed, obj) pair is unknown. M17.27 —
+// the ownership manager's SubscribersResolver uses this to project
+// an ObjectHandle into the ObjectClassHandle that
+// declaration.Manager.SubscribersFor expects.
+func (r *Registry) ClassOf(fed core.FederationName, obj core.ObjectHandle) core.ObjectClassHandle {
+	r.mu.RLock()
+	st, ok := r.federations[fed]
+	r.mu.RUnlock()
+	if !ok {
+		return 0
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	inst, ok := st.instances[obj]
+	if !ok {
+		return 0
+	}
+	return inst.cls
+}
+
 // stateFor returns (and lazily creates) the per-federation state.
 func (r *Registry) stateFor(fed core.FederationName) *federationState {
 	r.mu.RLock()

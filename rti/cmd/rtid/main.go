@@ -790,9 +790,37 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	// sync/ownership are not yet defined — M8 W2 follow-up); they are
 	// composed here so the runtime owns canonical state and so the
 	// object.Registry's OnRegister hook can populate initial ownership.
+	// M17.27 — Subscribers resolver routes negotiated divest's
+	// "assumption" broadcast to the federates that have subscribed
+	// to the divesting attributes on the divested object's class.
+	// Pre-M17.27 wiring left this nil (per ownership manager docstring)
+	// which silently skipped the fan-out; cross-federate ownership
+	// transfer scenarios couldn't fire requestAttributeOwnership
+	// Assumption on subscribers.
+	//
+	// Same indirection pattern as ownResignHook: objReg is constructed
+	// later in the wiring (after ownMgr), so we close over a pointer
+	// that is resolved at call time.
+	var objRegPtr **object.Registry
+	subscribersResolver := func(
+		ctx context.Context,
+		fed core.FederationName,
+		obj core.ObjectHandle,
+		attrs []core.AttributeHandle,
+	) []core.FederateHandle {
+		if objRegPtr == nil || *objRegPtr == nil {
+			return nil
+		}
+		cls := (*objRegPtr).ClassOf(fed, obj)
+		if cls == 0 {
+			return nil
+		}
+		return declMgr.SubscribersFor(ctx, fed, cls, attrs)
+	}
 	ownMgr, err := ownership.New(ownership.Options{
-		Outbox:   outbox,
-		EventLog: multi,
+		Outbox:      outbox,
+		EventLog:    multi,
+		Subscribers: subscribersResolver,
 		// Phase 3 research-platform: thread the resolved
 		// NegotiationStrategy when --research-config is set; nil →
 		// ownership.New falls back to defaultNegotiation, identical
@@ -941,6 +969,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	// M26 Phase F — bind the reservation-resign indirection now that
 	// objReg exists.
 	reservationResignHook = objReg.OnFederateResign
+	// M17.27 — resolve the SubscribersResolver indirection now that
+	// objReg exists. The ownership manager captured the resolver at
+	// New-time; it dereferences objRegPtr at every Subscribers call.
+	objRegPtr = &objReg
 
 	// M24 W2 — action-aware resign dispatch. Wired here, AFTER both
 	// ownMgr and objReg exist. Per IEEE 1516.1-2010 §4.10:
