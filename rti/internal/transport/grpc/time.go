@@ -324,6 +324,69 @@ func (s *timeService) QueryLBTS(
 	return &rtiv1.QueryLBTSResponse{Lbts: lbts, Finite: true}, nil
 }
 
+// --- M20.1: queryGALT + queryLITS (§8.19 / §8.20) ---
+
+// QueryGALT computes the Greatest Available Logical Time for the
+// calling federate: min(currentTime + lookahead) over all OTHER
+// regulating federates. When no other federate is regulating the
+// response is finite=false, galt=0 (caller treats as +Inf).
+func (s *timeService) QueryGALT(
+	_ context.Context, req *rtiv1.QueryFederateTimeRequest,
+) (*rtiv1.QueryGALTResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "nil request")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	snap := s.mgr.Snapshot(core.FederationName(req.GetFederationName()))
+	selfHandle := core.FederateHandle(req.GetFederateHandle())
+	var (
+		minVal float64
+		seen   bool
+	)
+	for i := range snap.Federates {
+		f := &snap.Federates[i]
+		if f.Handle == selfHandle {
+			continue
+		}
+		if !f.Regulating {
+			continue
+		}
+		v := float64(f.CurrentTime) + float64(f.Lookahead)
+		if !seen || v < minVal {
+			minVal = v
+			seen = true
+		}
+	}
+	if !seen {
+		return &rtiv1.QueryGALTResponse{Galt: 0, Finite: false}, nil
+	}
+	return &rtiv1.QueryGALTResponse{Galt: minVal, Finite: true}, nil
+}
+
+// QueryLITS asks the time manager for the smallest buffered TSO
+// timestamp for the calling federate. When async delivery is ON OR
+// the buffer is empty, the response is finite=false.
+func (s *timeService) QueryLITS(
+	_ context.Context, req *rtiv1.QueryFederateTimeRequest,
+) (*rtiv1.QueryLITSResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "nil request")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	lits, has := s.mgr.QueryLITS(
+		core.FederationName(req.GetFederationName()),
+		core.FederateHandle(req.GetFederateHandle()),
+	)
+	if !has {
+		return &rtiv1.QueryLITSResponse{Lits: 0, Finite: false}, nil
+	}
+	return &rtiv1.QueryLITSResponse{Lits: float64(lits), Finite: true}, nil
+}
+
 // --- M22 W2: Asynchronous-delivery toggle ---
 
 func (s *timeService) EnableAsynchronousDelivery(

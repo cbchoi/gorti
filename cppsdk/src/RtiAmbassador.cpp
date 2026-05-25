@@ -939,6 +939,34 @@ RTIambassador::LBTSResult RTIambassador::queryLBTS() {
   return LBTSResult{resp.lbts(), resp.finite()};
 }
 
+RTIambassador::GALTResult RTIambassador::queryGALT() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "queryGALT");
+  rti::v1::QueryFederateTimeRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::QueryGALTResponse resp;
+  const auto s = impl_->time_stub->QueryGALT(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryGALT");
+  return GALTResult{resp.galt(), resp.finite()};
+}
+
+RTIambassador::LITSResult RTIambassador::queryLITS() {
+  impl_->requireConnected();
+  requireJoinedForTime(impl_->joined, "queryLITS");
+  rti::v1::QueryFederateTimeRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  grpc::ClientContext ctx;
+  rti::v1::QueryLITSResponse resp;
+  const auto s = impl_->time_stub->QueryLITS(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "queryLITS");
+  return LITSResult{resp.lits(), resp.finite()};
+}
+
 void RTIambassador::enableAsynchronousDelivery() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "enableAsynchronousDelivery");

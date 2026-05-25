@@ -292,6 +292,20 @@ class RTIambassador {
   struct LBTSResult { double time; bool finite; };
   LBTSResult queryLBTS();
 
+  // §8.19 — Greatest Available Logical Time for this federate:
+  // min(currentTime + lookahead) over all OTHER regulating
+  // federates. ``finite`` is false when no other federate is
+  // regulating. M20.1.
+  struct GALTResult { double time; bool finite; };
+  GALTResult queryGALT();
+
+  // §8.20 — Least Incoming Time Stamp: smallest timestamp of any
+  // TSO message currently buffered for this federate. ``finite``
+  // is false when no message is buffered. Async-on federates
+  // see finite=false always (TSO bypasses the buffer). M20.1.
+  struct LITSResult { double time; bool finite; };
+  LITSResult queryLITS();
+
   // §8.17 — opt into asynchronous (unbuffered) delivery. RO
   // callbacks fire immediately rather than at the next grant.
   void enableAsynchronousDelivery();

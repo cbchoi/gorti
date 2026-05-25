@@ -345,6 +345,30 @@ func (m *Manager) CheckStalls(ctx context.Context) int {
 	return m.checkStalls(ctx)
 }
 
+// QueryLITS returns the smallest timestamp of any buffered TSO event
+// for the (fed, h) federate. M20.1 — IEEE 1516.1 §8.20 least incoming
+// time stamp. Returns (0, false) when nothing is buffered (LITS is
+// effectively +Inf). Only the async-OFF path buffers; async-ON
+// federates dispatch TSO immediately so the buffer stays empty.
+func (m *Manager) QueryLITS(
+	fed core.FederationName, h core.FederateHandle,
+) (core.LogicalTime, bool) {
+	ner := extOf(m)
+	ner.mu.Lock()
+	defer ner.mu.Unlock()
+	ns := ner.getLocked(fed, h)
+	if ns == nil || len(ns.tsoBuffer) == 0 {
+		return 0, false
+	}
+	min := ns.tsoBuffer[0].timestamp
+	for i := 1; i < len(ns.tsoBuffer); i++ {
+		if ns.tsoBuffer[i].timestamp < min {
+			min = ns.tsoBuffer[i].timestamp
+		}
+	}
+	return min, true
+}
+
 // fireTimeStateChanged invokes the OnTimeStateChanged hook (when wired)
 // with the federate's current regulating / constrained / lookahead
 // snapshot. Logical time is reported as 0 in cut-1 because the

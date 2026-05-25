@@ -66,6 +66,12 @@ type TimeManager interface {
 	// Snapshot returns the per-federation time-management view for
 	// the AdminService handler. Read-only; cheap.
 	Snapshot(fed FederationName) TimeSnapshot
+
+	// QueryLITS returns the Least Incoming Time Stamp for (fed, h) —
+	// the smallest timestamp of any TSO message buffered for the
+	// federate. M20.1 (IEEE 1516.1-2010 §8.20). Returns (0, false)
+	// when the buffer is empty.
+	QueryLITS(fed FederationName, h FederateHandle) (LogicalTime, bool)
 }
 
 // TimeFederateState bundles one federate's time-management snapshot.

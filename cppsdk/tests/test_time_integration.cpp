@@ -166,6 +166,27 @@ TEST_F(TimeIntegration, QueryLBTSWithRegulator) {
   EXPECT_DOUBLE_EQ(r.time, 2.0);
 }
 
+// --- M20.1 §8.19 queryGALT + §8.20 queryLITS --------------------------------
+
+TEST_F(TimeIntegration, QueryGALTSoloRegulatingIsInfinite) {
+  // Solo regulating federate — no OTHER regulators, so GALT is +inf.
+  amb.enableTimeRegulation(1.0);
+  const auto r = amb.queryGALT();
+  EXPECT_FALSE(r.finite);
+}
+
+TEST_F(TimeIntegration, QueryGALTUnregulatedIsInfinite) {
+  // Not regulating; with no other regulators GALT is also +inf.
+  const auto r = amb.queryGALT();
+  EXPECT_FALSE(r.finite);
+}
+
+TEST_F(TimeIntegration, QueryLITSEmptyBufferReturnsInfinite) {
+  // No TSO messages buffered → finite=false.
+  const auto r = amb.queryLITS();
+  EXPECT_FALSE(r.finite);
+}
+
 // --- Async delivery ---------------------------------------------------------
 
 TEST_F(TimeIntegration, EnableAsynchronousDeliverySucceeds) {
