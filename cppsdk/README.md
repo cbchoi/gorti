@@ -4,7 +4,7 @@ IEEE 1516.1-2010 Layer-2 ambassador (Pitch-style) for the gorti RTI.
 Federate code ported from Pitch / Portico / MAK should compile against
 this SDK with minimal call-site change.
 
-**Status:** M17 Cut-3 closed (2026-05-24). See `docs/PITCH_PARITY.md`
+**Status:** M17 Cut-4 closed (2026-05-25). See `docs/PITCH_PARITY.md`
 for the API divergence table.
 
 ## Build
@@ -97,19 +97,18 @@ Cut-3 (closed 2026-05-24):
 - M17.19 — Advanced encodings (enum, fixed/variable array,
   fixed record).
 
-## Out of scope (deferred to Cut-4)
+Cut-4 (closed 2026-05-25):
+- M17.21 — refactor dispatchOneEvent helper.
+- M17.22 — strict at-most-one `evokeCallback`.
+- M17.23 — variable-width `HLAvariableArray<T>`.
+- M17.24 — `HLAfixedRecord` auto-alignment.
+- M17.25 — save/restore event-stream callbacks (server + SDK).
+- M17.26 — MOM `TimeStateChanged` hook wired in rtid.
+- M17.27 — two-federate ownership transfer (Subscribers
+  resolver wired + Acquire-of-unowned semantics + xfed tests).
 
-- Strict at-most-one HLA_EVOKED `evokeCallback` (Cut-3 ships
-  cheap-evoke alias; a Cut-4 refactor extracts the dispatch
-  switch into a shared impl helper)
-- Variable-width element types in `HLAvariableArray` (e.g.
-  vector of `HLAunicodeString`)
-- `HLAfixedRecord` automatic alignment-padding
-- Save / restore event-stream callbacks (gorti server-side gap)
-- Time-state mirror in MOM `FederateAttributes` (gorti
-  `TimeStateChanged` hook not yet wired)
-- Async / non-blocking ambassador variants
-- Two-federate ownership transfer integration tests (single-
-  federate baseline shipped; cross-federate transfer scenarios
-  need a shared "two ambassadors against one rtid" fixture)
+## Out of scope
+
+- Async / non-blocking ambassador variants — separate
+  ambassador shape, not in M17 scope
 - Java SDK (M18 — separate milestone)

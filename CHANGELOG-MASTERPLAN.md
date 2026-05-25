@@ -514,6 +514,63 @@ Out of scope (deferred to Cut-4)
 - Async / non-blocking ambassador variants
 - Java SDK (M18 — separate milestone)
 
+#### M17 Cut-4 — C++ SDK polish + server-side gap closure (closed 2026-05-25)
+
+Cut-4 is the smaller polish cut: no new IEEE 1516.1 service group
+lands, but every "deferred to Cut-4" item from Cut-3 closes
+EXCEPT the async/non-blocking ambassador (out-of-scope for M17
+entirely — would be a separate SDK shape) and Java (M18). Two of
+the closures are gorti server changes that also benefit the
+Python SDK; the rest are C++ SDK polish.
+
+- M17.21 (`605fe76`) refactor dispatchOneEvent — extracts the
+  14-case event dispatch switch from tickCallback's drainOne
+  lambda into RTIambassadorImpl::dispatchOneEvent. Pure refactor
+  unblocking M17.22.
+- M17.22 (`1de1cdc`) strict at-most-one evokeCallback — replaces
+  the Cut-3 tickCallback alias with a per-call wait+dispatch loop
+  that pops EXACTLY ONE event. Returns true iff a callback fired
+  AND more events remain. evokeMultipleCallbacks stays a
+  tickCallback alias. docs/PITCH_PARITY.md updated.
+- M17.23 (`a167493`) variable-width HLAvariableArray — adds
+  decodeHLAvariableArrayVarWidth<T>(bytes, decode_fn) for arrays
+  of types whose encoded width depends on the value
+  (HLAunicodeString, nested arrays). Callback returns
+  std::pair<T, bytes_consumed>.
+- M17.24 (`9b1030d`) HLAfixedRecord auto-alignment — new
+  AlignedField{bytes, alignment} POD +
+  encodeHLAfixedRecordAligned / decodeHLAfixedRecordAligned
+  helpers that insert zero-pad per IEEE 1516.2 §B.4.1.
+- M17.25 (`1ca9741`) save/restore event-stream callbacks (server
+  + SDK). proto/rti/v1/stream.proto adds tags 43-45 for
+  InitiateFederateRestore / FederationRestored /
+  FederationNotRestored. gorti save/restore manager populates
+  the wire payloads + emits federationNotRestored on
+  AbortRestore. C++ SDK adds 3 FederateAmbassador slots +
+  dispatch.
+- M17.26 (`4ccf6de`) MOM TimeStateChanged hook — rtid composition
+  root now wires time.Manager.OnTimeStateChanged into
+  mom.Manager.TimeStateChanged. MOM FederateAttributes mirror
+  time_regulating / time_constrained / lookahead / logical_time
+  after enable/disable Regulation/Constrained transitions.
+- M17.27 (`c66540e`) two-federate ownership transfer (server +
+  tests). Wires the Subscribers resolver into ownership.New (was
+  documented "cut-1 simplification" nil — silently skipped
+  assumption fan-out). New Registry.ClassOf for the resolver to
+  project ObjectHandle → ObjectClassHandle. Ownership Acquire
+  now handles the "attribute is currently unowned" case — fires
+  the acquired notification without divest-confirmation. New
+  test_ownership_xfed_integration with 3 cross-federate tests.
+
+Verification
+- 17 ctest executables: 2 unit + 15 integration. ~25 s end-to-end.
+- 120+ GoogleTest cases.
+
+Out of scope (still deferred, no current owner)
+- Async / non-blocking ambassador variants — would be a
+  separate ambassador shape, not a Cut-4 polish item
+- Java SDK (M18 — separate milestone)
+
 Out of scope (deferred to M25+):
 - §4.2 connect / §4.4 disconnect — gRPC channel handles implicitly.
 - Wider §7 ownership — only the resign-related releases land in M24.
