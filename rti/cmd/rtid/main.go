@@ -924,12 +924,18 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		}
 	}
 
+	// M20.3 — HLAmanager interaction dispatch. The dispatcher
+	// intercepts incoming sendInteraction calls whose class is in
+	// the HLAmanager subtree and routes to the matching handler
+	// (HLAsetSwitches, HLArequest*, etc.) instead of broadcasting.
+	momDispatcher := mom.NewDispatcher(momMgr)
 	objReg, err := object.New(object.Options{
-		EventLog:     multi,
-		Declarations: declMgr,
-		Outbox:       outbox,
-		FOMs:         foms,
-		Clock:        clock,
+		EventLog:           multi,
+		Declarations:       declMgr,
+		Outbox:             outbox,
+		FOMs:               foms,
+		Clock:              clock,
+		ManagementDispatch: momDispatcher,
 		// TASK-077: wire mode + per-attribute order lookup so the
 		// registry can choose RO over TSO when both the federation
 		// is best-effort AND the FOM declares the attribute as

@@ -29,6 +29,9 @@ type federationSnapshot struct {
 	name            core.FederationName
 	federateHandles []core.FederateHandle // sorted ascending
 	fomModuleNames  []string
+	// M20.4 — federation-wide switches (HLAmanager.HLAfederation.
+	// HLAadjust.HLAsetSwitches).
+	autoProvideSwitch bool
 }
 
 // federateSnapshot is the live HLAfederate attribute set. Counter
@@ -48,6 +51,11 @@ type federateSnapshot struct {
 	interactionsReceived uint32
 	updatesSent          uint32
 	reflectionsReceived  uint32
+
+	// M20.4 — per-federate switches (HLAmanager.HLAfederate.
+	// HLAadjust.HLAsetSwitches).
+	conveyRegionDesignatorSetsSwitch bool
+	conveyProducingFederateSwitch    bool
 }
 
 func newMOMState() *momState {

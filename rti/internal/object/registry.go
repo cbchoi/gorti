@@ -104,6 +104,13 @@ type Options struct {
 	FOMs         core.FOMRepository
 	Clock        core.Clock
 
+	// M20.3 — MOM-driven interaction dispatch hook. Optional: when
+	// nil, every interaction takes the normal fanout path. When set,
+	// SendInteraction checks if the class name is in the HLAmanager
+	// subtree AND has a registered handler; if so, the dispatcher
+	// handles it INSTEAD of fanout. See rti/internal/mom/dispatch.go.
+	ManagementDispatch core.ManagementInteractionDispatcher
+
 	// Federations resolves a federation name to its operating mode
 	// (TASK-077). OPTIONAL: when nil, every federation is treated as
 	// ModeVerbose and the registry preserves the existing TSO-only

@@ -409,3 +409,99 @@ func (m *Manager) QueryFederate(fed core.FederationName, h core.FederateHandle) 
 		ReflectionsReceived:  attrs.ReflectionsReceived,
 	}, true
 }
+
+// --- M20.4 §10 HLAsetSwitches setters --------------------------------------
+
+// SetAutoProvideSwitch updates the federation-wide HLAautoProvide
+// switch. No-op when the federation is unknown to the MOM (consistent
+// with TimeStateChanged's missing-federation policy).
+func (m *Manager) SetAutoProvideSwitch(fed core.FederationName, v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return
+	}
+	st.federation.autoProvideSwitch = v
+}
+
+// AutoProvideSwitch returns the current federation-wide HLAautoProvide
+// state, defaulting to false when the federation is unknown.
+func (m *Manager) AutoProvideSwitch(fed core.FederationName) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return false
+	}
+	return st.federation.autoProvideSwitch
+}
+
+// SetConveyRegionDesignatorSetsSwitch updates the per-federate switch.
+// No-op when the (federation, federate) pair is unknown.
+func (m *Manager) SetConveyRegionDesignatorSetsSwitch(
+	fed core.FederationName, h core.FederateHandle, v bool,
+) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return
+	}
+	fs, ok := st.federates[h]
+	if !ok {
+		return
+	}
+	fs.conveyRegionDesignatorSetsSwitch = v
+}
+
+// ConveyRegionDesignatorSetsSwitch returns the per-federate switch
+// value, defaulting to false when the federate is unknown.
+func (m *Manager) ConveyRegionDesignatorSetsSwitch(
+	fed core.FederationName, h core.FederateHandle,
+) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return false
+	}
+	fs, ok := st.federates[h]
+	if !ok {
+		return false
+	}
+	return fs.conveyRegionDesignatorSetsSwitch
+}
+
+// SetConveyProducingFederateSwitch + accessor — symmetric pair.
+func (m *Manager) SetConveyProducingFederateSwitch(
+	fed core.FederationName, h core.FederateHandle, v bool,
+) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return
+	}
+	fs, ok := st.federates[h]
+	if !ok {
+		return
+	}
+	fs.conveyProducingFederateSwitch = v
+}
+
+func (m *Manager) ConveyProducingFederateSwitch(
+	fed core.FederationName, h core.FederateHandle,
+) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return false
+	}
+	fs, ok := st.federates[h]
+	if !ok {
+		return false
+	}
+	return fs.conveyProducingFederateSwitch
+}

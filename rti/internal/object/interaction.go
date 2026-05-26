@@ -33,6 +33,28 @@ func (r *Registry) sendInteraction(
 	if producer == core.InvalidFederateHandle {
 		return core.ErrFederateNotJoined
 	}
+
+	// M20.3 — MOM dispatch. Resolve the class name once; if it's in
+	// the HLAmanager subtree AND a dispatcher is wired AND the
+	// dispatcher recognizes the class, dispatch INSTEAD of doing
+	// normal publish-gate + fanout. Per IEEE 1516.1 §10: management
+	// interactions don't need a producer publish declaration, and
+	// they aren't broadcast to subscribers.
+	if r.opts.ManagementDispatch != nil {
+		fomH, fomErr := r.opts.FOMs.Get(ctx, fed)
+		if fomErr == nil && fomH != nil {
+			if names, ok := fomH.(core.FOMHandleNameLookup); ok {
+				if name, ok := names.InteractionClassName(cls); ok {
+					if r.opts.ManagementDispatch.IsManagerClass(name) {
+						return r.opts.ManagementDispatch.Dispatch(
+							ctx, fed, name, producer, params, fomH, names,
+						)
+					}
+				}
+			}
+		}
+	}
+
 	if !r.producerPublishesInteraction(ctx, fed, producer, cls) {
 		return core.ErrInteractionClassNotPublished
 	}
