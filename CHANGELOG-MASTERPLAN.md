@@ -82,14 +82,19 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
 - Bridge object-class extension — `ObjectClassFederateProtocol` sibling to `CoupledModelProtocol`
 - Documentation site infrastructure — MkDocs Material + GitHub Pages (`https://cbchoi.github.io/gorti/`)
 
-#### M15 — Distributed RTI: multi-process federation hosting (CUT-1 closed, multi-node deferred 2026-05-09)
+#### M15 — Distributed RTI: multi-process federation hosting (CUT-1 closed 2026-05-09; CUT-2 demo closed 2026-05-26)
 - M15 promises distributed RTI: a federation spanning N rtid processes that route federates to the right host. Real distributed correctness is genuine distributed-systems work (cluster membership protocol, federation routing, state replication, partition handling). Full scope is months of work for production correctness.
 - **Cut-1 ships surface contract + single-node-correct implementation:**
   - New `proto/rti/v1/cluster.proto` — `ClusterService` with `ListClusterNodes`, `LookupFederationHost`, `ReportNodeHealth` (rejected in cut-1).
   - New `rti/internal/cluster/` package — `Manager` tracks federation→node assignments; cut-1 always assigns to self. `Lookup` returns `StatusCurrent` for known federations, `StatusNotFound` otherwise.
   - For N=1 deployments (the default), behavior is identical to pre-M15.
-- **Cut-2 (multi-node consensus) deferred** — needs Raft integration + federation reassignment + cross-node event ordering. Plan §0 documents the scope honestly.
-- Plan at `docs/M15_DISPATCH_PLAN.md`. 5 spec tests cover the cut-1 surface.
+- **Cut-2 (demo, NOT production) closed 2026-05-26.** Real implementation that exercises the multi-node wire surface end-to-end, intentionally NOT fault-tolerant. The full Raft replacement stays as a future M15 cut-3.
+  - M15.2.1 (`7a955de`) extends `cluster.Manager` with `RegisterPeer` / `RecordAssignment` / `AssignmentsSnapshot` / `HostsLocally` / `SelfAddress`. New `NotifyAssignment` RPC + `NotifyAssignmentRequest` message in the proto. 7 new spec tests.
+  - M15.2.2 (`ee40eb5`) adds the `ClusterService` gRPC handler (cut-1 had only proto + Manager type — no wire impl), `--node-id` / `--cluster-peers` / `--cluster-advertise` CLI flags, `BroadcastAssignment` helper, lazy peer-connection cache. 5 parseClusterPeers unit tests.
+  - M15.2.3 (`ac8470a`) wires `AssignFederation` + `BroadcastAssignment` into the `OnCreateFederationSuccess` hook. createFederationHook signature widened to take clusterMgr + clusterSvc.
+  - M15.2.4 (`d78f0e5`) bufconn-based 2-node redirect spec test. 3 wire-level tests verify the cross-node REDIRECT path, NOT_FOUND for unknown federations, and ListClusterNodes membership.
+  - **Demo cut deferrals** (still open for M15 cut-3): no consensus (last-writer-wins gossip), no fault tolerance (peer death = inconsistent assignments), no persistence (assignments lost on restart), static cluster membership at startup, best-effort peer sync, no failover (M16 territory).
+- Plan at `docs/M15_DISPATCH_PLAN.md`. 15 spec tests total across cut-1 + cut-2 demo.
 
 #### M16 — Hot standby + replay-driven RTI failover (DEFERRED 2026-05-09)
 - M16 builds on M15 cut-2; deferred until that lands.
