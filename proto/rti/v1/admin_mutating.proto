@@ -43,6 +43,16 @@ service MutatingService {
   // destroys it. Same wire semantics as a federate calling
   // destroy_federation, but initiated by the operator.
   rpc DestroyFederation(AdminDestroyFederationRequest) returns (AdminDestroyFederationResponse);
+
+  // PromoteFederation (M16.1 demo) reassigns a federation to a different
+  // cluster node. Used for operator-driven failover or load
+  // rebalancing. The receiving rtid:
+  //   1. Records the new federation→target_node assignment locally
+  //   2. Broadcasts NotifyAssignment to every peer
+  //   3. (Cut-2 demo) does NOT replicate federation state — the demo
+  //      assumes a fresh federation on the new primary. M16 cut-3
+  //      adds replicated event log.
+  rpc PromoteFederation(PromoteFederationRequest) returns (PromoteFederationResponse);
 }
 
 message MutatingProbeRequest {
@@ -92,4 +102,22 @@ message AdminDestroyFederationResponse {
   // evict_joined_federates was false or the federation was already
   // empty).
   repeated uint64 evicted_handles = 1;
+}
+
+// PromoteFederationRequest — M16.1 demo. ``target_node_id`` is the
+// cluster node that should host the federation after the promote
+// completes. The receiving rtid validates that the target is a
+// known peer (via cluster.Manager) and rejects with InvalidArgument
+// if not.
+message PromoteFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string target_node_id = 3;
+}
+
+// PromoteFederationResponse carries the prior host's node_id so
+// the operator can verify the swap. Empty prior_node_id means the
+// federation had no prior assignment (newly promoted).
+message PromoteFederationResponse {
+  string prior_node_id = 1;
 }

@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/cbchoi/gorti/rti/internal/cluster"
 	"github.com/cbchoi/gorti/rti/internal/core"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
@@ -41,6 +42,28 @@ type MutatingOptions struct {
 
 	// Version is the rtid build version returned in Probe.
 	Version string
+
+	// M16.1 demo — PromoteFederation dependencies. Both OPTIONAL:
+	// when nil, PromoteFederation returns Unimplemented. cmd/rtid
+	// wires both unconditionally; spec tests may leave them nil to
+	// exercise only the ForceResign / DestroyFederation paths.
+	Cluster      ClusterPromoter
+	ClusterPeers ClusterPeerBroadcaster
+}
+
+// ClusterPromoter is the subset of cluster.Manager the
+// PromoteFederation handler needs. Decouples the gRPC handler
+// package from the cluster package.
+type ClusterPromoter interface {
+	PromoteFederation(name core.FederationName, targetNodeID string) (string, error)
+	SelfID() string
+	SelfAddress() string
+}
+
+// ClusterPeerBroadcaster is the subset of ClusterService used by
+// PromoteFederation to fan the new assignment to peers.
+type ClusterPeerBroadcaster interface {
+	BroadcastAssignment(ctx context.Context, federation core.FederationName, hostNodeID, hostAddress string)
 }
 
 // mutatingService is the concrete MutatingServiceServer impl.
@@ -191,3 +214,58 @@ func (s *mutatingService) DestroyFederation(ctx context.Context, req *rtiv1.Admi
 	}
 	return resp, nil
 }
+
+// PromoteFederation — M16.1 demo. Reassigns a federation to a
+// different cluster node and broadcasts the new assignment to
+// every peer. Demo cut does NOT replicate federation state — the
+// caller is responsible for ensuring the target node is ready to
+// host (typically because the operator has manually copied the
+// save bundle, or the federation is being moved as part of a
+// planned reshuffle, not a crash recovery).
+func (s *mutatingService) PromoteFederation(
+	ctx context.Context, req *rtiv1.PromoteFederationRequest,
+) (*rtiv1.PromoteFederationResponse, error) {
+	if s.opts.Cluster == nil {
+		return nil, status.Error(codes.Unimplemented,
+			"PromoteFederation requires a cluster manager")
+	}
+	fed := req.GetFederationName()
+	target := req.GetTargetNodeId()
+	if fed == "" {
+		return nil, status.Error(codes.InvalidArgument,
+			"federation_name is required")
+	}
+	if target == "" {
+		return nil, status.Error(codes.InvalidArgument,
+			"target_node_id is required")
+	}
+	prior, err := s.opts.Cluster.PromoteFederation(core.FederationName(fed), target)
+	if err != nil {
+		switch {
+		case errors.Is(err, cluster.ErrInvalidPromoteTarget):
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		case errors.Is(err, cluster.ErrUnknownPromoteTarget):
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+	// Best-effort broadcast — the local table is already updated.
+	if s.opts.ClusterPeers != nil {
+		// The target's address is part of the membership view; the
+		// broadcaster looks it up. We pass the target as the host
+		// (this rtid is informing peers of the new assignment, not
+		// claiming self).
+		hostAddr := ""
+		if s.opts.Cluster.SelfID() == target {
+			hostAddr = s.opts.Cluster.SelfAddress()
+		}
+		s.opts.ClusterPeers.BroadcastAssignment(
+			ctx, core.FederationName(fed), target, hostAddr,
+		)
+	}
+	return &rtiv1.PromoteFederationResponse{
+		PriorNodeId: prior,
+	}, nil
+}
+

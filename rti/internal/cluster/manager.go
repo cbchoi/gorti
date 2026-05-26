@@ -11,9 +11,18 @@
 package cluster
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+)
+
+// PromoteFederation error sentinels. M16.1 demo.
+var (
+	// ErrInvalidPromoteTarget — empty target_node_id.
+	ErrInvalidPromoteTarget = errors.New("cluster: invalid promote target (empty node_id)")
+	// ErrUnknownPromoteTarget — target_node_id not in membership.
+	ErrUnknownPromoteTarget = errors.New("cluster: unknown promote target (peer not registered)")
 )
 
 // Status mirrors LookupFederationHostResponse_Status at the proto
@@ -185,4 +194,27 @@ func (m *Manager) AssignmentsSnapshot() map[core.FederationName]string {
 func (m *Manager) HostsLocally(name core.FederationName) bool {
 	r := m.Lookup(name)
 	return r.Status == StatusCurrent
+}
+
+// PromoteFederation reassigns a federation to ``targetNodeID`` and
+// returns the prior host's node_id (empty when newly assigned).
+// M16.1 demo — used for operator-driven failover. The caller is
+// responsible for broadcasting the new assignment to peers; this
+// method only mutates the local table.
+//
+// Returns an error when ``targetNodeID`` is empty or not in the
+// membership table — promoting to an unknown node would silently
+// orphan the federation.
+func (m *Manager) PromoteFederation(name core.FederationName, targetNodeID string) (string, error) {
+	if targetNodeID == "" {
+		return "", ErrInvalidPromoteTarget
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, known := m.nodes[targetNodeID]; !known {
+		return "", ErrUnknownPromoteTarget
+	}
+	prior := m.assignments[name]
+	m.assignments[name] = targetNodeID
+	return prior, nil
 }

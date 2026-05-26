@@ -1178,8 +1178,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// See docs/rtid-tui.md §7.5 for the safety contract.
 		if cfg.AdminMutating {
 			if err := grpcsvc.RegisterMutatingService(adminGS, grpcsvc.MutatingOptions{
-				Federations: fedMgr,
-				Version:     rtidVersion(),
+				Federations:  fedMgr,
+				Version:      rtidVersion(),
+				Cluster:      clusterMgr,
+				ClusterPeers: clusterSvc,
 			}); err != nil {
 				return nil, fmt.Errorf("rtid: mutating service register: %w", err)
 			}
