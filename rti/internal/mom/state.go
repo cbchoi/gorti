@@ -56,6 +56,11 @@ type federateSnapshot struct {
 	// HLAadjust.HLAsetSwitches).
 	conveyRegionDesignatorSetsSwitch bool
 	conveyProducingFederateSwitch    bool
+	// M20.4 — per-federate reporting toggles
+	// (HLAmanager.HLAfederate.HLAadjust.HLAsetServiceReporting +
+	// .HLAsetExceptionReporting). Spec default: false.
+	serviceReportingEnabled   bool
+	exceptionReportingEnabled bool
 }
 
 func newMOMState() *momState {

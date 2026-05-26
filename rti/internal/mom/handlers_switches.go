@@ -22,13 +22,17 @@ import (
 )
 
 const (
-	ClassFederationSetSwitches = "HLAmanager.HLAfederation.HLAadjust.HLAsetSwitches"
-	ClassFederateSetSwitches   = "HLAmanager.HLAfederate.HLAadjust.HLAsetSwitches"
+	ClassFederationSetSwitches      = "HLAmanager.HLAfederation.HLAadjust.HLAsetSwitches"
+	ClassFederateSetSwitches        = "HLAmanager.HLAfederate.HLAadjust.HLAsetSwitches"
+	ClassSetServiceReporting        = "HLAmanager.HLAfederate.HLAadjust.HLAsetServiceReporting"
+	ClassSetExceptionReporting      = "HLAmanager.HLAfederate.HLAadjust.HLAsetExceptionReporting"
 )
 
 func registerSwitchHandlers(d *Dispatcher) {
 	d.Register(ClassFederationSetSwitches, handleFederationSetSwitches)
 	d.Register(ClassFederateSetSwitches, handleFederateSetSwitches)
+	d.Register(ClassSetServiceReporting, handleSetServiceReporting)
+	d.Register(ClassSetExceptionReporting, handleSetExceptionReporting)
 }
 
 // decodeHLAswitch reads a 1-byte HLAswitch encoding: 0 → false,
@@ -109,6 +113,52 @@ func handleFederateSetSwitches(
 		if present {
 			dctx.MOM.SetConveyProducingFederateSwitch(dctx.Federation, sender, v)
 		}
+	}
+	return nil, nil
+}
+
+// HLAsetServiceReporting + HLAsetExceptionReporting (M20.4) — each
+// carries a single HLAreportingState parameter (HLAswitch). They're
+// distinct interactions from HLAsetSwitches because IEEE 1516.1
+// §10.4 expects the per-toggle interactions to also fire a
+// confirmation HLAreport* (M20.6 wires the confirmations).
+
+func handleSetServiceReporting(
+	_ context.Context,
+	dctx DispatchContext,
+	sender core.FederateHandle,
+	params map[core.ParameterHandle][]byte,
+) ([]ResponseInteraction, error) {
+	b := findParam(dctx, ClassSetServiceReporting, "HLAreportingState", params)
+	if b == nil {
+		return nil, nil
+	}
+	v, present, err := decodeHLAswitch(b)
+	if err != nil {
+		return nil, fmt.Errorf("HLAreportingState: %w", err)
+	}
+	if present {
+		dctx.MOM.SetServiceReporting(dctx.Federation, sender, v)
+	}
+	return nil, nil
+}
+
+func handleSetExceptionReporting(
+	_ context.Context,
+	dctx DispatchContext,
+	sender core.FederateHandle,
+	params map[core.ParameterHandle][]byte,
+) ([]ResponseInteraction, error) {
+	b := findParam(dctx, ClassSetExceptionReporting, "HLAreportingState", params)
+	if b == nil {
+		return nil, nil
+	}
+	v, present, err := decodeHLAswitch(b)
+	if err != nil {
+		return nil, fmt.Errorf("HLAreportingState: %w", err)
+	}
+	if present {
+		dctx.MOM.SetExceptionReporting(dctx.Federation, sender, v)
 	}
 	return nil, nil
 }

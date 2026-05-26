@@ -59,15 +59,21 @@ func buildSwitchFOM() *stubFOMHandle {
 	const (
 		fedSwitchCls    = core.InteractionClassHandle(100)
 		perFedSwitchCls = core.InteractionClassHandle(101)
+		svcReportCls    = core.InteractionClassHandle(102)
+		excReportCls    = core.InteractionClassHandle(103)
 	)
 	return &stubFOMHandle{
 		icByName: map[string]core.InteractionClassHandle{
 			ClassFederationSetSwitches: fedSwitchCls,
 			ClassFederateSetSwitches:   perFedSwitchCls,
+			ClassSetServiceReporting:   svcReportCls,
+			ClassSetExceptionReporting: excReportCls,
 		},
 		icByH: map[core.InteractionClassHandle]string{
 			fedSwitchCls:    ClassFederationSetSwitches,
 			perFedSwitchCls: ClassFederateSetSwitches,
+			svcReportCls:    ClassSetServiceReporting,
+			excReportCls:    ClassSetExceptionReporting,
 		},
 		paramByH: map[core.InteractionClassHandle]map[string]core.ParameterHandle{
 			fedSwitchCls: {
@@ -77,6 +83,8 @@ func buildSwitchFOM() *stubFOMHandle {
 				"HLAconveyRegionDesignatorSets": core.ParameterHandle(1),
 				"HLAconveyProducingFederate":    core.ParameterHandle(2),
 			},
+			svcReportCls: {"HLAreportingState": core.ParameterHandle(1)},
+			excReportCls: {"HLAreportingState": core.ParameterHandle(1)},
 		},
 	}
 }
@@ -201,6 +209,63 @@ func TestHandleFederationSetSwitches_InvalidHLAswitchByteFails(t *testing.T) {
 		ClassFederationSetSwitches, 7, params, fom, fom)
 	if err == nil {
 		t.Errorf("Dispatch with invalid HLAswitch byte should fail")
+	}
+}
+
+// --- HLAsetServiceReporting + HLAsetExceptionReporting (M20.4) -------------
+
+func TestHandleSetServiceReporting_Enables(t *testing.T) {
+	mom := newTestMOM(t, "f1")
+	mom.FederationCreated(context.Background(), "f1",
+		[]core.FOMModule{{Path: "test.xml"}})
+	mom.FederateJoined(context.Background(), "f1", 7, "alice", "atype")
+
+	d := NewDispatcher(mom)
+	fom := buildSwitchFOM()
+	params := map[core.ParameterHandle][]byte{1: {0x01}}
+	if err := d.Dispatch(context.Background(), "f1",
+		ClassSetServiceReporting, 7, params, fom, fom); err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if !mom.ServiceReporting("f1", 7) {
+		t.Errorf("ServiceReporting = false, want true")
+	}
+	if mom.ExceptionReporting("f1", 7) {
+		t.Errorf("ExceptionReporting toggled by ServiceReporting interaction")
+	}
+}
+
+func TestHandleSetExceptionReporting_Toggle(t *testing.T) {
+	mom := newTestMOM(t, "f1")
+	mom.FederationCreated(context.Background(), "f1",
+		[]core.FOMModule{{Path: "test.xml"}})
+	mom.FederateJoined(context.Background(), "f1", 7, "alice", "atype")
+	mom.SetExceptionReporting("f1", 7, true) // prior state
+
+	d := NewDispatcher(mom)
+	fom := buildSwitchFOM()
+	params := map[core.ParameterHandle][]byte{1: {0x00}}
+	if err := d.Dispatch(context.Background(), "f1",
+		ClassSetExceptionReporting, 7, params, fom, fom); err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if mom.ExceptionReporting("f1", 7) {
+		t.Errorf("ExceptionReporting should now be false")
+	}
+}
+
+func TestHandleSetServiceReporting_InvalidByteFails(t *testing.T) {
+	mom := newTestMOM(t, "f1")
+	mom.FederationCreated(context.Background(), "f1",
+		[]core.FOMModule{{Path: "test.xml"}})
+	mom.FederateJoined(context.Background(), "f1", 7, "alice", "atype")
+
+	d := NewDispatcher(mom)
+	fom := buildSwitchFOM()
+	params := map[core.ParameterHandle][]byte{1: {0x99}}
+	if err := d.Dispatch(context.Background(), "f1",
+		ClassSetServiceReporting, 7, params, fom, fom); err == nil {
+		t.Errorf("invalid HLAswitch byte: want error, got nil")
 	}
 }
 

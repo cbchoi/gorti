@@ -505,3 +505,59 @@ func (m *Manager) ConveyProducingFederateSwitch(
 	}
 	return fs.conveyProducingFederateSwitch
 }
+
+// --- M20.4 per-federate reporting toggles -----------------------------------
+
+// SetServiceReporting flips the per-federate HLAreportServiceInvocation
+// emit toggle. No-op when (federation, federate) is unknown.
+func (m *Manager) SetServiceReporting(
+	fed core.FederationName, h core.FederateHandle, v bool,
+) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if st, ok := m.fed[fed]; ok {
+		if fs, ok := st.federates[h]; ok {
+			fs.serviceReportingEnabled = v
+		}
+	}
+}
+
+func (m *Manager) ServiceReporting(
+	fed core.FederationName, h core.FederateHandle,
+) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if st, ok := m.fed[fed]; ok {
+		if fs, ok := st.federates[h]; ok {
+			return fs.serviceReportingEnabled
+		}
+	}
+	return false
+}
+
+// SetExceptionReporting flips the per-federate HLAreportException emit
+// toggle. No-op when (federation, federate) is unknown.
+func (m *Manager) SetExceptionReporting(
+	fed core.FederationName, h core.FederateHandle, v bool,
+) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if st, ok := m.fed[fed]; ok {
+		if fs, ok := st.federates[h]; ok {
+			fs.exceptionReportingEnabled = v
+		}
+	}
+}
+
+func (m *Manager) ExceptionReporting(
+	fed core.FederationName, h core.FederateHandle,
+) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if st, ok := m.fed[fed]; ok {
+		if fs, ok := st.federates[h]; ok {
+			return fs.exceptionReportingEnabled
+		}
+	}
+	return false
+}
