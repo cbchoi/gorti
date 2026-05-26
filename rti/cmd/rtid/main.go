@@ -46,6 +46,7 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/eventlog"
 	"github.com/cbchoi/gorti/rti/internal/federation"
 	"github.com/cbchoi/gorti/rti/internal/mom"
+	"github.com/cbchoi/gorti/rti/internal/cluster"
 	"github.com/cbchoi/gorti/rti/internal/object"
 	"github.com/cbchoi/gorti/rti/internal/ownership"
 	"github.com/cbchoi/gorti/rti/internal/research"
@@ -62,6 +63,15 @@ func main() {
 	showVersion := flag.Bool("version", false, "print rtid version and exit")
 	listen := flag.String("listen", ":8442", "gRPC listen address")
 	metricsListen := flag.String("metrics-listen", ":9090", "Prometheus HTTP listen")
+	// M15 cut-2 demo flags. --cluster-peers is a comma-separated
+	// list of node_id=host:port pairs identifying the other rtid
+	// nodes in the cluster. --node-id is this node's stable ID; if
+	// empty, falls back to --listen value. Single-node deployments
+	// leave --cluster-peers empty and the cluster behaves
+	// identically to pre-M15 (cut-1 semantics).
+	nodeID := flag.String("node-id", "", "stable opaque ID for this node in the cluster (empty = use --listen value)")
+	clusterPeers := flag.String("cluster-peers", "", "comma-separated list of node_id=host:port entries for other rtid nodes in the cluster (M15 cut-2 demo)")
+	clusterAdvertise := flag.String("cluster-advertise", "", "host:port this node advertises to peers as its dial address (empty = use --listen value)")
 	// rtid-TUI Phase 1 (docs/rtid-tui.md §2.5 PINNED): a SEPARATE gRPC
 	// listener that serves the read-only AdminService (Snapshot /
 	// TailEvents / Status). Default localhost:8443 — admin is
@@ -175,6 +185,9 @@ func main() {
 			AdminMutatingAllowNonLoopback: *adminMutatingAllowNonLoopback,
 			EnableDDS:                     *enableDDS,
 			DDSDomainID:                   int32(*ddsDomainID),
+			NodeID:                        *nodeID,
+			ClusterPeers:                  *clusterPeers,
+			ClusterAdvertise:              *clusterAdvertise,
 		})
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
@@ -247,6 +260,10 @@ type serverMainArgs struct {
 	// the build tag and the operator have opted in.
 	EnableDDS   bool
 	DDSDomainID int32
+	// M15 cut-2 demo cluster flags.
+	NodeID           string
+	ClusterPeers     string // comma-separated node_id=host:port
+	ClusterAdvertise string // host:port advertised to peers
 }
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
@@ -331,6 +348,9 @@ func runServerMain(logger *slog.Logger, args serverMainArgs) {
 		AdminMutatingAllowNonLoopback: args.AdminMutatingAllowNonLoopback,
 		EnableDDS:                     args.EnableDDS,
 		DDSDomainID:                   args.DDSDomainID,
+		NodeID:                        args.NodeID,
+		ClusterPeers:                  args.ClusterPeers,
+		ClusterAdvertise:              args.ClusterAdvertise,
 	})
 	if err != nil {
 		logger.Error("rtid initialization failed", "err", err)
@@ -625,6 +645,19 @@ type rtidConfig struct {
 	// Zero is the DDS default domain. Only meaningful when
 	// EnableDDS=true.
 	DDSDomainID int32
+
+	// M15 cut-2 demo cluster fields.
+	//
+	// NodeID is this node's stable opaque identifier in the
+	// cluster. Empty = fall back to ListenAddr.
+	NodeID string
+	// ClusterPeers is a comma-separated list of node_id=host:port
+	// entries identifying peer rtid nodes. Empty = single-node
+	// (cut-1 behavior).
+	ClusterPeers string
+	// ClusterAdvertise is the host:port this node advertises to
+	// peers as its dial address. Empty = use ListenAddr.
+	ClusterAdvertise string
 }
 
 // rtid is the composed runtime: gRPC server + metrics handler + the
@@ -650,6 +683,11 @@ type rtid struct {
 	adminS  *stdgrpc.Server
 	metrics *metricsHandler
 	foms    *fomRepository
+	// M15 cut-2 demo cluster wiring. Always non-nil; single-node
+	// mode keeps the manager empty of peers and behaves identically
+	// to cut-1.
+	clusterMgr *cluster.Manager
+	clusterSvc *grpcsvc.ClusterService
 }
 
 // newRTID composes all the components and returns a runnable rtid.
@@ -1130,26 +1168,74 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		}
 	}
 
+	// M15 cut-2 — cluster manager + gRPC handler. Single-node mode
+	// (no --cluster-peers) leaves clusterMgr empty of peers and the
+	// cluster service behaves identically to cut-1.
+	clusterAdvAddr := cfg.ClusterAdvertise
+	if clusterAdvAddr == "" {
+		clusterAdvAddr = cfg.ListenAddr
+	}
+	clusterMgr := cluster.New(cfg.NodeID, clusterAdvAddr)
+	if peers, err := parseClusterPeers(cfg.ClusterPeers); err == nil {
+		for nodeID, address := range peers {
+			clusterMgr.RegisterPeer(nodeID, address)
+		}
+	} else {
+		return nil, fmt.Errorf("rtid: --cluster-peers: %w", err)
+	}
+	clusterSvc := grpcsvc.NewClusterService(clusterMgr, nil)
+	clusterSvc.RegisterWith(gs)
+
 	return &rtid{
-		cfg:       cfg,
-		logger:    cfg.Logger,
-		startedAt: startedAt,
-		fedMgr:    fedMgr,
-		declMgr:   declMgr,
-		objReg:    objReg,
-		syncMgr:   syncMgr,
-		ownMgr:    ownMgr,
-		momMgr:    momMgr,
-		ddmMgr:    ddmMgr,
-		saveMgr:   saveMgr,
-		timeMgr:   timeMgr,
-		multi:     multi,
-		outbox:    outbox,
-		grpcS:     gs,
-		adminS:    adminGS,
-		metrics:   metrics,
-		foms:      foms,
+		cfg:        cfg,
+		logger:     cfg.Logger,
+		startedAt:  startedAt,
+		fedMgr:     fedMgr,
+		declMgr:    declMgr,
+		objReg:     objReg,
+		syncMgr:    syncMgr,
+		ownMgr:     ownMgr,
+		momMgr:     momMgr,
+		ddmMgr:     ddmMgr,
+		saveMgr:    saveMgr,
+		timeMgr:    timeMgr,
+		multi:      multi,
+		outbox:     outbox,
+		grpcS:      gs,
+		adminS:     adminGS,
+		metrics:    metrics,
+		foms:       foms,
+		clusterMgr: clusterMgr,
+		clusterSvc: clusterSvc,
 	}, nil
+}
+
+// parseClusterPeers splits a comma-separated --cluster-peers value
+// into a node_id→address map. Each entry is "node_id=host:port";
+// duplicate node_ids are rejected. Empty input yields an empty map
+// (single-node mode).
+func parseClusterPeers(s string) (map[string]string, error) {
+	out := map[string]string{}
+	if s == "" {
+		return out, nil
+	}
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		eq := strings.Index(entry, "=")
+		if eq <= 0 || eq == len(entry)-1 {
+			return nil, fmt.Errorf("invalid peer %q (want node_id=host:port)", entry)
+		}
+		id := entry[:eq]
+		addr := entry[eq+1:]
+		if _, dup := out[id]; dup {
+			return nil, fmt.Errorf("duplicate peer node_id %q", id)
+		}
+		out[id] = addr
+	}
+	return out, nil
 }
 
 // rtidVersion returns the build version used in the AdminService
