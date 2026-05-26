@@ -97,12 +97,40 @@ type ConnectOptions struct {
 	// Empty BearerToken with non-nil Provider → Provider wins.
 	// Both empty/nil → no token.
 	BearerTokenProvider func(ctx context.Context) (string, error)
+
+	// ExtraDialOptions are appended to the gRPC DialOptions before
+	// grpc.NewClient is called. Production callers leave this nil;
+	// tests use it to inject grpc.WithContextDialer for bufconn /
+	// service-mesh fixtures so the redirect-follow path can reach
+	// in-process servers without a real network round-trip.
+	ExtraDialOptions []grpc.DialOption
 }
 
 // Connect dials rtid at addr (host:port) with insecure credentials.
 // Use ConnectWithOptions for TLS / bearer-token configurations.
 func Connect(ctx context.Context, addr string) (*Connection, error) {
 	return ConnectWithOptions(ctx, addr, ConnectOptions{})
+}
+
+// WrapGRPCClientConn builds a Connection over an externally-dialed
+// gRPC channel. Useful for advanced callers that supply a custom
+// dialer (bufconn for in-process tests, alternative resolver,
+// service-mesh sidecar) — the federate SDK then operates over the
+// provided channel without re-dialing.
+//
+// Caller owns the channel's lifecycle: Close() on the returned
+// Connection releases the underlying *grpc.ClientConn.
+func WrapGRPCClientConn(cc *grpc.ClientConn) *Connection {
+	return &Connection{
+		cc:      cc,
+		fed:     rtiv1.NewFederationServiceClient(cc),
+		decl:    rtiv1.NewDeclarationServiceClient(cc),
+		obj:     rtiv1.NewObjectServiceClient(cc),
+		stream:  rtiv1.NewStreamServiceClient(cc),
+		tm:      rtiv1.NewTimeServiceClient(cc),
+		ddm:     rtiv1.NewDDMServiceClient(cc),
+		cluster: rtiv1.NewClusterServiceClient(cc),
+	}
 }
 
 // ConnectWithOptions dials rtid at addr with the given auth options.
@@ -127,6 +155,9 @@ func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (
 			// (real deployments should pair them).
 			requireTLS: opts.TLS != nil,
 		}))
+	}
+	if len(opts.ExtraDialOptions) > 0 {
+		dialOpts = append(dialOpts, opts.ExtraDialOptions...)
 	}
 	cc, err := grpc.NewClient(addr, dialOpts...)
 	if err != nil {

@@ -43,13 +43,16 @@ func newBufNode(t *testing.T, id, addr string, peerListeners map[string]*bufconn
 	// Custom dialer that routes by the cluster's advertised address.
 	// peerListeners maps address → bufconn listener so a
 	// BroadcastAssignment(target=addr) dials the matching listener.
+	// Caller-supplied addresses MUST already be passthrough://
+	// prefixed (so the federate SDK can redial them directly via
+	// grpc.NewClient without re-prefixing).
 	dialer := func(target string) (*grpc.ClientConn, error) {
 		l, ok := peerListeners[target]
 		if !ok {
 			return nil, net.ErrClosed
 		}
 		return grpc.NewClient(
-			"passthrough:///"+target,
+			target,
 			grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
 				return l.Dial()
 			}),
@@ -83,7 +86,7 @@ func (b *bufNode) close() {
 func (b *bufNode) dialClient(t *testing.T) rtiv1.ClusterServiceClient {
 	t.Helper()
 	conn, err := grpc.NewClient(
-		"passthrough:///"+b.addr,
+		b.addr,
 		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
 			return b.lis.Dial()
 		}),
@@ -104,8 +107,8 @@ func TestSpec_M15_2_BroadcastAssignmentRedirectsRemoteNode(t *testing.T) {
 	const (
 		nodeAID   = "node-a"
 		nodeBID   = "node-b"
-		nodeAAddr = "bufnet-a"
-		nodeBAddr = "bufnet-b"
+		nodeAAddr = "passthrough:///bufnet-a"
+		nodeBAddr = "passthrough:///bufnet-b"
 	)
 
 	// Listener table is shared so each node's dialer can reach the
@@ -171,10 +174,10 @@ func TestSpec_M15_2_BroadcastAssignmentRedirectsRemoteNode(t *testing.T) {
 // NOT_FOUND from both nodes.
 func TestSpec_M15_2_LookupUnknownFederationNotFound(t *testing.T) {
 	listeners := map[string]*bufconn.Listener{}
-	nodeA := newBufNode(t, "node-a", "bufnet-a", listeners)
-	nodeB := newBufNode(t, "node-b", "bufnet-b", listeners)
-	listeners["bufnet-a"] = nodeA.lis
-	listeners["bufnet-b"] = nodeB.lis
+	nodeA := newBufNode(t, "node-a", "passthrough:///bufnet-a", listeners)
+	nodeB := newBufNode(t, "node-b", "passthrough:///bufnet-b", listeners)
+	listeners["passthrough:///bufnet-a"] = nodeA.lis
+	listeners["passthrough:///bufnet-b"] = nodeB.lis
 	t.Cleanup(nodeA.close)
 	t.Cleanup(nodeB.close)
 
@@ -198,14 +201,14 @@ func TestSpec_M15_2_LookupUnknownFederationNotFound(t *testing.T) {
 // membership view after RegisterPeer.
 func TestSpec_M15_2_ListClusterNodesReturnsBothNodes(t *testing.T) {
 	listeners := map[string]*bufconn.Listener{}
-	nodeA := newBufNode(t, "node-a", "bufnet-a", listeners)
-	nodeB := newBufNode(t, "node-b", "bufnet-b", listeners)
-	listeners["bufnet-a"] = nodeA.lis
-	listeners["bufnet-b"] = nodeB.lis
+	nodeA := newBufNode(t, "node-a", "passthrough:///bufnet-a", listeners)
+	nodeB := newBufNode(t, "node-b", "passthrough:///bufnet-b", listeners)
+	listeners["passthrough:///bufnet-a"] = nodeA.lis
+	listeners["passthrough:///bufnet-b"] = nodeB.lis
 	t.Cleanup(nodeA.close)
 	t.Cleanup(nodeB.close)
 
-	nodeA.mgr.RegisterPeer("node-b", "bufnet-b")
+	nodeA.mgr.RegisterPeer("node-b", "passthrough:///bufnet-b")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
