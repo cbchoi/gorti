@@ -26,6 +26,13 @@ service ClusterService {
   // ReportNodeHealth — peer-to-peer heartbeat (multi-node only).
   // Cut-1 implementation rejects with FailedPrecondition.
   rpc ReportNodeHealth(ReportNodeHealthRequest) returns (Empty);
+
+  // NotifyAssignment — peer-to-peer notification that a federation
+  // has been assigned to a specific node. The receiver updates its
+  // in-memory assignment table so subsequent LookupFederationHost
+  // calls return REDIRECT to the host. M15 cut-2 demo (best-effort
+  // gossip; production replaces with Raft).
+  rpc NotifyAssignment(NotifyAssignmentRequest) returns (Empty);
 }
 
 message ListClusterNodesRequest {
@@ -62,4 +69,20 @@ message LookupFederationHostResponse {
 message ReportNodeHealthRequest {
   WireVersion wire_version = 1;
   string from_node_id = 2;
+}
+
+// NotifyAssignmentRequest — M15 cut-2 demo gossip payload. ``host_node_id``
+// + ``host_address`` is the rtid that hosts ``federation_name``. The
+// receiver overwrites any prior assignment for that federation; last
+// writer wins (best-effort, not consensus-backed).
+//
+// Forward-compat: production Raft cut MUST replace this RPC with
+// log-replication semantics; this message stays for the demo cut and
+// will be deprecated in M15 cut-3.
+message NotifyAssignmentRequest {
+  WireVersion wire_version = 1;
+  string from_node_id = 2;
+  string federation_name = 3;
+  string host_node_id = 4;
+  string host_address = 5;
 }
