@@ -29,13 +29,14 @@ import (
 // One Connection MAY host multiple federates; the cut-3 / M21 happy
 // path is one Federate per Connection.
 type Connection struct {
-	cc     *grpc.ClientConn
-	fed    rtiv1.FederationServiceClient
-	decl   rtiv1.DeclarationServiceClient
-	obj    rtiv1.ObjectServiceClient
-	stream rtiv1.StreamServiceClient
-	tm     rtiv1.TimeServiceClient // wired here so time.go (TASK-206) can use it
-	ddm    rtiv1.DDMServiceClient  // M23 W4 — Go SDK DDM coverage
+	cc      *grpc.ClientConn
+	fed     rtiv1.FederationServiceClient
+	decl    rtiv1.DeclarationServiceClient
+	obj     rtiv1.ObjectServiceClient
+	stream  rtiv1.StreamServiceClient
+	tm      rtiv1.TimeServiceClient // wired here so time.go (TASK-206) can use it
+	ddm     rtiv1.DDMServiceClient  // M23 W4 — Go SDK DDM coverage
+	cluster rtiv1.ClusterServiceClient // M15.2 + M16.2 — cross-node redirect / reconnect
 }
 
 // FederationSpec describes a federation to create-or-join.
@@ -133,13 +134,14 @@ func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (
 	}
 	_ = ctx
 	return &Connection{
-		cc:     cc,
-		fed:    rtiv1.NewFederationServiceClient(cc),
-		decl:   rtiv1.NewDeclarationServiceClient(cc),
-		obj:    rtiv1.NewObjectServiceClient(cc),
-		stream: rtiv1.NewStreamServiceClient(cc),
-		tm:     rtiv1.NewTimeServiceClient(cc),
-		ddm:    rtiv1.NewDDMServiceClient(cc),
+		cc:      cc,
+		fed:     rtiv1.NewFederationServiceClient(cc),
+		decl:    rtiv1.NewDeclarationServiceClient(cc),
+		obj:     rtiv1.NewObjectServiceClient(cc),
+		stream:  rtiv1.NewStreamServiceClient(cc),
+		tm:      rtiv1.NewTimeServiceClient(cc),
+		ddm:     rtiv1.NewDDMServiceClient(cc),
+		cluster: rtiv1.NewClusterServiceClient(cc),
 	}, nil
 }
 
@@ -495,4 +497,73 @@ func errorString(err error) string {
 		return s[i+len("desc = "):]
 	}
 	return s
+}
+
+// --- M16.2 cross-node redirect / reconnect --------------------------------
+
+// MaxRedirectFollow caps the number of REDIRECT hops the SDK
+// follows before giving up. Prevents infinite redirect loops in
+// misconfigured clusters.
+const MaxRedirectFollow = 3
+
+// ErrTooManyRedirects is returned when ResolveFederationHost
+// follows MaxRedirectFollow REDIRECT responses without reaching
+// CURRENT.
+var ErrTooManyRedirects = errors.New("federate: too many redirects")
+
+// ResolveFederationHost asks the rtid at the current connection
+// which node hosts ``federationName``, following REDIRECT responses
+// transparently. Returns:
+//   - the original Connection unchanged when the rtid hosts the
+//     federation (Status=CURRENT) OR the federation is unknown
+//     (Status=NOT_FOUND — caller will create it on this node)
+//   - a NEW Connection to the host rtid when Status=REDIRECT
+//
+// When a new Connection is returned, the caller is responsible for
+// closing the prior one (if no longer needed). Use the returned
+// Connection for the subsequent JoinFederation call.
+//
+// M15 cut-2 demo wire surface; M16 cut-3 will add reconnect-on-
+// stream-drop tied to the consensus liveness signal.
+func (c *Connection) ResolveFederationHost(
+	ctx context.Context,
+	federationName string,
+	opts ConnectOptions,
+) (*Connection, error) {
+	if c == nil || c.cluster == nil {
+		return c, errors.New("federate: cluster service not available on this connection")
+	}
+	current := c
+	for hop := 0; hop < MaxRedirectFollow; hop++ {
+		resp, err := current.cluster.LookupFederationHost(ctx,
+			&rtiv1.LookupFederationHostRequest{
+				WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
+				FederationName: federationName,
+			})
+		if err != nil {
+			return current, fmt.Errorf("federate: LookupFederationHost: %w", err)
+		}
+		switch resp.GetStatus() {
+		case rtiv1.LookupFederationHostResponse_CURRENT,
+			rtiv1.LookupFederationHostResponse_NOT_FOUND:
+			return current, nil
+		case rtiv1.LookupFederationHostResponse_REDIRECT:
+			// Dial the host. Close the prior intermediate (but not
+			// the caller's original Connection — that's their
+			// responsibility).
+			next, err := ConnectWithOptions(ctx, resp.GetHostAddress(), opts)
+			if err != nil {
+				return current, fmt.Errorf("federate: redial %s: %w",
+					resp.GetHostAddress(), err)
+			}
+			if current != c {
+				_ = current.Close()
+			}
+			current = next
+		default:
+			return current, fmt.Errorf("federate: LookupFederationHost: unexpected status %v",
+				resp.GetStatus())
+		}
+	}
+	return current, ErrTooManyRedirects
 }
