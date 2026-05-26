@@ -1052,12 +1052,30 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		}
 	}
 
+	// M15 cut-2 — construct cluster manager + service BEFORE the
+	// grpc handlers so the federation-creation hook can reference
+	// them. The service is registered on the gs server later in
+	// this function (after gs is created).
+	clusterAdvAddr := cfg.ClusterAdvertise
+	if clusterAdvAddr == "" {
+		clusterAdvAddr = cfg.ListenAddr
+	}
+	clusterMgr := cluster.New(cfg.NodeID, clusterAdvAddr)
+	peers, err := parseClusterPeers(cfg.ClusterPeers)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: --cluster-peers: %w", err)
+	}
+	for nodeID, address := range peers {
+		clusterMgr.RegisterPeer(nodeID, address)
+	}
+	clusterSvc := grpcsvc.NewClusterService(clusterMgr, nil)
+
 	grpcSrv, err := grpcsvc.NewServer(grpcsvc.Options{
 		Federations:                fedMgr,
 		Declarations:               declMgr,
 		Objects:                    objReg,
 		Outbox:                     outbox,
-		OnCreateFederationSuccess:  createFederationHook(foms, momMgr, cfg.Logger),
+		OnCreateFederationSuccess:  createFederationHook(foms, momMgr, clusterMgr, clusterSvc, cfg.Logger),
 		OnDestroyFederationSuccess: destroyFederationHook(momMgr, cfg.Logger),
 		// M21 TASK-204: TimeService gRPC. Composed unconditionally
 		// in server mode (vs cut-1's nil placeholder) so federates
@@ -1168,22 +1186,9 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		}
 	}
 
-	// M15 cut-2 — cluster manager + gRPC handler. Single-node mode
-	// (no --cluster-peers) leaves clusterMgr empty of peers and the
-	// cluster service behaves identically to cut-1.
-	clusterAdvAddr := cfg.ClusterAdvertise
-	if clusterAdvAddr == "" {
-		clusterAdvAddr = cfg.ListenAddr
-	}
-	clusterMgr := cluster.New(cfg.NodeID, clusterAdvAddr)
-	if peers, err := parseClusterPeers(cfg.ClusterPeers); err == nil {
-		for nodeID, address := range peers {
-			clusterMgr.RegisterPeer(nodeID, address)
-		}
-	} else {
-		return nil, fmt.Errorf("rtid: --cluster-peers: %w", err)
-	}
-	clusterSvc := grpcsvc.NewClusterService(clusterMgr, nil)
+	// M15 cut-2 — register the cluster service on the federate-facing
+	// gRPC server (constructed earlier in this function alongside the
+	// other handlers).
 	clusterSvc.RegisterWith(gs)
 
 	return &rtid{
@@ -1692,11 +1697,14 @@ func chainOnFederateJoined(
 // createFederationHook returns the gRPC OnCreateFederationSuccess
 // closure that (a) populates the FOM repository's per-federation map
 // for FOMRepoOrderLookup and (b) registers the HLAfederation MOM
-// instance. The double parse on the FOM modules is intentional: the
+// instance. M15.2.3 also (c) records the federation→self assignment
+// in the cluster manager and broadcasts NotifyAssignment to peers.
+//
+// The double parse on the FOM modules is intentional: the
 // federation manager already validated them, so a Load failure here
 // would be a programmer error — surfacing it would lie about the
 // federation's existence (it has already been created).
-func createFederationHook(foms *fomRepository, momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, []core.FOMModule) {
+func createFederationHook(foms *fomRepository, momMgr core.ManagementObjectModel, clusterMgr *cluster.Manager, clusterSvc *grpcsvc.ClusterService, logger *slog.Logger) func(context.Context, core.FederationName, []core.FOMModule) {
 	return func(ctx context.Context, name core.FederationName, modules []core.FOMModule) {
 		h, err := foms.Load(ctx, modules)
 		if err != nil {
@@ -1709,6 +1717,15 @@ func createFederationHook(foms *fomRepository, momMgr core.ManagementObjectModel
 		if err := momMgr.FederationCreated(ctx, name, modules); err != nil {
 			logger.Warn("rtid: MOM FederationCreated hook failed",
 				"federation", name, "err", err)
+		}
+		// M15 cut-2 — claim the federation locally and tell peers.
+		if clusterMgr != nil {
+			clusterMgr.AssignFederation(name)
+			if clusterSvc != nil {
+				clusterSvc.BroadcastAssignment(
+					ctx, name, clusterMgr.SelfID(), clusterMgr.SelfAddress(),
+				)
+			}
 		}
 	}
 }
