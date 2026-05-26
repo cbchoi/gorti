@@ -626,6 +626,80 @@ Frozen plan + 28 tasks (TASK-246..273) at `docs/M23_DISPATCH_PLAN.md`.
 - `enableAsynchronousDelivery` / `disableAsynchronousDelivery` and lookahead-zero / optimistic time variants explicitly NOT in M21 (deferred to M20)
 - Frozen plan + 22 tasks (TASK-201..220) at `docs/M21_DISPATCH_PLAN.md`
 
+#### M20 — MOM-driven control services + §8 long-tail queries (closed 2026-05-26)
+
+Closes the long-tail IEEE 1516.1 compliance items deferred since
+M21: the §8.19/§8.20 time-state queries (queryGALT / queryLITS),
+the §8.21 retract path, and the §10 "drive the RTI via
+HLAmanager interactions" surface (HLAsetSwitches, HLAsetService /
+ExceptionReporting, HLArequest* counter family with HLAreport*
+responses).
+
+The §10 dispatch loop is the largest piece — a new layer that
+intercepts incoming sendInteraction calls whose class falls in
+the HLAmanager subtree and routes them to handler functions
+instead of broadcasting like ordinary interactions. The standard
+MIM (already merged into every federation FOM via
+rti/pkg/fom/mim) declares the class hierarchy; the dispatcher
+runs handlers for the most-useful subset.
+
+Sub-milestone breakdown
+- M20.1 (`137358a`) §8.19 queryGALT + §8.20 queryLITS — proto +
+  Go server + C++ SDK. GALT computes the LBTS excluding the
+  caller; LITS walks the per-federate tsoBuffer for the
+  smallest timestamp. 3 integration tests against the C++
+  ambassador.
+- M20.2 (`2eb386c`) §8.21 retract — wire-level handle on
+  SendInteraction / UpdateAttributeValues, new Retract RPC, time
+  manager tracks (sender, handle) on bufferedTSOEvent so
+  RetractMessage can find + drop matching events across every
+  recipient's buffer. C++ SDK gains MessageRetractionHandle +
+  retract() method. 4 unit tests in rti/internal/time/.
+- M20.3 (`add107d`) HLAmanager interaction dispatch
+  infrastructure — Dispatcher in rti/internal/mom/, hook into
+  object.Registry.sendInteraction (skip publish gate + fanout
+  when an HLAmanager.* class has a registered handler), wired
+  via rtid composition root.
+- M20.4 (`4c8561f`) HLAsetSwitches catalog —
+  HLAautoProvide (federation-wide), HLAconveyRegionDesignator
+  Sets / HLAconveyProducingFederate (per-federate), plus
+  HLAsetServiceReporting + HLAsetExceptionReporting as distinct
+  interactions. Spec-default off; partial-parameter updates
+  preserve unmentioned switches.
+- M20.5 (`d0cd220`) HLArequest* counter handlers — 4 handlers
+  for HLArequestInteractionsSent/Received +
+  HLArequestUpdatesSent/ReflectionsReceived. Each produces a
+  ResponseInteraction carrying the matching HLAreport* class
+  name + {HLAfederate, HLAcount} parameter payload.
+- M20.6 (`c372a27`) HLAreport* response emit wiring — production
+  ResponseEmitter resolves response class + param names to FOM
+  handles, builds a ReceiveInteraction proto, sends through the
+  MOM Outbox. Composition root wires
+  momDispatcher.SetEmitter(NewProductionEmitter(outbox)).
+- M20.7 (this commit) M20 close — CHANGELOG + README + memory.
+
+Verification
+- 17 new unit tests across rti/internal/time + rti/internal/mom.
+- go test ./... green.
+- ctest 17/17 green.
+
+Out of scope (still open in M20 long-tail)
+- HLArequestObjectInstance{Updated,Reflected} family — needs the
+  object registry to expose per-(federate, instance) update/
+  reflect counters; bigger lift than the federate-wide counter
+  handlers shipped here.
+- HLArequestPublications / HLArequestSubscriptions — needs
+  declaration.Manager access in the dispatcher's DispatchContext;
+  mechanically straightforward but requires expanding the
+  context type.
+- HLAmanager.HLAfederation.HLArequest.HLArequest{
+  Synchronization Points, SynchronizationPointStatus,
+  FederationSave } — wraps existing service RPCs but each is its
+  own response-shape design exercise.
+- HLAsetTiming + HLAmodifyAttributeState — broader feature work
+  (periodic MOM update intervals; attribute publication state
+  transitions). Deferred to a future cut.
+
 #### M19 — DDS / RTPS data plane adapter (Phase 0 + Phase 1a; halted clean)
 - Phase 0 design doc at `docs/m19-dds-adapter.md` — architecture, library + binding choices, QoS mapping, distribution model, phasing
 - §6.1 / §6.2 / §6.3 / §6.5 PINNED: Cyclone DDS / hand-rolled minimal CGo / `cyclonedds-python` / build-tag-gated split (default `rtid` stays CGo-free + DDS-free)
