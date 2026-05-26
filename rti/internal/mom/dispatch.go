@@ -77,11 +77,18 @@ type ResponseInteraction struct {
 // M20.6 wires the production emitter to the MOM Outbox so the
 // response actually reaches the wire. Nil emitter discards
 // responses (M20.3 default behavior).
+//
+// ``fom`` and ``fomNames`` are forwarded so the emitter can resolve
+// the response class name + parameter names to handles before
+// building the wire proto. Production wires this via cmd/rtid; the
+// recording emitter in tests just captures the name-keyed form.
 type ResponseEmitter func(
 	ctx context.Context,
 	fed core.FederationName,
 	recipient core.FederateHandle,
 	resp ResponseInteraction,
+	fom core.FOMHandle,
+	fomNames core.FOMHandleNameLookup,
 ) error
 
 // Dispatcher holds the class-name → Handler table.
@@ -191,7 +198,7 @@ func (d *Dispatcher) Dispatch(
 	d.mu.RUnlock()
 	if emit != nil {
 		for _, r := range responses {
-			if err := emit(ctx, fed, sender, r); err != nil {
+			if err := emit(ctx, fed, sender, r, fom, fomNames); err != nil {
 				return fmt.Errorf("mom emit %s: %w", r.ClassName, err)
 			}
 		}

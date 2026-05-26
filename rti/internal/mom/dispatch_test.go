@@ -309,6 +309,8 @@ func (r *recordingEmitter) emit(
 	fed core.FederationName,
 	recipient core.FederateHandle,
 	resp ResponseInteraction,
+	_ core.FOMHandle,
+	_ core.FOMHandleNameLookup,
 ) error {
 	r.emitted = append(r.emitted, emittedResponse{fed, recipient, resp})
 	return nil

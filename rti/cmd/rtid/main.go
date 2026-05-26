@@ -928,7 +928,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	// intercepts incoming sendInteraction calls whose class is in
 	// the HLAmanager subtree and routes to the matching handler
 	// (HLAsetSwitches, HLArequest*, etc.) instead of broadcasting.
+	// M20.6 wires the production ResponseEmitter so HLAreport*
+	// responses from HLArequest* handlers reach the wire via the
+	// shared outbox.
 	momDispatcher := mom.NewDispatcher(momMgr)
+	momDispatcher.SetEmitter(mom.NewProductionEmitter(outbox))
 	objReg, err := object.New(object.Options{
 		EventLog:           multi,
 		Declarations:       declMgr,
