@@ -290,6 +290,121 @@ func TestDispatch_NonManagerClassIsNoOp(t *testing.T) {
 	}
 }
 
+// --- HLArequest* counter handlers (M20.5) ----------------------------------
+
+// recordingEmitter captures each ResponseInteraction the dispatcher
+// forwards through SetEmitter. Tests assert against the captured slice.
+type recordingEmitter struct {
+	emitted []emittedResponse
+}
+
+type emittedResponse struct {
+	Federation core.FederationName
+	Recipient  core.FederateHandle
+	Resp       ResponseInteraction
+}
+
+func (r *recordingEmitter) emit(
+	_ context.Context,
+	fed core.FederationName,
+	recipient core.FederateHandle,
+	resp ResponseInteraction,
+) error {
+	r.emitted = append(r.emitted, emittedResponse{fed, recipient, resp})
+	return nil
+}
+
+func TestHandleRequestInteractionsSent_EmitsReportWithCounter(t *testing.T) {
+	mom := newTestMOM(t, "f1")
+	mom.FederationCreated(context.Background(), "f1",
+		[]core.FOMModule{{Path: "test.xml"}})
+	mom.FederateJoined(context.Background(), "f1", 7, "alice", "atype")
+	// Bump the InteractionsSent counter to 3.
+	for i := 0; i < 3; i++ {
+		mom.IncrementInteractionsSent("f1", 7)
+	}
+	emit := &recordingEmitter{}
+	d := NewDispatcher(mom)
+	d.SetEmitter(emit.emit)
+	fom := buildSwitchFOM() // HLArequest* don't need params, FOM lookup unused
+
+	if err := d.Dispatch(context.Background(), "f1",
+		ClassRequestInteractionsSent, 7, nil, fom, fom); err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if len(emit.emitted) != 1 {
+		t.Fatalf("emitted = %d, want 1", len(emit.emitted))
+	}
+	got := emit.emitted[0]
+	if got.Recipient != 7 {
+		t.Errorf("response recipient = %d, want 7 (the requester)", got.Recipient)
+	}
+	if got.Resp.ClassName != ClassReportInteractionsSent {
+		t.Errorf("response class = %q, want %q",
+			got.Resp.ClassName, ClassReportInteractionsSent)
+	}
+	// HLAcount is 4-byte BE big-endian uint32; value 3 → 0x00000003.
+	count := got.Resp.Params["HLAcount"]
+	if len(count) != 4 || count[3] != 3 {
+		t.Errorf("HLAcount = %v, want 4-byte BE [0,0,0,3]", count)
+	}
+	// HLAfederate carries the requester's handle.
+	fedB := got.Resp.Params["HLAfederate"]
+	if len(fedB) != 4 || fedB[3] != 7 {
+		t.Errorf("HLAfederate = %v, want 4-byte BE [0,0,0,7]", fedB)
+	}
+}
+
+func TestHandleRequestUpdatesSent_ReadsCorrectCounter(t *testing.T) {
+	mom := newTestMOM(t, "f1")
+	mom.FederationCreated(context.Background(), "f1",
+		[]core.FOMModule{{Path: "test.xml"}})
+	mom.FederateJoined(context.Background(), "f1", 7, "alice", "atype")
+	// Bump unrelated counters; the handler must pick UpdatesSent only.
+	mom.IncrementInteractionsSent("f1", 7)
+	mom.IncrementInteractionsReceived("f1", 7)
+	for i := 0; i < 5; i++ {
+		mom.IncrementUpdatesSent("f1", 7)
+	}
+	emit := &recordingEmitter{}
+	d := NewDispatcher(mom)
+	d.SetEmitter(emit.emit)
+	fom := buildSwitchFOM()
+
+	if err := d.Dispatch(context.Background(), "f1",
+		ClassRequestUpdatesSent, 7, nil, fom, fom); err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if len(emit.emitted) != 1 {
+		t.Fatalf("emitted = %d, want 1", len(emit.emitted))
+	}
+	if got := emit.emitted[0].Resp.ClassName; got != ClassReportUpdatesSent {
+		t.Errorf("response class = %q, want %q", got, ClassReportUpdatesSent)
+	}
+	count := emit.emitted[0].Resp.Params["HLAcount"]
+	if count[3] != 5 {
+		t.Errorf("HLAcount byte[3] = %d, want 5", count[3])
+	}
+}
+
+func TestHandleRequest_UnknownFederateNoEmit(t *testing.T) {
+	mom := newTestMOM(t, "f1")
+	mom.FederationCreated(context.Background(), "f1",
+		[]core.FOMModule{{Path: "test.xml"}})
+	// No federates joined.
+	emit := &recordingEmitter{}
+	d := NewDispatcher(mom)
+	d.SetEmitter(emit.emit)
+	fom := buildSwitchFOM()
+	if err := d.Dispatch(context.Background(), "f1",
+		ClassRequestInteractionsSent, 99, nil, fom, fom); err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if len(emit.emitted) != 0 {
+		t.Errorf("expected no emit for unknown federate, got %d", len(emit.emitted))
+	}
+}
+
 // --- Helper ----------------------------------------------------------------
 
 // newTestMOM builds a Manager with a no-op Outbox so handler tests can

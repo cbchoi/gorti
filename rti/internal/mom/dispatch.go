@@ -72,11 +72,25 @@ type ResponseInteraction struct {
 	Params map[string][]byte
 }
 
+// ResponseEmitter delivers an HLAreport* response back to the
+// requesting federate. M20.5 lets handlers produce responses;
+// M20.6 wires the production emitter to the MOM Outbox so the
+// response actually reaches the wire. Nil emitter discards
+// responses (M20.3 default behavior).
+type ResponseEmitter func(
+	ctx context.Context,
+	fed core.FederationName,
+	recipient core.FederateHandle,
+	resp ResponseInteraction,
+) error
+
 // Dispatcher holds the class-name → Handler table.
 type Dispatcher struct {
 	mu       sync.RWMutex
 	handlers map[string]Handler
 	mom      *Manager
+	// M20.5 — emitter for HLAreport* responses. nil = discard.
+	emitter ResponseEmitter
 }
 
 // NewDispatcher wires the default M20.3+ handler catalog.
@@ -88,10 +102,20 @@ func NewDispatcher(mom *Manager) *Dispatcher {
 		handlers: make(map[string]Handler),
 		mom:      mom,
 	}
-	// M20.4+ registers concrete handlers; M20.3 scaffold ships only
-	// the empty dispatcher + the registration entry point.
 	registerSwitchHandlers(d)
+	// M20.5 — HLArequest* counter handlers.
+	registerRequestHandlers(d)
 	return d
+}
+
+// SetEmitter wires the ResponseEmitter the dispatcher invokes for
+// each handler-produced HLAreport* response. M20.6 calls this from
+// cmd/rtid composition to forward responses through the MOM's
+// Outbox.
+func (d *Dispatcher) SetEmitter(e ResponseEmitter) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.emitter = e
 }
 
 // Register associates a handler with an FOM class name. Overwrites
@@ -158,9 +182,19 @@ func (d *Dispatcher) Dispatch(
 	if err != nil {
 		return fmt.Errorf("mom dispatch %s: %w", className, err)
 	}
-	// M20.6 will emit responses[] back to the sender via the outbox.
-	// For M20.3 we discard so the dispatch path is observable but
-	// the wire side stays untouched.
-	_ = responses
+	// M20.5 — invoke the response emitter (if wired) for each
+	// HLAreport* response the handler produced. Send errors are
+	// logged via the emitter's caller (M20.6 wires this through the
+	// MOM Outbox which logs internally).
+	d.mu.RLock()
+	emit := d.emitter
+	d.mu.RUnlock()
+	if emit != nil {
+		for _, r := range responses {
+			if err := emit(ctx, fed, sender, r); err != nil {
+				return fmt.Errorf("mom emit %s: %w", r.ClassName, err)
+			}
+		}
+	}
 	return nil
 }
