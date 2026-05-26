@@ -96,10 +96,18 @@ Skim-able summary of what each cut shipped. The append-only log below has the fu
   - **Demo cut deferrals** (still open for M15 cut-3): no consensus (last-writer-wins gossip), no fault tolerance (peer death = inconsistent assignments), no persistence (assignments lost on restart), static cluster membership at startup, best-effort peer sync, no failover (M16 territory).
 - Plan at `docs/M15_DISPATCH_PLAN.md`. 15 spec tests total across cut-1 + cut-2 demo.
 
-#### M16 — Hot standby + replay-driven RTI failover (DEFERRED 2026-05-09)
-- M16 builds on M15 cut-2; deferred until that lands.
-- **Dispatch plan written** at `docs/M16_DISPATCH_PLAN.md` so the design contract is pinned: replicated event log, federation lease + automatic promotion, federate reconnect via M15's `LookupFederationHost`, AdminService `PromoteFederation` + `QueryFederationRole`.
-- 6-wave structure documented; each wave is genuine distributed-systems work.
+#### M16 — Hot standby + replay-driven RTI failover (DEMO closed 2026-05-26)
+- M16 builds on M15 cut-2. Plan-only entry deferred 2026-05-09; the **demo cut closed 2026-05-26** as a real implementation that exercises the wire surface end-to-end, intentionally NOT production fault-tolerant.
+- **Sub-milestones:**
+  - M16.1 (`457544c`) — `Replicator` interface + `NoopReplicator` (always-accepts stand-in for the future Raft-backed implementation). `cluster.Manager.PromoteFederation(name, targetNodeID)` flips the local assignment; `ErrInvalidPromoteTarget` / `ErrUnknownPromoteTarget` sentinels. `MutatingService.PromoteFederation` admin RPC handler.
+  - M16.2 (`77cc9a2`) — Go SDK `(*Connection).ResolveFederationHost(ctx, federationName, opts)` follows REDIRECT responses up to `MaxRedirectFollow` (3) hops. `ConnectOptions.ExtraDialOptions` for custom dialers; `WrapGRPCClientConn` helper for externally-dialed channels. `ErrTooManyRedirects` sentinel.
+  - M16.3 (`4763db5`) — 2-node bufconn failover spec test: promote-then-redirect end-to-end + circular-redirect loop guard. 21 M15 spec tests total (cut-1 + cut-2 + M16 demo).
+- **Demo deferrals open for M16 cut-3 (Raft-backed):**
+  - No actual event-log replication — the `NoopReplicator` ships as a contract pin; cut-3 will swap in a `RaftReplicator` that quorum-commits.
+  - No federate-side reconnect-on-stream-drop — the SDK's `ResolveFederationHost` follows REDIRECTs when called explicitly, but the events-drain goroutine doesn't auto-redial when its gRPC stream errors. Cut-3 will tie reconnect to consensus-driven liveness signals.
+  - No bounded data loss contract — cut-3 will pin the replication-window invariant.
+  - No automatic promotion on lease expiry — operators trigger manually via the admin RPC.
+- 6-wave production structure documented in `docs/M16_DISPATCH_PLAN.md`; each wave is genuine distributed-systems work.
 
 #### M14 — mTLS + OIDC client authentication (closed 2026-05-09)
 - Pre-M14 every gRPC connection was plaintext + unauthenticated; any process on the network could JoinFederation. M14 wires authentication at the transport / interceptor layer; no service-handler changes.
