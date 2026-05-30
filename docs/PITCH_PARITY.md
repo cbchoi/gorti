@@ -7,7 +7,7 @@ Portico, MAK RTI) should bind against.
 
 This document records the places where gorti's Layer-2 surface
 diverges from a strict reading of the spec, what's compatible
-anyway, and what's explicitly out of scope. Last updated for M27.
+anyway, and what's explicitly out of scope. Last updated for M28.
 
 ## Compatible (gorti behaves as Pitch would)
 
@@ -26,18 +26,24 @@ anyway, and what's explicitly out of scope. Last updated for M27.
   identifiers accept either **`int`** (Pitch-style FOM handle, e.g.
   from `getObjectClassHandle`) **or `str`** (FOM name, pysdk
   convenience). Mixed lists are supported.
+- **M28** — typed handle classes (`ObjectClassHandle`, etc. — 9 total)
+  and typed collections (`AttributeHandleSet`,
+  `AttributeHandleValueMap`, etc. — 8 total) under `rti1516e.*`;
+  ambassador factory accessors (`getAttributeHandleSetFactory` etc. —
+  6 total). Federate code written against the Pitch typed-handle API
+  compiles unchanged.
 
 ## Method-shape divergence table
 
 | Spec method | Pitch shape | gorti shape | Status |
 |---|---|---|---|
-| `publishObjectClassAttributes` | `(ObjectClassHandle, AttributeHandleSet)` | `(int \| str, list[int \| str])` | Compatible |
-| `subscribeObjectClassAttributes` | `(ObjectClassHandle, AttributeHandleSet)` | `(int \| str, list[int \| str])` | Compatible |
-| `registerObjectInstance` | `(ObjectClassHandle[, String])` | `(int \| str, str \| None)` | Compatible |
-| `updateAttributeValues` | `(ObjectInstanceHandle, Map<AttributeHandle, byte[]>[, LogicalTime])` | `(int, dict[int \| str, bytes], float \| None)` | Compatible |
-| `sendInteraction` | `(InteractionClassHandle, Map<ParameterHandle, byte[]>, ...)` | `(int \| str, dict[int \| str, bytes], ...)` | Compatible |
-| `getObjectClassHandle(name)` | `(String) -> ObjectClassHandle` | `(str) -> int` | Compatible (M25 B) |
-| `getAttributeHandle` | `(ObjectClassHandle, String) -> AttributeHandle` | `(int, str) -> int` | Compatible (M25 B) |
+| `publishObjectClassAttributes` | `(ObjectClassHandle, AttributeHandleSet)` | `(int \| str \| ObjectClassHandle, list[int \| str \| AttributeHandle] \| AttributeHandleSet)` | Compatible (M28) |
+| `subscribeObjectClassAttributes` | `(ObjectClassHandle, AttributeHandleSet)` | `(int \| str \| ObjectClassHandle, list[int \| str \| AttributeHandle] \| AttributeHandleSet)` | Compatible (M28) |
+| `registerObjectInstance` | `(ObjectClassHandle[, String])` | `(int \| str \| ObjectClassHandle, str \| None)` | Compatible (M28) |
+| `updateAttributeValues` | `(ObjectInstanceHandle, Map<AttributeHandle, byte[]>[, LogicalTime])` | `(int \| ObjectInstanceHandle, dict[int \| str \| AttributeHandle, bytes] \| AttributeHandleValueMap, float \| None)` | Compatible (M28) |
+| `sendInteraction` | `(InteractionClassHandle, Map<ParameterHandle, byte[]>, ...)` | `(int \| str \| InteractionClassHandle, dict[int \| str \| ParameterHandle, bytes] \| ParameterHandleValueMap, ...)` | Compatible (M28) |
+| `getObjectClassHandle(name)` | `(String) -> ObjectClassHandle` | `(str) -> ObjectClassHandle` | Compatible (M25 B, M28) |
+| `getAttributeHandle` | `(ObjectClassHandle, String) -> AttributeHandle` | `(int \| str \| ObjectClassHandle, str) -> AttributeHandle` | Compatible (M25 B, M28) |
 | `getObjectInstanceHandle(name)` | runtime query | wire RPC + SDK accessor | Compatible (M27 C) |
 | `reserveObjectInstanceName` | async callback | async event + Pitch callback slot | Compatible (M26 F) |
 | `evokeCallback` | strict HLA_EVOKED buffering | cheap yield-to-loop | **Diverging (see below)** |
@@ -74,6 +80,34 @@ amb.enableCallbacks()
 If a ported federate requires the strict HLA_EVOKED semantics
 without the explicit disable/evoke discipline, raise an issue —
 buffered-drain mode would land in a future milestone.
+
+### Typed-handle int-equality (§10.6) — M28 W1
+
+gorti's typed handle classes (`ObjectClassHandle`, `AttributeHandle`,
+…) subclass `int`. This preserves bare-int back-compat — code that
+asserts `handle == 5` or passes a handle to `int(...)` keeps working
+unchanged — but it has a behavioral consequence vs Pitch's typed
+handles:
+
+```python
+>>> from rti1516e import ObjectClassHandle, AttributeHandle
+>>> ObjectClassHandle(5) == AttributeHandle(5)
+True   # gorti: equal (both are int(5))
+       # Pitch: False (distinct typed handle classes)
+```
+
+This is a deliberate dual-accept concession — it lets mixed-typed
+and bare-int callers interoperate in the same federate. Code that
+needs strict cross-type distinction must use `isinstance()`:
+
+```python
+def assert_object_class(h):
+    assert isinstance(h, ObjectClassHandle), f"want ObjectClassHandle, got {type(h)}"
+```
+
+Documented in `pysdk/rti1516e/handles.py::_StrongHandle` docstring
+and locked by
+`pysdk/tests/spec/m28/test_typed_handle_surface.py::test_spec_m28_typed_handle_int_equality_documented_concession`.
 
 ### C++ SDK parity (M17 Cut-2 + Cut-3)
 

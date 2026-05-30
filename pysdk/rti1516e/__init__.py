@@ -10,6 +10,13 @@ Public API:
         RtiConnection, FederationSpec, Federate,
         # Layer 2 — standard-shaped ambassador (Java/C++ port-friendly)
         Rti1516eAmbassador,
+        # M28 — Pitch-style typed handles + typed collections
+        ObjectClassHandle, AttributeHandle, InteractionClassHandle,
+        ParameterHandle, ObjectInstanceHandle, FederateHandle,
+        DimensionHandle, RegionHandle, MessageRetractionHandle,
+        AttributeHandleSet, ParameterHandleSet, FederateHandleSet,
+        DimensionHandleSet, RegionHandleSet,
+        AttributeHandleValueMap, ParameterHandleValueMap, AttributeRegionMap,
         # Events emitted by Federate.events()
         DiscoverObjectInstance, ReflectAttributeValues,
         ReceiveInteraction, TimeAdvanceGrant, FederationHalted,
@@ -77,19 +84,48 @@ from rti1516e.events import (
     ReflectAttributeValues,
     TimeAdvanceGrant,
 )
+from rti1516e.handles import (
+    AttributeHandle,
+    DimensionHandle,
+    FederateHandle,
+    InteractionClassHandle,
+    MessageRetractionHandle,
+    ObjectClassHandle,
+    ObjectInstanceHandle,
+    ParameterHandle,
+    RegionHandle,
+)
 from rti1516e.ownership import OwnershipClient
 from rti1516e.savepoint import RestoreState, SavepointClient, SaveState
+from rti1516e.sets import (
+    AttributeHandleSet,
+    AttributeHandleValueMap,
+    AttributeRegionMap,
+    DimensionHandleSet,
+    FederateHandleSet,
+    ParameterHandleSet,
+    ParameterHandleValueMap,
+    RegionHandleSet,
+)
 from rti1516e.standard import Rti1516eAmbassador
 from rti1516e.sync import SyncClient
 
 __all__ = [
+    "AttributeHandle",
+    "AttributeHandleSet",
+    "AttributeHandleValueMap",
+    "AttributeRegionMap",
     "AttributeRegions",
     "DDMClient",
+    "DimensionHandle",
+    "DimensionHandleSet",
     "DiscoverObjectInstance",
     "EncodingInsufficientBytes",
     "EncodingPaddingViolation",
     "EncodingTypeMismatch",
     "Federate",
+    "FederateHandle",
+    "FederateHandleSet",
     "FederationAlreadyExists",
     "FederationAlreadyJoined",
     "FederationHalted",
@@ -100,16 +136,25 @@ __all__ = [
     "FederationSpec",
     "FomMimRedefinition",
     "FomValidationFailed",
+    "InteractionClassHandle",
     "InvalidOwnershipState",
     "InvalidSaveState",
     "InvalidSyncState",
+    "MessageRetractionHandle",
     "ObjectAttributeNotOwned",
+    "ObjectClassHandle",
     "ObjectClassNotPublished",
+    "ObjectInstanceHandle",
     "ObjectNotFound",
     "OwnershipClient",
     "OwnershipNotPermitted",
+    "ParameterHandle",
+    "ParameterHandleSet",
+    "ParameterHandleValueMap",
     "ReceiveInteraction",
     "ReflectAttributeValues",
+    "RegionHandle",
+    "RegionHandleSet",
     "RegionNotFound",
     "RestoreState",
     "Rti1516eAmbassador",

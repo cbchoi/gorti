@@ -32,12 +32,42 @@ helper performs both calls and returns the minted handle.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from rti1516e._grpc_errors import translate_rpc_error
+from rti1516e.handles import (
+    AttributeHandle,
+    DimensionHandle,
+    InteractionClassHandle,
+    ObjectClassHandle,
+    ObjectInstanceHandle,
+    ParameterHandle,
+    RegionHandle,
+)
+from rti1516e.sets import (
+    AttributeHandleSet,
+    DimensionHandleSet,
+    ParameterHandleValueMap,
+    RegionHandleSet,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - type-check imports only
     import grpc
+
+# M28 — Pitch-port type aliases. Public service entry points widen to
+# accept typed handles + typed sets; internal protobuf request fields
+# stay bare int via existing ``int(h)`` coercion.
+_ObjectClassRef: TypeAlias = "int | ObjectClassHandle"
+_InteractionClassRef: TypeAlias = "int | InteractionClassHandle"
+_ObjectInstanceRef: TypeAlias = "int | ObjectInstanceHandle"
+_DimensionRef: TypeAlias = "int | DimensionHandle"
+_RegionRef: TypeAlias = "int | RegionHandle"
+_AttributeRefList: TypeAlias = "list[int | AttributeHandle] | AttributeHandleSet"
+_DimensionRefList: TypeAlias = "list[int | DimensionHandle] | DimensionHandleSet"
+_RegionRefList: TypeAlias = "list[int | RegionHandle] | RegionHandleSet"
+_ParameterValueDict: TypeAlias = (
+    "dict[int | ParameterHandle, bytes] | ParameterHandleValueMap"
+)
 
 
 @dataclass(frozen=True)
@@ -114,7 +144,7 @@ class DDMClient:
     # --- Region lifecycle (§6.5-6.6) -----------------------------------------
 
     async def create_region(
-        self, routing_space_handle: int, dimension_handles: list[int]
+        self, routing_space_handle: int, dimension_handles: _DimensionRefList
     ) -> int:
         """§6.5 — create a region in the given routing space; return handle."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -134,8 +164,8 @@ class DDMClient:
 
     async def set_range_bounds(
         self,
-        region_handle: int,
-        dimension_handle: int,
+        region_handle: _RegionRef,
+        dimension_handle: _DimensionRef,
         *,
         lower: int,
         upper: int,
@@ -160,7 +190,7 @@ class DDMClient:
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 
-    async def commit_region_modifications(self, region_handles: list[int]) -> None:
+    async def commit_region_modifications(self, region_handles: _RegionRefList) -> None:
         """§6.5 — atomically commit pending bounds across the supplied regions."""
         from rti.v1 import common_pb2, ddm_pb2
 
@@ -175,7 +205,7 @@ class DDMClient:
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 
-    async def delete_region(self, region_handle: int) -> None:
+    async def delete_region(self, region_handle: _RegionRef) -> None:
         """§6.6 — delete a region. Pending publishers/subscribers detach."""
         from rti.v1 import common_pb2, ddm_pb2
 
@@ -191,7 +221,7 @@ class DDMClient:
             translate_rpc_error(exc)
 
     async def query_bounds(
-        self, region_handle: int, dimension_handle: int
+        self, region_handle: _RegionRef, dimension_handle: _DimensionRef
     ) -> tuple[int, int] | None:
         """Return committed ``(lower, upper)`` for (region, dim), or None."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -214,9 +244,9 @@ class DDMClient:
 
     async def subscribe_object_class_attributes_with_regions(
         self,
-        object_class_handle: int,
-        attribute_handles: list[int],
-        region_handles: list[int],
+        object_class_handle: _ObjectClassRef,
+        attribute_handles: _AttributeRefList,
+        region_handles: _RegionRefList,
     ) -> None:
         """§6.10 — region-scoped subscription to object-class attributes."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -236,8 +266,8 @@ class DDMClient:
 
     async def subscribe_interaction_class_with_regions(
         self,
-        interaction_class_handle: int,
-        region_handles: list[int],
+        interaction_class_handle: _InteractionClassRef,
+        region_handles: _RegionRefList,
     ) -> None:
         """§6.13 — region-scoped subscription to an interaction class."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -258,7 +288,7 @@ class DDMClient:
 
     async def register_object_instance_with_regions(
         self,
-        object_class_handle: int,
+        object_class_handle: _ObjectClassRef,
         attribute_regions: list[AttributeRegions],
         *,
         object_name: str = "",
@@ -322,7 +352,7 @@ class DDMClient:
     # --- M23 W5 — §9 missing services -----------------------------------
 
     async def associate_regions_for_updates(
-        self, object_handle: int, bindings: list[AttributeRegions],
+        self, object_handle: _ObjectInstanceRef, bindings: list[AttributeRegions],
     ) -> None:
         """§9.6 — record per-attribute region associations on an existing instance."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -346,7 +376,9 @@ class DDMClient:
             translate_rpc_error(exc)
 
     async def unassociate_regions_for_updates(
-        self, object_handle: int, bindings: list[AttributeRegions] | None = None,
+        self,
+        object_handle: _ObjectInstanceRef,
+        bindings: list[AttributeRegions] | None = None,
     ) -> None:
         """§9.7 — drop matching attr-region pairs. None or empty drops ALL."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -372,9 +404,9 @@ class DDMClient:
 
     async def unsubscribe_object_class_attributes_with_regions(
         self,
-        object_class_handle: int,
-        attribute_handles: list[int],
-        region_handles: list[int],
+        object_class_handle: _ObjectClassRef,
+        attribute_handles: _AttributeRefList,
+        region_handles: _RegionRefList,
     ) -> None:
         """§9.9 — drop the region-scoped subscription on (cls, attr)."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -393,7 +425,7 @@ class DDMClient:
             translate_rpc_error(exc)
 
     async def unsubscribe_interaction_class_with_regions(
-        self, interaction_class_handle: int, region_handles: list[int],
+        self, interaction_class_handle: _InteractionClassRef, region_handles: _RegionRefList,
     ) -> None:
         """§9.11 — drop the region-scoped interaction subscription."""
         from rti.v1 import common_pb2, ddm_pb2
@@ -412,9 +444,9 @@ class DDMClient:
 
     async def send_interaction_with_regions(
         self,
-        interaction_class_handle: int,
-        parameters: dict[int, bytes],
-        region_handles: list[int],
+        interaction_class_handle: _InteractionClassRef,
+        parameters: _ParameterValueDict,
+        region_handles: _RegionRefList,
         timestamp: float | None = None,
     ) -> None:
         """§9.12 — region-scoped interaction send."""
@@ -437,9 +469,9 @@ class DDMClient:
 
     async def request_attribute_value_update_with_regions(
         self,
-        object_class_handle: int,
-        attribute_handles: list[int],
-        region_handles: list[int],
+        object_class_handle: _ObjectClassRef,
+        attribute_handles: _AttributeRefList,
+        region_handles: _RegionRefList,
         tag: bytes = b"",
     ) -> None:
         """§9.13 — class-scoped pull filtered by region overlap."""

@@ -349,6 +349,94 @@ Pitch-API parity story is now fully closed. The Layer 2 `Rti1516eAmbassador` is 
 
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
+#### M28 — pysdk typed-handle + typed-collection parity with Pitch 1516e (closed 2026-05-30)
+
+First milestone of the Pitch source-compat track re-opened after the
+v0.1.0 release. Brings pysdk to typed-handle parity with the C++ SDK
+and with the Pitch / Portico / MAK Python ambassador shape: a Python
+federate written against `rti1516e.*` typed handles
+(`ObjectClassHandle`, `AttributeHandleSet`, etc.) compiles and runs
+against gorti unchanged. C++ SDK already had typed handles via
+`StrongHandle<Tag>` (M17 Cut-1); M28 closes the pysdk gap.
+
+Four-wave structure:
+- **W1** — pure data types in three new modules:
+  - `pysdk/rti1516e/handles.py` — 9 `_StrongHandle` subclasses
+    (`ObjectClassHandle`, `AttributeHandle`, `InteractionClassHandle`,
+    `ParameterHandle`, `ObjectInstanceHandle`, `FederateHandle`,
+    `DimensionHandle`, `RegionHandle`, `MessageRetractionHandle`) as
+    `int` subclasses — `__hash__` / `__eq__` / `__lt__` / `__index__`
+    inherited; `__repr__` prints class name + value for debuggability.
+  - `pysdk/rti1516e/sets.py` — 5 typed set classes
+    (`AttributeHandleSet`, `ParameterHandleSet`, `FederateHandleSet`,
+    `DimensionHandleSet`, `RegionHandleSet`) + 2 value-map classes
+    (`AttributeHandleValueMap`, `ParameterHandleValueMap`) +
+    `AttributeRegionMap` — all with coerce-on-insert so mixed
+    bare-int + typed callers interoperate.
+  - `pysdk/rti1516e/factories.py` — 6 Pitch-style factory classes
+    backing the §10.6 ambassador accessors.
+- **W2** — public re-exports + factory wiring:
+  - `pysdk/rti1516e/__init__.py` re-exports the 9 handles + 8
+    collection classes so porting users write
+    `from rti1516e import ObjectClassHandle, AttributeHandleSet`
+    exactly as they would against Pitch.
+  - `Rti1516eAmbassador` gains 6 §10.6 factory accessors
+    (`getAttributeHandleSetFactory` / `getAttributeHandleValueMapFactory`
+    / `getParameterHandleValueMapFactory` / `getFederateHandleSetFactory`
+    / `getDimensionHandleSetFactory` / `getRegionHandleSetFactory`),
+    each backed by a cached factory instance attr.
+- **W3** — ambassador return-type tightening + accept-type broadening
+  across `standard.py` / `connection.py` / `ownership.py` / `ddm.py`:
+  `get*Handle` methods return the typed wrapper (still equal to the
+  bare int — back-compat preserved). Every method that took
+  `int | str` now also accepts the matching typed handle; every method
+  that took `list[int | str]` now also accepts the matching typed
+  set; every method that took `dict[int | str, bytes]` now also
+  accepts the matching value-map. Pure widening — pre-M28 callers
+  work unchanged.
+- **W4** — acceptance gate + docs:
+  - `examples/pitch-typed-smoke/` — sibling of M26's pitch-shape
+    smoke. Same federation FOM, same lifecycle, but the federate code
+    uses ONLY typed handles + typed collections (no bare ints, no
+    bare list/dict at the ambassador call sites). Pin:
+    `pysdk/tests/spec/m28/test_pitch_typed_smoke.py`.
+  - `pysdk/tests/spec/m28/test_typed_handle_surface.py` — 26-test
+    lockfile asserting every M28 public symbol (9 handles + 8
+    collections + 6 factory accessors) is importable from
+    `rti1516e.*` and behaves as Pitch expects.
+  - `docs/PITCH_PARITY.md` — header note bumped to M28; "Compatible"
+    bullet list grows the M28 typed-handle row; method-shape
+    divergence table cells extended to show the new typed-form parity;
+    new "Diverging" subsection on `ObjectClassHandle(5) ==
+    AttributeHandle(5) == True` (deliberate dual-accept concession,
+    documented + lockfile-pinned).
+  - `scripts/check-milestones.sh::check_m28` probe (6 checks).
+
+Back-compat: M25-M27 tests pass with **zero modifications**. M26
+pitch-shape smoke (the bare-int / bare-list smoke) still green —
+proves the back-compat invariant the W3 widening was designed to
+preserve. The typed-handle int-equality concession
+(`ObjectClassHandle(5) == AttributeHandle(5)` returns True because
+both are `int(5)`) is the one behavioral divergence vs Pitch's
+strict typed handles; code that needs strict cross-type distinction
+must use `isinstance()`. Documented in `docs/PITCH_PARITY.md` and
+locked in `test_spec_m28_typed_handle_int_equality_documented_concession`.
+
+Spec tests: 26 surface + 1 smoke in `pysdk/tests/spec/m28/`. Plus
+W1 unit tests landed earlier (`test_handles.py`, `test_sets.py`).
+
+Out of scope (deferred):
+- C++ SDK changes (already typed via `StrongHandle<Tag>` since M17 Cut-1).
+- Go SDK changes (not a Pitch-port target).
+- Wire-protocol changes (handles still travel as `uint64` over gRPC).
+- Strict `HLA_EVOKED` callback buffering (moved to M29).
+- §10 `getUpdateRateValueForAttribute`, §10.2
+  `getAvailableDimensionsFor*`, §11 MOM ambassador methods (moved
+  to M30).
+- Java SDK coupling — design assumes pysdk/cppsdk-only for now;
+  M18 (Java) will iterate on the typed-handle foundation, not be
+  contractually bound by it.
+
 #### M17 Cut-1 — C++ SDK MVP (closed 2026-05-23)
 
 First language binding beyond Python. The `rti1516e::` namespace

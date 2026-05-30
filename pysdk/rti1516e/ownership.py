@@ -25,12 +25,24 @@ addition to using Query.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from rti1516e._grpc_errors import translate_rpc_error
+from rti1516e.handles import (
+    AttributeHandle,
+    ObjectInstanceHandle,
+)
+from rti1516e.sets import AttributeHandleSet
 
 if TYPE_CHECKING:  # pragma: no cover - type-check imports only
     import grpc
+
+# M28 — Pitch-port type aliases. Public service entry points widen to
+# accept typed handles + typed sets; internal protobuf request fields
+# stay bare int via existing ``int(h)`` coercion.
+_AttributeRef: TypeAlias = "int | AttributeHandle"
+_ObjectInstanceRef: TypeAlias = "int | ObjectInstanceHandle"
+_AttributeRefList: TypeAlias = "list[int | AttributeHandle] | AttributeHandleSet"
 
 
 class OwnershipClient:
@@ -52,7 +64,7 @@ class OwnershipClient:
     # --- Divest / acquire (§7.2-7.7) ----------------------------------------
 
     async def unconditional_divest(
-        self, object_handle: int, attribute_handles: list[int]
+        self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
     ) -> None:
         """§7.2 — drop ownership without asking anyone to take it."""
         from rti.v1 import common_pb2, ownership_pb2
@@ -71,8 +83,8 @@ class OwnershipClient:
 
     async def negotiated_divest(
         self,
-        object_handle: int,
-        attribute_handles: list[int],
+        object_handle: _ObjectInstanceRef,
+        attribute_handles: _AttributeRefList,
         *,
         tag: bytes = b"",
     ) -> None:
@@ -94,8 +106,8 @@ class OwnershipClient:
 
     async def acquire(
         self,
-        object_handle: int,
-        attribute_handles: list[int],
+        object_handle: _ObjectInstanceRef,
+        attribute_handles: _AttributeRefList,
         *,
         tag: bytes = b"",
     ) -> None:
@@ -116,7 +128,7 @@ class OwnershipClient:
             translate_rpc_error(exc)
 
     async def cancel_negotiated_divest(
-        self, object_handle: int, attribute_handles: list[int]
+        self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
     ) -> None:
         """§7.5 — withdraw a pending negotiated divestiture."""
         from rti.v1 import common_pb2, ownership_pb2
@@ -134,7 +146,7 @@ class OwnershipClient:
             translate_rpc_error(exc)
 
     async def cancel_acquire(
-        self, object_handle: int, attribute_handles: list[int]
+        self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
     ) -> None:
         """§7.6 — withdraw a pending acquisition."""
         from rti.v1 import common_pb2, ownership_pb2
@@ -152,7 +164,7 @@ class OwnershipClient:
             translate_rpc_error(exc)
 
     async def divest_if_wanted(
-        self, object_handle: int, attribute_handles: list[int]
+        self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
     ) -> None:
         """§7.7 — transfer ownership only if a matching acquirer is queued."""
         from rti.v1 import common_pb2, ownership_pb2
@@ -172,7 +184,7 @@ class OwnershipClient:
     # --- Queries (§7.8-7.9) -------------------------------------------------
 
     async def query_attribute_ownership(
-        self, object_handle: int, attribute_handle: int
+        self, object_handle: _ObjectInstanceRef, attribute_handle: _AttributeRef
     ) -> tuple[int, bool]:
         """§7.8 — return ``(owner_handle, owned)``.
 
@@ -195,7 +207,7 @@ class OwnershipClient:
         return int(resp.owner_federate_handle), bool(resp.owned)
 
     async def is_attribute_owned_by_federate(
-        self, object_handle: int, attribute_handle: int
+        self, object_handle: _ObjectInstanceRef, attribute_handle: _AttributeRef
     ) -> bool:
         """§7.9 — return True iff this federate currently owns the attribute."""
         from rti.v1 import common_pb2, ownership_pb2

@@ -804,6 +804,81 @@ check_m24() {
   else set_status M24 NOT_STARTED; printf "${DIM}M24: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M28 (pysdk typed handles + typed collections — Pitch parity) ----------
+check_m28() {
+  section "M28 — pysdk typed handles + typed collections (Owner: agent-c)"
+  echo "Exit (srs.md §10.4): 9 typed handle classes + 8 typed collections + 6 factory accessors; M26 pitch-shape smoke still green"
+  local pass=0 total=6
+
+  # 1. handles.py: 9 typed handle classes
+  if grep -q 'class ObjectClassHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class AttributeHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class InteractionClassHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class ParameterHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class ObjectInstanceHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class FederateHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class DimensionHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class RegionHandle' pysdk/rti1516e/handles.py 2>/dev/null \
+     && grep -q 'class MessageRetractionHandle' pysdk/rti1516e/handles.py 2>/dev/null; then
+    present "handles.py: 9 typed handle classes"; pass=$((pass+1))
+  else
+    missing "pysdk/rti1516e/handles.py missing one of the 9 typed handle classes"
+  fi
+
+  # 2. sets.py: 5 typed sets + 2 value-maps + AttributeRegionMap
+  if grep -q 'class AttributeHandleSet' pysdk/rti1516e/sets.py 2>/dev/null \
+     && grep -q 'class ParameterHandleSet' pysdk/rti1516e/sets.py 2>/dev/null \
+     && grep -q 'class FederateHandleSet' pysdk/rti1516e/sets.py 2>/dev/null \
+     && grep -q 'class DimensionHandleSet' pysdk/rti1516e/sets.py 2>/dev/null \
+     && grep -q 'class RegionHandleSet' pysdk/rti1516e/sets.py 2>/dev/null \
+     && grep -q 'class AttributeHandleValueMap' pysdk/rti1516e/sets.py 2>/dev/null \
+     && grep -q 'class ParameterHandleValueMap' pysdk/rti1516e/sets.py 2>/dev/null \
+     && grep -q 'class AttributeRegionMap' pysdk/rti1516e/sets.py 2>/dev/null; then
+    present "sets.py: 5 typed sets + 2 value-maps + AttributeRegionMap"; pass=$((pass+1))
+  else
+    missing "pysdk/rti1516e/sets.py missing one of the 8 typed collection classes"
+  fi
+
+  # 3. ambassador: 6 §10.6 factory accessors
+  if grep -q 'getAttributeHandleSetFactory' pysdk/rti1516e/standard.py 2>/dev/null \
+     && grep -q 'getAttributeHandleValueMapFactory' pysdk/rti1516e/standard.py 2>/dev/null \
+     && grep -q 'getParameterHandleValueMapFactory' pysdk/rti1516e/standard.py 2>/dev/null \
+     && grep -q 'getFederateHandleSetFactory' pysdk/rti1516e/standard.py 2>/dev/null \
+     && grep -q 'getDimensionHandleSetFactory' pysdk/rti1516e/standard.py 2>/dev/null \
+     && grep -q 'getRegionHandleSetFactory' pysdk/rti1516e/standard.py 2>/dev/null; then
+    present "ambassador: 6 factory accessors"; pass=$((pass+1))
+  else
+    missing "Rti1516eAmbassador missing one of the 6 §10.6 factory accessors"
+  fi
+
+  # 4. Public re-exports from rti1516e namespace
+  if grep -q 'ObjectClassHandle' pysdk/rti1516e/__init__.py 2>/dev/null \
+     && grep -q 'AttributeHandleSet' pysdk/rti1516e/__init__.py 2>/dev/null; then
+    present "rti1516e/__init__.py: typed handles + collections re-exported"; pass=$((pass+1))
+  else
+    missing "pysdk/rti1516e/__init__.py missing M28 re-exports"
+  fi
+
+  # 5. M28 spec test files
+  if [ -f pysdk/tests/spec/m28/test_pitch_typed_smoke.py ] \
+     && [ -f pysdk/tests/spec/m28/test_typed_handle_surface.py ]; then
+    present "pysdk/tests/spec/m28/ spec tests committed"; pass=$((pass+1))
+  else
+    pending "M28 spec test files incomplete"
+  fi
+
+  # 6. pitch-typed-smoke example
+  if [ -f examples/pitch-typed-smoke/smoke_federate.py ]; then
+    present "examples/pitch-typed-smoke/ reference federate"; pass=$((pass+1))
+  else
+    pending "examples/pitch-typed-smoke/smoke_federate.py missing"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M28 DONE; printf "${GRN}M28: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M28 IN_PROGRESS; printf "${YLW}M28: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M28 NOT_STARTED; printf "${DIM}M28: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- M14 (mTLS + OIDC client authentication) ----------
 check_m14() {
   section "M14 — mTLS + OIDC client authentication (Owner: agent-a + agent-c)"
@@ -860,7 +935,7 @@ check_m14() {
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -898,6 +973,7 @@ check_m21
 check_m22
 check_m23
 check_m24
+check_m28
 check_m14
 print_summary
 

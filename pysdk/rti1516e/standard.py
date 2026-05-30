@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from concurrent.futures import Future
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.events import (
@@ -45,9 +45,61 @@ from rti1516e.events import (
     SynchronizationPointAnnounced,
     TimeAdvanceGrant,
 )
+from rti1516e.factories import (
+    AttributeHandleSetFactory,
+    AttributeHandleValueMapFactory,
+    DimensionHandleSetFactory,
+    FederateHandleSetFactory,
+    ParameterHandleValueMapFactory,
+    RegionHandleSetFactory,
+)
+from rti1516e.handles import (
+    AttributeHandle,
+    DimensionHandle,
+    FederateHandle,
+    InteractionClassHandle,
+    ObjectClassHandle,
+    ObjectInstanceHandle,
+    ParameterHandle,
+    RegionHandle,
+)
+from rti1516e.sets import (
+    AttributeHandleSet,
+    AttributeHandleValueMap,
+    DimensionHandleSet,
+    FederateHandleSet,
+    ParameterHandleSet,
+    ParameterHandleValueMap,
+    RegionHandleSet,
+)
 
 if TYPE_CHECKING:
     from rti1516e.connection import Federate, _FederateContextManager
+
+
+# M28 — Pitch-port type aliases. Typed handles are int subclasses, so
+# the bare-int callers from M25-M27 keep working at runtime; the alias
+# documents that typed forms are accepted too and lets mypy --strict
+# resolve mixed-typed Pitch federate code unchanged.
+ObjectClassRef: TypeAlias = "int | str | ObjectClassHandle"
+AttributeRef: TypeAlias = "int | str | AttributeHandle"
+InteractionClassRef: TypeAlias = "int | str | InteractionClassHandle"
+ParameterRef: TypeAlias = "int | str | ParameterHandle"
+ObjectInstanceRef: TypeAlias = "int | ObjectInstanceHandle"
+DimensionRef: TypeAlias = "int | str | DimensionHandle"
+FederateRef: TypeAlias = "int | FederateHandle"
+RegionRef: TypeAlias = "int | RegionHandle"
+AttributeRefList: TypeAlias = "list[int | str | AttributeHandle] | AttributeHandleSet"
+ParameterRefList: TypeAlias = "list[int | str | ParameterHandle] | ParameterHandleSet"
+FederateRefList: TypeAlias = "list[int | FederateHandle] | FederateHandleSet"
+DimensionRefList: TypeAlias = "list[int | str | DimensionHandle] | DimensionHandleSet"
+RegionRefList: TypeAlias = "list[int | RegionHandle] | RegionHandleSet"
+AttributeValueDict: TypeAlias = (
+    "dict[int | str | AttributeHandle, Any] | AttributeHandleValueMap"
+)
+ParameterValueDict: TypeAlias = (
+    "dict[int | str | ParameterHandle, Any] | ParameterHandleValueMap"
+)
 
 
 class Rti1516eAmbassador:
@@ -90,6 +142,14 @@ class Rti1516eAmbassador:
         # the buffer through the normal dispatch path.
         self._callbacks_enabled: bool = True
         self._callback_buffer: list[Any] = []
+        # M28 — Pitch-style factory singletons. Stateless; one instance per
+        # ambassador per Pitch convention.
+        self._attribute_handle_set_factory = AttributeHandleSetFactory()
+        self._attribute_handle_value_map_factory = AttributeHandleValueMapFactory()
+        self._parameter_handle_value_map_factory = ParameterHandleValueMapFactory()
+        self._federate_handle_set_factory = FederateHandleSetFactory()
+        self._dimension_handle_set_factory = DimensionHandleSetFactory()
+        self._region_handle_set_factory = RegionHandleSetFactory()
 
     # --- Connection / federation lifecycle ---
 
@@ -183,7 +243,7 @@ class Rti1516eAmbassador:
     # --- Declaration management ---
 
     def publishObjectClassAttributes(  # noqa: N802
-        self, class_name: int | str, attributes: list[int | str]
+        self, class_name: ObjectClassRef, attributes: AttributeRefList
     ) -> None:
         """M27 Phase B: ``class_name`` accepts ``int`` (Pitch-style FOM
         handle, e.g. from ``getObjectClassHandle``) or ``str`` (FOM name).
@@ -191,37 +251,37 @@ class Rti1516eAmbassador:
         self._run(self._fed().publish_object_class(class_name, attributes=list(attributes)))
 
     def subscribeObjectClassAttributes(  # noqa: N802
-        self, class_name: int | str, attributes: list[int | str]
+        self, class_name: ObjectClassRef, attributes: AttributeRefList
     ) -> None:
         """See :meth:`publishObjectClassAttributes` for the M27 Phase B
         int|str semantics."""
         self._run(self._fed().subscribe_object_class(class_name, attributes=list(attributes)))
 
-    def publishInteractionClass(self, class_name: int | str) -> None:  # noqa: N802
+    def publishInteractionClass(self, class_name: InteractionClassRef) -> None:  # noqa: N802
         """M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or ``str``."""
         self._run(self._fed().publish_interaction_class(class_name))
 
-    def subscribeInteractionClass(self, class_name: int | str) -> None:  # noqa: N802
+    def subscribeInteractionClass(self, class_name: InteractionClassRef) -> None:  # noqa: N802
         """M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or ``str``."""
         self._run(self._fed().subscribe_interaction_class(class_name))
 
     # --- Object management ---
 
     def registerObjectInstance(  # noqa: N802
-        self, class_name: int | str, instance_name: str | None = None
-    ) -> int:
+        self, class_name: ObjectClassRef, instance_name: str | None = None
+    ) -> ObjectInstanceHandle:
         """M27 Phase B: ``class_name`` accepts ``int`` (Pitch-style FOM
         handle) or ``str`` (FOM name). The parameter is still named
         ``class_name`` for source-compat with pre-M27 callers."""
         result = self._run(
             self._fed().register_object_instance(class_name, instance_name=instance_name)
         )
-        return int(result)
+        return ObjectInstanceHandle(result)
 
     def updateAttributeValues(  # noqa: N802
         self,
-        object_handle: int,
-        values: dict[int | str, Any],
+        object_handle: ObjectInstanceRef,
+        values: AttributeValueDict,
         timestamp: float | None = None,
     ) -> None:
         """M27 Phase B: ``values`` dict keys accept ``int`` (Pitch-style
@@ -232,8 +292,8 @@ class Rti1516eAmbassador:
 
     def sendInteraction(  # noqa: N802
         self,
-        class_name: int | str,
-        parameters: dict[int | str, Any],
+        class_name: InteractionClassRef,
+        parameters: ParameterValueDict,
         timestamp: float | None = None,
     ) -> None:
         """M27 Phase B: ``class_name`` and ``parameters`` dict keys
@@ -292,38 +352,54 @@ class Rti1516eAmbassador:
     # --- M23 W1: §6 deleteObjectInstance ---
 
     def deleteObjectInstance(  # noqa: N802
-        self, object_handle: int, tag: bytes = b"", timestamp: float | None = None,
+        self,
+        object_handle: ObjectInstanceRef,
+        tag: bytes = b"",
+        timestamp: float | None = None,
     ) -> None:
         self._run(self._fed().delete_object_instance(object_handle, tag, timestamp))
 
-    def localDeleteObjectInstance(self, object_handle: int) -> None:  # noqa: N802
+    def localDeleteObjectInstance(self, object_handle: ObjectInstanceRef) -> None:  # noqa: N802
         self._run(self._fed().local_delete_object_instance(object_handle))
 
     def requestAttributeValueUpdate(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int], tag: bytes = b"",
+        self,
+        object_handle: ObjectInstanceRef,
+        attribute_handles: AttributeRefList,
+        tag: bytes = b"",
     ) -> None:
-        self._run(self._fed().request_attribute_value_update(object_handle, attribute_handles, tag))
+        self._run(
+            self._fed().request_attribute_value_update(
+                object_handle, list(attribute_handles), tag,
+            )
+        )
 
     def requestClassAttributeValueUpdate(  # noqa: N802
-        self, object_class_handle: int, attribute_handles: list[int], tag: bytes = b"",
+        self,
+        object_class_handle: ObjectClassRef,
+        attribute_handles: AttributeRefList,
+        tag: bytes = b"",
     ) -> None:
         self._run(
             self._fed().request_class_attribute_value_update(
-                object_class_handle, attribute_handles, tag,
+                object_class_handle, list(attribute_handles), tag,
             )
         )
 
     def changeAttributeTransportationType(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int], transport: int,
+        self,
+        object_handle: ObjectInstanceRef,
+        attribute_handles: AttributeRefList,
+        transport: int,
     ) -> None:
         self._run(
             self._fed().change_attribute_transportation_type(
-                object_handle, attribute_handles, transport,
+                object_handle, list(attribute_handles), transport,
             )
         )
 
     def changeInteractionTransportationType(  # noqa: N802
-        self, interaction_class_handle: int, transport: int,
+        self, interaction_class_handle: InteractionClassRef, transport: int,
     ) -> None:
         self._run(
             self._fed().change_interaction_transportation_type(
@@ -336,45 +412,59 @@ class Rti1516eAmbassador:
     # delegates to fed.support.<method> via _run(). Federates ported
     # from Pitch use these directly.
 
-    def getObjectClassHandle(self, class_name: str) -> int:  # noqa: N802
-        return int(self._run(self._fed().support.get_object_class_handle(class_name)))
+    def getObjectClassHandle(self, class_name: str) -> ObjectClassHandle:  # noqa: N802
+        return ObjectClassHandle(
+            self._run(self._fed().support.get_object_class_handle(class_name))
+        )
 
-    def getObjectClassName(self, class_handle: int) -> str:  # noqa: N802
+    def getObjectClassName(self, class_handle: ObjectClassRef) -> str:  # noqa: N802
         return str(self._run(self._fed().support.get_object_class_name(class_handle)))
 
-    def getAttributeHandle(self, class_handle: int, attribute_name: str) -> int:  # noqa: N802
-        return int(
+    def getAttributeHandle(  # noqa: N802
+        self, class_handle: ObjectClassRef, attribute_name: str
+    ) -> AttributeHandle:
+        return AttributeHandle(
             self._run(self._fed().support.get_attribute_handle(class_handle, attribute_name))
         )
 
-    def getAttributeName(self, class_handle: int, attribute_handle: int) -> str:  # noqa: N802
+    def getAttributeName(  # noqa: N802
+        self, class_handle: ObjectClassRef, attribute_handle: AttributeRef
+    ) -> str:
         return str(
             self._run(self._fed().support.get_attribute_name(class_handle, attribute_handle))
         )
 
-    def getInteractionClassHandle(self, class_name: str) -> int:  # noqa: N802
-        return int(self._run(self._fed().support.get_interaction_class_handle(class_name)))
+    def getInteractionClassHandle(self, class_name: str) -> InteractionClassHandle:  # noqa: N802
+        return InteractionClassHandle(
+            self._run(self._fed().support.get_interaction_class_handle(class_name))
+        )
 
-    def getInteractionClassName(self, class_handle: int) -> str:  # noqa: N802
+    def getInteractionClassName(self, class_handle: InteractionClassRef) -> str:  # noqa: N802
         return str(self._run(self._fed().support.get_interaction_class_name(class_handle)))
 
-    def getParameterHandle(self, class_handle: int, parameter_name: str) -> int:  # noqa: N802
-        return int(
+    def getParameterHandle(  # noqa: N802
+        self, class_handle: InteractionClassRef, parameter_name: str
+    ) -> ParameterHandle:
+        return ParameterHandle(
             self._run(self._fed().support.get_parameter_handle(class_handle, parameter_name))
         )
 
-    def getParameterName(self, class_handle: int, parameter_handle: int) -> str:  # noqa: N802
+    def getParameterName(  # noqa: N802
+        self, class_handle: InteractionClassRef, parameter_handle: ParameterRef
+    ) -> str:
         return str(
             self._run(self._fed().support.get_parameter_name(class_handle, parameter_handle))
         )
 
-    def getDimensionHandle(self, dimension_name: str) -> int:  # noqa: N802
-        return int(self._run(self._fed().support.get_dimension_handle(dimension_name)))
+    def getDimensionHandle(self, dimension_name: str) -> DimensionHandle:  # noqa: N802
+        return DimensionHandle(
+            self._run(self._fed().support.get_dimension_handle(dimension_name))
+        )
 
-    def getDimensionName(self, dimension_handle: int) -> str:  # noqa: N802
+    def getDimensionName(self, dimension_handle: DimensionRef) -> str:  # noqa: N802
         return str(self._run(self._fed().support.get_dimension_name(dimension_handle)))
 
-    def getDimensionUpperBound(self, dimension_handle: int) -> int:  # noqa: N802
+    def getDimensionUpperBound(self, dimension_handle: DimensionRef) -> int:  # noqa: N802
         return int(self._run(self._fed().support.get_dimension_upper_bound(dimension_handle)))
 
     def getOrderType(self, order_name: str) -> int:  # noqa: N802
@@ -389,23 +479,47 @@ class Rti1516eAmbassador:
     def getTransportationName(self, transportation_type: int) -> str:  # noqa: N802
         return str(self._run(self._fed().support.get_transportation_name(transportation_type)))
 
-    def getObjectInstanceHandle(self, object_name: str) -> int:  # noqa: N802
+    def getObjectInstanceHandle(self, object_name: str) -> ObjectInstanceHandle:  # noqa: N802
         """§6.30 — resolve a runtime object instance name to its handle.
         M27 Phase C."""
-        return int(self._run(self._fed().support.get_object_instance_handle(object_name)))
+        return ObjectInstanceHandle(
+            self._run(self._fed().support.get_object_instance_handle(object_name))
+        )
 
-    def getObjectInstanceName(self, object_handle: int) -> str:  # noqa: N802
+    def getObjectInstanceName(self, object_handle: ObjectInstanceRef) -> str:  # noqa: N802
         """§6.31 — resolve a runtime object instance handle to its name."""
         return str(self._run(self._fed().support.get_object_instance_name(object_handle)))
+
+    # --- §10.6 Handle factory accessors (M28 W2) ---
+
+    def getAttributeHandleSetFactory(self) -> AttributeHandleSetFactory:  # noqa: N802
+        return self._attribute_handle_set_factory
+
+    def getAttributeHandleValueMapFactory(self) -> AttributeHandleValueMapFactory:  # noqa: N802
+        return self._attribute_handle_value_map_factory
+
+    def getParameterHandleValueMapFactory(self) -> ParameterHandleValueMapFactory:  # noqa: N802
+        return self._parameter_handle_value_map_factory
+
+    def getFederateHandleSetFactory(self) -> FederateHandleSetFactory:  # noqa: N802
+        return self._federate_handle_set_factory
+
+    def getDimensionHandleSetFactory(self) -> DimensionHandleSetFactory:  # noqa: N802
+        return self._dimension_handle_set_factory
+
+    def getRegionHandleSetFactory(self) -> RegionHandleSetFactory:  # noqa: N802
+        return self._region_handle_set_factory
 
     # --- §4.11-4.13 Synchronization points (M25 Phase C) ---
 
     def registerFederationSynchronizationPoint(  # noqa: N802
-        self, label: str, tag: bytes = b"", sync_set: list[int] | None = None
+        self, label: str, tag: bytes = b"", sync_set: FederateRefList | None = None
     ) -> None:
         self._run(
             self._fed().sync.register_synchronization_point(
-                label, tag=tag, required_federates=sync_set
+                label,
+                tag=tag,
+                required_federates=list(sync_set) if sync_set is not None else None,
             )
         )
 
@@ -415,43 +529,61 @@ class Rti1516eAmbassador:
     # --- §7 Ownership Management (M25 Phase C) ---
 
     def unconditionalAttributeOwnershipDivestiture(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int]
-    ) -> None:
-        self._run(self._fed().ownership.unconditional_divest(object_handle, attribute_handles))
-
-    def negotiatedAttributeOwnershipDivestiture(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int], tag: bytes = b""
+        self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
     ) -> None:
         self._run(
-            self._fed().ownership.negotiated_divest(object_handle, attribute_handles, tag=tag)
+            self._fed().ownership.unconditional_divest(
+                object_handle, list(attribute_handles)
+            )
+        )
+
+    def negotiatedAttributeOwnershipDivestiture(  # noqa: N802
+        self,
+        object_handle: ObjectInstanceRef,
+        attribute_handles: AttributeRefList,
+        tag: bytes = b"",
+    ) -> None:
+        self._run(
+            self._fed().ownership.negotiated_divest(
+                object_handle, list(attribute_handles), tag=tag
+            )
         )
 
     def attributeOwnershipAcquisition(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int], tag: bytes = b""
+        self,
+        object_handle: ObjectInstanceRef,
+        attribute_handles: AttributeRefList,
+        tag: bytes = b"",
     ) -> None:
         self._run(
-            self._fed().ownership.acquire(object_handle, attribute_handles, tag=tag)
+            self._fed().ownership.acquire(object_handle, list(attribute_handles), tag=tag)
         )
 
     def cancelNegotiatedAttributeOwnershipDivestiture(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int]
+        self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
     ) -> None:
         self._run(
-            self._fed().ownership.cancel_negotiated_divest(object_handle, attribute_handles)
+            self._fed().ownership.cancel_negotiated_divest(
+                object_handle, list(attribute_handles)
+            )
         )
 
     def cancelAttributeOwnershipAcquisition(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int]
+        self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
     ) -> None:
-        self._run(self._fed().ownership.cancel_acquire(object_handle, attribute_handles))
+        self._run(
+            self._fed().ownership.cancel_acquire(object_handle, list(attribute_handles))
+        )
 
     def attributeOwnershipDivestitureIfWanted(  # noqa: N802
-        self, object_handle: int, attribute_handles: list[int]
+        self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
     ) -> None:
-        self._run(self._fed().ownership.divest_if_wanted(object_handle, attribute_handles))
+        self._run(
+            self._fed().ownership.divest_if_wanted(object_handle, list(attribute_handles))
+        )
 
     def queryAttributeOwnership(  # noqa: N802
-        self, object_handle: int, attribute_handle: int
+        self, object_handle: ObjectInstanceRef, attribute_handle: AttributeRef
     ) -> tuple[int, bool]:
         return cast(
             "tuple[int, bool]",
@@ -461,7 +593,7 @@ class Rti1516eAmbassador:
         )
 
     def isAttributeOwnedByFederate(  # noqa: N802
-        self, object_handle: int, attribute_handle: int
+        self, object_handle: ObjectInstanceRef, attribute_handle: AttributeRef
     ) -> bool:
         return bool(
             self._run(
@@ -499,16 +631,20 @@ class Rti1516eAmbassador:
     # --- §9 Data Distribution Management (M25 Phase C) ---
 
     def createRegion(  # noqa: N802
-        self, routing_space_handle: int, dimension_handles: list[int]
-    ) -> int:
-        return int(
-            self._run(self._fed().ddm.create_region(routing_space_handle, dimension_handles))
+        self, routing_space_handle: int, dimension_handles: DimensionRefList
+    ) -> RegionHandle:
+        return RegionHandle(
+            self._run(
+                self._fed().ddm.create_region(
+                    routing_space_handle, list(dimension_handles)
+                )
+            )
         )
 
     def setRangeBounds(  # noqa: N802
         self,
-        region_handle: int,
-        dimension_handle: int,
+        region_handle: RegionRef,
+        dimension_handle: DimensionRef,
         lower_bound: int,
         upper_bound: int,
     ) -> None:
@@ -518,46 +654,46 @@ class Rti1516eAmbassador:
             )
         )
 
-    def commitRegionModifications(self, region_handles: list[int]) -> None:  # noqa: N802
-        self._run(self._fed().ddm.commit_region_modifications(region_handles))
+    def commitRegionModifications(self, region_handles: RegionRefList) -> None:  # noqa: N802
+        self._run(self._fed().ddm.commit_region_modifications(list(region_handles)))
 
-    def deleteRegion(self, region_handle: int) -> None:  # noqa: N802
+    def deleteRegion(self, region_handle: RegionRef) -> None:  # noqa: N802
         self._run(self._fed().ddm.delete_region(region_handle))
 
     def subscribeObjectClassAttributesWithRegions(  # noqa: N802
         self,
-        object_class_handle: int,
-        attribute_handles: list[int],
-        region_handles: list[int],
+        object_class_handle: ObjectClassRef,
+        attribute_handles: AttributeRefList,
+        region_handles: RegionRefList,
     ) -> None:
         self._run(
             self._fed().ddm.subscribe_object_class_attributes_with_regions(
-                object_class_handle, attribute_handles, region_handles
+                object_class_handle, list(attribute_handles), list(region_handles)
             )
         )
 
     def subscribeInteractionClassWithRegions(  # noqa: N802
-        self, interaction_class_handle: int, region_handles: list[int]
+        self, interaction_class_handle: InteractionClassRef, region_handles: RegionRefList
     ) -> None:
         self._run(
             self._fed().ddm.subscribe_interaction_class_with_regions(
-                interaction_class_handle, region_handles
+                interaction_class_handle, list(region_handles)
             )
         )
 
     def registerObjectInstanceWithRegions(  # noqa: N802
         self,
-        object_class_handle: int,
-        attributes_and_regions: dict[int, list[int]],
+        object_class_handle: ObjectClassRef,
+        attributes_and_regions: dict[int | str | AttributeHandle, list[int | RegionHandle]],
         instance_name: str = "",
-    ) -> int:
+    ) -> ObjectInstanceHandle:
         from rti1516e.ddm import AttributeRegions
 
         bindings = [
             AttributeRegions(attribute_handle=int(a), region_handles=[int(r) for r in regs])
             for a, regs in attributes_and_regions.items()
         ]
-        return int(
+        return ObjectInstanceHandle(
             self._run(
                 self._fed().ddm.register_object_instance_with_regions(
                     object_class_handle, bindings, object_name=instance_name
@@ -567,8 +703,8 @@ class Rti1516eAmbassador:
 
     def associateRegionsForUpdates(  # noqa: N802
         self,
-        object_handle: int,
-        attributes_and_regions: dict[int, list[int]],
+        object_handle: ObjectInstanceRef,
+        attributes_and_regions: dict[int | str | AttributeHandle, list[int | RegionHandle]],
     ) -> None:
         from rti1516e.ddm import AttributeRegions
 
@@ -580,8 +716,10 @@ class Rti1516eAmbassador:
 
     def unassociateRegionsForUpdates(  # noqa: N802
         self,
-        object_handle: int,
-        attributes_and_regions: dict[int, list[int]] | None = None,
+        object_handle: ObjectInstanceRef,
+        attributes_and_regions: (
+            dict[int | str | AttributeHandle, list[int | RegionHandle]] | None
+        ) = None,
     ) -> None:
         from rti1516e.ddm import AttributeRegions
 
@@ -599,51 +737,51 @@ class Rti1516eAmbassador:
 
     def unsubscribeObjectClassAttributesWithRegions(  # noqa: N802
         self,
-        object_class_handle: int,
-        attribute_handles: list[int],
-        region_handles: list[int],
+        object_class_handle: ObjectClassRef,
+        attribute_handles: AttributeRefList,
+        region_handles: RegionRefList,
     ) -> None:
         self._run(
             self._fed().ddm.unsubscribe_object_class_attributes_with_regions(
-                object_class_handle, attribute_handles, region_handles
+                object_class_handle, list(attribute_handles), list(region_handles)
             )
         )
 
     def unsubscribeInteractionClassWithRegions(  # noqa: N802
-        self, interaction_class_handle: int, region_handles: list[int]
+        self, interaction_class_handle: InteractionClassRef, region_handles: RegionRefList
     ) -> None:
         self._run(
             self._fed().ddm.unsubscribe_interaction_class_with_regions(
-                interaction_class_handle, region_handles
+                interaction_class_handle, list(region_handles)
             )
         )
 
     def sendInteractionWithRegions(  # noqa: N802
         self,
-        interaction_class_handle: int,
-        parameters: dict[int, bytes],
-        region_handles: list[int],
+        interaction_class_handle: InteractionClassRef,
+        parameters: dict[int | str | ParameterHandle, bytes] | ParameterHandleValueMap,
+        region_handles: RegionRefList,
         timestamp: float | None = None,
     ) -> None:
         self._run(
             self._fed().ddm.send_interaction_with_regions(
                 interaction_class_handle,
-                parameters,
-                region_handles,
+                dict(parameters),
+                list(region_handles),
                 timestamp=timestamp,
             )
         )
 
     def requestAttributeValueUpdateWithRegions(  # noqa: N802
         self,
-        object_class_handle: int,
-        attribute_handles: list[int],
-        region_handles: list[int],
+        object_class_handle: ObjectClassRef,
+        attribute_handles: AttributeRefList,
+        region_handles: RegionRefList,
         tag: bytes = b"",
     ) -> None:
         self._run(
             self._fed().ddm.request_attribute_value_update_with_regions(
-                object_class_handle, attribute_handles, region_handles, tag=tag
+                object_class_handle, list(attribute_handles), list(region_handles), tag=tag
             )
         )
 
@@ -662,7 +800,7 @@ class Rti1516eAmbassador:
         """
         return self._run(self._fed().mom.query_federation_attributes())
 
-    def queryFederateAttributes(self, federate_handle: int) -> Any:  # noqa: N802
+    def queryFederateAttributes(self, federate_handle: FederateRef) -> Any:  # noqa: N802
         """§11 — return the HLAfederate MOM object snapshot for one federate.
 
         Returns :class:`rti1516e.mom.FederateAttributes`. The

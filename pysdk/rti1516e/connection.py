@@ -28,10 +28,52 @@ import inspect
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, Self, cast
+from typing import Any, Self, TypeAlias, cast
 
 from rti1516e._transport import build_grpc_transport as _build_grpc_transport
 from rti1516e._transport import lookup as _lookup_transport
+from rti1516e.handles import (
+    AttributeHandle,
+    DimensionHandle,
+    FederateHandle,
+    InteractionClassHandle,
+    ObjectClassHandle,
+    ObjectInstanceHandle,
+    ParameterHandle,
+    RegionHandle,
+)
+from rti1516e.sets import (
+    AttributeHandleSet,
+    AttributeHandleValueMap,
+    DimensionHandleSet,
+    FederateHandleSet,
+    ParameterHandleSet,
+    ParameterHandleValueMap,
+    RegionHandleSet,
+)
+
+# M28 — Pitch-port type aliases. Layer 1 widens its accept types so the
+# typed-handle / typed-collection callers from Layer 2 land cleanly under
+# mypy --strict. Typed handles are int subclasses → no runtime change.
+_ObjectClassRef: TypeAlias = "int | str | ObjectClassHandle"
+_AttributeRef: TypeAlias = "int | str | AttributeHandle"
+_InteractionClassRef: TypeAlias = "int | str | InteractionClassHandle"
+_ParameterRef: TypeAlias = "int | str | ParameterHandle"
+_ObjectInstanceRef: TypeAlias = "int | ObjectInstanceHandle"
+_DimensionRef: TypeAlias = "int | str | DimensionHandle"
+_FederateRef: TypeAlias = "int | FederateHandle"
+_RegionRef: TypeAlias = "int | RegionHandle"
+_AttributeRefList: TypeAlias = "list[int | str | AttributeHandle] | AttributeHandleSet"
+_ParameterRefList: TypeAlias = "list[int | str | ParameterHandle] | ParameterHandleSet"
+_FederateRefList: TypeAlias = "list[int | FederateHandle] | FederateHandleSet"
+_DimensionRefList: TypeAlias = "list[int | str | DimensionHandle] | DimensionHandleSet"
+_RegionRefList: TypeAlias = "list[int | RegionHandle] | RegionHandleSet"
+_AttributeValueDict: TypeAlias = (
+    "dict[int | str | AttributeHandle, Any] | AttributeHandleValueMap"
+)
+_ParameterValueDict: TypeAlias = (
+    "dict[int | str | ParameterHandle, Any] | ParameterHandleValueMap"
+)
 
 
 async def _dispatch(transport: Any, method: str, **kwargs: Any) -> Any:
@@ -337,7 +379,7 @@ class Federate:
     # --- Declaration management (TASK-064) ---
 
     async def publish_object_class(
-        self, class_name: int | str, *, attributes: list[int | str]
+        self, class_name: _ObjectClassRef, *, attributes: _AttributeRefList
     ) -> None:
         """Declare publication of an object class + its attributes.
 
@@ -355,7 +397,7 @@ class Federate:
         )
 
     async def subscribe_object_class(
-        self, class_name: int | str, *, attributes: list[int | str]
+        self, class_name: _ObjectClassRef, *, attributes: _AttributeRefList
     ) -> None:
         """Declare subscription to an object class + its attributes.
 
@@ -369,7 +411,7 @@ class Federate:
             attributes=list(attributes),
         )
 
-    async def publish_interaction_class(self, class_name: int | str) -> None:
+    async def publish_interaction_class(self, class_name: _InteractionClassRef) -> None:
         """Declare publication of an interaction class.
 
         M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or
@@ -382,7 +424,7 @@ class Federate:
             class_name=class_name,
         )
 
-    async def subscribe_interaction_class(self, class_name: int | str) -> None:
+    async def subscribe_interaction_class(self, class_name: _InteractionClassRef) -> None:
         """Declare subscription to an interaction class.
 
         M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or
@@ -400,7 +442,7 @@ class Federate:
     # --- Object management (TASK-065) ---
 
     async def register_object_instance(
-        self, class_name: int | str, *, instance_name: str | None = None
+        self, class_name: _ObjectClassRef, *, instance_name: str | None = None
     ) -> int:
         """Register an instance and return its handle.
 
@@ -421,8 +463,8 @@ class Federate:
 
     async def update_attributes(
         self,
-        object_handle: int,
-        values: dict[int | str, Any],
+        object_handle: _ObjectInstanceRef,
+        values: _AttributeValueDict,
         *,
         timestamp: float | None = None,
     ) -> None:
@@ -444,8 +486,8 @@ class Federate:
 
     async def send_interaction(
         self,
-        class_name: int | str,
-        parameters: dict[int | str, Any],
+        class_name: _InteractionClassRef,
+        parameters: _ParameterValueDict,
         *,
         timestamp: float | None = None,
     ) -> None:
@@ -607,7 +649,7 @@ class Federate:
 
     async def delete_object_instance(
         self,
-        object_handle: int,
+        object_handle: _ObjectInstanceRef,
         tag: bytes = b"",
         timestamp: float | None = None,
     ) -> None:
@@ -625,7 +667,7 @@ class Federate:
             timestamp=timestamp,
         )
 
-    async def local_delete_object_instance(self, object_handle: int) -> None:
+    async def local_delete_object_instance(self, object_handle: _ObjectInstanceRef) -> None:
         """Federate-local cleanup; no peer notification (§6.18, M23)."""
         await _dispatch(
             self._transport,
@@ -635,7 +677,10 @@ class Federate:
         )
 
     async def request_attribute_value_update(
-        self, object_handle: int, attribute_handles: list[int], tag: bytes = b"",
+        self,
+        object_handle: _ObjectInstanceRef,
+        attribute_handles: _AttributeRefList,
+        tag: bytes = b"",
     ) -> None:
         """Pull-style resync: ask the owner to emit fresh values (§6.24, M23).
 
@@ -654,8 +699,8 @@ class Federate:
 
     async def request_class_attribute_value_update(
         self,
-        object_class_handle: int,
-        attribute_handles: list[int],
+        object_class_handle: _ObjectClassRef,
+        attribute_handles: _AttributeRefList,
         tag: bytes = b"",
     ) -> None:
         """Class-scoped pull (§6.25, M23). Every owner of any instance of
@@ -670,7 +715,10 @@ class Federate:
         )
 
     async def change_attribute_transportation_type(
-        self, object_handle: int, attribute_handles: list[int], transport: int,
+        self,
+        object_handle: _ObjectInstanceRef,
+        attribute_handles: _AttributeRefList,
+        transport: int,
     ) -> None:
         """Per-instance per-attribute transport override (§6.20, M23).
 
@@ -688,7 +736,7 @@ class Federate:
         )
 
     async def change_interaction_transportation_type(
-        self, interaction_class_handle: int, transport: int,
+        self, interaction_class_handle: _InteractionClassRef, transport: int,
     ) -> None:
         """Per-publisher per-class transport override (§6.22, M23)."""
         await _dispatch(
