@@ -1,0 +1,12 @@
+# M31 fixture xlang_python_cpp_pubsub — C++ DLC sub golden (SKELETON).
+# The CRITICAL invariant: REFLECT Position values match what the Python
+# publisher emitted, byte-for-byte through the same rtid.
+SUB: CONNECT                                                       # §4.2
+SUB: JOIN federate=cpp-sub                                         # §4.9
+SUB: SUBSCRIBE class=Vehicle attributes=[Position] active=true     # §5.6 (catalogue 11.9 active flag)
+SUB: DISCOVER name=car-1                                           # §6.9 (catalogue 4.19 wstring overload, despite Python publisher using str)
+SUB: REFLECT Position=10.000000                                    # §6.11 RO — wire interop check: pysdk HLAfloat64BE = cppsdk HLAfloat64BE
+SUB: REFLECT Position=20.000000                                    # §6.11 — Annex B big-endian IEEE 754 double
+SUB: REFLECT Position=30.000000                                    # §6.11
+SUB: REMOVE                                                        # §6.15 (catalogue 4.22) — publisher resigns with CANCEL_THEN_DELETE_THEN_DIVEST
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10
