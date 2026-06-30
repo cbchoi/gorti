@@ -1,0 +1,14 @@
+# expected.federate.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.5, §4.6, §4.7, §4.8 (catalogue rows 3.7,
+# 4.4 — both absent in gorti M17).
+FED: CONNECT
+FED: CREATE federation=alpha
+FED: CREATE federation=beta
+FED: CREATE federation=gamma
+FED: LIST_FEDERATION_EXECUTIONS
+FED: REPORT_FEDERATION_EXECUTIONS count=3 alpha beta gamma
+FED: DESTROY federation=alpha
+FED: DESTROY federation=beta
+FED: DESTROY federation=gamma
+FED: DISCONNECT
+# Verify against Pitch capture once Agent E TASK-363 clears.
