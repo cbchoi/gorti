@@ -1,0 +1,15 @@
+# expected.subscriber.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §8.5, §8.6, §5.6, §6.9, §8.8, §6.15, §4.10:
+SUB: CONNECT
+SUB: JOIN
+SUB: TIME_CONSTRAINED_ENABLED
+SUB: SUBSCRIBE Vehicle Position
+SUB: DISCOVER name=car-tso handle=<H>
+SUB: REMOVE_TSO handle=<H> sentOrder=TIMESTAMP time=10.000000 receivedOrder=TIMESTAMP
+SUB: TIME_ADVANCE_GRANT
+SUB: RESIGN
+# Per §6.15 the TSO removeObjectInstance MUST fire before
+# timeAdvanceGrant for the bracketing time. The order shown here is the
+# spec-required canonical ordering — RO events would sort within an LBTS
+# bucket per docs/DLC_COMPLIANCE_PROGRAM.md §5.3.1 rule 2.
+# Verify against Pitch capture once Agent E TASK-363 clears.
