@@ -183,3 +183,56 @@ verification.
 `pysdk/tests/spec/m25/test_ambassador_surface.py` is the lockfile:
 every Pitch-style method the ambassador promises is asserted to
 exist as a callable with `self` as first parameter.
+
+---
+
+## C++ DLC track (M31-M35)
+
+The C++ SDK has its own parity track — the IEEE 1516.1-2010 DLC C++
+federate API. Parent program: `docs/DLC_COMPLIANCE_PROGRAM.md`. 153
+divergence rows enumerated in `docs/DLC_DIVERGENCE_CATALOGUE.md`.
+M31 lands the RED test scaffold (`docs/M31_DISPATCH_PLAN.md`); M32-M35
+flip slices GREEN per `docs/DLC_COMPLIANCE_PROGRAM.md §6`.
+
+Where the Python track aims for **shape parity** with Pitch's
+`Rti1516eAmbassador` ergonomics, the C++ track aims for **strict
+spec compliance** — gorti's `cppsdk/include/RTI/*.h` headers are
+byte-shape-identical to Pitch's reprint of Annex A/B/C at the type
+level. Every divergence is a lockfile assertion under
+`cppsdk/tests/dlc/lockfile/` (~200 `static_assert` checks).
+
+The parity-mode leg of each conformance fixture
+(`cppsdk/tests/dlc/conformance/<fixture>/parity/`) bake-offs the same
+federate source against Pitch CRC. Opt-in via `PRTI_HOME`; off by
+default. Pin: Pitch pRTI Free 5.5.10 build 9905.
+
+C++17 forced deviations from the literal spec text are documented in
+the "Pitch deviations from spec" section below — primarily the
+`std::auto_ptr` → `rti1516e::auto_ptr` alias (the spec returns
+`std::auto_ptr` from factories; C++17 removed it; gorti aliases to
+`std::unique_ptr`). See `docs/DLC_COMPLIANCE_PROGRAM.md §3.1.0` for
+the rationale.
+
+The C++ column in the method-shape divergence table above shows
+"owed-to-M35" for every cell that the DLC track will GREEN-flip.
+
+---
+
+## Pitch deviations from spec
+
+Pitch is a *vendor implementation* of IEEE 1516.1-2010, not the spec
+itself. When Pitch's observable behavior diverges from the spec text,
+the tie-breaker is the **spec** (per
+`docs/DLC_COMPLIANCE_PROGRAM.md §5.2.2`). Fixtures that would only
+pass against Pitch's specific reading get a `SkipIfPitchDeviation`
+marker in the parity driver with a spec cite.
+
+Initially empty — populated as the M32-M35 GREEN-flip work surfaces
+divergences. Reserved rows for the deviations we've already noticed:
+
+| Sentence | Pitch | Spec § | Status |
+|---|---|---|---|
+| `evokeCallback(0.0, 0.0)` blocking | Pitch blocks ~10 ms (scheduler quantum) before return | §10.41 "approximate minimum time = 0 means return immediately" | DEVIATION; gorti follows spec; parity-leg expected to diverge here; `SkipIfPitchDeviation("Pitch §10.41 timing quirk")`. |
+| C++17 `std::auto_ptr` factory return | Pitch ships C++03-shape headers; impl declares `std::auto_ptr<T>` | Spec text (Annex A) writes literal `std::auto_ptr` | gorti's **forced deviation**: `rti1516e::auto_ptr` alias. See `docs/DLC_COMPLIANCE_PROGRAM.md §3.1.0`. NOT a spec violation — the spec references a removed C++ facility. |
+
+(More rows append as M32-M35 surfaces them.)
