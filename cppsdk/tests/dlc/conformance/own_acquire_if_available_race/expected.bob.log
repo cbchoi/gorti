@@ -1,0 +1,11 @@
+# expected.bob.log — TBD-pitch-capture (TASK-363 prereq)
+# Bob wins the race — per IEEE 1516.1-2010 §7.9 + §7.7.
+# Bob's perspective (winner). RO-bucket: DISCOVER/ACQUISITION_NOTIFICATION
+# ordering depends on RTI scheduling; harness LBTS-bucket sort normalizes.
+BOB: CONNECT
+BOB: JOIN
+BOB: DISCOVER name=car-race handle=<H>
+BOB: ACQUIRE_IF_AVAILABLE attrs=[Position]
+BOB: ACQUISITION_NOTIFICATION attrs=1
+BOB: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.
