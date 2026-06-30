@@ -931,11 +931,156 @@ check_m14() {
   else set_status M14 NOT_STARTED; printf "${DIM}M14: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M31 ----------
+check_m31() {
+  section "M31 — DLC C++ surface lockfile RED scaffold (Owner: agent-d C++)"
+  echo "Exit (srs.md §10.6 + docs/M31_DISPATCH_PLAN.md §3): 200 RED lockfile assertions, 27 conformance fixtures, 30 stubs, docs landed"
+  local pass=0 total=11
+
+  # 1. Lockfile dir + per-TU file count.
+  if [ -d cppsdk/tests/dlc/lockfile ]; then
+    local lockfile_count
+    lockfile_count=$(find cppsdk/tests/dlc/lockfile -name '*.cpp' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$lockfile_count" -ge 30 ]; then
+      present "cppsdk/tests/dlc/lockfile/ has $lockfile_count .cpp files (≥30 expected)"
+      pass=$((pass+1))
+    else
+      pending "cppsdk/tests/dlc/lockfile/ has only $lockfile_count .cpp files (≥30 expected)"
+    fi
+  else
+    missing "cppsdk/tests/dlc/lockfile/ missing"
+  fi
+
+  # 2. Conformance fixtures: 27 dirs.
+  if [ -d cppsdk/tests/dlc/conformance ]; then
+    local fixture_count
+    fixture_count=$(find cppsdk/tests/dlc/conformance -maxdepth 1 -mindepth 1 -type d ! -name '_harness' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$fixture_count" -ge 27 ]; then
+      present "cppsdk/tests/dlc/conformance/ has $fixture_count fixtures (≥27 expected)"
+      pass=$((pass+1))
+    else
+      pending "cppsdk/tests/dlc/conformance/ has only $fixture_count fixtures (27 expected)"
+    fi
+  else
+    missing "cppsdk/tests/dlc/conformance/ missing"
+  fi
+
+  # 3. Each fixture has required artefacts (sampled — first 5).
+  if [ -d cppsdk/tests/dlc/conformance ]; then
+    local complete=0 sampled=0
+    for d in cppsdk/tests/dlc/conformance/*/; do
+      [ "$(basename "$d")" = "_harness" ] && continue
+      sampled=$((sampled+1))
+      [ "$sampled" -gt 5 ] && break
+      local has_federate has_fom has_golden has_test has_readme
+      has_federate=$(ls "$d"federate*.cpp 2>/dev/null | wc -l | tr -d ' ')
+      has_fom=$(ls "$d"federation.fom.xml 2>/dev/null | wc -l | tr -d ' ')
+      has_golden=$(ls "$d"expected*.log 2>/dev/null | wc -l | tr -d ' ')
+      has_test=$(ls "$d"test_*.cpp 2>/dev/null | wc -l | tr -d ' ')
+      has_readme=$(ls "$d"README.md 2>/dev/null | wc -l | tr -d ' ')
+      if [ "$has_federate" -ge 1 ] && [ "$has_fom" -ge 1 ] && [ "$has_golden" -ge 1 ] && [ "$has_test" -ge 1 ] && [ "$has_readme" -ge 1 ]; then
+        complete=$((complete+1))
+      fi
+    done
+    if [ "$sampled" -eq 0 ]; then
+      pending "no conformance fixtures present to sample"
+    elif [ "$complete" -eq "$sampled" ]; then
+      present "all $sampled sampled fixtures have federate*.cpp + fom + golden + test + README"
+      pass=$((pass+1))
+    else
+      pending "$complete/$sampled sampled fixtures have all 5 artefacts"
+    fi
+  else
+    missing "fixture artefact check skipped (no conformance dir)"
+  fi
+
+  # 4. Parity harness: normalize.py + pitch_*.sh.
+  if [ -f cppsdk/tests/dlc/conformance/_harness/normalize.py ] \
+     && [ -f cppsdk/tests/dlc/conformance/_harness/pitch_build.sh ] \
+     && [ -f cppsdk/tests/dlc/conformance/_harness/pitch_run.sh ]; then
+    present "conformance/_harness/ has normalize.py + pitch_build.sh + pitch_run.sh"
+    pass=$((pass+1))
+  else
+    pending "conformance/_harness/ parity-mode scaffolding incomplete"
+  fi
+
+  # 5. 30 RTI/ stubs.
+  local stub_count
+  stub_count=$(find cppsdk/include/RTI -name '*.h' 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$stub_count" -ge 30 ]; then
+    present "cppsdk/include/RTI/ has $stub_count headers (≥30 expected)"
+    pass=$((pass+1))
+  else
+    pending "cppsdk/include/RTI/ has only $stub_count headers (30 expected)"
+  fi
+
+  # 6. agent-d brief exists + non-empty.
+  if [ -s docs/agent-d-cppsdk.md ]; then
+    present "docs/agent-d-cppsdk.md present + non-empty"
+    pass=$((pass+1))
+  else
+    missing "docs/agent-d-cppsdk.md missing or empty"
+  fi
+
+  # 7. SRS §5.14 + §7.4 + FR-DLC-* + IR-CPPAPI-* present.
+  if grep -q 'FR-DLC-1\b' docs/srs.md 2>/dev/null \
+     && grep -q 'FR-DLC-15\b' docs/srs.md 2>/dev/null \
+     && grep -q 'IR-CPPAPI-1' docs/srs.md 2>/dev/null; then
+    present "docs/srs.md mentions FR-DLC-1..15 + IR-CPPAPI-1"
+    pass=$((pass+1))
+  else
+    pending "docs/srs.md missing FR-DLC-* or IR-CPPAPI-* citations"
+  fi
+
+  # 8. IDD §1.8 present.
+  if grep -q '^### 1\.8' docs/idd.md 2>/dev/null; then
+    present "docs/idd.md has §1.8"
+    pass=$((pass+1))
+  else
+    pending "docs/idd.md §1.8 missing"
+  fi
+
+  # 9. Spec-coverage matrix generated.
+  if [ -f docs/dlc-spec-coverage.md ]; then
+    local section_count
+    section_count=$(grep -cE '^\| §[0-9]' docs/dlc-spec-coverage.md 2>/dev/null)
+    section_count="${section_count:-0}"
+    if [ "$section_count" -ge 40 ] 2>/dev/null; then
+      present "docs/dlc-spec-coverage.md has $section_count §-rows (≥40 expected)"
+      pass=$((pass+1))
+    else
+      pending "docs/dlc-spec-coverage.md has only $section_count §-rows (40 expected)"
+    fi
+  else
+    pending "docs/dlc-spec-coverage.md not yet generated"
+  fi
+
+  # 10. RTI_CONFORMANCE_AUDIT referenced from srs §10.6.
+  if grep -q 'RTI_CONFORMANCE_AUDIT' docs/srs.md 2>/dev/null; then
+    present "docs/srs.md §10.6 references RTI_CONFORMANCE_AUDIT.md"
+    pass=$((pass+1))
+  else
+    pending "docs/srs.md missing RTI_CONFORMANCE_AUDIT.md cross-ref"
+  fi
+
+  # 11. CHANGELOG M31 row with (0/200) GREEN.
+  if grep -qE '\*\*M31\*\*.*0/200|M31.*\(0/200\) GREEN' CHANGELOG-MASTERPLAN.md 2>/dev/null; then
+    present "CHANGELOG-MASTERPLAN.md has M31 (0/200) GREEN row"
+    pass=$((pass+1))
+  else
+    pending "CHANGELOG-MASTERPLAN.md missing M31 (0/200) GREEN row"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M31 DONE; printf "${GRN}M31: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M31 IN_PROGRESS; printf "${YLW}M31: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M31 NOT_STARTED; printf "${DIM}M31: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28 M31; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -975,6 +1120,7 @@ check_m23
 check_m24
 check_m28
 check_m14
+check_m31
 print_summary
 
 exit "$REGRESSED"

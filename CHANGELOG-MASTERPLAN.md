@@ -349,6 +349,36 @@ Pitch-API parity story is now fully closed. The Layer 2 `Rti1516eAmbassador` is 
 
 Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
+### Cut 4 — IEEE 1516.1-2010 DLC C++ strict compliance (M31..M35)
+
+**Goal**: strict implementation of the IEEE 1516.1-2010 Dynamic Link Compatible (DLC) C++ federate API. A federate written against any 1516e DLC C++ vendor (Pitch, MAK, Portico) compiles unchanged against gorti's `cppsdk`. Parent: `docs/DLC_COMPLIANCE_PROGRAM.md` (153-row divergence catalogue at `docs/DLC_DIVERGENCE_CATALOGUE.md`).
+
+#### M31 — DLC C++ surface lockfile (RED test scaffold) — (0/200) GREEN baseline
+
+First milestone of the DLC compliance track. Lands **failing tests** that lock the IEEE 1516.1-2010 DLC C++ API surface at the spec. No implementation code; every lockfile/conformance test is RED by design. Subsequent milestones (M32–M35) turn slices GREEN.
+
+Four parts (~10,000 LOC across ~300 files):
+
+- **W1 lockfile**: ~140 per-TU `.cpp` files / ~200 `static_assert` checks under `cppsdk/tests/dlc/lockfile/{core,types,exceptions,encoding,time}/` (Agents A + B of the M31 fan-out).
+- **W2 conformance**: 27 federate fixtures under `cppsdk/tests/dlc/conformance/<fixture>/` (Agents C + D) covering §4-§11 + a threading re-entrancy fixture + a cross-language Python↔C++ fixture. Each has `federate*.cpp` + `federation.fom.xml` + `expected.*.log` skeletons (real captures gated on Pitch EULA — see `docs/PITCH_GOLDEN_LICENSING.md`) + gtest driver + README with spec cites.
+- **W3 parity-mode**: per-fixture `parity/` subdirs (Agent C C++ harness) + `_harness/normalize.py` + `_harness/pitch_build.sh` + `_harness/pitch_run.sh` (Agent E). Opt-in via `PRTI_HOME`; pinned to Pitch pRTI Free 5.5.10 build 9905.
+- **W4 docs + infra**: 30 forward-declaration header stubs at `cppsdk/include/RTI/{*.h, encoding/*.h, time/*.h}` per `docs/M31_DISPATCH_PLAN.md §2.5`. SRS §5.14 (FR-DLC-1..18) + §7.4 (IR-CPPAPI-1..4) + §10.6 (Cut 4 milestone rows). IDD §1.8 skeleton. `docs/agent-d-cppsdk.md` brief draft. `docs/PITCH_PARITY.md` C++ DLC + Pitch-deviations sections. `docs/PITCH_GOLDEN_LICENSING.md` EULA review (TENTATIVE GO subject to 4 conditions). `docs/MIGRATION_M17_TO_DLC.md` skeleton. `scripts/check-milestones.sh check_m31` 11-probe. `scripts/gen-spec-coverage.sh` + `scripts/check-spec-traceability.sh` lints.
+
+5-agent fan-out (Agent A: lockfile core; Agent B: lockfile rest; Agent C: fixtures 4-7 + harness; Agent D: fixtures 8-11 + wiring; Agent E: infra + docs). Orchestration plan at `ralph.md`.
+
+C++17 baseline + `auto_ptr` resolution per `docs/DLC_COMPLIANCE_PROGRAM.md §3.1.0`: `rti1516e::auto_ptr<T> = std::unique_ptr<T>` under default C++17; opt-in `-DGORTI_DLC_USE_REAL_AUTO_PTR` switches to the literal `std::auto_ptr` under C++14 source-port mode.
+
+CRITICAL DECISIONS recorded in this milestone:
+- FR-DLC-16: every enum in `RTI/Enums.h` is UNSCOPED (`enum X { ... }`, not `enum class X { ... }`). The scoped form breaks source-compat with Pitch federates.
+- FR-DLC-17: `RTI_EXPORT` macro / SO-version `librti1516e.so.N` per `HLA_API_MAJOR_VERSION`.
+- FR-DLC-18: `std::wstring` UTF-16 normalization (gorti commitment, not spec mandate).
+
+M31 exit (per `docs/M31_DISPATCH_PLAN.md §3`): all ~200 lockfile assertions RED, all 27 conformance fixtures fail-to-link with `undefined reference to rti1516e::*`, parity harness skips cleanly without `PRTI_HOME`, 30 RTI header stubs land, all docs land, M17 cppsdk tests stay GREEN, pysdk untouched. Status reported by `scripts/check-milestones.sh check_m31` (11 probes).
+
+Baseline: **(0/200) GREEN** — M32 onward measures progress as `(GREEN_count/200)`. **DONE 2026-MM-DD** (placeholder until orchestrator closes).
+
+---
+
 #### M28 — pysdk typed-handle + typed-collection parity with Pitch 1516e (closed 2026-05-30)
 
 First milestone of the Pitch source-compat track re-opened after the

@@ -173,6 +173,31 @@ Single RTI process, supports multiple federations concurrently, federates discov
 - **FR-DDM-5** — Region overlap detection: deterministic interval-tree check across all dimensions of the routing space; tie-break on `RegionHandle` ascending.
 - **FR-DDM-6** — Performance: DDM filtering MUST NOT make non-DDM workloads slower (zero-cost when no regions are in play). DDM workload baseline at federation size 25 with 100 regions in `docs/reports/M10/agent-a.md`.
 
+### 5.14 C++ Federate API DLC compliance (FR-DLC-*) — cut 4
+
+Strict implementation of IEEE 1516.1-2010 Dynamic Link Compatible (DLC) C++ federate API per `docs/DLC_COMPLIANCE_PROGRAM.md` (M31-M35). The full divergence catalogue is `docs/DLC_DIVERGENCE_CATALOGUE.md` (153 rows) and the lockfile that pins this surface is `cppsdk/tests/dlc/lockfile/`.
+
+C++17 baseline. The spec text references `std::auto_ptr<T>` (C++03); since C++17 removed it, gorti aliases `rti1516e::auto_ptr<T> = std::unique_ptr<T>` in `RTI/SpecificConfig.h`. See `docs/DLC_COMPLIANCE_PROGRAM.md §3.1.0`.
+
+- **FR-DLC-1** — Header layout matches IEEE 1516.1-2010 Annex A: every spec-mandated header exists under `RTI/`, `RTI/encoding/`, `RTI/time/` with the spec filenames (capital `RTI`). The legacy `rti1516e/` gorti path remains as a re-export shim for M17-era callers.
+- **FR-DLC-2** — `RTIambassador` is pure-abstract per §10. `RTIambassadorFactory::createRTIambassador()` is the only legal construction path; direct construction yields a compile error. The factory returns `rti1516e::auto_ptr<RTIambassador>` (a `using auto_ptr<T> = std::unique_ptr<T>` alias defined in `RTI/SpecificConfig.h`, since `std::auto_ptr` was removed in C++17; spec-literal `std::auto_ptr` optionally re-aliased via `-DGORTI_DLC_USE_REAL_AUTO_PTR` under C++14).
+- **FR-DLC-3** — `RTIambassador::connect` matches §4.2 signature exactly: `void connect(FederateAmbassador&, CallbackModel, std::wstring const& localSettingsDesignator)`, with the spec-mandated exception set (`ConnectionFailed`, `InvalidLocalSettingsDesignator`, `UnsupportedCallbackModel`, `AlreadyConnected`, `CallNotAllowedFromWithinCallback`, `RTIinternalError`).
+- **FR-DLC-4** — All federate-facing strings use `std::wstring` per Annex A; the M17-era `std::string` API remains via a thin shim in `rti1516e/` but the spec-strict surface is wstring-only.
+- **FR-DLC-5** — Every FederateAmbassador callback exposes all spec-defined overloads. Specifically: `discoverObjectInstance` 2 overloads, `reflectAttributeValues` 3 overloads (RO / TSO / TSO+retract), `receiveInteraction` 3 overloads, `removeObjectInstance` 3 overloads.
+- **FR-DLC-6** — Every exception class enumerated in Annex C (~120 classes) is defined as a leaf of the `rti1516e::Exception` abstract base. The Pitch-style `RTI_EXCEPTION(Name)` macro is reused. `RTIinternalError` becomes a leaf, not the base.
+- **FR-DLC-7** — Encoding helpers under `RTI/encoding/` cover the IEEE 1516.2 Annex B basic data types as `DataElement`-derived classes (not free functions): the 19 basic types enumerated in `BasicDataElements.h` plus the 5 composite encoders (`HLAfixedArray`, `HLAvariableArray`, `HLAfixedRecord`, `HLAvariantRecord`, `HLAopaqueData`).
+- **FR-DLC-8** — Time types under `RTI/time/` cover `HLAfloat64Time/Interval/Factory` and `HLAinteger64Time/Interval/Factory`; abstract bases `LogicalTime`, `LogicalTimeInterval`, `LogicalTimeFactory` ship under `RTI/`. Federate calls `getTimeFactory()` (returns `rti1516e::auto_ptr<LogicalTimeFactory>`) or the static `LogicalTimeFactoryFactory::makeLogicalTimeFactory(implementationName)` to obtain a factory by name; the loaded factory then yields `LogicalTime` instances.
+- **FR-DLC-9** — `RTI_THROW(...)` macro defined per `SpecificConfig.h`; every public method uses it for its exception specification.
+- **FR-DLC-10** — All 6 spec `ResignAction` enum values accepted; `resignFederationExecution` requires a mandatory `ResignAction` argument (no default).
+- **FR-DLC-11** — `CallbackModel { HLA_IMMEDIATE, HLA_EVOKED }` enum exposed per §4.2. Default behavior matches M29 (HLA_IMMEDIATE).
+- **FR-DLC-12** — Time-management calls (`enableTimeRegulation`, `enableTimeConstrained`, `timeAdvanceRequest`, etc.) are **asynchronous** per §8; acks arrive on `timeRegulationEnabled` / `timeConstrainedEnabled` / `timeAdvanceGrant` callbacks. The M17-era synchronous-return semantics is dropped on the spec surface.
+- **FR-DLC-13** — Object-management calls take a MANDATORY `VariableLengthData const& tag` per §6.10, §6.12, §6.14, §7.8 etc. (no default).
+- **FR-DLC-14** — `CallNotAllowedFromWithinCallback` exception thrown when a federate re-enters the ambassador from within a callback.
+- **FR-DLC-15** — `RoutingSpaceHandle` removed from the public DLC surface (HLA Evolved dropped routing spaces); gorti-internal uses move to a non-spec namespace.
+- **FR-DLC-16** — `CallbackModel` is an **unscoped enum** per `Enums.h:21-25` (`enum CallbackModel { HLA_IMMEDIATE, HLA_EVOKED };`). The lockfile test must reject `enum class` (the scoped form changes federate access syntax from `HLA_IMMEDIATE` to `CallbackModel::HLA_IMMEDIATE` and breaks source-compat). All gorti enums in `RTI/Enums.h` match: `OrderType`, `TransportationType`, `ResignAction`, `SaveStatus`, `RestoreStatus`, `SaveFailureReason`, `RestoreFailureReason`, `ServiceGroup`, `SynchronizationPointFailureReason`.
+- **FR-DLC-17** — ABI / SO-name versioning: shared libraries carry SO-version `librti1516e.so.N` matching `HLA_API_MAJOR_VERSION`; `RTI_EXPORT` macro from `RTI/SpecificConfig.h` controls visibility (`__declspec(dllexport)` Windows, `__attribute__((visibility("default")))` ELF). Cross-RTI binary swaps (gorti `.so` ↔ Pitch `.so`) work for any federate that compiled against either header set.
+- **FR-DLC-18** — `std::wstring` encoding: per Annex A the spec is silent; gorti **normalizes to UTF-16** on the wire and treats `wchar_t` as host-defined (Linux/macOS = 32-bit UCS-4; Windows = 16-bit UCS-2). A `RTI/SpecificConfig.h` static_assert + runtime decoder ensures FOM names round-trip identically across hosts. This is a gorti commitment, not a spec mandate; documented as a Pitch-equivalent choice.
+
 ---
 
 ## 6. Non-Functional Requirements
@@ -232,6 +257,13 @@ Single RTI process, supports multiple federations concurrently, federates discov
 ### 7.3 Federate API Shape (IR-PYAPI-*)
 
 - **IR-PYAPI-1** — Hybrid: idiomatic Python API (`async def`, context managers, dataclasses) plus a thin standard-shaped adapter (`Rti1516eAmbassador`-style) for users porting from existing RTIs.
+
+### 7.4 C++ Federate API Shape (IR-CPPAPI-*)
+
+- **IR-CPPAPI-1** — Source compatibility: a federate written against IEEE 1516.1-2010 DLC C++ headers (Pitch pRTI, Portico, MAK) compiles against gorti's cppsdk with NO source changes beyond the connect-string argument value (vendor connect syntax is implementation-defined).
+- **IR-CPPAPI-2** — Header tree matches Annex C: `RTI/`, `RTI/encoding/`, `RTI/time/` plus the gorti-namespaced `rti1516e/` aliases for back-compat with M17 callers.
+- **IR-CPPAPI-3** — Distribution: CMake `find_package(rti1516e)`, pkg-config, and a header-only reference distribution for federate builds that don't want to link the gorti gRPC runtime.
+- **IR-CPPAPI-4** — Wire-protocol independence: the DLC API surface MUST NOT leak gRPC, protobuf, or absl types. Only spec-defined types and STL types appear in public headers.
 
 ---
 
@@ -327,3 +359,17 @@ Cut-3 dispatch order rationale: M12 first (closes the biggest user-visible gap �
 - HLA-Evolved interoperability with commercial RTIs at the wire level (Pitch HLA Evolved wire format reverse-engineering; out of scope for OSS without spec-vendor cooperation)
 - FOM editor / GUI tooling
 - Time-warped optimistic time advance (Jefferson-style rollback)
+
+### 10.6 Milestones — Cut 4 (IEEE 1516.1-2010 DLC C++ strict compliance)
+
+Sister track to the RTI-side behavioral conformance audit at `docs/RTI_CONFORMANCE_AUDIT.md`. The DLC C++ surface program lives at `docs/DLC_COMPLIANCE_PROGRAM.md`; the M31 lockfile lands the RED scaffold and each subsequent milestone flips a slice GREEN.
+
+| ID | Owner | Deliverable | Exit Criteria |
+|---|---|---|---|
+| **M31** | Agent D (C++) | DLC lockfile tests (RED) — surface frozen, no impl | All ~200 lockfile assertions compile-fail or link-fail as designed; CMake test target `dlc_lockfile_red` exercises the failure mode; SRS §5.14 + §7.4 land; `docs/DLC_DIVERGENCE_CATALOGUE.md` committed |
+| **M32** | Agent D | DLC headers, construction, handles, collections, VLD (~50/200 GREEN) | Catalogue sections 1, 2, 5, 7, 8, 15 flip RED→GREEN; Pitch chat sample's first 200 lines compile against gorti cppsdk |
+| **M33** | Agent D | DLC callbacks + exceptions + ownership + DDM + obj-mgmt (~100/200 GREEN) | Catalogue sections 3, 4, 6 (~120 exception classes), 10, 11, 12, 13, 17 flip GREEN; cross-RTI parity test (under `cppsdk/tests/dlc/conformance/<fixture>/parity/`) extends from 1 federate to 5 |
+| **M34** | Agent D | Encoding helpers + time types (~40/200 GREEN) | Catalogue sections 9, 14 flip GREEN; encoding-vector tests pass with `HLA*` helpers replacing hand-encoders |
+| **M35** | Agent D | MOM + back-compat shim deprecation + **IVCT-derived conformance subset** (last ~10/200 GREEN + conformance gate) | Catalogue section 16 flips GREEN; M17-era `rti1516e/RtiAmbassador.h` headers marked `[[deprecated]]`; Pitch chat sample compiles + runs end-to-end against gorti; **gorti rtid passes an IVCT-derived conformance subset** (specific test catalog selected during M35 W2 — see `docs/RTI_CONFORMANCE_AUDIT.md` §6 for honest scoping of IVCT integration options); `docs/dlc-spec-coverage.md` reports 100% spec-section coverage; `docs/MIGRATION_M17_TO_DLC.md` published |
+
+Cut-4 reference docs: `docs/DLC_COMPLIANCE_PROGRAM.md` (program parent), `docs/DLC_DIVERGENCE_CATALOGUE.md` (153 rows driving the lockfile), `docs/M31_DISPATCH_PLAN.md` (RED scaffold), `docs/RTI_CONFORMANCE_AUDIT.md` (RTI-side behavioral parallel track), `docs/agent-d-cppsdk.md` (the new C++ SDK agent brief).

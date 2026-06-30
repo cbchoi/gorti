@@ -399,6 +399,101 @@ All metrics prefixed `rti_`. Standardized labels: `federation` (always), `federa
 
 Histogram buckets: SI-friendly defaults (`5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 1e-1, 5e-1, 1, 5`).
 
+### 1.8 C++ Federate Public API (`cppsdk/include/rti1516e/`, `cppsdk/include/RTI/`)
+
+Per IR-CPPAPI-1..4 and FR-DLC-1..18 (`docs/srs.md §5.14`). Strict implementation of IEEE 1516.1-2010 Annex C (DLC C++ federate API). The M31 milestone lands the RED test scaffold and 30 forward-declaration header stubs; M32-M35 flip slices GREEN per `docs/DLC_COMPLIANCE_PROGRAM.md §6`.
+
+#### 1.8.1 Header tree
+
+```
+RTI/                          [spec-mandated path; gorti's M31 stub form]
+  RTIambassador.h
+  RTIambassadorFactory.h
+  FederateAmbassador.h
+  NullFederateAmbassador.h
+  Exception.h
+  Handle.h
+  Typedefs.h
+  VariableLengthData.h
+  LogicalTime.h
+  LogicalTimeFactory.h
+  LogicalTimeInterval.h
+  RangeBounds.h
+  Enums.h
+  SpecificConfig.h
+  RTI1516.h                   [aggregate include + rtiName()/rtiVersion()]
+  encoding/
+    BasicDataElements.h       [HLAfloat64BE, HLAinteger32BE, HLAunicodeString, ...]
+    DataElement.h             [abstract base]
+    EncodingConfig.h
+    EncodingExceptions.h
+    HLAfixedArray.h
+    HLAfixedRecord.h
+    HLAopaqueData.h
+    HLAvariableArray.h
+    HLAvariantRecord.h
+  time/
+    HLAfloat64Time.h
+    HLAfloat64TimeFactory.h
+    HLAfloat64Interval.h
+    HLAinteger64Time.h
+    HLAinteger64TimeFactory.h
+    HLAinteger64Interval.h
+rti1516e/                     [gorti back-compat aliases — re-export from RTI/]
+  (M17 Cut-1..4 headers continue to work; new code prefers RTI/)
+```
+
+#### 1.8.2 Construction pattern (spec-exact)
+
+(see `docs/M32_DISPATCH_PLAN.md` for the M32 GREEN-flip of catalogue sections 1 + 2.)
+
+Pre-M32 stub form (M31):
+
+```cpp
+#include <RTI/RTIambassadorFactory.h>
+#include <RTI/NullFederateAmbassador.h>
+#include <RTI/Enums.h>
+
+class MyFed : public rti1516e::NullFederateAmbassador { /* ... */ };
+
+auto factory = rti1516e::RTIambassadorFactory();
+auto amb = factory.createRTIambassador();   // rti1516e::auto_ptr alias of unique_ptr
+MyFed fed;
+amb->connect(fed, rti1516e::HLA_IMMEDIATE,
+             L"crcAddress=127.0.0.1:8989");
+```
+
+#### 1.8.3 Callback overload set
+
+Each of `discoverObjectInstance`, `reflectAttributeValues`, `receiveInteraction`, `removeObjectInstance` exposes all spec-mandated overloads. The full enumeration lives in `docs/M33_DISPATCH_PLAN.md §2` (M33 GREEN-flip).
+
+Stub-form summary:
+
+| Callback | Overloads |
+|---|---|
+| `discoverObjectInstance` | 2 (3-arg, 4-arg with `FederateHandle producingFederate`) |
+| `reflectAttributeValues` | 3 (RO, TSO, TSO+retract) |
+| `receiveInteraction` | 3 (RO, TSO, TSO+retract) |
+| `removeObjectInstance` | 3 (RO, TSO, TSO+retract) |
+
+#### 1.8.4 Exception hierarchy
+
+(see `RTI/Exception.h` walkthrough in M33 dispatch plan)
+
+Pre-M32 stub form: abstract `rti1516e::Exception` base with virtual wstring `what()`, ~120 `RTI_EXCEPTION(Name)`-generated leaf classes per Annex C. `RTIinternalError` is a leaf, not the base (catalogue 6.4).
+
+#### 1.8.5 Encoding helpers
+
+(see `RTI/encoding/BasicDataElements.h` walkthrough in M34 dispatch plan)
+
+Pre-M32 stub form: 19 basic types via `DEFINE_ENCODING_HELPER_CLASS` + 5 composite encoders (`HLAfixedArray`, `HLAvariableArray`, `HLAfixedRecord`, `HLAvariantRecord`, `HLAopaqueData`) per IEEE 1516.2 Annex B.
+
+#### 1.8.6 Time types
+
+(see `RTI/time/HLAfloat64Time.h` walkthrough in M34 dispatch plan)
+
+Pre-M32 stub form: abstract `LogicalTime` / `LogicalTimeInterval` / `LogicalTimeFactory` bases + 6 concrete reference impls (`HLAfloat64Time/Interval/Factory`, `HLAinteger64Time/Interval/Factory`). Federate calls `getTimeFactory()` (returns `rti1516e::auto_ptr<LogicalTimeFactory>`) or the static `LogicalTimeFactoryFactory::makeLogicalTimeFactory(impl_name)` to obtain a factory by name.
+
 ---
 
 ## 2. Internal Interfaces
