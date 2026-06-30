@@ -1,0 +1,10 @@
+# expected.subscriber.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §5.6, §6.9, §6.19, §6.11, §4.10:
+SUB: CONNECT
+SUB: JOIN
+SUB: SUBSCRIBE Vehicle Position Velocity
+SUB: DISCOVER name=car-cls handle=<H>
+SUB: REQUEST_UPDATE class=Vehicle attrs=[Position,Velocity]
+SUB: REFLECT name=car-cls Position=11 Velocity=22
+SUB: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.
