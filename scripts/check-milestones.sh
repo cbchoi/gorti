@@ -1043,8 +1043,9 @@ check_m31() {
   # 9. Spec-coverage matrix generated.
   if [ -f docs/dlc-spec-coverage.md ]; then
     local section_count
-    section_count=$(grep -cE '^\| §[0-9]' docs/dlc-spec-coverage.md 2>/dev/null || echo 0)
-    if [ "$section_count" -ge 40 ]; then
+    section_count=$(grep -cE '^\| §[0-9]' docs/dlc-spec-coverage.md 2>/dev/null)
+    section_count="${section_count:-0}"
+    if [ "$section_count" -ge 40 ] 2>/dev/null; then
       present "docs/dlc-spec-coverage.md has $section_count §-rows (≥40 expected)"
       pass=$((pass+1))
     else
