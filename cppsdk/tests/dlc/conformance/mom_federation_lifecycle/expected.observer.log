@@ -1,0 +1,13 @@
+# M31 fixture mom_federation_lifecycle — observer golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+OBS: CONNECT                                                       # §4.2
+OBS: JOIN federate=observer                                        # §4.9 — observer joins first
+OBS: SUBSCRIBE class=HLAobjectRoot.HLAmanager.HLAfederate attributes=[HLAfederateHandle,HLAfederateName] active=true  # §5.6 + §11 standard MOM path (catalogue 16.1 — no bespoke API)
+OBS: DISCOVER name=HLAfederate                                     # §11 — RTI publishes per-federate MOM object as federates join; §6.9 (catalogue 4.19 wstring)
+OBS: REFLECT HLAfederateName=observer                              # §11 — MOM populates name attribute via standard reflectAttributeValues RO (catalogue 4.20)
+OBS: DISCOVER name=HLAfederate
+OBS: REFLECT HLAfederateName=alice
+OBS: DISCOVER name=HLAfederate
+OBS: REFLECT HLAfederateName=bob
+OBS: REMOVE                                                        # §6.15 removeObjectInstance (catalogue 4.22) — alice resigns first; MOM removes her HLAfederate object
+OBS: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10
