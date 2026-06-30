@@ -1,0 +1,18 @@
+# M31 conformance fixture: tm_ner_pair — regulator golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 (Pitch EULA) clears.
+# Each line below cites the spec sentence its presence enforces.
+REG: CONNECT                                            # §4.2
+REG: JOIN federate=regulator                            # §4.9
+REG: PUBLISH interaction=Tick                           # §5.4
+REG: TIME_REGULATION_ENABLED time=0.000000              # §8.3 callback (async ack of §8.2)
+REG: GRANT time=1.000000                                # §8.13 grant for §8.8 NER(1)
+REG: SEND interaction=Tick seq=1 time=1                 # §6.12 TSO sendInteraction
+REG: GRANT time=2.000000                                # §8.13
+REG: SEND interaction=Tick seq=2 time=2                 # §6.12
+REG: GRANT time=3.000000                                # §8.13
+REG: SEND interaction=Tick seq=3 time=3                 # §6.12
+REG: GRANT time=4.000000                                # §8.13
+REG: SEND interaction=Tick seq=4 time=4                 # §6.12
+REG: GRANT time=5.000000                                # §8.13
+REG: SEND interaction=Tick seq=5 time=5                 # §6.12
+REG: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST       # §4.10
