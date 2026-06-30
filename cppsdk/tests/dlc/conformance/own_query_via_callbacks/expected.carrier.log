@@ -1,0 +1,7 @@
+# expected.carrier.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §4.10:
+CARRIER: CONNECT
+CARRIER: JOIN
+CARRIER: REGISTER name=car-query handle=<H>
+CARRIER: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.
