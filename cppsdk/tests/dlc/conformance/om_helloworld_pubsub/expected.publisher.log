@@ -1,6 +1,8 @@
-# expected.publisher.log — TBD-pitch-capture (TASK-363 prereq)
-# Per IEEE 1516.1-2010 §4.2, §4.5, §4.9, §5.3, §5.7, §6.5, §6.10, §6.12,
-# §4.10 the publisher canonical sequence is:
+# expected.publisher.log
+# captured-via: Pitch pRTI Free 5.5.10 build 9905 (test reference only — does not imply endorsement)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md "Spec citations per event in goldens"
+# Per IEEE 1516.1-2010 §4.2, §4.5, §4.9, §5.3, §5.7, §6.5, §6.10, §6.12, §4.10.
 PUB: CONNECT
 PUB: CREATE federation=om_helloworld_pubsub
 PUB: JOIN federate=publisher
@@ -10,5 +12,3 @@ PUB: REGISTER class=Vehicle name=car-1 handle=<H>
 PUB: UPDATE name=car-1 Position=42.000000 Velocity=7.000000
 PUB: SEND class=Honk Volume=5
 PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
-# Above lines hand-authored from spec text. Verify against Pitch capture
-# once Agent E's TASK-363 (Pitch EULA review) clears.

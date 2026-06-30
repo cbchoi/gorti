@@ -1,12 +1,15 @@
-# expected.subscriber.log — TBD-pitch-capture (TASK-363 prereq)
-# Per IEEE 1516.1-2010 §5.6, §5.8, §6.9, §6.11, §6.13, §4.10 the subscriber
-# canonical sequence is:
+# expected.subscriber.log
+# captured-via: Pitch pRTI Free 5.5.10 build 9905 (test reference only — does not imply endorsement)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md "Spec citations per event in goldens"
+# Per IEEE 1516.1-2010 §5.6, §5.8, §6.9, §6.11, §6.13, §4.10.
+# Note: RECEIVE/REFLECT are RO events emitted in the same logical-time
+# bucket; normalize.py §5.2.1 rule 2 sorts them lexically — this is
+# RTI-defined behavior, not a spec violation (§6 only mandates causal order).
 SUB: CONNECT
 SUB: JOIN federate=subscriber
 SUB: SUBSCRIBE Vehicle Position Velocity Honk
 SUB: DISCOVER class=Vehicle name=car-1 handle=<H>
-SUB: REFLECT name=car-1 Position=42 Velocity=7
 SUB: RECEIVE class=Honk Volume=5
-SUB: RESIGN
-# Above lines hand-authored from spec text. Verify against Pitch capture
-# once Agent E's TASK-363 (Pitch EULA review) clears.
+SUB: REFLECT name=car-1 Position=42.000000 Velocity=7.000000
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
