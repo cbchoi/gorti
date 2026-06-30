@@ -970,8 +970,8 @@ check_m31() {
     local complete=0 sampled=0
     for d in cppsdk/tests/dlc/conformance/*/; do
       [ "$(basename "$d")" = "_harness" ] && continue
+      [ "$sampled" -ge 5 ] && break
       sampled=$((sampled+1))
-      [ "$sampled" -gt 5 ] && break
       local has_federate has_fom has_golden has_test has_readme
       has_federate=$(ls "$d"federate*.cpp 2>/dev/null | wc -l | tr -d ' ')
       has_fom=$(ls "$d"federation.fom.xml 2>/dev/null | wc -l | tr -d ' ')
