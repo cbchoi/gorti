@@ -1,0 +1,15 @@
+# expected.federate.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §5.3 (publishObjectClassAttributes),
+# §5.7 (unpublishObjectClassAttributes), §5.3 (unpublishObjectClass —
+# catalogue row 11.10), §6.8 (registerObjectInstance, raises
+# ObjectClassNotPublished per §6.8 exception set), §4.10.
+FED: CONNECT
+FED: JOIN federate=unpublisher
+FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
+FED: UNPUBLISH_ATTRS class=Vehicle attributes=[Position]
+FED: REGISTER class=Vehicle name=car-phase1 handle=<H>
+FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
+FED: UNPUBLISH_CLASS class=Vehicle
+FED: REGISTER_FAILED reason=ObjectClassNotPublished
+FED: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.
