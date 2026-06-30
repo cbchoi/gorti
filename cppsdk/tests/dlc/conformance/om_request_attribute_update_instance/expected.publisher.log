@@ -1,0 +1,9 @@
+# expected.publisher.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §6.20, §6.10, §4.10:
+PUB: CONNECT
+PUB: JOIN
+PUB: REGISTER name=car-inst handle=<H>
+PUB: PROVIDE_UPDATE_INSTANCE handle=<H> attrs=2
+PUB: UPDATE name=car-inst Position=33.000000 Velocity=44.000000
+PUB: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.

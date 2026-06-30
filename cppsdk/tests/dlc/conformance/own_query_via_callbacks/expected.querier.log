@@ -1,0 +1,17 @@
+# expected.querier.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.9, §7.17, §7.18, §4.10:
+# All three §7.18 callback flavors exercised in a single run.
+# RO-bucket: the three INFORM/IS_NOT_OWNED/IS_OWNED_BY_RTI callback
+# orderings depend on RTI scheduling; harness LBTS-bucket sort
+# normalizes against this.
+QUERIER: CONNECT
+QUERIER: JOIN
+QUERIER: DISCOVER name=car-query handle=<H>
+QUERIER: QUERY_OWNERSHIP attr=OwnedAttr
+QUERIER: QUERY_OWNERSHIP attr=UnownedAttr
+QUERIER: QUERY_OWNERSHIP attr=HLAprivilegeToDelete
+QUERIER: INFORM_OWNERSHIP attr=OwnedAttr owner=<H>
+QUERIER: ATTRIBUTE_IS_NOT_OWNED attr=UnownedAttr
+QUERIER: ATTRIBUTE_IS_OWNED_BY_RTI attr=HLAprivilegeToDelete
+QUERIER: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.

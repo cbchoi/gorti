@@ -1,0 +1,9 @@
+# expected.bob.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.9, §7.8, §4.10:
+# Bob requests acquisition but Alice refuses; no §7.7 notification fires.
+BOB: CONNECT
+BOB: JOIN
+BOB: DISCOVER name=car-1 handle=<H>
+BOB: OWNERSHIP_ACQUISITION
+BOB: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.

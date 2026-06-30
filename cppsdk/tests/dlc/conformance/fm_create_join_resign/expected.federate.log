@@ -1,0 +1,46 @@
+# expected.federate.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.5, §4.9, §4.10 (mandatory ResignAction —
+# catalogue row 3.9), with all 6 enumerators per catalogue row 5.3.
+# Sub-scenario 1: UNCONDITIONALLY_DIVEST_ATTRIBUTES
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=UNCONDITIONALLY_DIVEST_ATTRIBUTES
+FED: DISCONNECT
+# Sub-scenario 2: DELETE_OBJECTS
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=DELETE_OBJECTS
+FED: DISCONNECT
+# Sub-scenario 3: CANCEL_PENDING_OWNERSHIP_ACQUISITIONS
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=CANCEL_PENDING_OWNERSHIP_ACQUISITIONS
+FED: DISCONNECT
+# Sub-scenario 4: DELETE_OBJECTS_THEN_DIVEST
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=DELETE_OBJECTS_THEN_DIVEST
+FED: DISCONNECT
+# Sub-scenario 5: CANCEL_THEN_DELETE_THEN_DIVEST
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
+FED: DISCONNECT
+# Sub-scenario 6: NO_ACTION
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=NO_ACTION
+FED: DISCONNECT
+# Verify against Pitch capture once Agent E TASK-363 clears.

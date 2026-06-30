@@ -1,0 +1,12 @@
+# expected.publisher.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §5.3, §6.20, §5.10 (catalogue row
+# 4.16), §4.10. CRITICAL: START_REGISTRATION fires EXACTLY ONCE — only
+# after the subscriber's active=true subscribe, NOT after its passive
+# (active=false) subscribe (catalogue row 11.9).
+PUB: CONNECT
+PUB: JOIN federate=publisher
+PUB: PUBLISH class=Vehicle attributes=[Position]
+PUB: ADVISORY_SWITCH=ObjectClassRelevance
+PUB: START_REGISTRATION class=Vehicle
+PUB: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.

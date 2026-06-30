@@ -1,0 +1,11 @@
+# expected.carol.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §4.13, §4.14 (successfully=true per
+# catalogue row 3.11), §4.15 (failedToSyncSet per catalogue row 4.7),
+# §4.10.
+CAROL: CONNECT
+CAROL: JOIN federate=CAROL
+CAROL: ANNOUNCE_SYNC label=checkpoint
+CAROL: ACHIEVED label=checkpoint successfully=true
+CAROL: FEDERATION_SYNCHRONIZED label=checkpoint failedToSyncSet.size=0
+CAROL: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.

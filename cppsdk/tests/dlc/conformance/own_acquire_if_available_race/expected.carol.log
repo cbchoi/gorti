@@ -1,0 +1,13 @@
+# expected.carol.log — TBD-pitch-capture (TASK-363 prereq)
+# Carol loses the race — per IEEE 1516.1-2010 §7.9 + §7.10
+# (catalogue row 4.29: attributeOwnershipUnavailable — gorti M17 absent).
+CAROL: CONNECT
+CAROL: JOIN
+CAROL: DISCOVER name=car-race handle=<H>
+CAROL: ACQUIRE_IF_AVAILABLE attrs=[Position]
+CAROL: OWNERSHIP_UNAVAILABLE attrs=1
+CAROL: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.
+# NOTE: the race winner is non-deterministic across runs; this golden
+# captures the "carol-loses" branch. If Pitch reports the other branch,
+# swap bob/carol goldens accordingly.
