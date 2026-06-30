@@ -234,5 +234,6 @@ divergences. Reserved rows for the deviations we've already noticed:
 |---|---|---|---|
 | `evokeCallback(0.0, 0.0)` blocking | Pitch blocks ~10 ms (scheduler quantum) before return | §10.41 "approximate minimum time = 0 means return immediately" | DEVIATION; gorti follows spec; parity-leg expected to diverge here; `SkipIfPitchDeviation("Pitch §10.41 timing quirk")`. |
 | C++17 `std::auto_ptr` factory return | Pitch ships C++03-shape headers; impl declares `std::auto_ptr<T>` | Spec text (Annex A) writes literal `std::auto_ptr` | gorti's **forced deviation**: `rti1516e::auto_ptr` alias. See `docs/DLC_COMPLIANCE_PROGRAM.md §3.1.0`. NOT a spec violation — the spec references a removed C++ facility. |
+| `fm_create_join_resign` enumerator iteration (3-6 of 6) | Pitch Free's 2-federate seat cap + seat-retention behavior between rapid in-process resign/disconnect/reconnect cycles prevents iterating all 6 `ResignAction` enumerators within a single federate process. Enumerator 3 (`CANCEL_PENDING_OWNERSHIP_ACQUISITIONS`) additionally errors when no pending acquisitions exist, which is implementation-defined per §4.10. | §4.10 (enumerator definitions are mandatory; iteration order is not) | PARTIAL CAPTURE; enumerators 1-2 Pitch-confirmed, 3-6 spec-derived. golden header attests both. |
 
 (More rows append as M32-M35 surfaces them.)
