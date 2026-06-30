@@ -1,0 +1,9 @@
+# M31 fixture tm_lookahead_change — observer golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+OBS: CONNECT                                                          # §4.2
+OBS: JOIN federate=observer                                           # §4.9
+OBS: TIME_CONSTRAINED_ENABLED time=0.000000                           # §8.6 (catalogue 4.34)
+OBS: GALT phase=after-enable defined=1 value=2.000000                 # §8.16 — initial GALT = 0 + lookahead(2.0)
+OBS: GALT phase=after-first-advance defined=1 value=3.000000          # §8.16 — regulator now at t=1, so GALT = 1 + 2.0
+OBS: GALT phase=after-modify defined=1 value=2.500000                 # §8.16 + §8.19 — modifyLookahead(0.5) shrinks GALT
+OBS: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                     # §4.10
