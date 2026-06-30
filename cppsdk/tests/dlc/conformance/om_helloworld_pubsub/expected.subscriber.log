@@ -1,0 +1,12 @@
+# expected.subscriber.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §5.6, §5.8, §6.9, §6.11, §6.13, §4.10 the subscriber
+# canonical sequence is:
+SUB: CONNECT
+SUB: JOIN federate=subscriber
+SUB: SUBSCRIBE Vehicle Position Velocity Honk
+SUB: DISCOVER class=Vehicle name=car-1 handle=<H>
+SUB: REFLECT name=car-1 Position=42 Velocity=7
+SUB: RECEIVE class=Honk Volume=5
+SUB: RESIGN
+# Above lines hand-authored from spec text. Verify against Pitch capture
+# once Agent E's TASK-363 (Pitch EULA review) clears.
