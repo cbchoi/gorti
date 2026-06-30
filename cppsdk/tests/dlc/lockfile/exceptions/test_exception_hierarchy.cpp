@@ -13,6 +13,7 @@
 #include <RTI/Exception.h>
 #include <RTI/SpecificConfig.h>
 #include <type_traits>
+#include <stdexcept>  // for std::runtime_error used in static_assert below
 
 namespace {
 
