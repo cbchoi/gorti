@@ -1,5 +1,9 @@
 # M31 fixture threading_callback_reentry — subscriber golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.subscriber.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: N/A — gorti-only fixture by design (per dispatch Tier 5). See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 #
 # CRITICAL: the CAUGHT line is the spec witness for catalogue 17.2.
 # A run that REFLECTs but does not throw, or throws a different exception

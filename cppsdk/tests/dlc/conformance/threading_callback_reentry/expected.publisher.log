@@ -1,5 +1,9 @@
 # M31 fixture threading_callback_reentry — publisher golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.publisher.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: N/A — gorti-only fixture by design (per dispatch Tier 5). See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 PUB: CONNECT                                                       # §4.2
 PUB: JOIN federate=pub                                             # §4.9
 PUB: PUBLISH class=Vehicle attributes=[Position]                   # §5.2

@@ -1,4 +1,8 @@
-# expected.publisher.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.publisher.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §5.3, §6.20, §5.10 (catalogue row
 # 4.16), §4.10. CRITICAL: START_REGISTRATION fires EXACTLY ONCE — only
 # after the subscriber's active=true subscribe, NOT after its passive
@@ -9,4 +13,3 @@ PUB: PUBLISH class=Vehicle attributes=[Position]
 PUB: ADVISORY_SWITCH=ObjectClassRelevance
 PUB: START_REGISTRATION class=Vehicle
 PUB: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

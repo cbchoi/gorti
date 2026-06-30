@@ -1,5 +1,9 @@
 # M31 conformance fixture: tm_ner_pair — regulator golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 (Pitch EULA) clears.
+# expected.regulator.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Each line below cites the spec sentence its presence enforces.
 REG: CONNECT                                            # §4.2
 REG: JOIN federate=regulator                            # §4.9

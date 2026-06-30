@@ -1,4 +1,8 @@
-# expected.querier.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.querier.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §6.9, §7.17, §7.18, §4.10:
 # All three §7.18 callback flavors exercised in a single run.
 # RO-bucket: the three INFORM/IS_NOT_OWNED/IS_OWNED_BY_RTI callback
@@ -14,4 +18,3 @@ QUERIER: INFORM_OWNERSHIP attr=OwnedAttr owner=<H>
 QUERIER: ATTRIBUTE_IS_NOT_OWNED attr=UnownedAttr
 QUERIER: ATTRIBUTE_IS_OWNED_BY_RTI attr=HLAprivilegeToDelete
 QUERIER: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

@@ -1,5 +1,9 @@
 # M31 fixture tm_tso_ordering — subscriber golden (SKELETON, ORDER-CRITICAL).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.subscriber.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 #
 # CRITICAL: lines 5..7 below are in spec-canonical TSO tie-break order.
 # Per §5.2.1 of docs/DLC_COMPLIANCE_PROGRAM.md, log_diff MUST NOT sort

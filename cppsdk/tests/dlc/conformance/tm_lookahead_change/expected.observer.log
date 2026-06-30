@@ -1,5 +1,9 @@
 # M31 fixture tm_lookahead_change — observer golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.observer.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 OBS: CONNECT                                                          # §4.2
 OBS: JOIN federate=observer                                           # §4.9
 OBS: TIME_CONSTRAINED_ENABLED time=0.000000                           # §8.6 (catalogue 4.34)

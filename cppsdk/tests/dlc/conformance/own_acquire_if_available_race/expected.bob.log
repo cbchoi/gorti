@@ -1,4 +1,8 @@
-# expected.bob.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.bob.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Bob wins the race — per IEEE 1516.1-2010 §7.9 + §7.7.
 # Bob's perspective (winner). RO-bucket: DISCOVER/ACQUISITION_NOTIFICATION
 # ordering depends on RTI scheduling; harness LBTS-bucket sort normalizes.
@@ -8,4 +12,3 @@ BOB: DISCOVER name=car-race handle=<H>
 BOB: ACQUIRE_IF_AVAILABLE attrs=[Position]
 BOB: ACQUISITION_NOTIFICATION attrs=1
 BOB: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

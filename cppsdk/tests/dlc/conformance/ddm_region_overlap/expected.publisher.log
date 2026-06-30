@@ -1,5 +1,9 @@
 # M31 fixture ddm_region_overlap — publisher golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.publisher.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 PUB: CONNECT                                                       # §4.2
 PUB: JOIN federate=pub                                             # §4.9
 PUB: PUBLISH class=Vehicle attributes=[Position]                   # §5.2 publishObjectClassAttributes

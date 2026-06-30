@@ -1,5 +1,9 @@
 # M31 fixture mom_federation_lifecycle — bob member golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.bob.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 bob: CONNECT                                                       # §4.2
 bob: JOIN federate=bob                                             # §4.9
 bob: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10
