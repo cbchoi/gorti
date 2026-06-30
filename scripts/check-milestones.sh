@@ -1076,11 +1076,96 @@ check_m31() {
   else set_status M31 NOT_STARTED; printf "${DIM}M31: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M32: DLC ctor + handles + VLD GREEN (~50 lockfile TUs flip) ----------
+check_m32() {
+  section "M32 — DLC ctor + handles + VLD GREEN (~50 lockfile TUs flip)"
+  echo "Exit (docs/DLC_COMPLIANCE_PROGRAM.md §6 M32 row): catalogue §1+§2+§5+§7+§8+§15 flip RED→GREEN; ~50 lockfile TUs compile + link against new librti1516e_dlc.a"
+  local pass=0 total=5
+
+  # Probe 1: ≥50 lockfile TUs PASS compile against current headers.
+  # M31 baseline: TUs that fail to compile are the per-axis-RED state;
+  # M32 success: TUs that compile clean against the new headers (+ matching impl).
+  # Heuristic compile-only probe (no link). Uses -I cppsdk/include only — does
+  # not pull in gtest, so test files that include <gtest/gtest.h> won't compile
+  # here. That's fine — the gtest-style TUs measure as RED in this probe and
+  # we lean on the lockfile static_assert TUs (no gtest dep) for the GREEN
+  # count.
+  local pass_count=0
+  if [ -d cppsdk/tests/dlc/lockfile ] && command -v g++ >/dev/null 2>&1; then
+    # shellcheck disable=SC2044
+    while IFS= read -r tu; do
+      if g++ -c -std=c++17 -I cppsdk/include "$tu" -o /dev/null 2>/dev/null; then
+        pass_count=$((pass_count+1))
+      fi
+    done < <(find cppsdk/tests/dlc/lockfile -name '*.cpp' 2>/dev/null)
+  fi
+  if [ "$pass_count" -ge 50 ]; then
+    present "≥50 lockfile TUs compile clean against headers (have $pass_count)"
+    pass=$((pass+1))
+  else
+    pending "$pass_count / 50 lockfile TUs compile clean — M32 not yet at GREEN target"
+  fi
+
+  # Probe 2: librti1516e_dlc.a (or librti1516e.a) static archive present.
+  if [ -f cppsdk/build/librti1516e_dlc.a ] || [ -f cppsdk/build/librti1516e.a ]; then
+    present "DLC static lib (librti1516e_dlc.a / librti1516e.a) present under cppsdk/build/"
+    pass=$((pass+1))
+  else
+    pending "librti1516e_dlc.a / librti1516e.a not yet built under cppsdk/build/ (run: cmake --build cppsdk/build --target rti1516e_dlc)"
+  fi
+
+  # Probe 3: at least one conformance fixture compiles clean against headers.
+  # Compile-only (no link) — link failures are the M32+M33 boundary (M32 lands
+  # ctor + handles, M33 lands callback + exception impls that fixtures pull in
+  # at link time).
+  local fixture_compile_pass=0 fixture_sampled=0
+  if [ -d cppsdk/tests/dlc/conformance ] && command -v g++ >/dev/null 2>&1; then
+    for d in cppsdk/tests/dlc/conformance/*/; do
+      [ "$(basename "$d")" = "_harness" ] && continue
+      [ "$fixture_sampled" -ge 3 ] && break
+      for f in "$d"federate*.cpp; do
+        [ -f "$f" ] || continue
+        fixture_sampled=$((fixture_sampled+1))
+        if g++ -c -std=c++17 -I cppsdk/include "$f" -o /dev/null 2>/dev/null; then
+          fixture_compile_pass=$((fixture_compile_pass+1))
+        fi
+        break
+      done
+    done
+  fi
+  if [ "$fixture_compile_pass" -ge 1 ]; then
+    present "$fixture_compile_pass / $fixture_sampled sampled conformance fixtures compile against new headers"
+    pass=$((pass+1))
+  else
+    pending "$fixture_compile_pass / $fixture_sampled sampled conformance fixtures compile against headers"
+  fi
+
+  # Probe 4: CHANGELOG-MASTERPLAN.md has M32 row.
+  if grep -qE '^\| \*\*M32\*\*|^#### M32 — ' CHANGELOG-MASTERPLAN.md 2>/dev/null; then
+    present "CHANGELOG-MASTERPLAN.md has M32 row + section"
+    pass=$((pass+1))
+  else
+    pending "CHANGELOG-MASTERPLAN.md M32 row missing"
+  fi
+
+  # Probe 5: PITCH_PARITY.md M32 catalogue progress matrix.
+  if grep -qE 'M32-resolved|M32 catalogue progress|M32 progress' docs/PITCH_PARITY.md 2>/dev/null; then
+    present "docs/PITCH_PARITY.md updated for M32 (catalogue progress matrix present)"
+    pass=$((pass+1))
+  else
+    pending "docs/PITCH_PARITY.md M32 update missing"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M32 DONE; printf "${GRN}M32: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M32 IN_PROGRESS; printf "${YLW}M32: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M32 NOT_STARTED; printf "${DIM}M32: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28 M31; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28 M31 M32; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -1121,6 +1206,7 @@ check_m24
 check_m28
 check_m14
 check_m31
+check_m32
 print_summary
 
 exit "$REGRESSED"
