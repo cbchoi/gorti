@@ -1,0 +1,19 @@
+# M31 fixture tm_tso_ordering — subscriber golden (SKELETON, ORDER-CRITICAL).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+#
+# CRITICAL: lines 5..7 below are in spec-canonical TSO tie-break order.
+# Per §5.2.1 of docs/DLC_COMPLIANCE_PROGRAM.md, log_diff MUST NOT sort
+# within an LBTS bucket for TSO. RO would be allowed to sort; TSO is not.
+#
+# Per §8.15 the spec mandates: within a single logical-time bucket, TSO
+# deliveries are ordered by ascending FederateHandle. Publishers join in
+# the canonical order [alice, bob, carol] so their handles are ascending.
+SUB: CONNECT                                                           # §4.2
+SUB: JOIN federate=sub                                                 # §4.9
+SUB: SUBSCRIBE interaction=Tick active=true                            # §5.6 (catalogue 11.11 — active flag)
+SUB: TIME_CONSTRAINED_ENABLED time=0.000000                            # §8.6
+SUB: RECV interaction=Tick time=1.000000 seq=1 source=alice order=TIMESTAMP  # §8.15 — lowest FederateHandle wins tie-break
+SUB: RECV interaction=Tick time=1.000000 seq=1 source=bob order=TIMESTAMP    # §8.15
+SUB: RECV interaction=Tick time=1.000000 seq=1 source=carol order=TIMESTAMP  # §8.15
+SUB: GRANT time=2.000000                                               # §8.13
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                      # §4.10

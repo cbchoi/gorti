@@ -1,0 +1,13 @@
+# M31 fixture threading_callback_reentry — subscriber golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+#
+# CRITICAL: the CAUGHT line is the spec witness for catalogue 17.2.
+# A run that REFLECTs but does not throw, or throws a different exception
+# type, is a bug — gorti must throw CallNotAllowedFromWithinCallback.
+SUB: CONNECT                                                       # §4.2
+SUB: JOIN federate=sub                                             # §4.9
+SUB: SUBSCRIBE class=Vehicle attributes=[Position] active=true     # §5.6 (catalogue 11.9 active flag)
+SUB: REFLECT Position=...                                          # §6.11 reflectAttributeValues RO (catalogue 4.20)
+SUB: ATTEMPT_REENTRY service=updateAttributeValues                 # §10 — federate attempts amb call inside callback context
+SUB: CAUGHT exception=CallNotAllowedFromWithinCallback             # §10 + catalogue 17.2 — spec-mandated exception class
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10 (legal AFTER callback returns)

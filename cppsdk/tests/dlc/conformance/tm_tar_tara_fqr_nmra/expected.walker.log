@@ -1,0 +1,17 @@
+# M31 conformance fixture: tm_tar_tara_fqr_nmra — walker golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+WLK: CONNECT                                            # §4.2
+WLK: JOIN federate=walker                               # §4.9
+WLK: TIME_REGULATION_ENABLED time=0.000000              # §8.3 (catalogue 4.33)
+WLK: TIME_CONSTRAINED_ENABLED time=0.000000             # §8.6 (catalogue 4.34)
+WLK: REQUEST primitive=TAR target=1.000000              # §8.10
+WLK: GRANT time=1.000000                                # §8.13 — for TAR
+WLK: REQUEST primitive=TARA target=2.000000             # §8.11
+WLK: GRANT time=2.000000                                # §8.13 — for TARA
+WLK: REQUEST primitive=FQR target=3.000000              # §8.12
+WLK: GRANT time=3.000000                                # §8.13 — for FQR (drains the queue)
+WLK: REQUEST primitive=NMR target=4.000000              # §8.8
+WLK: GRANT time=4.000000                                # §8.13 — for NMR
+WLK: REQUEST primitive=NMRA target=5.000000             # §8.9
+WLK: GRANT time=5.000000                                # §8.13 — for NMRA
+WLK: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST       # §4.10

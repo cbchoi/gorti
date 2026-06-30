@@ -1,0 +1,9 @@
+# M31 fixture threading_callback_reentry — publisher golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+PUB: CONNECT                                                       # §4.2
+PUB: JOIN federate=pub                                             # §4.9
+PUB: PUBLISH class=Vehicle attributes=[Position]                   # §5.2
+PUB: NAME_RESERVED name=car-1                                      # §6.4 ack callback
+PUB: REGISTER class=Vehicle name=car-1                             # §6.8 registerObjectInstance (catalogue 11.2, 2 overloads)
+PUB: UPDATE name=car-1 Position=42.000000                          # §6.10 updateAttributeValues RO (catalogue 11.3 + 17.1 mandatory tag)
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

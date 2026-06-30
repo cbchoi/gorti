@@ -1,0 +1,17 @@
+# M31 conformance fixture: tm_ner_pair — constrained golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 (Pitch EULA) clears.
+CON: CONNECT                                            # §4.2
+CON: JOIN federate=constrained                          # §4.9
+CON: SUBSCRIBE interaction=Tick active=true             # §5.6 (active flag per catalogue 11.11)
+CON: TIME_CONSTRAINED_ENABLED time=0.000000             # §8.6 callback (async ack of §8.5)
+CON: RECV interaction=Tick time=1.000000 order=TIMESTAMP # §6.13 TSO; §8.14 delivered AT logical time
+CON: GRANT time=1.000000                                # §8.13
+CON: RECV interaction=Tick time=2.000000 order=TIMESTAMP # §6.13
+CON: GRANT time=2.000000                                # §8.13
+CON: RECV interaction=Tick time=3.000000 order=TIMESTAMP # §6.13
+CON: GRANT time=3.000000                                # §8.13
+CON: RECV interaction=Tick time=4.000000 order=TIMESTAMP # §6.13
+CON: GRANT time=4.000000                                # §8.13
+CON: RECV interaction=Tick time=5.000000 order=TIMESTAMP # §6.13
+CON: GRANT time=5.000000                                # §8.13
+CON: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST       # §4.10

@@ -1,0 +1,5 @@
+# M31 fixture mom_federation_lifecycle — alice member golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+alice: CONNECT                                                     # §4.2
+alice: JOIN federate=alice                                         # §4.9
+alice: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                # §4.10

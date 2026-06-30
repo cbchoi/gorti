@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- §8.8 NER pair: minimal FOM. One Tick interaction with TSO. -->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>tm_ner_pair</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-07-01</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>M31 conformance fixture — §8.8 NER cycle between a
+      regulator and a constrained federate. The regulator emits Tick
+      interactions at scheduled logical times; the constrained federate
+      receives Tick callbacks under TSO and records the grant order.
+    </description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>Tick</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <semantics>Heartbeat carrying the regulator's logical time.</semantics>
+        <parameter>
+          <name>seq</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>1-based sequence counter.</semantics>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CANCEL_THEN_DELETE_THEN_DIVEST"/>
+  </switches>
+</objectModel>

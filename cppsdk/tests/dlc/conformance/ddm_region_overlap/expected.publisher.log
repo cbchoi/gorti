@@ -1,0 +1,15 @@
+# M31 fixture ddm_region_overlap — publisher golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+PUB: CONNECT                                                       # §4.2
+PUB: JOIN federate=pub                                             # §4.9
+PUB: PUBLISH class=Vehicle attributes=[Position]                   # §5.2 publishObjectClassAttributes
+PUB: CREATE_REGION dims=[X,Y]                                      # §9.2 createRegion(DimensionHandleSet) — catalogue 10.1
+PUB: SET_RANGE region=<R> dim=X lower=0 upper=500                  # §10.30 setRangeBounds (catalogue 13.8)
+PUB: SET_RANGE region=<R> dim=Y lower=0 upper=500                  # §10.30
+PUB: COMMIT_REGION region=<R>                                      # §9.3 commitRegionModifications(RegionHandleSet) — catalogue 10.9
+PUB: NAME_RESERVED name=car-1                                      # §6.4 reserveObjectInstanceName ack callback
+PUB: REGISTER class=Vehicle name=car-1 region=<R>                  # §9.5 registerObjectInstanceWithRegions — catalogue 10.3
+PUB: UPDATE name=car-1 Position=150.000000                         # §6.10 updateAttributeValues RO (catalogue 11.3, mandatory tag)
+PUB: UPDATE name=car-1 Position=200.000000                         # §6.10
+PUB: UPDATE name=car-1 Position=250.000000                         # §6.10
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

@@ -1,0 +1,5 @@
+# M31 fixture mom_federation_lifecycle — bob member golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+bob: CONNECT                                                       # §4.2
+bob: JOIN federate=bob                                             # §4.9
+bob: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

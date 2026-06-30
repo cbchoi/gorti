@@ -349,3 +349,16 @@ set_tests_properties(callbacks_toggle_integration PROPERTIES
   LABELS "integration"
   TIMEOUT 60
 )
+
+# --- M31 DLC conformance fixtures (RED scaffold) ----------------------
+#
+# Pulls in cppsdk/tests/dlc/conformance/ — 27 fixtures with WILL_FAIL=TRUE.
+# Build is opt-in via -DDLC_CONFORMANCE_RED_EXPECTED=ON (default ON in M31).
+# The federate executables are EXCLUDE_FROM_ALL so the M17 path is
+# unaffected; opt in with `cmake --build build --target dlc_conformance`.
+
+option(DLC_CONFORMANCE_RED_EXPECTED
+  "M31: include the DLC conformance fixture suite (expected RED)." ON)
+if(DLC_CONFORMANCE_RED_EXPECTED)
+  add_subdirectory(dlc/conformance)
+endif()

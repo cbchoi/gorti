@@ -1,0 +1,7 @@
+# M31 fixture tm_tso_ordering — bob publisher golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+bob: CONNECT                                                           # §4.2
+bob: JOIN federate=bob                                                 # §4.9
+bob: PUBLISH interaction=Tick                                          # §5.4
+bob: SEND interaction=Tick seq=1 source=bob time=1                     # §6.12 TSO
+bob: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                      # §4.10
