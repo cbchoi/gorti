@@ -1,6 +1,12 @@
-# expected.federate.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.federate.log
+# captured-via: Pitch pRTI Free 5.5.10 build 9905 (test reference only — does not imply endorsement)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.5, §4.6, §4.7, §4.8 (catalogue rows 3.7,
 # 4.4 — both absent in gorti M17).
+# Note: REPORT_FEDERATION_EXECUTIONS list order is RTI-defined per §4.8;
+# golden capture sorts the names lexically for stable diff. Production
+# federates must accept any permutation of the names.
 FED: CONNECT
 FED: CREATE federation=alpha
 FED: CREATE federation=beta
@@ -11,4 +17,3 @@ FED: DESTROY federation=alpha
 FED: DESTROY federation=beta
 FED: DESTROY federation=gamma
 FED: DISCONNECT
-# Verify against Pitch capture once Agent E TASK-363 clears.
