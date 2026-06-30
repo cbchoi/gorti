@@ -1,0 +1,16 @@
+# M31 fixture ddm_region_mod_in_flight — publisher golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+PUB: CONNECT                                                       # §4.2
+PUB: JOIN federate=pub                                             # §4.9
+PUB: PUBLISH class=Sensor attributes=[Value]                       # §5.2
+PUB: CREATE_REGION dim=Channel lower=40 upper=60                   # §9.2 + §10.30
+PUB: COMMIT_REGION region=<R>                                      # §9.3 (catalogue 10.9)
+PUB: NAME_RESERVED name=sensor-1                                   # §6.4 ack callback
+PUB: REGISTER class=Sensor name=sensor-1                           # §9.5 (catalogue 10.3)
+PUB: UPDATE name=sensor-1 Value=1.000000                           # §6.10 RO
+PUB: UPDATE name=sensor-1 Value=2.000000                           # §6.10
+PUB: UPDATE name=sensor-1 Value=3.000000                           # §6.10
+PUB: UPDATE name=sensor-1 Value=4.000000                           # §6.10
+PUB: UPDATE name=sensor-1 Value=5.000000                           # §6.10
+PUB: UPDATE name=sensor-1 Value=6.000000                           # §6.10
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

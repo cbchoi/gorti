@@ -1,0 +1,21 @@
+# M31 fixture ddm_region_mod_in_flight — subscriber golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+#
+# Timing-sensitive: depends on driver coordination of region modify
+# landing between updates 3 and 4. The golden documents the contract,
+# not the exact interleave; real Pitch capture will record the actual
+# witnessed sequence and TASK-362 will validate the spec cites.
+SUB: CONNECT                                                       # §4.2
+SUB: JOIN federate=sub                                             # §4.9
+SUB: ENABLE_ADVISORY attribute_scope=true                          # §6.27 enableAttributeScopeAdvisorySwitch (catalogue 13.10)
+SUB: CREATE_REGION dim=Channel lower=0 upper=50                    # §9.2
+SUB: COMMIT_REGION region=<R>                                      # §9.3
+SUB: SUBSCRIBE_WITH_REGIONS class=Sensor attributes=[Value] active=true   # §9.8 (catalogue 10.5)
+SUB: DISCOVER name=sensor-1                                        # §6.9 (catalogue 4.19)
+SUB: IN_SCOPE attributes=[Value]                                   # §6.17 attributesInScope (catalogue 4.23) — overlap with publisher
+SUB: REFLECT Value=1.000000                                        # §6.11 RO (catalogue 4.20)
+SUB: REFLECT Value=2.000000                                        # §6.11
+SUB: REFLECT Value=3.000000                                        # §6.11
+SUB: MODIFY_REGION dim=Channel new_lower=0 new_upper=30            # §10.30 setRangeBounds + §9.3 commitRegionModifications
+SUB: OUT_OF_SCOPE attributes=[Value]                               # §6.18 attributesOutOfScope (catalogue 4.23) — overlap with [40,60] is now empty
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10
