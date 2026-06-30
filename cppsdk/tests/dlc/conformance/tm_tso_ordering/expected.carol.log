@@ -1,5 +1,9 @@
 # M31 fixture tm_tso_ordering — carol publisher golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.carol.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 carol: CONNECT                                                         # §4.2
 carol: JOIN federate=carol                                             # §4.9
 carol: PUBLISH interaction=Tick                                        # §5.4

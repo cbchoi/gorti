@@ -1,5 +1,9 @@
 # M31 conformance fixture: tm_tar_tara_fqr_nmra — walker golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.walker.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 WLK: CONNECT                                            # §4.2
 WLK: JOIN federate=walker                               # §4.9
 WLK: TIME_REGULATION_ENABLED time=0.000000              # §8.3 (catalogue 4.33)

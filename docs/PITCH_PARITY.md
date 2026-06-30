@@ -237,3 +237,49 @@ divergences. Reserved rows for the deviations we've already noticed:
 | `fm_create_join_resign` enumerator iteration (3-6 of 6) | Pitch Free's 2-federate seat cap + seat-retention behavior between rapid in-process resign/disconnect/reconnect cycles prevents iterating all 6 `ResignAction` enumerators within a single federate process. Enumerator 3 (`CANCEL_PENDING_OWNERSHIP_ACQUISITIONS`) additionally errors when no pending acquisitions exist, which is implementation-defined per §4.10. | §4.10 (enumerator definitions are mandatory; iteration order is not) | PARTIAL CAPTURE; enumerators 1-2 Pitch-confirmed, 3-6 spec-derived. golden header attests both. |
 
 (More rows append as M32-M35 surfaces them.)
+
+---
+
+## DLC fixture Pitch-capture status (TASK-350, M32 prep)
+
+Snapshot of the parity-leg attestation state for all 27 DLC conformance fixtures
+under `cppsdk/tests/dlc/conformance/<name>/`. Each golden file (`expected.*.log`)
+carries a `Pitch-capture status:` header line; this table aggregates that state
+for reviewer convenience.
+
+| Fixture | # federates | Pitch-capture status | Notes |
+|---|---|---|---|
+| `om_helloworld_pubsub` | 2 | CAPTURED | Generalized 2026-06-30 smoke. Pub + sub. |
+| `fm_create_join_resign` | 1 | PARTIAL | Enumerators 1-2 captured; 3-6 spec-derived. See row above. |
+| `fm_list_executions` | 1 | CAPTURED | §4.6/4.7/4.8 lifecycle. REPORT order RTI-defined; capture sorts lexically. |
+| `dm_pub_sub_active_passive` | 2 | PENDING | Pub/sub w/ advisory switches. Tractable; not in current session budget. |
+| `dm_unpublish_whole_vs_attrs` | 1 | PENDING | Single federate; expected to capture cleanly. |
+| `fm_save_restore_roundtrip` | 1 | PENDING | Save/restore lifecycle; Pitch supports `requestFederationSave/restore`. |
+| `fm_sync_full` | 3 | BLOCKED (>2 fed) | registrar + bob + carol. Exceeds Pitch Free 2-fed cap. |
+| `fm_sync_subset_with_failure` | 3 | BLOCKED (>2 fed) | Same as `fm_sync_full`. |
+| `om_delete_object_tso` | 2 | PENDING | TSO delete ordering. |
+| `om_local_delete` | 2 | PENDING | §6.16 — local-delete must NOT propagate. |
+| `om_message_retraction` | 2 | PENDING | §8.20 retract. |
+| `om_request_attribute_update_class` | 2 | PENDING | §6.19/§6.20. |
+| `om_request_attribute_update_instance` | 2 | PENDING | §6.19/§6.20 instance variant. |
+| `om_reserve_multi_atomic` | 2 | PENDING | §6.5 multi-reserve atomicity. |
+| `own_negotiated_divest_two_phase` | 2 | PENDING | §7 ownership negotiated divest. |
+| `own_acquire_if_available_race` | 3 | BLOCKED (>2 fed) | bob + carol + carrier. |
+| `own_query_via_callbacks` | 2 | PENDING | §7 ownership query callbacks. |
+| `own_release_request_denied` | 2 | PENDING | §7 ownership release-denied. |
+| `tm_ner_pair` | 2 | PENDING | §8 NER pair. Pitch implements full time mgmt. |
+| `tm_tar_tara_fqr_nmra` | 1 | PENDING | §8 TAR/TARA/FQR/NMRA. |
+| `tm_lookahead_change` | 2 | PENDING | §8.21 modifyLookahead. |
+| `tm_tso_ordering` | 4 | BLOCKED (>2 fed) | alice + bob + carol + subscriber. |
+| `ddm_region_overlap` | 2 | PENDING | §9 DDM region overlap. |
+| `ddm_region_mod_in_flight` | 2 | PENDING | §9 region modification mid-update. |
+| `mom_federation_lifecycle` | 3 | BLOCKED (>2 fed) | §11 MOM observer. |
+| `threading_callback_reentry` | 2 | N/A (gorti-only) | Tier 5; Pitch may not implement §10 `CallNotAllowedFromWithinCallback` per spec. |
+| `xlang_python_cpp_pubsub` | 2 | N/A (gorti-only) | Tier 5; Pitch Free 5.5.10 ships no Python binding. |
+
+**Tally:** 3 CAPTURED (incl. 1 PARTIAL), 17 PENDING (tractable 1-2-federate, follow-on
+TASK-350 work), 5 BLOCKED by Pitch Free 2-federate EULA cap, 2 gorti-only by design.
+
+All goldens currently committed pass `scripts/check-spec-traceability.sh` lint:
+`27/27 fixtures clean`. No Pitch trademarks leaked into committed golden files
+per `grep -rE "Pitch Technologies|pRTI.*[Tt]rade.*mark" expected*.log` → 0 hits.

@@ -1,4 +1,8 @@
-# expected.subscriber.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.subscriber.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §8.5, §8.6, §5.6, §6.9, §8.8, §6.15, §4.10:
 SUB: CONNECT
 SUB: JOIN
@@ -12,4 +16,3 @@ SUB: RESIGN
 # timeAdvanceGrant for the bracketing time. The order shown here is the
 # spec-required canonical ordering — RO events would sort within an LBTS
 # bucket per docs/DLC_COMPLIANCE_PROGRAM.md §5.3.1 rule 2.
-# Verify against Pitch capture once Agent E TASK-363 clears.

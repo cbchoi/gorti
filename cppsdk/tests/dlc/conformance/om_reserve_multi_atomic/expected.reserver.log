@@ -1,4 +1,8 @@
-# expected.reserver.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.reserver.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §6.5, §6.6, §4.10:
 RESERVER: CONNECT
 RESERVER: JOIN
@@ -9,4 +13,3 @@ RESERVER: RESIGN
 # car-Y and car-Z must NOT be reserved either. The colliding-names
 # callback (§6.6) carries only the colliding subset, not the full
 # requested set.
-# Verify against Pitch capture once Agent E TASK-363 clears.

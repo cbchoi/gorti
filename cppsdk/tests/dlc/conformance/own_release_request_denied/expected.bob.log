@@ -1,4 +1,8 @@
-# expected.bob.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.bob.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §6.9, §7.8, §4.10:
 # Bob requests acquisition but Alice refuses; no §7.7 notification fires.
 BOB: CONNECT
@@ -6,4 +10,3 @@ BOB: JOIN
 BOB: DISCOVER name=car-1 handle=<H>
 BOB: OWNERSHIP_ACQUISITION
 BOB: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

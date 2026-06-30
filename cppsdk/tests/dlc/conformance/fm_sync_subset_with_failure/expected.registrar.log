@@ -1,4 +1,8 @@
-# expected.registrar.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.registrar.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §4.11 (2-arg overload — catalogue
 # row 3.10), §4.12, §4.10. Alice is NOT in the sync subset; she sees
 # registration success only, no announce/synchronized callbacks.
@@ -7,4 +11,3 @@ REG: JOIN federate=alice
 REG: REGISTER_SYNC_POINT_SUBSET label=checkpoint size=2
 REG: SYNC_REGISTRATION_SUCCEEDED label=checkpoint
 REG: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

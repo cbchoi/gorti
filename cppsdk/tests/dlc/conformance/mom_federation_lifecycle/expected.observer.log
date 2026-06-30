@@ -1,5 +1,9 @@
 # M31 fixture mom_federation_lifecycle — observer golden (SKELETON).
-# TBD-pitch-capture: real golden lands when TASK-363 clears.
+# expected.observer.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 OBS: CONNECT                                                       # §4.2
 OBS: JOIN federate=observer                                        # §4.9 — observer joins first
 OBS: SUBSCRIBE class=HLAobjectRoot.HLAmanager.HLAfederate attributes=[HLAfederateHandle,HLAfederateName] active=true  # §5.6 + §11 standard MOM path (catalogue 16.1 — no bespoke API)

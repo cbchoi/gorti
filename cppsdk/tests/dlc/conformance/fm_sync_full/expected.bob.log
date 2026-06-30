@@ -1,4 +1,8 @@
-# expected.bob.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.bob.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §4.13, §4.14 (successfully=true per
 # catalogue row 3.11), §4.15 (failedToSyncSet per catalogue row 4.7),
 # §4.10.
@@ -8,4 +12,3 @@ BOB: ANNOUNCE_SYNC label=checkpoint
 BOB: ACHIEVED label=checkpoint successfully=true
 BOB: FEDERATION_SYNCHRONIZED label=checkpoint failedToSyncSet.size=0
 BOB: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

@@ -1,4 +1,8 @@
-# expected.federate.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.federate.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §6.10, §4.16-§4.20, §4.24-§4.29:
 FED: CONNECT
 FED: JOIN federate=saver
@@ -18,4 +22,3 @@ FED: INITIATE_FEDERATE_RESTORE label=checkpoint-1 federate=saver handle=<H>
 FED: FEDERATE_RESTORE_COMPLETE
 FED: FEDERATION_RESTORED
 FED: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

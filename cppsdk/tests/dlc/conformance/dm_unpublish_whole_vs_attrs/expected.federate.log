@@ -1,4 +1,8 @@
-# expected.federate.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.federate.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §5.3 (publishObjectClassAttributes),
 # §5.7 (unpublishObjectClassAttributes), §5.3 (unpublishObjectClass —
 # catalogue row 11.10), §6.8 (registerObjectInstance, raises
@@ -12,4 +16,3 @@ FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
 FED: UNPUBLISH_CLASS class=Vehicle
 FED: REGISTER_FAILED reason=ObjectClassNotPublished
 FED: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

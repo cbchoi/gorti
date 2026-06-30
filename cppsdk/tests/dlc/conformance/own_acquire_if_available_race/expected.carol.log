@@ -1,4 +1,8 @@
-# expected.carol.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.carol.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Carol loses the race — per IEEE 1516.1-2010 §7.9 + §7.10
 # (catalogue row 4.29: attributeOwnershipUnavailable — gorti M17 absent).
 CAROL: CONNECT
@@ -7,7 +11,6 @@ CAROL: DISCOVER name=car-race handle=<H>
 CAROL: ACQUIRE_IF_AVAILABLE attrs=[Position]
 CAROL: OWNERSHIP_UNAVAILABLE attrs=1
 CAROL: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.
 # NOTE: the race winner is non-deterministic across runs; this golden
 # captures the "carol-loses" branch. If Pitch reports the other branch,
 # swap bob/carol goldens accordingly.

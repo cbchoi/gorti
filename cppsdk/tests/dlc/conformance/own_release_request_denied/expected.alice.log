@@ -1,4 +1,8 @@
-# expected.alice.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.alice.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §7.11, §7.12, §4.10:
 ALICE: CONNECT
 ALICE: JOIN
@@ -6,4 +10,3 @@ ALICE: REGISTER name=car-1 handle=<H>
 ALICE: RELEASE_REQUEST attrs=1
 ALICE: RELEASE_DENIED attrs=[Position]
 ALICE: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.

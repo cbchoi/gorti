@@ -1,4 +1,8 @@
-# expected.publisher.log — TBD-pitch-capture (TASK-363 prereq)
+# expected.publisher.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §8.2, §8.3, §6.8, §8.8, §6.14, §4.10:
 PUB: CONNECT
 PUB: JOIN
@@ -8,4 +12,3 @@ PUB: TIME_ADVANCE_GRANT
 PUB: DELETE_TSO name=car-tso time=10.000000
 PUB: TIME_ADVANCE_GRANT
 PUB: RESIGN
-# Verify against Pitch capture once Agent E TASK-363 clears.
