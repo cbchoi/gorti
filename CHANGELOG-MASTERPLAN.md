@@ -353,7 +353,39 @@ Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 
 **Goal**: strict implementation of the IEEE 1516.1-2010 Dynamic Link Compatible (DLC) C++ federate API. A federate written against any 1516e DLC C++ vendor (Pitch, MAK, Portico) compiles unchanged against gorti's `cppsdk`. Parent: `docs/DLC_COMPLIANCE_PROGRAM.md` (153-row divergence catalogue at `docs/DLC_DIVERGENCE_CATALOGUE.md`).
 
-#### M31 — DLC C++ surface lockfile (RED test scaffold) — (0/200) GREEN baseline
+#### Cut-4 milestone roster (running totals)
+
+| Milestone | Owner | Scope | Status |
+|---|---|---|---|
+| **M31** | Agent D (C++) | DLC lockfile RED scaffold | ✓ ~200 lockfile TUs / 27 conformance fixtures / 30 RTI/ stubs / 8 docs / 3 scripts landed. 27 PASS / 13 RED-at-per-axis at integration. **DONE 2026-07-01** — see `docs/M31_DISPATCH_PLAN.md` and 5-agent fan-out in worktree branches. |
+| **M32** | Agents F/G/H | DLC headers + ctor + handles + VLD GREEN (~50/200) | <COUNT> lockfile TUs flip RED→GREEN (catalogue §1+2+5+7+8+15). 27 conformance fixtures LINK against new librti1516e_dlc.a (runtime still fails — M33+). `cppsdk/src/dlc/` lands with RTIambassadorImpl wstring-adapter wrapping M17 impl. **DONE 2026-07-DD** (placeholder; orchestrator fills count + date after F+G merge). |
+
+#### M32 — DLC headers + ctor + handles + VLD GREEN (~50/200) — orchestrator placeholder
+
+Second milestone of the DLC compliance track. Flips catalogue sections **§1 (header layout & namespace), §2 (construction & factory), §5 (enums), §7 (typed handles), §8 (VariableLengthData), §15 (misc typedefs)** from RED→GREEN per `docs/DLC_COMPLIANCE_PROGRAM.md §6`. Acceptance gate: Pitch chat sample's first ~200 lines compile against gorti `cppsdk` headers + link against `librti1516e_dlc.a`.
+
+Three-agent fan-out (F/G/H):
+
+- **Agent F** — divergence-catalogue drift fixes against landed M31 stubs (corrects header/typedef/enum shape against Pitch pRTI Free 5.5.10 reference); re-runs lockfile static-asserts to count flips.
+- **Agent G** — `cppsdk/src/dlc/` implementation: `RTIambassadorImpl` wstring-adapter pimpl over the existing M17 `rti1516e::RTIambassador` (the M17 impl stays as the transport layer; the DLC surface is the public face). `RTIambassadorFactoryImpl` constructs the pimpl; handle `StrongHandle` ctors fill in for the typed-handle catalogue rows. `librti1516e_dlc.a` static archive ships per `FR-DLC-17`.
+- **Agent H** — acceptance gate / CHANGELOG / PITCH_PARITY / spec-coverage refresh / memory rollup (this entry).
+
+Out of scope for M32 (defer to M33+):
+- FederateAmbassador callbacks (catalogue §4) — M33
+- Exceptions full hierarchy (catalogue §6 — ~120 exception classes) — M33
+- Object management + ownership + DDM behavioral conformance (catalogue §10-§13) — M33
+- Encoding helpers (catalogue §9) — M34
+- Time types (catalogue §14) — M34
+- MOM + back-compat deprecation + IVCT integration — M35
+- Real Pitch goldens for fixtures still PENDING (see `docs/PITCH_PARITY.md` §"DLC fixture Pitch-capture status")
+
+Status reported by `scripts/check-milestones.sh check_m32` (5 probes). Spec-coverage matrix refreshed by `scripts/gen-spec-coverage.sh`.
+
+Final M32 count + close date filled in by orchestrator after Agents F + G merge to main.
+
+---
+
+#### M31 — DLC C++ surface lockfile (RED test scaffold) — (0/200) GREEN baseline — DONE 2026-07-01
 
 First milestone of the DLC compliance track. Lands **failing tests** that lock the IEEE 1516.1-2010 DLC C++ API surface at the spec. No implementation code; every lockfile/conformance test is RED by design. Subsequent milestones (M32–M35) turn slices GREEN.
 
@@ -375,7 +407,7 @@ CRITICAL DECISIONS recorded in this milestone:
 
 M31 exit (per `docs/M31_DISPATCH_PLAN.md §3`): all ~200 lockfile assertions RED, all 27 conformance fixtures fail-to-link with `undefined reference to rti1516e::*`, parity harness skips cleanly without `PRTI_HOME`, 30 RTI header stubs land, all docs land, M17 cppsdk tests stay GREEN, pysdk untouched. Status reported by `scripts/check-milestones.sh check_m31` (11 probes).
 
-Baseline: **(0/200) GREEN** — M32 onward measures progress as `(GREEN_count/200)`. **DONE 2026-MM-DD** (placeholder until orchestrator closes).
+Baseline: **(0/200) GREEN** — M32 onward measures progress as `(GREEN_count/200)`. **DONE 2026-07-01** — see `docs/M31_DISPATCH_PLAN.md` and 5-agent fan-out in worktree branches. Acceptance per `scripts/check-milestones.sh check_m31` (11/11 probes PASS after the `docs/dlc-spec-coverage.md` post-merge populate at `28b2a44`).
 
 ---
 
