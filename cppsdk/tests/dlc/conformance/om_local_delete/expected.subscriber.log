@@ -1,0 +1,14 @@
+# expected.subscriber.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §5.6, §6.9, §6.11, §6.16, §4.10:
+SUB: CONNECT
+SUB: JOIN
+SUB: SUBSCRIBE Vehicle Position
+SUB: DISCOVER name=car-local handle=<H>
+SUB: REFLECT name=car-local Position=99.000000
+SUB: LOCAL_DELETE handle=<H>
+SUB: RESIGN
+# CRITICAL: per §6.16, after LOCAL_DELETE the subscriber MUST NOT see
+# any further removeObjectInstance callback. If REMOVE_SPURIOUS appears
+# the test fails (line emitted by federate_subscriber.cpp's defensive
+# removeObjectInstance override).
+# Verify against Pitch capture once Agent E TASK-363 clears.
