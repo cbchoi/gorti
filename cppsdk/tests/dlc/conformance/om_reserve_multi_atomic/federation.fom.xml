@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>DLC Conformance — om_reserve_multi_atomic</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <description>
+      Atomic multi-name reservation. Federate A reserves "car-X"; then
+      Federate B calls reserveMultipleObjectInstanceName({"car-Y",
+      "car-X", "car-Z"}) — ALL three must fail atomically because
+      "car-X" collides. RTI fires multipleObjectInstanceNameReservation
+      Failed with the colliding-names set. M31 fixture #9 per
+      docs/M31_DISPATCH_PLAN.md §2.2. Catalogue rows 11.1 + 4.18.
+    </description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>Position</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>Neither</sharing>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>
