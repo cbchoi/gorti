@@ -1,0 +1,7 @@
+# M31 fixture tm_tso_ordering — alice publisher golden (SKELETON).
+# TBD-pitch-capture: real golden lands when TASK-363 clears.
+alice: CONNECT                                                         # §4.2
+alice: JOIN federate=alice                                             # §4.9
+alice: PUBLISH interaction=Tick                                        # §5.4
+alice: SEND interaction=Tick seq=1 source=alice time=1                 # §6.12 TSO
+alice: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                    # §4.10

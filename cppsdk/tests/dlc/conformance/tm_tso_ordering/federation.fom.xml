@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- §8.13-§8.15 TSO strict ordering — 3 publishers, 1 subscriber. -->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>tm_tso_ordering</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-07-01</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>M31 fixture — §8.13-§8.15 TSO strict order. Three publishers
+      send Tick(seq, source) at identical logical time T=1.0. The subscriber
+      receives them under TSO and the canonical log MUST reflect the
+      spec-mandated tie-break order. RO would allow re-sort; TSO must
+      not (per §5.2.1 of DLC_COMPLIANCE_PROGRAM.md).</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass><name>HLAobjectRoot</name></objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>Tick</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <semantics>TSO heartbeat with per-source seq.</semantics>
+        <parameter>
+          <name>seq</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>1-based per-source counter.</semantics>
+        </parameter>
+        <parameter>
+          <name>source</name>
+          <dataType>HLAASCIIstring</dataType>
+          <semantics>Federate name of the sender.</semantics>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CANCEL_THEN_DELETE_THEN_DIVEST"/>
+  </switches>
+</objectModel>
