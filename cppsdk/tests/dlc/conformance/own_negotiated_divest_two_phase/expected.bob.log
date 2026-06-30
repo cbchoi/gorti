@@ -1,0 +1,10 @@
+# expected.bob.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.9, §7.4, §7.7, §7.8, §4.10:
+BOB: CONNECT
+BOB: JOIN
+BOB: DISCOVER name=car-divest handle=<H>
+BOB: ASSUMPTION_REQUEST attrs=1
+BOB: OWNERSHIP_ACQUISITION
+BOB: ACQUISITION_NOTIFICATION attrs=1
+BOB: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.

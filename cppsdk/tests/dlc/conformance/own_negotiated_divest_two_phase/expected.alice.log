@@ -1,0 +1,10 @@
+# expected.alice.log — TBD-pitch-capture (TASK-363 prereq)
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §7.3, §7.5, §7.6, §4.10:
+ALICE: CONNECT
+ALICE: JOIN
+ALICE: REGISTER name=car-divest handle=<H>
+ALICE: NEGOTIATED_DIVEST attrs=[Position]
+ALICE: DIVESTITURE_NOTIFICATION attrs=1
+ALICE: CONFIRM_DIVESTITURE
+ALICE: RESIGN
+# Verify against Pitch capture once Agent E TASK-363 clears.
