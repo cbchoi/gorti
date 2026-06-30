@@ -86,6 +86,18 @@ target_link_libraries(rti1516e PUBLIC
 enable_testing()
 add_subdirectory(tests)
 
+# --- M31 DLC lockfile suite (RED by design) -------------------------------
+#
+# Every target inside this subdir is EXCLUDE_FROM_ALL — `cmake --build` with
+# no target argument will not touch them, so M17's default build path stays
+# untouched. The targets are exercised only via ctest:
+#   ctest --test-dir build -L lockfile
+# Each TU is marked WILL_FAIL=TRUE: a failed compile is the passing signal.
+# See cppsdk/tests/dlc/lockfile/CMakeLists.txt and docs/M31_DISPATCH_PLAN.md.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/dlc/lockfile/CMakeLists.txt")
+  add_subdirectory(tests/dlc/lockfile)
+endif()
+
 # --- Examples -------------------------------------------------------------
 # Built into ${CMAKE_BINARY_DIR}/examples/cpp-pitch-smoke/cpp_pitch_publisher
 # so the Python interop test (pysdk/tests/spec/m17/) can spawn it.
