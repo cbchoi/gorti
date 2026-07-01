@@ -191,8 +191,10 @@ exist as a callable with `self` as first parameter.
 The C++ SDK has its own parity track — the IEEE 1516.1-2010 DLC C++
 federate API. Parent program: `docs/DLC_COMPLIANCE_PROGRAM.md`. 153
 divergence rows enumerated in `docs/DLC_DIVERGENCE_CATALOGUE.md`.
-M31 lands the RED test scaffold (`docs/M31_DISPATCH_PLAN.md`); M32-M35
-flip slices GREEN per `docs/DLC_COMPLIANCE_PROGRAM.md §6`.
+M31 (closed 2026-07-01) lands the RED test scaffold
+(`docs/M31_DISPATCH_PLAN.md`); M32 (in progress 2026-07) flips
+catalogue §1+§2+§5+§7+§8+§15 GREEN; M33-M35 flip the remaining
+slices per `docs/DLC_COMPLIANCE_PROGRAM.md §6`.
 
 Where the Python track aims for **shape parity** with Pitch's
 `Rti1516eAmbassador` ergonomics, the C++ track aims for **strict
@@ -215,6 +217,43 @@ the rationale.
 
 The C++ column in the method-shape divergence table above shows
 "owed-to-M35" for every cell that the DLC track will GREEN-flip.
+
+### M32 catalogue progress (M32-resolved sections, ~50/200 lockfile TUs)
+
+Per `docs/DLC_COMPLIANCE_PROGRAM.md §6`, M32 flips these catalogue
+sections from RED→GREEN:
+
+| Catalogue § | Title | Lockfile TU dir | M32 status |
+|---|---|---|---|
+| §1 | Header layout & namespace | `lockfile/core/test_*ambassador*.cpp` paths under `cppsdk/include/RTI/` | **M32-resolved** (header tree matches Annex A) |
+| §2 | Construction & factory | `lockfile/core/test_rtiambassadorfactory.cpp`, `test_rtiambassador_connect.cpp` | **M32-resolved** (`RTIambassadorFactory().createRTIambassador()` returns `auto_ptr<RTIambassador>`) |
+| §5 | Enums | `lockfile/core/test_callbackmodel_enum.cpp` + `RTI/Enums.h` reprint | **M32-resolved** (unscoped enums per FR-DLC-16) |
+| §7 | Typed handles | `lockfile/types/test_*handle*.cpp` | **M32-resolved** (handle ctor / equality / hash / wstring roundtrip) |
+| §8 | VariableLengthData | `lockfile/types/test_vld*.cpp` | **M32-resolved** (`VariableLengthData` deep-copy + size/data accessors) |
+| §15 | Misc typedefs | `lockfile/types/test_typedefs.cpp` | **M32-resolved** (`OrderType`, `TransportationType`, `ResignAction`, `SaveStatus`, etc.) |
+| §3 | Connect / federation lifecycle | `lockfile/core/test_rtiambassador_federation_mgmt.cpp` | owed-to-M32+M33 (M32 lands ctor, M33 lands save/restore behavioral) |
+| §4 | FederateAmbassador callbacks | `lockfile/core/test_federateambassador_signatures.cpp` | owed-to-M33 |
+| §6 | Exceptions (~120 classes) | `lockfile/exceptions/test_*.cpp` | owed-to-M33 |
+| §10-§13 | Obj mgmt / ownership / DDM / time mgmt | `lockfile/core/test_rtiambassador_{object,ownership,ddm,time}_mgmt.cpp` | owed-to-M33 |
+| §9 | Encoding helpers | `lockfile/encoding/test_*.cpp` | owed-to-M34 |
+| §14 | Time types | `lockfile/time/test_*.cpp` | owed-to-M34 |
+| §16 | MOM | `lockfile/core/test_rtiambassador_mom.cpp` | owed-to-M35 |
+
+After M32 merge, `scripts/check-milestones.sh check_m32` reports the
+exact GREEN count for verification against this matrix.
+
+### M32 deviations surfaced (Agent F drift fixes)
+
+When Agent F re-walked the M31 stubs against Pitch pRTI Free 5.5.10
+in M32 W1, the following divergences were identified and either
+corrected in the stubs or recorded as deliberate gorti choices below
+in the "Pitch deviations from spec" section. Specific rows append
+into that section as F's drift-fix commits land.
+
+(M32-prep `8f6f50a` already captured 3 Pitch goldens + 24 attested
+goldens + the initial deviations row for `fm_create_join_resign`
+enumerators 3-6. M32 W1 surfaces additional rows as F's catalogue
+re-walk completes.)
 
 ---
 
