@@ -339,7 +339,7 @@ RegionHandle DLCRTIambassadorImpl::createRegion(DimensionHandleSet const&) {
 void DLCRTIambassadorImpl::commitRegionModifications(RegionHandleSet const&) {
   m32_stub("commitRegionModifications");
 }
-void DLCRTIambassadorImpl::deleteRegion(RegionHandle) {
+void DLCRTIambassadorImpl::deleteRegion(RegionHandle const&) {
   m32_stub("deleteRegion");
 }
 

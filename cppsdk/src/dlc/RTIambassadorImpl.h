@@ -216,7 +216,7 @@ class DLCRTIambassadorImpl : public RTIambassador {
   // ===== §9 Data Distribution Management =====
   RegionHandle createRegion(DimensionHandleSet const& theDimensions) override;
   void commitRegionModifications(RegionHandleSet const& theRegions) override;
-  void deleteRegion(RegionHandle theRegion) override;
+  void deleteRegion(RegionHandle const& theRegion) override;
 
   ObjectInstanceHandle registerObjectInstanceWithRegions(
       ObjectClassHandle theClass,
