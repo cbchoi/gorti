@@ -323,6 +323,59 @@ Additional blockers Agent O identified for a full end-to-end run:
 4. Agent J FederateAmbassador dispatch — the subscriber's `NullFederateAmbassador` subclass expects the RTI to invoke `discoverObjectInstance` / `reflectAttributeValues` / `receiveInteraction`. Currently no dispatch loop.
 5. `cppsdk/tests/dlc/conformance/CMakeLists.txt` — `target_link_libraries` currently references `rti1516e` (M17 lib). To exercise the DLC surface impl, the fixture link target needs to switch to `rti1516e_dlc` (M32-landed static archive). This is a mechanical Cmake update pending post-Agent-K/L merge (not a scope blocker per se, but a coordination note).
 
+### M34-PARITY-OUTCOME sentinel (post-M34 baseline, pre-M35 impl merges)
+
+Post-M34 merge (7-agent fan-out AA/AB/AC/AD/AE/AF/AG), first real
+gorti↔Pitch parity attempted on `om_helloworld_pubsub`.
+
+**M34 outcome (main = `e1f698d`):** PARTIAL — 2/9 publisher events, 2/7
+subscriber events match Pitch byte-identical. Gap: §5 Declaration Mgmt
+(publishObjectClassAttributes / subscribeObjectClassAttributes /
+publishInteractionClass) and §6 Object Mgmt (registerObjectInstance /
+updateAttributeValues / sendInteraction) still throw `NotConnected`
+("M17 pImpl not yet wired into DLCRTIambassadorImpl"). Callback
+dispatch to the subscriber's `NullFederateAmbassador` also not yet
+installed, so DISCOVER / REFLECT / RECEIVE never fire.
+
+**M35-BE (Agent BE, 2026-07-02): second parity re-attempt, 4 fixtures.**
+Baseline snapshot with M35-B[ABCD] impl branches NOT YET MERGED to main:
+
+| Fixture | Events matched | Outcome |
+|---|---|---|
+| `om_helloworld_pubsub` | 4/16 (PUB 2/9, SUB 2/7) | PARTIAL |
+| `fm_list_executions` | 9/10 (FED 9/10) | NEAR_MATCH |
+| `dm_pub_sub_active_passive` | 4/11 (PUB 2/6, SUB 2/5) | PARTIAL |
+| `own_release_request_denied` | 4/11 (ALICE 2/6, BOB 2/5) | PARTIAL |
+
+The `fm_list_executions` NEAR_MATCH is new (not captured in M34 rollup)
+— the fixture exercises only §4 Federation Mgmt, which the M34-AA
+`createFederationExecution` / `listFederationExecutions` / `destroy` /
+`disconnect` sequence covers end-to-end. The single missing event is
+`FED: REPORT_FEDERATION_EXECUTIONS count=3 alpha beta gamma` — this
+line is emitted from a `reportFederationExecutions(...)` callback on
+the FederateAmbassador (§4.8), and the M34-AD callback bridge has not
+yet routed the M17 `reportFederationExecutions` reply to the DLC
+federate. This is a small M35 fix (one bridge slot).
+
+The 3 PARTIAL fixtures share the same blocker profile as
+`om_helloworld_pubsub`: §5/§6 stubs throw `NotConnected`, subscriber
+callbacks never dispatch. The M35-B[ABCD] fan-out addresses each of
+these — BA fixture emission fix, BB §5 M17 delegation, BC §6 M17
+delegation, BD `DLCFederateAmbassadorBridge` install in `connect()`.
+
+**M35 impl branch state (2026-07-02):** all 4 impl branches exist on
+agent worktrees but are not yet merged to main:
+
+- `worktree-agent-aceaa0297d29c19af` — M35-BA fixture always emits `PUB: CREATE` (6 lines)
+- `worktree-agent-a952f41a108b53743` — M35-BB §5 Declaration Mgmt real M17 delegation (231 lines)
+- `worktree-agent-aefc398d2e2bd5247` — M35-BC §6 Object Mgmt real M17 delegations (318 lines)
+- `worktree-agent-a7e9c84da2de60105` — M35-BD install DLCFederateAmbassadorBridge in connect() (87 lines)
+
+Post-merge parity re-diff is deferred to the orchestrator's third
+parity-diff attempt once BA/BB/BC/BD land on main; Agent BE's captured
+logs (`gorti-captured.*.log`) reflect the pre-merge M34 baseline for
+all 4 fixtures.
+
 ---
 
 ## Pitch deviations from spec
