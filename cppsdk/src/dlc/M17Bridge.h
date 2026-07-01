@@ -30,6 +30,11 @@
 #include <string>
 #include <vector>
 
+
+namespace rti1516e_m17 {
+class FederateAmbassador;
+}  // namespace rti1516e_m17
+
 namespace rti1516e {
 
 // SaveState / RestoreState mirror rti1516e::RTIambassador::SaveState /
@@ -109,48 +114,73 @@ class M17Bridge {
   // §4.15 — current restore state for `label`.
   M17RestoreState queryRestoreState(const std::string& label);
 
-  // ===== §6 Object Management (M35 Agent BC) =====
+  // ---------- §5 Declaration Management (M35 Agent BB) --------------------
   //
-  // Every §6 wire call requires the federate to be joined; M17 raises
-  // FederateNotExecutionMember pre-join. The bridge re-raises via
-  // std::runtime_error("FederateNotExecutionMember: ...") so the DLC
-  // caller translates through translateBridgeError.
+  // Pitch shape (M17): (ObjectClassHandle cls, AttributeHandleSet attrs) — the
+  // handles are pre-resolved via §10.2 support services. The bridge accepts
+  // raw uint64 handles so DLC's typed handles (which store a VLD blob rather
+  // than a raw integer) can be adapted via the file-bottom Friend shims in
+  // RTIambassadorImpl.cpp (see raw{ObjectClass,Attribute,InteractionClass}
+  // Handle helpers). Empty attrs vector is spec-legal per M17 header comment
+  // — the manager records publish/subscribe intent without attribute bindings.
+  //
+  // The DLC-only extras `bool active` (row 11.9) and `wstring updateRate`
+  // (row 11.9/11.11) are NOT modeled on the M17 wire (M17 Cut-1 does not
+  // support passive subscription or per-subscription update-rate policies).
+  // The DLC caller strips them before invoking the bridge; the divergence is
+  // documented in docs/DLC_DIVERGENCE_CATALOGUE.md §11 rows 11.9 / 11.11.
+  //
+  // Throws std::runtime_error on M17 failure (see guard() prefix vocabulary).
+  void publishObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
+  void unpublishObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
+  void subscribeObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
+  void unsubscribeObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
 
-  // §6.5 — async reserve. Result delivered via the
-  //   objectInstanceNameReservation{Succeeded,Failed}(name) callback on
-  //   the bound FederateAmbassador; the RPC itself returns promptly.
+  void publishInteractionClass(std::uint64_t cls);
+  void unpublishInteractionClass(std::uint64_t cls);
+  void subscribeInteractionClass(std::uint64_t cls);
+  void unsubscribeInteractionClass(std::uint64_t cls);
+
+
+  // ===== §6 Object Management (M35 Agent BC) =====
   void reserveObjectInstanceName(const std::string& name);
-  // §6.5 (multi) — atomic batch reservation. All names succeed or none
-  //   do. Result via multipleObjectInstanceNameReservation callbacks.
-  void reserveMultipleObjectInstanceNames(
-      const std::vector<std::string>& names);
-  // §6.6 — synchronous release of a previously reserved name.
+  void reserveMultipleObjectInstanceNames(const std::vector<std::string>& names);
   void releaseObjectInstanceName(const std::string& name);
-
-  // §6.8 — register an instance. Empty `instance_name` asks the RTI to
-  //   generate one. `object_class` is a raw ObjectClassHandle uint64.
-  //   Returns raw ObjectInstanceHandle uint64 (0 == invalid).
+  void releaseMultipleObjectInstanceNames(const std::vector<std::string>& names);
   std::uint64_t registerObjectInstance(std::uint64_t object_class,
                                        const std::string& instance_name);
-
-  // §6.10 RO — update attribute values. `values` maps raw
-  //   AttributeHandle uint64 → VLD bytes. `tag` is the DLC-mandatory
-  //   userSuppliedTag; M17 Cut-1 does not carry the tag on the wire
-  //   (documented divergence, DLC catalogue §11 row "updateAttributeValues
-  //   /tag"). Kept in the bridge signature so the semantic is visible
-  //   at the DLC/M17 boundary; the bytes are dropped internally.
   void updateAttributeValues(
       std::uint64_t object,
       const std::map<std::uint64_t, std::vector<std::uint8_t>>& values,
       const std::vector<std::uint8_t>& tag);
-
-  // §6.12 RO — send an interaction. `parameters` maps raw
-  //   ParameterHandle uint64 → VLD bytes. Same tag caveat as
-  //   updateAttributeValues.
   void sendInteraction(
       std::uint64_t interaction_class,
-      const std::map<std::uint64_t, std::vector<std::uint8_t>>& parameters,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& params,
       const std::vector<std::uint8_t>& tag);
+  void deleteObjectInstance(std::uint64_t object,
+                            const std::vector<std::uint8_t>& tag);
+  void localDeleteObjectInstance(std::uint64_t object);
+  void requestAttributeValueUpdate(
+      std::uint64_t object,
+      const std::vector<std::uint64_t>& attrs,
+      const std::vector<std::uint8_t>& tag);
+
+  // ---------- M35 Agent BH — §10 Support Services + callback bind ----------
+  void bind_federate_ambassador(rti1516e_m17::FederateAmbassador* fed);
+  std::uint64_t getObjectClassHandle(const std::string& name);
+  std::string   getObjectClassName(std::uint64_t handle);
+  std::uint64_t getAttributeHandle(std::uint64_t cls, const std::string& name);
+  std::string   getAttributeName(std::uint64_t cls, std::uint64_t attr);
+  std::uint64_t getInteractionClassHandle(const std::string& name);
+  std::string   getInteractionClassName(std::uint64_t handle);
+  std::uint64_t getParameterHandle(std::uint64_t cls, const std::string& name);
+  std::string   getParameterName(std::uint64_t cls, std::uint64_t param);
+  void enableCallbacks();
+  void disableCallbacks();
 
  private:
   // Full defn lives in M17Bridge.cpp; the M17 rti1516e::RTIambassador
