@@ -1,0 +1,150 @@
+// IEEE 1516.1-2010 Annex C — Exception base + all spec leaves.
+//
+// gorti M32. Catalogue rows 6.1-6.5 / FR-DLC-6. All leaves store the
+// wstring message and return it from `what()`. Base has a virtual dtor
+// and a wostream `operator<<`.
+
+#include <RTI/Exception.h>
+#include <ostream>
+
+namespace rti1516e {
+
+Exception::Exception() = default;
+Exception::Exception(Exception const&) = default;
+Exception& Exception::operator=(Exception const&) = default;
+Exception::~Exception() = default;
+
+std::wostream& operator<<(std::wostream& os, Exception const& e) {
+  return os << e.what();
+}
+
+// Leaf implementations. The RTI_EXCEPTION macro in the header declared a
+// class with a wstring ctor + `what()` override + private `_msg` field.
+
+#define IMPLEMENT_EXCEPTION(A)                                     \
+  A::A(std::wstring const& message) RTI_NOEXCEPT : _msg(message) {} \
+  std::wstring A::what() const RTI_NOEXCEPT { return _msg; }
+
+IMPLEMENT_EXCEPTION(AlreadyConnected)
+IMPLEMENT_EXCEPTION(AsynchronousDeliveryAlreadyDisabled)
+IMPLEMENT_EXCEPTION(AsynchronousDeliveryAlreadyEnabled)
+IMPLEMENT_EXCEPTION(AttributeAcquisitionWasNotCanceled)
+IMPLEMENT_EXCEPTION(AttributeAcquisitionWasNotRequested)
+IMPLEMENT_EXCEPTION(AttributeAlreadyBeingAcquired)
+IMPLEMENT_EXCEPTION(AttributeAlreadyBeingChanged)
+IMPLEMENT_EXCEPTION(AttributeAlreadyBeingDivested)
+IMPLEMENT_EXCEPTION(AttributeAlreadyOwned)
+IMPLEMENT_EXCEPTION(AttributeDivestitureWasNotRequested)
+IMPLEMENT_EXCEPTION(AttributeNotDefined)
+IMPLEMENT_EXCEPTION(AttributeNotOwned)
+IMPLEMENT_EXCEPTION(AttributeNotPublished)
+IMPLEMENT_EXCEPTION(AttributeNotRecognized)
+IMPLEMENT_EXCEPTION(AttributeNotSubscribed)
+IMPLEMENT_EXCEPTION(AttributeRelevanceAdvisorySwitchIsOff)
+IMPLEMENT_EXCEPTION(AttributeRelevanceAdvisorySwitchIsOn)
+IMPLEMENT_EXCEPTION(AttributeScopeAdvisorySwitchIsOff)
+IMPLEMENT_EXCEPTION(AttributeScopeAdvisorySwitchIsOn)
+IMPLEMENT_EXCEPTION(BadInitializationParameter)
+IMPLEMENT_EXCEPTION(CallNotAllowedFromWithinCallback)
+IMPLEMENT_EXCEPTION(ConnectionFailed)
+IMPLEMENT_EXCEPTION(CouldNotCreateLogicalTimeFactory)
+IMPLEMENT_EXCEPTION(CouldNotDecode)
+IMPLEMENT_EXCEPTION(CouldNotDiscover)
+IMPLEMENT_EXCEPTION(CouldNotEncode)
+IMPLEMENT_EXCEPTION(CouldNotOpenFDD)
+IMPLEMENT_EXCEPTION(CouldNotOpenMIM)
+IMPLEMENT_EXCEPTION(CouldNotInitiateRestore)
+IMPLEMENT_EXCEPTION(DeletePrivilegeNotHeld)
+IMPLEMENT_EXCEPTION(DesignatorIsHLAstandardMIM)
+IMPLEMENT_EXCEPTION(RequestForTimeConstrainedPending)
+IMPLEMENT_EXCEPTION(NoRequestToEnableTimeConstrainedWasPending)
+IMPLEMENT_EXCEPTION(RequestForTimeRegulationPending)
+IMPLEMENT_EXCEPTION(NoRequestToEnableTimeRegulationWasPending)
+IMPLEMENT_EXCEPTION(NoFederateWillingToAcquireAttribute)
+IMPLEMENT_EXCEPTION(ErrorReadingFDD)
+IMPLEMENT_EXCEPTION(ErrorReadingMIM)
+IMPLEMENT_EXCEPTION(FederateAlreadyExecutionMember)
+IMPLEMENT_EXCEPTION(FederateHandleNotKnown)
+IMPLEMENT_EXCEPTION(FederateHasNotBegunSave)
+IMPLEMENT_EXCEPTION(FederateInternalError)
+IMPLEMENT_EXCEPTION(FederateIsExecutionMember)
+IMPLEMENT_EXCEPTION(FederateNameAlreadyInUse)
+IMPLEMENT_EXCEPTION(FederateNotExecutionMember)
+IMPLEMENT_EXCEPTION(FederateOwnsAttributes)
+IMPLEMENT_EXCEPTION(FederateServiceInvocationsAreBeingReportedViaMOM)
+IMPLEMENT_EXCEPTION(FederateUnableToUseTime)
+IMPLEMENT_EXCEPTION(FederatesCurrentlyJoined)
+IMPLEMENT_EXCEPTION(FederationExecutionAlreadyExists)
+IMPLEMENT_EXCEPTION(FederationExecutionDoesNotExist)
+IMPLEMENT_EXCEPTION(IllegalName)
+IMPLEMENT_EXCEPTION(IllegalTimeArithmetic)
+IMPLEMENT_EXCEPTION(InconsistentFDD)
+IMPLEMENT_EXCEPTION(InteractionClassAlreadyBeingChanged)
+IMPLEMENT_EXCEPTION(InteractionClassNotDefined)
+IMPLEMENT_EXCEPTION(InteractionClassNotPublished)
+IMPLEMENT_EXCEPTION(InteractionClassNotRecognized)
+IMPLEMENT_EXCEPTION(InteractionClassNotSubscribed)
+IMPLEMENT_EXCEPTION(InteractionParameterNotDefined)
+IMPLEMENT_EXCEPTION(InteractionParameterNotRecognized)
+IMPLEMENT_EXCEPTION(InteractionRelevanceAdvisorySwitchIsOff)
+IMPLEMENT_EXCEPTION(InteractionRelevanceAdvisorySwitchIsOn)
+IMPLEMENT_EXCEPTION(InTimeAdvancingState)
+IMPLEMENT_EXCEPTION(InvalidAttributeHandle)
+IMPLEMENT_EXCEPTION(InvalidDimensionHandle)
+IMPLEMENT_EXCEPTION(InvalidFederateHandle)
+IMPLEMENT_EXCEPTION(InvalidInteractionClassHandle)
+IMPLEMENT_EXCEPTION(InvalidLocalSettingsDesignator)
+IMPLEMENT_EXCEPTION(InvalidLogicalTime)
+IMPLEMENT_EXCEPTION(InvalidLogicalTimeInterval)
+IMPLEMENT_EXCEPTION(InvalidLookahead)
+IMPLEMENT_EXCEPTION(InvalidObjectClassHandle)
+IMPLEMENT_EXCEPTION(InvalidOrderName)
+IMPLEMENT_EXCEPTION(InvalidOrderType)
+IMPLEMENT_EXCEPTION(InvalidParameterHandle)
+IMPLEMENT_EXCEPTION(InvalidRangeBound)
+IMPLEMENT_EXCEPTION(InvalidRegion)
+IMPLEMENT_EXCEPTION(InvalidResignAction)
+IMPLEMENT_EXCEPTION(InvalidRegionContext)
+IMPLEMENT_EXCEPTION(InvalidMessageRetractionHandle)
+IMPLEMENT_EXCEPTION(InvalidServiceGroup)
+IMPLEMENT_EXCEPTION(InvalidTransportationName)
+IMPLEMENT_EXCEPTION(InvalidTransportationType)
+IMPLEMENT_EXCEPTION(InvalidUpdateRateDesignator)
+IMPLEMENT_EXCEPTION(JoinedFederateIsNotInTimeAdvancingState)
+IMPLEMENT_EXCEPTION(LogicalTimeAlreadyPassed)
+IMPLEMENT_EXCEPTION(MessageCanNoLongerBeRetracted)
+IMPLEMENT_EXCEPTION(NameNotFound)
+IMPLEMENT_EXCEPTION(NameSetWasEmpty)
+IMPLEMENT_EXCEPTION(NoAcquisitionPending)
+IMPLEMENT_EXCEPTION(NotConnected)
+IMPLEMENT_EXCEPTION(ObjectClassNotDefined)
+IMPLEMENT_EXCEPTION(ObjectClassNotKnown)
+IMPLEMENT_EXCEPTION(ObjectClassNotPublished)
+IMPLEMENT_EXCEPTION(ObjectClassRelevanceAdvisorySwitchIsOff)
+IMPLEMENT_EXCEPTION(ObjectClassRelevanceAdvisorySwitchIsOn)
+IMPLEMENT_EXCEPTION(ObjectInstanceNameInUse)
+IMPLEMENT_EXCEPTION(ObjectInstanceNameNotReserved)
+IMPLEMENT_EXCEPTION(ObjectInstanceNotKnown)
+IMPLEMENT_EXCEPTION(OwnershipAcquisitionPending)
+IMPLEMENT_EXCEPTION(RTIinternalError)
+IMPLEMENT_EXCEPTION(RegionDoesNotContainSpecifiedDimension)
+IMPLEMENT_EXCEPTION(RegionInUseForUpdateOrSubscription)
+IMPLEMENT_EXCEPTION(RegionNotCreatedByThisFederate)
+IMPLEMENT_EXCEPTION(RestoreInProgress)
+IMPLEMENT_EXCEPTION(RestoreNotInProgress)
+IMPLEMENT_EXCEPTION(RestoreNotRequested)
+IMPLEMENT_EXCEPTION(SaveInProgress)
+IMPLEMENT_EXCEPTION(SaveNotInProgress)
+IMPLEMENT_EXCEPTION(SaveNotInitiated)
+IMPLEMENT_EXCEPTION(SpecifiedSaveLabelDoesNotExist)
+IMPLEMENT_EXCEPTION(SynchronizationPointLabelNotAnnounced)
+IMPLEMENT_EXCEPTION(TimeConstrainedAlreadyEnabled)
+IMPLEMENT_EXCEPTION(TimeConstrainedIsNotEnabled)
+IMPLEMENT_EXCEPTION(TimeRegulationAlreadyEnabled)
+IMPLEMENT_EXCEPTION(TimeRegulationIsNotEnabled)
+IMPLEMENT_EXCEPTION(UnableToPerformSave)
+IMPLEMENT_EXCEPTION(UnknownName)
+IMPLEMENT_EXCEPTION(UnsupportedCallbackModel)
+IMPLEMENT_EXCEPTION(InternalError)
+
+}  // namespace rti1516e
