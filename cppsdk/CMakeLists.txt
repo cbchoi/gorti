@@ -81,6 +81,35 @@ target_link_libraries(rti1516e PUBLIC
   rti1516e_generated
 )
 
+# --- M32 DLC library ------------------------------------------------------
+#
+# Strict IEEE 1516.1-2010 C++ federate API impl. M32 target: LINK only.
+# Method bodies are RTIinternalError stubs; runtime bodies land M33+ as
+# wstring-adapters over gorti's M17 gRPC surface.
+#
+# The library is standalone (no gRPC dependency) — the DLC surface stops at
+# the vtable. Downstream milestones will replace the stubs with real bodies
+# that delegate to the M17 impl.
+
+add_library(rti1516e_dlc STATIC
+  src/dlc/VariableLengthData.cpp
+  src/dlc/Handle.cpp
+  src/dlc/Exception.cpp
+  src/dlc/RangeBounds.cpp
+  src/dlc/Typedefs.cpp
+  src/dlc/FederateAmbassador.cpp
+  src/dlc/NullFederateAmbassador.cpp
+  src/dlc/DataElement.cpp
+  src/dlc/EncodingExceptions.cpp
+  src/dlc/BasicDataElements.cpp
+  src/dlc/RTIambassadorImpl.cpp
+  src/dlc/RTIambassadorFactory.cpp
+)
+target_include_directories(rti1516e_dlc PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+# No transitive gRPC/protobuf. Stubs are self-contained until M33+.
+
 # --- Tests ----------------------------------------------------------------
 
 enable_testing()
