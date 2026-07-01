@@ -45,8 +45,20 @@ class RTI_EXPORT LogicalTimeFactory {
   virtual std::wstring getName() const = 0;
 };
 
+// Per Pitch LogicalTimeFactory.h:106-115 — the "HLA" convenience factory
+// factory. Provides HLAfloat64Time / HLAinteger64Time out of the box; the
+// federate-time-side LogicalTimeFactoryFactory below forwards to this.
+class RTI_EXPORT HLAlogicalTimeFactoryFactory {
+ public:
+  static rti1516e::auto_ptr<LogicalTimeFactory> makeLogicalTimeFactory(
+      std::wstring const& implementationName);
+};
+
 // §8 — static maker: choose factory by impl-name string at runtime.
-class RTI_EXPORT LogicalTimeFactoryFactory {
+// Per Pitch LogicalTimeFactory.h:120 — exported under RTI_EXPORT_FEDTIME
+// (the fed-time library), and its impl typically forwards to
+// HLAlogicalTimeFactoryFactory::makeLogicalTimeFactory.
+class RTI_EXPORT_FEDTIME LogicalTimeFactoryFactory {
  public:
   static rti1516e::auto_ptr<LogicalTimeFactory> makeLogicalTimeFactory(
       std::wstring const& implementationName);

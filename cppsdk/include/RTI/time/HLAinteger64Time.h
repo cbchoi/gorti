@@ -7,7 +7,7 @@
 
 #include <RTI/SpecificConfig.h>
 #include <RTI/LogicalTime.h>
-#include <stdint.h>
+#include <RTI/encoding/EncodingConfig.h>  // for Integer64 typedef
 
 namespace rti1516e {
 
@@ -17,7 +17,7 @@ class LogicalTimeInterval;
 class RTI_EXPORT_FEDTIME HLAinteger64Time : public LogicalTime {
  public:
   HLAinteger64Time();
-  HLAinteger64Time(int64_t value);
+  HLAinteger64Time(Integer64 value);
   HLAinteger64Time(LogicalTime const& value);
   HLAinteger64Time(HLAinteger64Time const& value);
   virtual ~HLAinteger64Time() RTI_NOEXCEPT;
@@ -38,8 +38,11 @@ class RTI_EXPORT_FEDTIME HLAinteger64Time : public LogicalTime {
   virtual bool operator<=(LogicalTime const& value) const override;
 
   HLAinteger64Time& operator=(HLAinteger64Time const& value);
-  virtual int64_t getTime() const;
-  virtual void setTime(int64_t value);
+  // Per Pitch HLAinteger64Time.h:129,131,141 — Integer64 typedef, not
+  // int64_t; the concrete surface uses rti1516e::Integer64 consistently.
+  virtual Integer64 getTime() const;
+  virtual void setTime(Integer64 value);
+  operator Integer64() const;
 
   virtual VariableLengthData encode() const override;
   virtual size_t encode(void* buffer, size_t bufferSize) const override;

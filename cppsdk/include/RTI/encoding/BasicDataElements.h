@@ -45,6 +45,8 @@
     EncodableDataType& operator=(EncodableDataType const& rhs);                \
     EncodableDataType& operator=(SimpleDataType const& rhs);                   \
     operator SimpleDataType() const;                                           \
+    /* Pitch BasicDataElements.h:123 — set() takes SimpleDataType by value. */ \
+    virtual void set(SimpleDataType inData);                                   \
     SimpleDataType get() const;                                                \
                                                                                \
    private:                                                                    \

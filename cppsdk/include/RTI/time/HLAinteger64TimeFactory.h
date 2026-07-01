@@ -7,9 +7,13 @@
 
 #include <RTI/SpecificConfig.h>
 #include <RTI/LogicalTimeFactory.h>
-#include <stdint.h>
+#include <RTI/encoding/EncodingConfig.h>  // for Integer64 typedef
+#include <string>
 
 namespace rti1516e {
+
+// Per Pitch HLAinteger64TimeFactory.h:26 — namespace-scope selector constant.
+const std::wstring HLAinteger64TimeName(L"HLAinteger64Time");
 
 class HLAinteger64Time;
 class HLAinteger64Interval;
@@ -22,9 +26,10 @@ class RTI_EXPORT_FEDTIME HLAinteger64TimeFactory : public LogicalTimeFactory {
   virtual rti1516e::auto_ptr<LogicalTime> makeInitial() override;
   virtual rti1516e::auto_ptr<LogicalTime> makeFinal() override;
 
-  virtual rti1516e::auto_ptr<HLAinteger64Time> makeLogicalTime(int64_t value);
+  // Use rti1516e::Integer64 (matches concrete HLAinteger64Time's surface).
+  virtual rti1516e::auto_ptr<HLAinteger64Time> makeLogicalTime(Integer64 value);
   virtual rti1516e::auto_ptr<HLAinteger64Interval> makeLogicalTimeInterval(
-      int64_t value);
+      Integer64 value);
 
   virtual rti1516e::auto_ptr<LogicalTimeInterval> makeZero() override;
   virtual rti1516e::auto_ptr<LogicalTimeInterval> makeEpsilon() override;

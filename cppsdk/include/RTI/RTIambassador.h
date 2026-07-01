@@ -412,27 +412,28 @@ class RTI_EXPORT RTIambassador {
   virtual void disableCallbacks() = 0;
 
   // §10 — factory for the federation's logical-time impl.
-  virtual rti1516e::auto_ptr<LogicalTimeFactory> getTimeFactory() = 0;
+  // Per Pitch RTIambassador.h:1769 the accessor is `const`.
+  virtual rti1516e::auto_ptr<LogicalTimeFactory> getTimeFactory() const = 0;
 
-  // §10 — 9 decode*Handle methods.
+  // §10 — 9 decode*Handle methods. All `const` per Pitch RTIambassador.h:1776-1846.
   virtual FederateHandle decodeFederateHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual ObjectClassHandle decodeObjectClassHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual InteractionClassHandle decodeInteractionClassHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual ObjectInstanceHandle decodeObjectInstanceHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual AttributeHandle decodeAttributeHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual ParameterHandle decodeParameterHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual DimensionHandle decodeDimensionHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual MessageRetractionHandle decodeMessageRetractionHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
   virtual RegionHandle decodeRegionHandle(
-      VariableLengthData const& encodedValue) = 0;
+      VariableLengthData const& encodedValue) const = 0;
 
  private:
   RTIambassador(RTIambassador const&) = delete;

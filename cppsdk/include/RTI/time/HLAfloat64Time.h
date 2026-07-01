@@ -41,6 +41,10 @@ class RTI_EXPORT_FEDTIME HLAfloat64Time : public LogicalTime {
   HLAfloat64Time& operator=(HLAfloat64Time const& value);
   virtual double getTime() const;
   virtual void setTime(double value);
+  // Pitch HLAfloat64Time.h:138 — implicit conversion to double so federates
+  // can write `double d = t;`. Paired with the non-explicit ctor(double) this
+  // also makes HLAfloat64Time assignable from a bare double.
+  operator double() const;
 
   virtual VariableLengthData encode() const override;
   virtual size_t encode(void* buffer, size_t bufferSize) const override;

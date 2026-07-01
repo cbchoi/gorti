@@ -39,6 +39,8 @@ class RTI_EXPORT HLAvariableArray : public DataElement {
   virtual size_t size() const;
   virtual void addElement(DataElement const& dataElement);
   virtual void addElementPointer(DataElement* dataElement);
+  // Pitch HLAvariableArray.h:108 — set(index, DataElement const&) returns void.
+  virtual void set(size_t index, DataElement const& dataElement);
   virtual DataElement const& get(size_t index) const;
   virtual DataElement const& operator[](size_t index) const;
 
