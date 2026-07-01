@@ -24,6 +24,7 @@
 #define GORTI_DLC_M17_BRIDGE_H
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -186,6 +187,48 @@ class M17Bridge {
   // §10.4 callback dispatch enable/disable. M17 has this natively.
   void enableCallbacks();
   void disableCallbacks();
+  // ===== §6 Object Management (M35 Agent BC) =====
+  //
+  // Every §6 wire call requires the federate to be joined; M17 raises
+  // FederateNotExecutionMember pre-join. The bridge re-raises via
+  // std::runtime_error("FederateNotExecutionMember: ...") so the DLC
+  // caller translates through translateBridgeError.
+
+  // §6.5 — async reserve. Result delivered via the
+  //   objectInstanceNameReservation{Succeeded,Failed}(name) callback on
+  //   the bound FederateAmbassador; the RPC itself returns promptly.
+  void reserveObjectInstanceName(const std::string& name);
+  // §6.5 (multi) — atomic batch reservation. All names succeed or none
+  //   do. Result via multipleObjectInstanceNameReservation callbacks.
+  void reserveMultipleObjectInstanceNames(
+      const std::vector<std::string>& names);
+  // §6.6 — synchronous release of a previously reserved name.
+  void releaseObjectInstanceName(const std::string& name);
+
+  // §6.8 — register an instance. Empty `instance_name` asks the RTI to
+  //   generate one. `object_class` is a raw ObjectClassHandle uint64.
+  //   Returns raw ObjectInstanceHandle uint64 (0 == invalid).
+  std::uint64_t registerObjectInstance(std::uint64_t object_class,
+                                       const std::string& instance_name);
+
+  // §6.10 RO — update attribute values. `values` maps raw
+  //   AttributeHandle uint64 → VLD bytes. `tag` is the DLC-mandatory
+  //   userSuppliedTag; M17 Cut-1 does not carry the tag on the wire
+  //   (documented divergence, DLC catalogue §11 row "updateAttributeValues
+  //   /tag"). Kept in the bridge signature so the semantic is visible
+  //   at the DLC/M17 boundary; the bytes are dropped internally.
+  void updateAttributeValues(
+      std::uint64_t object,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& values,
+      const std::vector<std::uint8_t>& tag);
+
+  // §6.12 RO — send an interaction. `parameters` maps raw
+  //   ParameterHandle uint64 → VLD bytes. Same tag caveat as
+  //   updateAttributeValues.
+  void sendInteraction(
+      std::uint64_t interaction_class,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& parameters,
+      const std::vector<std::uint8_t>& tag);
 
  private:
   // Full defn lives in M17Bridge.cpp; the M17 rti1516e::RTIambassador
