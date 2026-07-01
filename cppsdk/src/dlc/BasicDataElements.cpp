@@ -131,7 +131,8 @@ T load_le(unsigned char const* in) {
     return *this;                                                              \
   }                                                                            \
   Cls::operator SimpleT() const { return _impl->value; }                       \
-  SimpleT Cls::get() const { return _impl->value; }
+  SimpleT Cls::get() const { return _impl->value; }                            \
+  void Cls::set(SimpleT inData) { _impl->value = inData; }
 
 DEFINE_NUMERIC_IMPL(HLAboolean, bool, be)  // HLA-boolean = HLAinteger32BE with 0/1
 DEFINE_NUMERIC_IMPL(HLAbyte, Octet, be)
@@ -239,7 +240,8 @@ DEFINE_NUMERIC_IMPL(HLAunicodeChar, wchar_t, be)
     return *this;                                                              \
   }                                                                            \
   Cls::operator OctetPair() const { return _impl->value; }                     \
-  OctetPair Cls::get() const { return _impl->value; }
+  OctetPair Cls::get() const { return _impl->value; }                          \
+  void Cls::set(OctetPair inData) { _impl->value = inData; }
 
 DEFINE_OCTET_PAIR_IMPL(HLAoctetPairBE, be)
 DEFINE_OCTET_PAIR_IMPL(HLAoctetPairLE, le)
@@ -334,6 +336,7 @@ HLAASCIIstring& HLAASCIIstring::operator=(std::string const& rhs) {
 }
 HLAASCIIstring::operator std::string() const { return _impl->value; }
 std::string HLAASCIIstring::get() const { return _impl->value; }
+void HLAASCIIstring::set(std::string inData) { _impl->value = std::move(inData); }
 
 // -----------------------------------------------------------------------
 // HLAunicodeString — HLA-varString of uint16BE code units (UTF-16 BE).
@@ -441,5 +444,6 @@ HLAunicodeString& HLAunicodeString::operator=(std::wstring const& rhs) {
 }
 HLAunicodeString::operator std::wstring() const { return _impl->value; }
 std::wstring HLAunicodeString::get() const { return _impl->value; }
+void HLAunicodeString::set(std::wstring inData) { _impl->value = std::move(inData); }
 
 }  // namespace rti1516e
