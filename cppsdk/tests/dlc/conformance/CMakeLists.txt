@@ -30,7 +30,13 @@ file(GLOB FIXTURE_DIRS LIST_DIRECTORIES true RELATIVE
 
 foreach(dir ${FIXTURE_DIRS})
   set(_fixpath "${CMAKE_CURRENT_SOURCE_DIR}/${dir}")
-  if(IS_DIRECTORY "${_fixpath}" AND NOT dir STREQUAL "_harness")
+  # _harness holds shared helpers, not a fixture.
+  # _runtime is M33-I's gorti-only runtime-exception fixture — it has its
+  # own CMakeLists.txt (no federate*.cpp, links rti1516e_dlc) and is
+  # add_subdirectory'd explicitly at the bottom of this file.
+  if(IS_DIRECTORY "${_fixpath}"
+     AND NOT dir STREQUAL "_harness"
+     AND NOT dir STREQUAL "_runtime")
     file(GLOB FED_SOURCES "${_fixpath}/federate*.cpp")
     file(GLOB TEST_SOURCES "${_fixpath}/test_*.cpp")
 
@@ -83,6 +89,12 @@ foreach(_src ${_ALL_FED_SOURCES} ${_ALL_TEST_SOURCES})
   if(_fixname STREQUAL "_harness")
     continue()
   endif()
+  # _runtime has a custom target name (test_conf__runtime_exceptions) that
+  # doesn't fit the auto-fanout naming; it's wired to dlc_conformance from
+  # inside its own CMakeLists.txt.
+  if(_fixname STREQUAL "_runtime")
+    continue()
+  endif()
   if(_fname MATCHES "^test_")
     set(_tgt "test_conf_${_fixname}")
   else()
@@ -92,3 +104,7 @@ foreach(_src ${_ALL_FED_SOURCES} ${_ALL_TEST_SOURCES})
     add_dependencies(dlc_conformance ${_tgt})
   endif()
 endforeach()
+
+# M33-I — gorti-only runtime exception fixture (has its own CMakeLists.txt,
+# links rti1516e_dlc, WILL_FAIL=OFF).
+add_subdirectory(_runtime)
