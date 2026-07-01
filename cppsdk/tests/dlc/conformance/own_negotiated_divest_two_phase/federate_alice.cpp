@@ -5,7 +5,9 @@
 //   2. Alice calls negotiatedAttributeOwnershipDivestiture (§7.3) with tag.
 //   3. RTI fires requestAttributeOwnershipAssumption on Bob (§7.4).
 //   4. Bob calls attributeOwnershipAcquisition (§7.8).
-//   5. RTI fires attributeOwnershipDivestitureNotification on Alice (§7.5).
+//   5. RTI fires requestDivestitureConfirmation on Alice (§7.5) — the
+//      spec-correct callback name; M33-K-2 fix (M31 fixture used
+//      the non-existent "attributeOwnershipDivestitureNotification").
 //   6. Alice calls confirmDivestiture (§7.6); RTI fires
 //      attributeOwnershipAcquisitionNotification on Bob (§7.7).
 //
@@ -32,14 +34,16 @@ std::string ws2s(const std::wstring& w) {
 
 class AliceFed : public rti1516e::NullFederateAmbassador {
  public:
-  // §7.5 attributeOwnershipDivestitureNotification — RTI tells divester
-  // the assumption has happened; divester must confirm.
-  void attributeOwnershipDivestitureNotification(
+  // §7.5 requestDivestitureConfirmation — RTI tells divester the
+  // assumption has happened; divester must confirm. 2-arg (no tag) per
+  // IEEE 1516.1-2010 FederateAmbassador.h line 414. M33-K-2 fix:
+  // M31 fixture wrote "attributeOwnershipDivestitureNotification" —
+  // that callback does NOT exist in the spec.
+  void requestDivestitureConfirmation(
       rti1516e::ObjectInstanceHandle theObject,
-      rti1516e::AttributeHandleSet const& releasedAttributes,
-      rti1516e::VariableLengthData const& theUserSuppliedTag) override {
-    std::cout << "ALICE: DIVESTITURE_NOTIFICATION attrs=" << releasedAttributes.size()
-              << std::endl;
+      rti1516e::AttributeHandleSet const& releasedAttributes) override {
+    std::cout << "ALICE: REQUEST_DIVESTITURE_CONFIRMATION attrs="
+              << releasedAttributes.size() << std::endl;
     divestiture_notified_.store(true);
   }
 
