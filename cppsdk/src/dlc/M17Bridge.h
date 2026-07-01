@@ -29,6 +29,20 @@
 #include <string>
 #include <vector>
 
+// Forward-decl of the M17 FederateAmbassador under the shim-namespace name.
+// M35 Agent BD wires DLCFederateAmbassadorBridge (which derives from
+// `rti1516e_m17::FederateAmbassador` — see FederateAmbassadorBridge_m17_shim.h)
+// as the M17 callback sink at connect() time. The bind method takes the shim
+// name so RTIambassadorImpl.cpp — which already sees the shim via
+// FederateAmbassadorBridge.h — can pass the bridge pointer directly without
+// a cast. Inside M17Bridge.cpp the same class lives at
+// `::rti1516e::FederateAmbassador` (the shim is not active there); the impl
+// reinterpret_casts the incoming pointer — safe because both names refer to
+// the same class definition (identical layout + vtable).
+namespace rti1516e_m17 {
+class FederateAmbassador;
+}  // namespace rti1516e_m17
+
 namespace rti1516e {
 
 // SaveState / RestoreState mirror rti1516e::RTIambassador::SaveState /
@@ -62,6 +76,14 @@ class M17Bridge {
   void disconnect();
   // True between connect and disconnect.
   bool isConnected() const noexcept;
+
+  // §10.4 — install the M17 callback sink. M35 Agent BD wires the DLC-side
+  // DLCFederateAmbassadorBridge here so M17 callback deliveries convert to
+  // DLC callbacks on the user's FederateAmbassador. Must be called after
+  // connect() and before joinFederationExecution() (M17's Events RPC opens
+  // at join). Passing nullptr unbinds. The M17 impl retains the pointer
+  // by reference — the caller keeps the bridge alive until disconnect().
+  void bind_federate_ambassador(rti1516e_m17::FederateAmbassador* fed);
 
   // §4.5 — create a federation execution. `fom_modules` are file paths.
   void createFederationExecution(const std::string& name,
