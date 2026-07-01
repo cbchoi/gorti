@@ -1,2 +1,7 @@
 SUB: CONNECT
 SUB: JOIN federate=subscriber
+SUB: SUBSCRIBE Vehicle Position Velocity Honk
+SUB: DISCOVER class=Vehicle name=car-1 handle=<H>
+SUB: RECEIVE class=Honk Volume=5
+SUB: REFLECT name=car-1 Position=42.000000 Velocity=7.000000
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

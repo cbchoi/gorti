@@ -213,17 +213,28 @@ DLCRTIambassadorImpl::~DLCRTIambassadorImpl() = default;
 void DLCRTIambassadorImpl::connect(FederateAmbassador& fed,
                                    CallbackModel callbackModel,
                                    std::wstring const& localSettings) {
-  std::string const url = parseLocalSettings(localSettings);
-  bridge([&] { m17_->connect(url); });
   fed_amb_ = &fed;
   callback_model_ = callbackModel;
+  // Construct the bridge first so if M17 connect fails the bridge dtor
+  // (harmless — no M17 backref yet) runs during disconnect() cleanup.
+  callback_bridge_ =
+      std::make_unique<gorti::dlc::DLCFederateAmbassadorBridge>(&fed);
+  std::string const url = parseLocalSettings(localSettings);
+  bridge([&] {
+    m17_->connect(url);
+    m17_->bind_federate_ambassador(callback_bridge_.get());
+  });
 }
 
 // §4.3 — disconnect. Clears the bound FederateAmbassador so late
 // callback deliveries can no-op safely (Agent AD checks fed_amb_ before
 // dispatching).
 void DLCRTIambassadorImpl::disconnect() {
-  bridge([&] { m17_->disconnect(); });
+  bridge([&] {
+    if (callback_bridge_) m17_->bind_federate_ambassador(nullptr);
+    m17_->disconnect();
+  });
+  callback_bridge_.reset();
   fed_amb_ = nullptr;
 }
 
@@ -1506,12 +1517,24 @@ void DLCRTIambassadorImpl::disableInteractionRelevanceAdvisorySwitch() {}
 // §10.41 evokeCallback — single-arg spec form (catalogue 13.11).
 // No event queue in DLC M33 yet; returns false to signal "no more callbacks
 // pending". Federate can loop on this call safely.
-bool DLCRTIambassadorImpl::evokeCallback(double) { return false; }
+bool DLCRTIambassadorImpl::evokeCallback(double approximateMinimumTimeInSeconds) {
+  // Delegate to M17's at-most-one drain (M17.22 semantics).
+  return bridgeR([&] {
+    return m17_->evokeCallback(approximateMinimumTimeInSeconds,
+                               approximateMinimumTimeInSeconds);
+  });
+}
 
 // §10.42 evokeMultipleCallbacks — 2 args, no defaults (catalogue 13.12).
 // Same rationale as evokeCallback: no queued events, return false.
-bool DLCRTIambassadorImpl::evokeMultipleCallbacks(double, double) {
-  return false;
+bool DLCRTIambassadorImpl::evokeMultipleCallbacks(
+    double approximateMinimumTimeInSeconds,
+    double approximateMaximumTimeInSeconds) {
+  // Delegate to M17's drain-in-window (tickCallback alias).
+  return bridgeR([&] {
+    return m17_->evokeMultipleCallbacks(approximateMinimumTimeInSeconds,
+                                        approximateMaximumTimeInSeconds);
+  });
 }
 
 // §10.43-10.44 enable/disableCallbacks — M35 Agent BH: delegate to M17

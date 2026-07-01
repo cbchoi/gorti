@@ -265,4 +265,189 @@ void M17Bridge::unsubscribeInteractionClass(std::uint64_t cls) {
   });
 }
 
+// ---------- §6 Object Management (M35 Agent BC) ---------------------------
+//
+// The DLC caller passes raw uint64 handles + std::map<uint64, bytes> value
+// containers. Inside this TU `rti1516e::AttributeHandle` and
+// `rti1516e::VariableLengthData` resolve to the M17 types (from
+// <rti1516e/Types.h>) — the DLC and M17 headers cannot co-exist in one TU,
+// so we rebuild the M17 shape here.
+
+// §6.5 reserveObjectInstanceName — async; the reply arrives on the bound
+// FederateAmbassador via objectInstanceNameReservationSucceeded/Failed
+// (Cut-1 wire; M17 owns the callback dispatch).
+void M17Bridge::reserveObjectInstanceName(const std::string& name) {
+  guard("reserveObjectInstanceName",
+        [&] { impl_->amb->reserveObjectInstanceName(name); });
+}
+
+// §6.5 reserveMultipleObjectInstanceNames — atomic batch reservation.
+void M17Bridge::reserveMultipleObjectInstanceNames(
+    const std::vector<std::string>& names) {
+  guard("reserveMultipleObjectInstanceNames",
+        [&] { impl_->amb->reserveMultipleObjectInstanceNames(names); });
+}
+
+// §6.6 releaseObjectInstanceName — synchronous.
+void M17Bridge::releaseObjectInstanceName(const std::string& name) {
+  guard("releaseObjectInstanceName",
+        [&] { impl_->amb->releaseObjectInstanceName(name); });
+}
+
+// §6.8 registerObjectInstance — synchronous; returns the assigned
+// ObjectInstanceHandle raw uint64. Empty `instance_name` requests an
+// RTI-generated name.
+std::uint64_t M17Bridge::registerObjectInstance(
+    std::uint64_t object_class, const std::string& instance_name) {
+  return guard("registerObjectInstance", [&] {
+    auto h = impl_->amb->registerObjectInstance(
+        ::rti1516e::ObjectClassHandle{object_class}, instance_name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+
+// §6.10 updateAttributeValues (RO) — rebuild the M17
+// AttributeHandleValueMap from the raw uint64 keyed map and delegate.
+// M17 Cut-1 does not carry the DLC-mandatory userSuppliedTag on the
+// wire (DLC catalogue §11); the `tag` param is accepted at the bridge
+// boundary and dropped here to make the divergence explicit — a future
+// M17 wire extension will pass it through.
+void M17Bridge::updateAttributeValues(
+    std::uint64_t object,
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& values,
+    const std::vector<std::uint8_t>& tag) {
+  (void)tag;  // Divergence: M17 wire has no tag field yet.
+  guard("updateAttributeValues", [&] {
+    ::rti1516e::AttributeHandleValueMap m17_values;
+    for (auto const& kv : values) {
+      // M17's VariableLengthData == std::vector<std::uint8_t>, so bytes
+      // are moved through the shape unchanged.
+      m17_values.emplace(::rti1516e::AttributeHandle{kv.first},
+                         ::rti1516e::VariableLengthData{kv.second});
+    }
+    impl_->amb->updateAttributeValues(
+        ::rti1516e::ObjectInstanceHandle{object}, m17_values);
+  });
+}
+
+// §6.12 sendInteraction (RO) — same shape as updateAttributeValues but
+// on the ParameterHandle map. Same tag caveat.
+void M17Bridge::sendInteraction(
+    std::uint64_t interaction_class,
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& parameters,
+    const std::vector<std::uint8_t>& tag) {
+  (void)tag;  // Divergence: M17 wire has no tag field yet.
+  guard("sendInteraction", [&] {
+    ::rti1516e::ParameterHandleValueMap m17_params;
+    for (auto const& kv : parameters) {
+      m17_params.emplace(::rti1516e::ParameterHandle{kv.first},
+                         ::rti1516e::VariableLengthData{kv.second});
+    }
+    impl_->amb->sendInteraction(
+        ::rti1516e::InteractionClassHandle{interaction_class}, m17_params);
+  });
+}
+
+
+// shim name `rti1516e_m17::FederateAmbassador*` in the header (see
+// M17Bridge.h), but this TU sees the M17 header without the shim, so the
+// same class lives at `::rti1516e::FederateAmbassador`. Both names refer to
+// the exact same class definition (identical layout + vtable); a
+// reinterpret_cast is safe and lets us hand the pointer to M17's
+// setFederateAmbassador. setFederateAmbassador is nothrow in M17 Cut-1;
+// still routed through `guard` for uniformity.
+void M17Bridge::bind_federate_ambassador(rti1516e_m17::FederateAmbassador* fed) {
+  guard("bind_federate_ambassador", [&] {
+    impl_->amb->setFederateAmbassador(
+        reinterpret_cast<::rti1516e::FederateAmbassador*>(fed));
+  });
+}
+
+
+// ---------- §10 Support Services (M35 Agent BH) ---------------------------
+//
+// Straight delegation to the M17 ambassador. Uint64 in/out; the M17 typed
+// handle round-trip happens inside this TU where <rti1516e/Types.h> is
+// visible. Handle values are M17's raw() form; DLC callers wrap via the
+// makeXHandleFromUint64 helpers in RTIambassadorImpl.cpp.
+
+std::uint64_t M17Bridge::getObjectClassHandle(const std::string& name) {
+  return guard("getObjectClassHandle", [&] {
+    auto h = impl_->amb->getObjectClassHandle(name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getObjectClassName(std::uint64_t handle) {
+  return guard("getObjectClassName", [&] {
+    return impl_->amb->getObjectClassName(
+        ::rti1516e::ObjectClassHandle{handle});
+  });
+}
+std::uint64_t M17Bridge::getAttributeHandle(std::uint64_t cls,
+                                            const std::string& name) {
+  return guard("getAttributeHandle", [&] {
+    auto h = impl_->amb->getAttributeHandle(
+        ::rti1516e::ObjectClassHandle{cls}, name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getAttributeName(std::uint64_t cls,
+                                        std::uint64_t attr) {
+  return guard("getAttributeName", [&] {
+    return impl_->amb->getAttributeName(
+        ::rti1516e::ObjectClassHandle{cls},
+        ::rti1516e::AttributeHandle{attr});
+  });
+}
+std::uint64_t M17Bridge::getInteractionClassHandle(const std::string& name) {
+  return guard("getInteractionClassHandle", [&] {
+    auto h = impl_->amb->getInteractionClassHandle(name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getInteractionClassName(std::uint64_t handle) {
+  return guard("getInteractionClassName", [&] {
+    return impl_->amb->getInteractionClassName(
+        ::rti1516e::InteractionClassHandle{handle});
+  });
+}
+std::uint64_t M17Bridge::getParameterHandle(std::uint64_t cls,
+                                            const std::string& name) {
+  return guard("getParameterHandle", [&] {
+    auto h = impl_->amb->getParameterHandle(
+        ::rti1516e::InteractionClassHandle{cls}, name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getParameterName(std::uint64_t cls,
+                                        std::uint64_t param) {
+  return guard("getParameterName", [&] {
+    return impl_->amb->getParameterName(
+        ::rti1516e::InteractionClassHandle{cls},
+        ::rti1516e::ParameterHandle{param});
+  });
+}
+
+void M17Bridge::enableCallbacks() {
+  guard("enableCallbacks", [&] { impl_->amb->enableCallbacks(); });
+}
+void M17Bridge::disableCallbacks() {
+  guard("disableCallbacks", [&] { impl_->amb->disableCallbacks(); });
+}
+
+
+
+bool M17Bridge::evokeCallback(double approx_min_time, double approx_max_time) {
+  return guard("evokeCallback", [&] {
+    return impl_->amb->evokeCallback(approx_min_time, approx_max_time);
+  });
+}
+bool M17Bridge::evokeMultipleCallbacks(double approx_min_time,
+                                       double approx_max_time) {
+  return guard("evokeMultipleCallbacks", [&] {
+    return impl_->amb->evokeMultipleCallbacks(approx_min_time,
+                                              approx_max_time);
+  });
+}
+
 }  // namespace rti1516e

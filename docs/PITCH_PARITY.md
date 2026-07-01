@@ -443,3 +443,24 @@ TASK-350 work), 5 BLOCKED by Pitch Free 2-federate EULA cap, 2 gorti-only by des
 All goldens currently committed pass `scripts/check-spec-traceability.sh` lint:
 `27/27 fixtures clean`. No Pitch trademarks leaked into committed golden files
 per `grep -rE "Pitch Technologies|pRTI.*[Tt]rade.*mark" expected*.log` → 0 hits.
+
+### M35-PARITY-OUTCOME sentinel (post-reconciliation, 2026-07-02)
+
+M35-PARITY-OUTCOME: FULL — om_helloworld_pubsub 9/9 pub + 7/7 sub events
+byte-identical to Pitch pRTI Free 5.5.10 build 9905 after §5.2.1
+canonicalization (handle ints → `<H>`, RO-bucket lexical sort). First
+end-to-end FULL MATCH on integrated main: the strict DLC C++ surface
+(RTIambassadorFactory → connect → create → join → publish → register →
+update → send → resign, with subscriber-side DISCOVER/REFLECT/RECEIVE via
+the DLCFederateAmbassadorBridge) produces the same canonical event
+sequence as Pitch.
+
+Known RTI-defined divergence (documented, not a spec violation): gorti
+delivers REFLECT before RECEIVE within the same RO bucket; Pitch delivers
+RECEIVE before REFLECT. §6 mandates only causal order for RO delivery —
+the canonicalizer's within-bucket sort (rule 2) absorbs this by design.
+
+Remaining fixtures: 26 of 27 not yet at FULL (17 tractable with the same
+evoke-drain + emission-precision pattern applied here; 5 blocked by the
+Pitch Free 2-federate cap for golden capture; 2 gorti-only by design +
+2 own_* / tm_* fixture-level API fixes already landed in M35-K/N).

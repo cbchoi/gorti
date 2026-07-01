@@ -182,6 +182,13 @@ class M17Bridge {
   void enableCallbacks();
   void disableCallbacks();
 
+  // §10.41/§10.42 — callback evocation. Delegates to M17's tickCallback
+  // machinery (M17 buffers events; the caller's thread drains them).
+  // evokeCallback dispatches at most one; evokeMultipleCallbacks drains
+  // within the [min,max] window. Both return true iff a callback fired.
+  bool evokeCallback(double approx_min_time, double approx_max_time);
+  bool evokeMultipleCallbacks(double approx_min_time, double approx_max_time);
+
  private:
   // Full defn lives in M17Bridge.cpp; the M17 rti1516e::RTIambassador
   // member is stored here so no M17 type leaks into the header.

@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -58,8 +59,9 @@ class SubscriberFed : public rti1516e::NullFederateAmbassador {
       v.decode(theAttributeValues.at(velocity_attr_));
       velocity = v.get();
     }
-    std::cout << "SUB: REFLECT name=car-1 Position=" << position
-              << " Velocity=" << velocity << std::endl;
+    std::printf("SUB: REFLECT name=car-1 Position=%.6f Velocity=%.6f\n",
+                position, velocity);
+    std::fflush(stdout);
     reflected_.store(true);
   }
 
@@ -126,14 +128,17 @@ int main() {
     amb->subscribeInteractionClass(honk, true);
     std::cout << "SUB: SUBSCRIBE Vehicle Position Velocity Honk" << std::endl;
 
-    // Drain — HLA_IMMEDIATE delivers callbacks on RTI threads.
+    // Drain via §10.42 evokeMultipleCallbacks. Legal under HLA_IMMEDIATE
+    // on both RTIs (Pitch delivers on background threads and the evoke is
+    // a harmless yield; gorti M17 buffers events and drains them on the
+    // evoking thread). Emits no canonical lines, so goldens are unaffected.
     for (int i = 0; i < 50; ++i) {
       if (fed.reflected_.load() && fed.received_interaction_.load()) break;
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
-    std::cout << "SUB: RESIGN" << std::endl;
+    std::cout << "SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST" << std::endl;
     amb->disconnect();
     return 0;
   } catch (const rti1516e::Exception& e) {
