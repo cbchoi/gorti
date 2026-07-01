@@ -302,6 +302,27 @@ at first non-ctor method call and no log is captured.
 **Outcome (backfilled by Agent O):** MATCH / PARTIAL / DIVERGE / NOT_YET_ATTEMPTED.
 See CHANGELOG M33 row for the specific result and follow-on tickets.
 
+**Agent O pre-merge measurement (2026-07-02):** NOT_YET_ATTEMPTED. Both
+`federate_publisher.cpp` and `federate_subscriber.cpp` compile clean
+against the M32 header set (`g++ -c -std=c++17 -I cppsdk/include ...`
+succeeds without diagnostics). Runtime is blocked at the first non-ctor
+call — `RTIambassador::connect()` at line 51 of `federate_publisher.cpp`
+(and line 42 of `federate_subscriber.cpp`) throws `RTIinternalError`
+with the message `"M32 stub — RTIambassador::connect() impl deferred to
+M33+."`. The federate's `catch(rti1516e::Exception const&)` block
+writes `PUB: ERROR ...` to stderr and returns 1. No `PUB: CONNECT` line
+reaches stdout, so no downstream event (CREATE / JOIN / PUBLISH /
+REGISTER / UPDATE / SEND / RESIGN) is exercised. The parity-diff attempt
+is therefore deterministically NOT_YET_ATTEMPTED until Agent K's §4.2
+`connect()` impl merges (parse `crcAddress=…` and route to gorti gRPC).
+
+Additional blockers Agent O identified for a full end-to-end run:
+1. Agent K §4.5 `createFederationExecution` / §4.9 `joinFederationExecution` / §4.10 `resignFederationExecution` real impl (currently M32-stub).
+2. Agent K §10.2 support services (`getObjectClassHandle` / `getAttributeHandle` / `getInteractionClassHandle` / `getParameterHandle`) — currently M32-stub, but M17 transport already impls these; the wstring-adapter wire-through is Agent K's task.
+3. Agent L §6 object management (`registerObjectInstance` / `updateAttributeValues` / `sendInteraction` / `publishObjectClassAttributes` / `publishInteractionClass`) — currently M32-stub.
+4. Agent J FederateAmbassador dispatch — the subscriber's `NullFederateAmbassador` subclass expects the RTI to invoke `discoverObjectInstance` / `reflectAttributeValues` / `receiveInteraction`. Currently no dispatch loop.
+5. `cppsdk/tests/dlc/conformance/CMakeLists.txt` — `target_link_libraries` currently references `rti1516e` (M17 lib). To exercise the DLC surface impl, the fixture link target needs to switch to `rti1516e_dlc` (M32-landed static archive). This is a mechanical Cmake update pending post-Agent-K/L merge (not a scope blocker per se, but a coordination note).
+
 ---
 
 ## Pitch deviations from spec
