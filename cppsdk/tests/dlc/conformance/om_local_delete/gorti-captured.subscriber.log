@@ -1,0 +1,7 @@
+SUB: CONNECT
+SUB: JOIN
+SUB: SUBSCRIBE Vehicle Position
+SUB: DISCOVER name=car-local handle=<H>
+SUB: REFLECT name=car-local Position=99.000000
+SUB: LOCAL_DELETE handle=<H>
+SUB: RESIGN
