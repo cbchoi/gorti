@@ -44,6 +44,8 @@ class RTI_EXPORT_FEDTIME HLAfloat64Interval : public LogicalTimeInterval {
   HLAfloat64Interval& operator=(HLAfloat64Interval const& value);
   virtual double getInterval() const;
   virtual void setInterval(double value);
+  // Pitch HLAfloat64Interval.h:147 — implicit conversion to double.
+  operator double() const;
 
   virtual VariableLengthData encode() const override;
   virtual size_t encode(void* buffer, size_t bufferSize) const override;
