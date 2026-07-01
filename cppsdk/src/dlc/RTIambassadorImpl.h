@@ -13,7 +13,15 @@
 
 #include <RTI/RTIambassador.h>
 
+#include <memory>
+
 namespace rti1516e {
+
+// Forward-decl only — full defn in dlc/M17Bridge.h. Keeping this a
+// forward-decl (not an #include of the M17 header) is what prevents the
+// M17 `rti1516e::RTIambassador` class from colliding with the DLC
+// spec-abstract `rti1516e::RTIambassador` in this same header.
+class M17Bridge;
 
 class DLCRTIambassadorImpl : public RTIambassador {
  public:
@@ -358,6 +366,27 @@ class DLCRTIambassadorImpl : public RTIambassador {
       VariableLengthData const& encodedValue) const override;
   RegionHandle decodeRegionHandle(
       VariableLengthData const& encodedValue) const override;
+
+ private:
+  // ===== M34 pImpl for M17 delegation =====
+  //
+  // Owns the M17 concrete rti1516e::RTIambassador via an opaque bridge so
+  // the M17 header stays out of TUs that also see <RTI/RTIambassador.h>.
+  // Constructed unconditionally in the ctor; connect()/disconnect() drive
+  // the M17 wire lifecycle.
+  std::unique_ptr<M17Bridge> m17_;
+
+  // Bound DLC-side FederateAmbassador reference from §4.2 connect(). Agent
+  // AD's callback dispatch bridge reads this to route M17 callbacks through
+  // the DLC callback surface. Null before connect() and after disconnect().
+  FederateAmbassador* fed_amb_{nullptr};
+
+  // Selected CallbackModel from §4.2 connect(). Recorded so AD's dispatch
+  // bridge and future §10 evokeCallback/evokeMultipleCallbacks impls know
+  // whether the federate opted into HLA_IMMEDIATE (dispatch on stream
+  // thread) or HLA_EVOKED (dispatch only on evoke). Defaults to HLA_EVOKED
+  // to match the Pitch pre-connect state (safe: no callbacks fire).
+  CallbackModel callback_model_{HLA_EVOKED};
 };
 
 }  // namespace rti1516e
