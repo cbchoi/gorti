@@ -75,6 +75,26 @@ auto guard(char const* op, Fn&& f) -> decltype(f()) {
     throw std::runtime_error(
         std::string("FederateNotExecutionMember: ") + e.what() +
         " [op=" + op + "]");
+  } catch (::rti1516e::m17::NameNotFound const& e) {
+    // M35 Agent BH — surface as its own prefix so the DLC caller can
+    // translate to §C.3 NameNotFound instead of the RTIinternalError
+    // fallback. §10 support-services triggers this on unknown FOM names.
+    throw std::runtime_error(std::string("NameNotFound: ") + e.what() +
+                             " [op=" + op + "]");
+  } catch (::rti1516e::m17::InvalidObjectClassHandle const& e) {
+    throw std::runtime_error(
+        std::string("InvalidObjectClassHandle: ") + e.what() +
+        " [op=" + op + "]");
+  } catch (::rti1516e::m17::InvalidAttributeHandle const& e) {
+    throw std::runtime_error(std::string("InvalidAttributeHandle: ") +
+                             e.what() + " [op=" + op + "]");
+  } catch (::rti1516e::m17::InvalidInteractionClassHandle const& e) {
+    throw std::runtime_error(
+        std::string("InvalidInteractionClassHandle: ") + e.what() +
+        " [op=" + op + "]");
+  } catch (::rti1516e::m17::InvalidParameterHandle const& e) {
+    throw std::runtime_error(std::string("InvalidParameterHandle: ") +
+                             e.what() + " [op=" + op + "]");
   } catch (::rti1516e::m17::RTIinternalError const& e) {
     throw std::runtime_error(std::string("RTIinternalError: ") + e.what() +
                              " [op=" + op + "]");
@@ -278,6 +298,77 @@ void M17Bridge::unsubscribeInteractionClass(std::uint64_t cls) {
     impl_->amb->unsubscribeInteractionClass(
         ::rti1516e::InteractionClassHandle{cls});
   });
+}
+
+// ---------- §10 Support Services (M35 Agent BH) ---------------------------
+//
+// Straight delegation to the M17 ambassador. Uint64 in/out; the M17 typed
+// handle round-trip happens inside this TU where <rti1516e/Types.h> is
+// visible. Handle values are M17's raw() form; DLC callers wrap via the
+// makeXHandleFromUint64 helpers in RTIambassadorImpl.cpp.
+
+std::uint64_t M17Bridge::getObjectClassHandle(const std::string& name) {
+  return guard("getObjectClassHandle", [&] {
+    auto h = impl_->amb->getObjectClassHandle(name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getObjectClassName(std::uint64_t handle) {
+  return guard("getObjectClassName", [&] {
+    return impl_->amb->getObjectClassName(
+        ::rti1516e::ObjectClassHandle{handle});
+  });
+}
+std::uint64_t M17Bridge::getAttributeHandle(std::uint64_t cls,
+                                            const std::string& name) {
+  return guard("getAttributeHandle", [&] {
+    auto h = impl_->amb->getAttributeHandle(
+        ::rti1516e::ObjectClassHandle{cls}, name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getAttributeName(std::uint64_t cls,
+                                        std::uint64_t attr) {
+  return guard("getAttributeName", [&] {
+    return impl_->amb->getAttributeName(
+        ::rti1516e::ObjectClassHandle{cls},
+        ::rti1516e::AttributeHandle{attr});
+  });
+}
+std::uint64_t M17Bridge::getInteractionClassHandle(const std::string& name) {
+  return guard("getInteractionClassHandle", [&] {
+    auto h = impl_->amb->getInteractionClassHandle(name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getInteractionClassName(std::uint64_t handle) {
+  return guard("getInteractionClassName", [&] {
+    return impl_->amb->getInteractionClassName(
+        ::rti1516e::InteractionClassHandle{handle});
+  });
+}
+std::uint64_t M17Bridge::getParameterHandle(std::uint64_t cls,
+                                            const std::string& name) {
+  return guard("getParameterHandle", [&] {
+    auto h = impl_->amb->getParameterHandle(
+        ::rti1516e::InteractionClassHandle{cls}, name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getParameterName(std::uint64_t cls,
+                                        std::uint64_t param) {
+  return guard("getParameterName", [&] {
+    return impl_->amb->getParameterName(
+        ::rti1516e::InteractionClassHandle{cls},
+        ::rti1516e::ParameterHandle{param});
+  });
+}
+
+void M17Bridge::enableCallbacks() {
+  guard("enableCallbacks", [&] { impl_->amb->enableCallbacks(); });
+}
+void M17Bridge::disableCallbacks() {
+  guard("disableCallbacks", [&] { impl_->amb->disableCallbacks(); });
 }
 
 }  // namespace rti1516e

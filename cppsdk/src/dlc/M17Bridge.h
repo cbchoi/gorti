@@ -161,6 +161,32 @@ class M17Bridge {
   void subscribeInteractionClass(std::uint64_t cls);
   void unsubscribeInteractionClass(std::uint64_t cls);
 
+  // ---------- §10 Support Services (M35 Agent BH) -------------------------
+  //
+  // Name↔handle lookups against the joined federation's FOM. The M17
+  // ambassador caches results, so the same lookup does not re-hit the
+  // wire. Every accessor throws std::runtime_error on failure (namespace-
+  // prefixed by guard() so the DLC caller translates to the correct spec
+  // exception via translateBridgeError()).
+  //
+  // Uint64 handle values are M17's raw handle representation (uint64
+  // per-handle-type). DLC callers wrap them into typed handles via the
+  // makeXHandleFromUint64 helpers in RTIambassadorImpl.cpp.
+  std::uint64_t getObjectClassHandle(const std::string& name);
+  std::string   getObjectClassName(std::uint64_t handle);
+  std::uint64_t getAttributeHandle(std::uint64_t cls,
+                                   const std::string& name);
+  std::string   getAttributeName(std::uint64_t cls, std::uint64_t attr);
+  std::uint64_t getInteractionClassHandle(const std::string& name);
+  std::string   getInteractionClassName(std::uint64_t handle);
+  std::uint64_t getParameterHandle(std::uint64_t cls,
+                                   const std::string& name);
+  std::string   getParameterName(std::uint64_t cls, std::uint64_t param);
+
+  // §10.4 callback dispatch enable/disable. M17 has this natively.
+  void enableCallbacks();
+  void disableCallbacks();
+
  private:
   // Full defn lives in M17Bridge.cpp; the M17 rti1516e::RTIambassador
   // member is stored here so no M17 type leaks into the header.
