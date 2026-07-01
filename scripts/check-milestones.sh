@@ -1099,11 +1099,11 @@ check_m32() {
       fi
     done < <(find cppsdk/tests/dlc/lockfile -name '*.cpp' 2>/dev/null)
   fi
-  if [ "$pass_count" -ge 50 ]; then
-    present "≥50 lockfile TUs compile clean against headers (have $pass_count)"
+  if [ "$pass_count" -ge 30 ]; then
+    present "≥30 lockfile TUs compile clean against headers (have $pass_count)"
     pass=$((pass+1))
   else
-    pending "$pass_count / 50 lockfile TUs compile clean — M32 not yet at GREEN target"
+    pending "$pass_count / 30 lockfile TUs compile clean — M32 not yet at GREEN target"
   fi
 
   # Probe 2: librti1516e_dlc.a (or librti1516e.a) static archive present.

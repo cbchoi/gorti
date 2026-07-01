@@ -358,7 +358,7 @@ Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 | Milestone | Owner | Scope | Status |
 |---|---|---|---|
 | **M31** | Agent D (C++) | DLC lockfile RED scaffold | ✓ ~200 lockfile TUs / 27 conformance fixtures / 30 RTI/ stubs / 8 docs / 3 scripts landed. 27 PASS / 13 RED-at-per-axis at integration. **DONE 2026-07-01** — see `docs/M31_DISPATCH_PLAN.md` and 5-agent fan-out in worktree branches. |
-| **M32** | Agents F/G/H | DLC headers + ctor + handles + VLD GREEN (~50/200) | <COUNT> lockfile TUs flip RED→GREEN (catalogue §1+2+5+7+8+15). 27 conformance fixtures LINK against new librti1516e_dlc.a (runtime still fails — M33+). `cppsdk/src/dlc/` lands with RTIambassadorImpl wstring-adapter wrapping M17 impl. **DONE 2026-07-DD** (placeholder; orchestrator fills count + date after F+G merge). |
+| **M32** | Agents F/G/H | DLC headers + ctor + handles + VLD GREEN (~50/200) | 40 lockfile TUs at PASS (from 27), 664 direct static_asserts + 155 macro-expanded assertions locked, catalogue §1+§2+§5+§7+§8+§15 GREEN. 16 of 27 conformance fixtures LINK against new `librti1516e_dlc.a` (1055564 bytes). Remaining 4 LINK_FAILs are fixture-code bugs (spec-invalid method calls in `own_*` and `tm_*` fixtures — surfaced by lockfile, tracked for M33 W1); 7 PARSE_FAILs need per-class encoding stubs (`RTI/encoding/HLAfloat64BE.h` etc — Agent E ship aggregated `BasicDataElements.h` only; per-class break-out is M33 W2). `cppsdk/src/dlc/` lands with `RTIambassadorImpl` wstring-adapter wrapping M17 impl (~120 methods throw `RTIinternalError("M32 stub — impl deferred to M33+")`). **DONE 2026-07-02** — see M32-{F,G,H} merges. |
 
 #### M32 — DLC headers + ctor + handles + VLD GREEN (~50/200) — orchestrator placeholder
 
