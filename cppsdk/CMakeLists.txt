@@ -114,11 +114,18 @@ add_library(rti1516e_dlc STATIC
   # FederateAmbassador callbacks into DLC-shaped ones (typed handles,
   # wstring, LogicalTime). Installed by RTIambassadorImpl::connect().
   src/dlc/FederateAmbassadorBridge.cpp
+  # M34 Agent AA — M17 delegation bridge (opaque wrapper around
+  # the M17 rti1516e::RTIambassador so the M17 header stays out of
+  # the DLC TUs that also see <RTI/RTIambassador.h>).
+  src/dlc/M17Bridge.cpp
 )
 target_include_directories(rti1516e_dlc PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
-# No transitive gRPC/protobuf. Stubs are self-contained until M33+.
+# M34 Agent AA — link the M17 concrete ambassador (which drags gRPC +
+# protobuf transitively). Static libs don't PROPAGATE this, but the
+# resolution graph needs it for the M17Bridge.cpp translation unit.
+target_link_libraries(rti1516e_dlc PUBLIC rti1516e)
 
 # --- Tests ----------------------------------------------------------------
 

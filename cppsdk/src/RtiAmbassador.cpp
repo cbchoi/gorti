@@ -254,14 +254,14 @@ class RTIambassadorImpl {
   }
 };
 
-RTIambassador::RTIambassador() : impl_(std::make_unique<RTIambassadorImpl>()) {}
+M17RTIambassador::M17RTIambassador() : impl_(std::make_unique<RTIambassadorImpl>()) {}
 
-RTIambassador::~RTIambassador() = default;
+M17RTIambassador::~M17RTIambassador() = default;
 
-RTIambassador::RTIambassador(RTIambassador&&) noexcept = default;
-RTIambassador& RTIambassador::operator=(RTIambassador&&) noexcept = default;
+M17RTIambassador::M17RTIambassador(M17RTIambassador&&) noexcept = default;
+M17RTIambassador& M17RTIambassador::operator=(M17RTIambassador&&) noexcept = default;
 
-void RTIambassador::connect(const std::string& url) {
+void M17RTIambassador::connect(const std::string& url) {
   if (impl_->connected) {
     throw AlreadyConnected(
         "RTIambassador::connect: already connected to " + impl_->url);
@@ -283,7 +283,7 @@ void RTIambassador::connect(const std::string& url) {
   impl_->connected = true;
 }
 
-void RTIambassador::disconnect() {
+void M17RTIambassador::disconnect() {
   impl_->stopEventStream();
   impl_->federation_stub.reset();
   impl_->support_stub.reset();
@@ -305,11 +305,11 @@ void RTIambassador::disconnect() {
   impl_->clearHandleCaches();
 }
 
-bool RTIambassador::isConnected() const noexcept {
+bool M17RTIambassador::isConnected() const noexcept {
   return impl_->connected;
 }
 
-void RTIambassador::createFederationExecution(
+void M17RTIambassador::createFederationExecution(
     const std::string& federation_name,
     const FomModuleList& fom_modules) {
   impl_->requireConnected();
@@ -331,7 +331,7 @@ void RTIambassador::createFederationExecution(
   }
 }
 
-void RTIambassador::destroyFederationExecution(
+void M17RTIambassador::destroyFederationExecution(
     const std::string& federation_name) {
   impl_->requireConnected();
 
@@ -347,7 +347,7 @@ void RTIambassador::destroyFederationExecution(
   }
 }
 
-FederateHandle RTIambassador::joinFederationExecution(
+FederateHandle M17RTIambassador::joinFederationExecution(
     const std::string& federate_name,
     const std::string& federation_name) {
   impl_->requireConnected();
@@ -379,7 +379,7 @@ FederateHandle RTIambassador::joinFederationExecution(
   return impl_->federate_handle;
 }
 
-void RTIambassador::resignFederationExecution() {
+void M17RTIambassador::resignFederationExecution() {
   impl_->requireConnected();
   if (!impl_->joined) {
     throw FederateNotExecutionMember(
@@ -415,7 +415,7 @@ void RTIambassador::resignFederationExecution() {
 
 // --- M17.3 §10.2 handle services ------------------------------------------
 
-ObjectClassHandle RTIambassador::getObjectClassHandle(
+ObjectClassHandle M17RTIambassador::getObjectClassHandle(
     const std::string& name) {
   impl_->requireConnected();
   {
@@ -443,7 +443,7 @@ ObjectClassHandle RTIambassador::getObjectClassHandle(
   return ObjectClassHandle(h);
 }
 
-std::string RTIambassador::getObjectClassName(ObjectClassHandle handle) {
+std::string M17RTIambassador::getObjectClassName(ObjectClassHandle handle) {
   impl_->requireConnected();
   {
     std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -469,7 +469,7 @@ std::string RTIambassador::getObjectClassName(ObjectClassHandle handle) {
   return name;
 }
 
-AttributeHandle RTIambassador::getAttributeHandle(ObjectClassHandle cls,
+AttributeHandle M17RTIambassador::getAttributeHandle(ObjectClassHandle cls,
                                                   const std::string& name) {
   impl_->requireConnected();
   const RTIambassadorImpl::AttrKey key{cls.raw(), name};
@@ -498,7 +498,7 @@ AttributeHandle RTIambassador::getAttributeHandle(ObjectClassHandle cls,
   return AttributeHandle(h);
 }
 
-std::string RTIambassador::getAttributeName(ObjectClassHandle cls,
+std::string M17RTIambassador::getAttributeName(ObjectClassHandle cls,
                                             AttributeHandle handle) {
   impl_->requireConnected();
   const RTIambassadorImpl::AttrKey rk{cls.raw(), std::to_string(handle.raw())};
@@ -527,7 +527,7 @@ std::string RTIambassador::getAttributeName(ObjectClassHandle cls,
   return name;
 }
 
-InteractionClassHandle RTIambassador::getInteractionClassHandle(
+InteractionClassHandle M17RTIambassador::getInteractionClassHandle(
     const std::string& name) {
   impl_->requireConnected();
   {
@@ -555,7 +555,7 @@ InteractionClassHandle RTIambassador::getInteractionClassHandle(
   return InteractionClassHandle(h);
 }
 
-std::string RTIambassador::getInteractionClassName(
+std::string M17RTIambassador::getInteractionClassName(
     InteractionClassHandle handle) {
   impl_->requireConnected();
   {
@@ -583,7 +583,7 @@ std::string RTIambassador::getInteractionClassName(
   return name;
 }
 
-ParameterHandle RTIambassador::getParameterHandle(
+ParameterHandle M17RTIambassador::getParameterHandle(
     InteractionClassHandle cls, const std::string& name) {
   impl_->requireConnected();
   const RTIambassadorImpl::ParamKey key{cls.raw(), name};
@@ -612,7 +612,7 @@ ParameterHandle RTIambassador::getParameterHandle(
   return ParameterHandle(h);
 }
 
-std::string RTIambassador::getParameterName(InteractionClassHandle cls,
+std::string M17RTIambassador::getParameterName(InteractionClassHandle cls,
                                             ParameterHandle handle) {
   impl_->requireConnected();
   const RTIambassadorImpl::ParamKey rk{cls.raw(), std::to_string(handle.raw())};
@@ -643,7 +643,7 @@ std::string RTIambassador::getParameterName(InteractionClassHandle cls,
 
 // --- M17.9 §6.30 / §6.31 runtime instance handle services ----------------
 
-ObjectInstanceHandle RTIambassador::getObjectInstanceHandle(
+ObjectInstanceHandle M17RTIambassador::getObjectInstanceHandle(
     const std::string& name) {
   impl_->requireConnected();
   if (!impl_->joined) {
@@ -661,7 +661,7 @@ ObjectInstanceHandle RTIambassador::getObjectInstanceHandle(
   return ObjectInstanceHandle(resp.object_handle());
 }
 
-std::string RTIambassador::getObjectInstanceName(ObjectInstanceHandle handle) {
+std::string M17RTIambassador::getObjectInstanceName(ObjectInstanceHandle handle) {
   impl_->requireConnected();
   if (!impl_->joined) {
     throw FederateNotExecutionMember(
@@ -680,7 +680,7 @@ std::string RTIambassador::getObjectInstanceName(ObjectInstanceHandle handle) {
 
 // --- M17.10 §6.1-5 object instance name reservation ----------------------
 
-void RTIambassador::reserveObjectInstanceName(const std::string& name) {
+void M17RTIambassador::reserveObjectInstanceName(const std::string& name) {
   impl_->requireConnected();
   if (!impl_->joined) {
     throw FederateNotExecutionMember(
@@ -697,7 +697,7 @@ void RTIambassador::reserveObjectInstanceName(const std::string& name) {
   if (!s.ok()) throwFromStatus(s, "reserveObjectInstanceName");
 }
 
-void RTIambassador::reserveMultipleObjectInstanceNames(
+void M17RTIambassador::reserveMultipleObjectInstanceNames(
     const std::vector<std::string>& names) {
   impl_->requireConnected();
   if (!impl_->joined) {
@@ -718,7 +718,7 @@ void RTIambassador::reserveMultipleObjectInstanceNames(
   if (!s.ok()) throwFromStatus(s, "reserveMultipleObjectInstanceNames");
 }
 
-void RTIambassador::releaseObjectInstanceName(const std::string& name) {
+void M17RTIambassador::releaseObjectInstanceName(const std::string& name) {
   impl_->requireConnected();
   if (!impl_->joined) {
     throw FederateNotExecutionMember(
@@ -759,7 +759,7 @@ void requireJoinedForTime(bool joined, const char* method) {
 }
 }  // namespace
 
-void RTIambassador::enableTimeRegulation(double lookahead) {
+void M17RTIambassador::enableTimeRegulation(double lookahead) {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "enableTimeRegulation");
   rti::v1::EnableRegulationRequest req;
@@ -773,7 +773,7 @@ void RTIambassador::enableTimeRegulation(double lookahead) {
   if (!s.ok()) throwFromStatus(s, "enableTimeRegulation");
 }
 
-void RTIambassador::disableTimeRegulation() {
+void M17RTIambassador::disableTimeRegulation() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "disableTimeRegulation");
   rti::v1::DisableRegulationRequest req;
@@ -786,7 +786,7 @@ void RTIambassador::disableTimeRegulation() {
   if (!s.ok()) throwFromStatus(s, "disableTimeRegulation");
 }
 
-void RTIambassador::enableTimeConstrained() {
+void M17RTIambassador::enableTimeConstrained() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "enableTimeConstrained");
   rti::v1::EnableConstrainedRequest req;
@@ -799,7 +799,7 @@ void RTIambassador::enableTimeConstrained() {
   if (!s.ok()) throwFromStatus(s, "enableTimeConstrained");
 }
 
-void RTIambassador::disableTimeConstrained() {
+void M17RTIambassador::disableTimeConstrained() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "disableTimeConstrained");
   rti::v1::DisableConstrainedRequest req;
@@ -812,7 +812,7 @@ void RTIambassador::disableTimeConstrained() {
   if (!s.ok()) throwFromStatus(s, "disableTimeConstrained");
 }
 
-void RTIambassador::modifyLookahead(double lookahead) {
+void M17RTIambassador::modifyLookahead(double lookahead) {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "modifyLookahead");
   rti::v1::ModifyLookaheadRequest req;
@@ -826,7 +826,7 @@ void RTIambassador::modifyLookahead(double lookahead) {
   if (!s.ok()) throwFromStatus(s, "modifyLookahead");
 }
 
-void RTIambassador::timeAdvanceRequest(double time) {
+void M17RTIambassador::timeAdvanceRequest(double time) {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "timeAdvanceRequest");
   rti::v1::TARRequest req;
@@ -840,7 +840,7 @@ void RTIambassador::timeAdvanceRequest(double time) {
   if (!s.ok()) throwFromStatus(s, "timeAdvanceRequest");
 }
 
-void RTIambassador::timeAdvanceRequestAvailable(double time) {
+void M17RTIambassador::timeAdvanceRequestAvailable(double time) {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "timeAdvanceRequestAvailable");
   rti::v1::TARARequest req;
@@ -855,7 +855,7 @@ void RTIambassador::timeAdvanceRequestAvailable(double time) {
   if (!s.ok()) throwFromStatus(s, "timeAdvanceRequestAvailable");
 }
 
-void RTIambassador::nextMessageRequest(double time) {
+void M17RTIambassador::nextMessageRequest(double time) {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "nextMessageRequest");
   rti::v1::NERRequest req;
@@ -869,7 +869,7 @@ void RTIambassador::nextMessageRequest(double time) {
   if (!s.ok()) throwFromStatus(s, "nextMessageRequest");
 }
 
-void RTIambassador::nextMessageRequestAvailable(double time) {
+void M17RTIambassador::nextMessageRequestAvailable(double time) {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "nextMessageRequestAvailable");
   rti::v1::NMRARequest req;
@@ -884,7 +884,7 @@ void RTIambassador::nextMessageRequestAvailable(double time) {
   if (!s.ok()) throwFromStatus(s, "nextMessageRequestAvailable");
 }
 
-void RTIambassador::flushQueueRequest(double time) {
+void M17RTIambassador::flushQueueRequest(double time) {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "flushQueueRequest");
   rti::v1::FQRRequest req;
@@ -898,7 +898,7 @@ void RTIambassador::flushQueueRequest(double time) {
   if (!s.ok()) throwFromStatus(s, "flushQueueRequest");
 }
 
-double RTIambassador::queryLogicalTime() {
+double M17RTIambassador::queryLogicalTime() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "queryLogicalTime");
   rti::v1::QueryFederateTimeRequest req;
@@ -912,7 +912,7 @@ double RTIambassador::queryLogicalTime() {
   return resp.logical_time();
 }
 
-double RTIambassador::queryLookahead() {
+double M17RTIambassador::queryLookahead() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "queryLookahead");
   rti::v1::QueryFederateTimeRequest req;
@@ -926,7 +926,7 @@ double RTIambassador::queryLookahead() {
   return resp.lookahead();
 }
 
-RTIambassador::LBTSResult RTIambassador::queryLBTS() {
+M17RTIambassador::LBTSResult RTIambassador::queryLBTS() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "queryLBTS");
   rti::v1::QueryLBTSRequest req;
@@ -939,7 +939,7 @@ RTIambassador::LBTSResult RTIambassador::queryLBTS() {
   return LBTSResult{resp.lbts(), resp.finite()};
 }
 
-RTIambassador::GALTResult RTIambassador::queryGALT() {
+M17RTIambassador::GALTResult RTIambassador::queryGALT() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "queryGALT");
   rti::v1::QueryFederateTimeRequest req;
@@ -953,7 +953,7 @@ RTIambassador::GALTResult RTIambassador::queryGALT() {
   return GALTResult{resp.galt(), resp.finite()};
 }
 
-RTIambassador::LITSResult RTIambassador::queryLITS() {
+M17RTIambassador::LITSResult RTIambassador::queryLITS() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "queryLITS");
   rti::v1::QueryFederateTimeRequest req;
@@ -967,7 +967,7 @@ RTIambassador::LITSResult RTIambassador::queryLITS() {
   return LITSResult{resp.lits(), resp.finite()};
 }
 
-void RTIambassador::enableAsynchronousDelivery() {
+void M17RTIambassador::enableAsynchronousDelivery() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "enableAsynchronousDelivery");
   rti::v1::EnableAsynchronousDeliveryRequest req;
@@ -981,7 +981,7 @@ void RTIambassador::enableAsynchronousDelivery() {
   if (!s.ok()) throwFromStatus(s, "enableAsynchronousDelivery");
 }
 
-void RTIambassador::disableAsynchronousDelivery() {
+void M17RTIambassador::disableAsynchronousDelivery() {
   impl_->requireConnected();
   requireJoinedForTime(impl_->joined, "disableAsynchronousDelivery");
   rti::v1::DisableAsynchronousDeliveryRequest req;
@@ -1008,8 +1008,8 @@ void RTIambassador::disableAsynchronousDelivery() {
 // could in principle introspect a federation it isn't joined to,
 // matching the pysdk M27 D.1 behavior).
 
-RTIambassador::FederationAttributes
-RTIambassador::queryFederationAttributes() {
+M17RTIambassador::FederationAttributes
+M17RTIambassador::queryFederationAttributes() {
   impl_->requireConnected();
   if (impl_->joined_federation.empty()) {
     throw FederateNotExecutionMember(
@@ -1033,8 +1033,8 @@ RTIambassador::queryFederationAttributes() {
   return out;
 }
 
-RTIambassador::FederateAttributes
-RTIambassador::queryFederateAttributes(FederateHandle federate) {
+M17RTIambassador::FederateAttributes
+M17RTIambassador::queryFederateAttributes(FederateHandle federate) {
   impl_->requireConnected();
   if (impl_->joined_federation.empty()) {
     throw FederateNotExecutionMember(
@@ -1068,8 +1068,8 @@ RTIambassador::queryFederateAttributes(FederateHandle federate) {
   return out;
 }
 
-std::vector<RTIambassador::MomInstance>
-RTIambassador::enumerateMomInstances() {
+std::vector<M17RTIambassador::MomInstance>
+M17RTIambassador::enumerateMomInstances() {
   impl_->requireConnected();
   if (impl_->joined_federation.empty()) {
     throw FederateNotExecutionMember(
@@ -1105,7 +1105,7 @@ RTIambassador::enumerateMomInstances() {
 // announceSynchronizationPoint(label, tag) and
 // federationSynchronized(label) overrides.
 
-void RTIambassador::registerFederationSynchronizationPoint(
+void M17RTIambassador::registerFederationSynchronizationPoint(
     const std::string& label,
     const VariableLengthData& tag,
     const std::vector<FederateHandle>& required_federates) {
@@ -1130,7 +1130,7 @@ void RTIambassador::registerFederationSynchronizationPoint(
   if (!s.ok()) throwFromStatus(s, "registerFederationSynchronizationPoint");
 }
 
-void RTIambassador::synchronizationPointAchieved(const std::string& label) {
+void M17RTIambassador::synchronizationPointAchieved(const std::string& label) {
   impl_->requireConnected();
   if (!impl_->joined) {
     throw FederateNotExecutionMember(
@@ -1180,7 +1180,7 @@ void requireJoinedForOwnership(bool joined, const char* method) {
 
 }  // namespace
 
-void RTIambassador::unconditionalAttributeOwnershipDivestiture(
+void M17RTIambassador::unconditionalAttributeOwnershipDivestiture(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes) {
   impl_->requireConnected();
@@ -1196,7 +1196,7 @@ void RTIambassador::unconditionalAttributeOwnershipDivestiture(
   if (!s.ok()) throwFromStatus(s, "unconditionalAttributeOwnershipDivestiture");
 }
 
-void RTIambassador::negotiatedAttributeOwnershipDivestiture(
+void M17RTIambassador::negotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes,
     const VariableLengthData& tag) {
@@ -1214,7 +1214,7 @@ void RTIambassador::negotiatedAttributeOwnershipDivestiture(
   if (!s.ok()) throwFromStatus(s, "negotiatedAttributeOwnershipDivestiture");
 }
 
-void RTIambassador::attributeOwnershipAcquisition(
+void M17RTIambassador::attributeOwnershipAcquisition(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes) {
   impl_->requireConnected();
@@ -1229,7 +1229,7 @@ void RTIambassador::attributeOwnershipAcquisition(
   if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisition");
 }
 
-void RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
+void M17RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes) {
   impl_->requireConnected();
@@ -1247,7 +1247,7 @@ void RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
     throwFromStatus(s, "cancelNegotiatedAttributeOwnershipDivestiture");
 }
 
-void RTIambassador::cancelAttributeOwnershipAcquisition(
+void M17RTIambassador::cancelAttributeOwnershipAcquisition(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes) {
   impl_->requireConnected();
@@ -1263,7 +1263,7 @@ void RTIambassador::cancelAttributeOwnershipAcquisition(
   if (!s.ok()) throwFromStatus(s, "cancelAttributeOwnershipAcquisition");
 }
 
-void RTIambassador::attributeOwnershipDivestitureIfWanted(
+void M17RTIambassador::attributeOwnershipDivestitureIfWanted(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes) {
   impl_->requireConnected();
@@ -1279,7 +1279,7 @@ void RTIambassador::attributeOwnershipDivestitureIfWanted(
   if (!s.ok()) throwFromStatus(s, "attributeOwnershipDivestitureIfWanted");
 }
 
-RTIambassador::OwnershipQueryResult RTIambassador::queryAttributeOwnership(
+M17RTIambassador::OwnershipQueryResult RTIambassador::queryAttributeOwnership(
     ObjectInstanceHandle object,
     AttributeHandle attribute) {
   impl_->requireConnected();
@@ -1297,7 +1297,7 @@ RTIambassador::OwnershipQueryResult RTIambassador::queryAttributeOwnership(
                               resp.owned()};
 }
 
-bool RTIambassador::isAttributeOwnedByFederate(
+bool M17RTIambassador::isAttributeOwnedByFederate(
     ObjectInstanceHandle object,
     AttributeHandle attribute) {
   impl_->requireConnected();
@@ -1334,7 +1334,7 @@ void requireJoinedForSavepoint(bool joined, const char* method) {
 }
 }  // namespace
 
-void RTIambassador::requestFederationSave(
+void M17RTIambassador::requestFederationSave(
     const std::string& label,
     std::optional<double> save_time) {
   impl_->requireConnected();
@@ -1351,7 +1351,7 @@ void RTIambassador::requestFederationSave(
   if (!s.ok()) throwFromStatus(s, "requestFederationSave");
 }
 
-void RTIambassador::federateSaveComplete() {
+void M17RTIambassador::federateSaveComplete() {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "federateSaveComplete");
   rti::v1::FederateSaveResponseRequest req;
@@ -1364,7 +1364,7 @@ void RTIambassador::federateSaveComplete() {
   if (!s.ok()) throwFromStatus(s, "federateSaveComplete");
 }
 
-void RTIambassador::federateSaveNotComplete() {
+void M17RTIambassador::federateSaveNotComplete() {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "federateSaveNotComplete");
   rti::v1::FederateSaveResponseRequest req;
@@ -1377,7 +1377,7 @@ void RTIambassador::federateSaveNotComplete() {
   if (!s.ok()) throwFromStatus(s, "federateSaveNotComplete");
 }
 
-void RTIambassador::abortFederationSave() {
+void M17RTIambassador::abortFederationSave() {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "abortFederationSave");
   rti::v1::AbortFederationSaveRequest req;
@@ -1389,7 +1389,7 @@ void RTIambassador::abortFederationSave() {
   if (!s.ok()) throwFromStatus(s, "abortFederationSave");
 }
 
-RTIambassador::SaveState RTIambassador::querySaveState(const std::string& label) {
+M17RTIambassador::SaveState RTIambassador::querySaveState(const std::string& label) {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "querySaveState");
   rti::v1::QuerySaveStateRequest req;
@@ -1403,7 +1403,7 @@ RTIambassador::SaveState RTIambassador::querySaveState(const std::string& label)
   return static_cast<SaveState>(resp.state());
 }
 
-void RTIambassador::requestFederationRestore(const std::string& label) {
+void M17RTIambassador::requestFederationRestore(const std::string& label) {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "requestFederationRestore");
   rti::v1::RequestFederationRestoreRequest req;
@@ -1417,7 +1417,7 @@ void RTIambassador::requestFederationRestore(const std::string& label) {
   if (!s.ok()) throwFromStatus(s, "requestFederationRestore");
 }
 
-void RTIambassador::federateRestoreComplete() {
+void M17RTIambassador::federateRestoreComplete() {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "federateRestoreComplete");
   rti::v1::FederateRestoreResponseRequest req;
@@ -1430,7 +1430,7 @@ void RTIambassador::federateRestoreComplete() {
   if (!s.ok()) throwFromStatus(s, "federateRestoreComplete");
 }
 
-void RTIambassador::abortFederationRestore() {
+void M17RTIambassador::abortFederationRestore() {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "abortFederationRestore");
   rti::v1::AbortFederationRestoreRequest req;
@@ -1442,7 +1442,7 @@ void RTIambassador::abortFederationRestore() {
   if (!s.ok()) throwFromStatus(s, "abortFederationRestore");
 }
 
-RTIambassador::RestoreState RTIambassador::queryRestoreState(
+M17RTIambassador::RestoreState RTIambassador::queryRestoreState(
     const std::string& label) {
   impl_->requireConnected();
   requireJoinedForSavepoint(impl_->joined, "queryRestoreState");
@@ -1489,7 +1489,7 @@ void packAttributeRegions(Req& req, const AttributeRegionMap& map) {
 
 }  // namespace
 
-RoutingSpaceHandle RTIambassador::getRoutingSpaceHandle(
+RoutingSpaceHandle M17RTIambassador::getRoutingSpaceHandle(
     const std::string& name) {
   impl_->requireConnected();
   requireJoinedForDDM(impl_->joined, "getRoutingSpaceHandle");
@@ -1508,7 +1508,7 @@ RoutingSpaceHandle RTIambassador::getRoutingSpaceHandle(
   return RoutingSpaceHandle(resp.routing_space_handle());
 }
 
-DimensionHandle RTIambassador::getDimensionHandle(
+DimensionHandle M17RTIambassador::getDimensionHandle(
     RoutingSpaceHandle routing_space,
     const std::string& name) {
   impl_->requireConnected();
@@ -1529,7 +1529,7 @@ DimensionHandle RTIambassador::getDimensionHandle(
   return DimensionHandle(resp.dimension_handle());
 }
 
-RegionHandle RTIambassador::createRegion(
+RegionHandle M17RTIambassador::createRegion(
     RoutingSpaceHandle routing_space,
     const std::vector<DimensionHandle>& dimensions) {
   impl_->requireConnected();
@@ -1547,7 +1547,7 @@ RegionHandle RTIambassador::createRegion(
   return RegionHandle(resp.region_handle());
 }
 
-void RTIambassador::setRangeBounds(RegionHandle region,
+void M17RTIambassador::setRangeBounds(RegionHandle region,
                                    DimensionHandle dimension,
                                    const DimensionRange& bounds) {
   impl_->requireConnected();
@@ -1567,7 +1567,7 @@ void RTIambassador::setRangeBounds(RegionHandle region,
   if (!s.ok()) throwFromStatus(s, "setRangeBounds");
 }
 
-void RTIambassador::commitRegionModifications(
+void M17RTIambassador::commitRegionModifications(
     const std::vector<RegionHandle>& regions) {
   impl_->requireConnected();
   requireJoinedForDDM(impl_->joined, "commitRegionModifications");
@@ -1582,7 +1582,7 @@ void RTIambassador::commitRegionModifications(
   if (!s.ok()) throwFromStatus(s, "commitRegionModifications");
 }
 
-void RTIambassador::deleteRegion(RegionHandle region) {
+void M17RTIambassador::deleteRegion(RegionHandle region) {
   impl_->requireConnected();
   requireJoinedForDDM(impl_->joined, "deleteRegion");
   rti::v1::DeleteRegionRequest req;
@@ -1596,7 +1596,7 @@ void RTIambassador::deleteRegion(RegionHandle region) {
   if (!s.ok()) throwFromStatus(s, "deleteRegion");
 }
 
-RTIambassador::QueryBoundsResult RTIambassador::queryBounds(
+M17RTIambassador::QueryBoundsResult RTIambassador::queryBounds(
     RegionHandle region, DimensionHandle dimension) {
   impl_->requireConnected();
   requireJoinedForDDM(impl_->joined, "queryBounds");
@@ -1620,7 +1620,7 @@ RTIambassador::QueryBoundsResult RTIambassador::queryBounds(
   return out;
 }
 
-void RTIambassador::subscribeObjectClassAttributesWithRegions(
+void M17RTIambassador::subscribeObjectClassAttributesWithRegions(
     ObjectClassHandle object_class,
     const AttributeHandleSet& attributes,
     const RegionHandleSet& regions) {
@@ -1641,7 +1641,7 @@ void RTIambassador::subscribeObjectClassAttributesWithRegions(
   if (!s.ok()) throwFromStatus(s, "subscribeObjectClassAttributesWithRegions");
 }
 
-void RTIambassador::subscribeInteractionClassWithRegions(
+void M17RTIambassador::subscribeInteractionClassWithRegions(
     InteractionClassHandle interaction_class,
     const RegionHandleSet& regions) {
   impl_->requireConnected();
@@ -1660,7 +1660,7 @@ void RTIambassador::subscribeInteractionClassWithRegions(
   if (!s.ok()) throwFromStatus(s, "subscribeInteractionClassWithRegions");
 }
 
-void RTIambassador::unsubscribeObjectClassAttributesWithRegions(
+void M17RTIambassador::unsubscribeObjectClassAttributesWithRegions(
     ObjectClassHandle object_class,
     const AttributeHandleSet& attributes,
     const RegionHandleSet& regions) {
@@ -1682,7 +1682,7 @@ void RTIambassador::unsubscribeObjectClassAttributesWithRegions(
     throwFromStatus(s, "unsubscribeObjectClassAttributesWithRegions");
 }
 
-void RTIambassador::unsubscribeInteractionClassWithRegions(
+void M17RTIambassador::unsubscribeInteractionClassWithRegions(
     InteractionClassHandle interaction_class,
     const RegionHandleSet& regions) {
   impl_->requireConnected();
@@ -1701,8 +1701,8 @@ void RTIambassador::unsubscribeInteractionClassWithRegions(
   if (!s.ok()) throwFromStatus(s, "unsubscribeInteractionClassWithRegions");
 }
 
-RTIambassador::RegisterWithRegionsResult
-RTIambassador::registerObjectInstanceWithRegions(
+M17RTIambassador::RegisterWithRegionsResult
+M17RTIambassador::registerObjectInstanceWithRegions(
     ObjectClassHandle object_class,
     const AttributeRegionMap& attribute_regions,
     const std::string& object_name) {
@@ -1724,7 +1724,7 @@ RTIambassador::registerObjectInstanceWithRegions(
       ObjectInstanceHandle(resp.object_handle()), resp.object_name()};
 }
 
-void RTIambassador::associateRegionsForUpdates(
+void M17RTIambassador::associateRegionsForUpdates(
     ObjectInstanceHandle object,
     const AttributeRegionMap& attribute_regions) {
   impl_->requireConnected();
@@ -1741,7 +1741,7 @@ void RTIambassador::associateRegionsForUpdates(
   if (!s.ok()) throwFromStatus(s, "associateRegionsForUpdates");
 }
 
-void RTIambassador::unassociateRegionsForUpdates(
+void M17RTIambassador::unassociateRegionsForUpdates(
     ObjectInstanceHandle object,
     const AttributeRegionMap& attribute_regions) {
   impl_->requireConnected();
@@ -1759,7 +1759,7 @@ void RTIambassador::unassociateRegionsForUpdates(
   if (!s.ok()) throwFromStatus(s, "unassociateRegionsForUpdates");
 }
 
-void RTIambassador::sendInteractionWithRegions(
+void M17RTIambassador::sendInteractionWithRegions(
     InteractionClassHandle interaction_class,
     const ParameterHandleValueMap& parameters,
     const RegionHandleSet& regions,
@@ -1783,7 +1783,7 @@ void RTIambassador::sendInteractionWithRegions(
   if (!s.ok()) throwFromStatus(s, "sendInteractionWithRegions");
 }
 
-void RTIambassador::requestAttributeValueUpdateWithRegions(
+void M17RTIambassador::requestAttributeValueUpdateWithRegions(
     ObjectClassHandle object_class,
     const AttributeHandleSet& attributes,
     const RegionHandleSet& regions,
@@ -1839,7 +1839,7 @@ void requireJoined(const RTIambassadorImpl& impl, std::string_view op) {
 
 }  // namespace
 
-void RTIambassador::publishObjectClassAttributes(
+void M17RTIambassador::publishObjectClassAttributes(
     ObjectClassHandle cls, const AttributeHandleSet& attributes) {
   requireJoined(*impl_, "publishObjectClassAttributes");
   rti::v1::PubObjAttrsRequest req;
@@ -1852,7 +1852,7 @@ void RTIambassador::publishObjectClassAttributes(
   if (!s.ok()) throwFromStatus(s, "publishObjectClassAttributes");
 }
 
-void RTIambassador::unpublishObjectClassAttributes(
+void M17RTIambassador::unpublishObjectClassAttributes(
     ObjectClassHandle cls, const AttributeHandleSet& attributes) {
   requireJoined(*impl_, "unpublishObjectClassAttributes");
   rti::v1::UnpubObjAttrsRequest req;
@@ -1865,7 +1865,7 @@ void RTIambassador::unpublishObjectClassAttributes(
   if (!s.ok()) throwFromStatus(s, "unpublishObjectClassAttributes");
 }
 
-void RTIambassador::subscribeObjectClassAttributes(
+void M17RTIambassador::subscribeObjectClassAttributes(
     ObjectClassHandle cls, const AttributeHandleSet& attributes) {
   requireJoined(*impl_, "subscribeObjectClassAttributes");
   rti::v1::SubObjAttrsRequest req;
@@ -1878,7 +1878,7 @@ void RTIambassador::subscribeObjectClassAttributes(
   if (!s.ok()) throwFromStatus(s, "subscribeObjectClassAttributes");
 }
 
-void RTIambassador::unsubscribeObjectClassAttributes(
+void M17RTIambassador::unsubscribeObjectClassAttributes(
     ObjectClassHandle cls, const AttributeHandleSet& attributes) {
   requireJoined(*impl_, "unsubscribeObjectClassAttributes");
   rti::v1::UnsubObjAttrsRequest req;
@@ -1891,7 +1891,7 @@ void RTIambassador::unsubscribeObjectClassAttributes(
   if (!s.ok()) throwFromStatus(s, "unsubscribeObjectClassAttributes");
 }
 
-void RTIambassador::publishInteractionClass(InteractionClassHandle cls) {
+void M17RTIambassador::publishInteractionClass(InteractionClassHandle cls) {
   requireJoined(*impl_, "publishInteractionClass");
   rti::v1::PubInterRequest req;
   req.set_wire_version(rti::v1::WIRE_VERSION_V1);
@@ -1905,7 +1905,7 @@ void RTIambassador::publishInteractionClass(InteractionClassHandle cls) {
   if (!s.ok()) throwFromStatus(s, "publishInteractionClass");
 }
 
-void RTIambassador::unpublishInteractionClass(InteractionClassHandle cls) {
+void M17RTIambassador::unpublishInteractionClass(InteractionClassHandle cls) {
   requireJoined(*impl_, "unpublishInteractionClass");
   rti::v1::UnpubInterRequest req;
   req.set_wire_version(rti::v1::WIRE_VERSION_V1);
@@ -1919,7 +1919,7 @@ void RTIambassador::unpublishInteractionClass(InteractionClassHandle cls) {
   if (!s.ok()) throwFromStatus(s, "unpublishInteractionClass");
 }
 
-void RTIambassador::subscribeInteractionClass(InteractionClassHandle cls) {
+void M17RTIambassador::subscribeInteractionClass(InteractionClassHandle cls) {
   requireJoined(*impl_, "subscribeInteractionClass");
   rti::v1::SubInterRequest req;
   req.set_wire_version(rti::v1::WIRE_VERSION_V1);
@@ -1933,7 +1933,7 @@ void RTIambassador::subscribeInteractionClass(InteractionClassHandle cls) {
   if (!s.ok()) throwFromStatus(s, "subscribeInteractionClass");
 }
 
-void RTIambassador::unsubscribeInteractionClass(InteractionClassHandle cls) {
+void M17RTIambassador::unsubscribeInteractionClass(InteractionClassHandle cls) {
   requireJoined(*impl_, "unsubscribeInteractionClass");
   rti::v1::UnsubInterRequest req;
   req.set_wire_version(rti::v1::WIRE_VERSION_V1);
@@ -1949,7 +1949,7 @@ void RTIambassador::unsubscribeInteractionClass(InteractionClassHandle cls) {
 
 // --- M17.5 §6 register / update / send -----------------------------------
 
-ObjectInstanceHandle RTIambassador::registerObjectInstance(
+ObjectInstanceHandle M17RTIambassador::registerObjectInstance(
     ObjectClassHandle cls, const std::string& instance_name) {
   requireJoined(*impl_, "registerObjectInstance");
   rti::v1::RegisterObjectRequest req;
@@ -1965,7 +1965,7 @@ ObjectInstanceHandle RTIambassador::registerObjectInstance(
   return ObjectInstanceHandle(resp.object_handle());
 }
 
-void RTIambassador::updateAttributeValues(
+void M17RTIambassador::updateAttributeValues(
     ObjectInstanceHandle obj, const AttributeHandleValueMap& values) {
   requireJoined(*impl_, "updateAttributeValues");
   rti::v1::UpdateAttributeValuesRequest req;
@@ -1984,7 +1984,7 @@ void RTIambassador::updateAttributeValues(
   if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
 }
 
-void RTIambassador::sendInteraction(
+void M17RTIambassador::sendInteraction(
     InteractionClassHandle cls, const ParameterHandleValueMap& parameters) {
   requireJoined(*impl_, "sendInteraction");
   rti::v1::SendInteractionRequest req;
@@ -2004,7 +2004,7 @@ void RTIambassador::sendInteraction(
 
 // --- M20.2 §8.21 retract ---------------------------------------------------
 
-void RTIambassador::retract(MessageRetractionHandle handle) {
+void M17RTIambassador::retract(MessageRetractionHandle handle) {
   requireJoined(*impl_, "retract");
   rti::v1::RetractRequest req;
   req.set_wire_version(rti::v1::WIRE_VERSION_V1);
@@ -2019,7 +2019,7 @@ void RTIambassador::retract(MessageRetractionHandle handle) {
 
 // --- M17.6 §10.4 tickCallback + FederateAmbassador ------------------------
 
-void RTIambassador::setFederateAmbassador(FederateAmbassador* fed) {
+void M17RTIambassador::setFederateAmbassador(FederateAmbassador* fed) {
   impl_->fed_ambassador = fed;
 }
 
@@ -2069,7 +2069,7 @@ void RTIambassadorImpl::stopEventStream() {
   }
 }
 
-bool RTIambassador::tickCallback(double approx_min_time,
+bool M17RTIambassador::tickCallback(double approx_min_time,
                                  double approx_max_time) {
   using clock = std::chrono::steady_clock;
   using std::chrono::duration;
@@ -2284,12 +2284,12 @@ bool RTIambassadorImpl::dispatchOneEvent() {
 // Background reader keeps filling the event queue when disabled;
 // no events are lost across the toggle.
 
-bool RTIambassador::evokeMultipleCallbacks(double approx_min_time,
+bool M17RTIambassador::evokeMultipleCallbacks(double approx_min_time,
                                            double approx_max_time) {
   return tickCallback(approx_min_time, approx_max_time);
 }
 
-bool RTIambassador::evokeCallback(double approx_min_time,
+bool M17RTIambassador::evokeCallback(double approx_min_time,
                                   double approx_max_time) {
   using clock = std::chrono::steady_clock;
   using std::chrono::duration;
@@ -2329,11 +2329,11 @@ bool RTIambassador::evokeCallback(double approx_min_time,
   return !impl_->event_queue.empty();
 }
 
-void RTIambassador::disableCallbacks() {
+void M17RTIambassador::disableCallbacks() {
   impl_->callbacks_enabled.store(false);
 }
 
-void RTIambassador::enableCallbacks() {
+void M17RTIambassador::enableCallbacks() {
   impl_->callbacks_enabled.store(true);
   // Wake any thread waiting in tickCallback so it re-checks the
   // gate. (Pre-existing tickCallback paths poll with a 5 ms
