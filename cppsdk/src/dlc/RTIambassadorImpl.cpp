@@ -4,6 +4,14 @@
 // M32 GREEN target is LINK-only; runtime bodies land M33+ as wstring-adapters
 // over gorti's M17 gRPC surface.
 
+// FederateAmbassadorBridge.h uses the `rti1516e_m17` shim (see
+// FederateAmbassadorBridge_m17_shim.h) and MUST appear before any include
+// chain that pulls in `<rti1516e/*.h>` under the plain `rti1516e` name.
+// M17Bridge.h/.cpp and <RTI/*.h> both avoid the M17 headers, so this is
+// currently the only shim consumer in the TU — but keeping the include
+// first future-proofs against additions.
+#include "FederateAmbassadorBridge.h"
+
 #include "RTIambassadorImpl.h"
 
 #include "M17Bridge.h"
@@ -183,28 +191,38 @@ DLCRTIambassadorImpl::~DLCRTIambassadorImpl() = default;
 
 // §4.2 — connect. Parses `localSettingsDesignator` (Pitch Portable-Options
 // "crcAddress=host:port" or bare "grpc://host:port") into an M17 dial URL.
-// Stores the FederateAmbassador reference + CallbackModel for Agent AD's
-// callback dispatch bridge. Callback binding is Agent AD's responsibility;
-// this method only records the FA and calls m17_->connect(url) so the
-// wire channel is up before the fixture's create/join sequence.
+// Stores the FederateAmbassador reference + CallbackModel and installs the
+// DLC-side callback bridge (M35 Agent BD) as the M17 callback sink so that
+// M17 DISCOVER / REFLECT / RECEIVE deliveries route to `fed`.
 //
-// TODO(M35): wire in DLCFederateAmbassadorBridge to install `fed_amb_` as
-// the M17 ambassador for callback dispatch. Bridge lives at
-// cppsdk/src/dlc/FederateAmbassadorBridge.{h,cpp}.
+// Ordering: M17's `setFederateAmbassador` MUST run before the Events RPC
+// opens on joinFederationExecution — we bind here inside the same bridge()
+// call so a mid-sequence M17 exception surfaces via translateBridgeError.
 void DLCRTIambassadorImpl::connect(FederateAmbassador& fed,
                                    CallbackModel callbackModel,
                                    std::wstring const& localSettings) {
-  std::string const url = parseLocalSettings(localSettings);
-  bridge([&] { m17_->connect(url); });
   fed_amb_ = &fed;
   callback_model_ = callbackModel;
+  // Construct the bridge first so if M17 connect fails the bridge dtor
+  // (harmless — no M17 backref yet) runs during disconnect() cleanup.
+  callback_bridge_ =
+      std::make_unique<gorti::dlc::DLCFederateAmbassadorBridge>(&fed);
+  std::string const url = parseLocalSettings(localSettings);
+  bridge([&] {
+    m17_->connect(url);
+    m17_->bind_federate_ambassador(callback_bridge_.get());
+  });
 }
 
-// §4.3 — disconnect. Clears the bound FederateAmbassador so late
-// callback deliveries can no-op safely (Agent AD checks fed_amb_ before
-// dispatching).
+// §4.3 — disconnect. Unbinds the M17 callback sink FIRST so no late M17
+// delivery can land on a torn-down bridge, then closes the channel and
+// destroys the bridge + FederateAmbassador binding.
 void DLCRTIambassadorImpl::disconnect() {
-  bridge([&] { m17_->disconnect(); });
+  bridge([&] {
+    if (callback_bridge_) m17_->bind_federate_ambassador(nullptr);
+    m17_->disconnect();
+  });
+  callback_bridge_.reset();
   fed_amb_ = nullptr;
 }
 
