@@ -8,6 +8,8 @@
 #include <RTI/Exception.h>
 #include <RTI/RangeBounds.h>
 #include <RTI/RTIambassadorFactory.h>
+#include <RTI/time/HLAfloat64Time.h>
+#include <RTI/time/HLAfloat64Interval.h>
 
 namespace rti1516e {
 
@@ -582,61 +584,190 @@ bool DLCRTIambassadorImpl::isAttributeOwnedByFederate(ObjectInstanceHandle,
 }
 
 // ===== §8 Time Management =====
-void DLCRTIambassadorImpl::enableTimeRegulation(LogicalTimeInterval const&) {
-  m32_stub("enableTimeRegulation");
+//
+// M34 Agent AB: §8 shim over gorti's M17 time surface.
+//
+// Design:
+//   - Spec (§8) parameters LogicalTime const& and LogicalTimeInterval const&
+//     are pure-abstract; gorti M17 speaks double. Each shim narrows to
+//     double via `dynamic_cast<HLAfloat64Time const*>(&lt)->getTime()`
+//     (resp. HLAfloat64Interval::getInterval()). Federation-scope logical-
+//     time bindings other than HLAfloat64Time are not supported (catalogue
+//     §9 rows 9.1/9.4). When the concrete type is not HLAfloat64Time the
+//     dynamic_cast returns nullptr and we fall through to the M17-not-wired
+//     branch; a future pImpl wiring will replace the guard with a proper
+//     InvalidLogicalTime throw.
+//   - Like §6, DLCRTIambassadorImpl currently owns no M17 client member;
+//     wiring one requires editing RTIambassadorImpl.h, which is outside
+//     M34 Agent AB's file scope ("Only touch RTIambassadorImpl.cpp §8").
+//     Until that pImpl lands each shim throws rti1516e::NotConnected via
+//     `m17NotWiredTime_` — spec-legal per every §8 method's RTI_THROW
+//     clause (see Pitch RTIambassador.h §8.2-8.24). This keeps the 13
+//     catalogue §9 rows LINKed for the tm_* conformance fixtures.
+//   - Async ack shape (enableTimeRegulation → timeRegulationEnabled;
+//     enableTimeConstrained → timeConstrainedEnabled; TAR/NER/FQR →
+//     timeAdvanceGrant) is delivered on the federate's FederateAmbassador
+//     via the M17 event-stream once the pImpl lands.
+//
+// Catalogue §9 rows 9.1-9.14 (FR-DLC-8).
+
+namespace {
+
+// Central point for the "M17 §8 not yet wired" reply. Every §8 method
+// declares NotConnected in its RTI_THROW clause; NotConnected is the
+// spec-legal signal for "no CRC bound" and correctly reflects the M17-
+// pImpl-not-installed state.
+[[noreturn]] void m17NotWiredTime_(char const* method) {
+  std::wstring msg = L"gorti DLC §8 ";
+  for (char const* p = method; *p; ++p)
+    msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
+  msg += L": M17 time surface not yet wired into DLCRTIambassadorImpl "
+         L"(M34 follow-up — needs a private M17 client member on "
+         L"RTIambassadorImpl.h; tracked as \"M34 header pImpl\" in the "
+         L"dispatch plan). Federate is not connected to any CRC.";
+  throw NotConnected(msg);
 }
+
+}  // namespace
+
+void DLCRTIambassadorImpl::enableTimeRegulation(
+    LogicalTimeInterval const& theLookahead) {
+  // §8.2 — async. Federate must be joined; ack arrives asynchronously via
+  //        §8.3 timeRegulationEnabled(federateTime) on FederateAmbassador.
+  //        gorti M17 uses double; narrow via HLAfloat64Interval concrete.
+  auto const* p = dynamic_cast<HLAfloat64Interval const*>(&theLookahead);
+  double const m17_lookahead_ = p ? p->getInterval() : 0.0;
+  (void)m17_lookahead_;
+  m17NotWiredTime_("enableTimeRegulation");
+}
+
 void DLCRTIambassadorImpl::disableTimeRegulation() {
-  m32_stub("disableTimeRegulation");
+  // §8.4 — synchronous per spec (no async ack).
+  m17NotWiredTime_("disableTimeRegulation");
 }
+
 void DLCRTIambassadorImpl::enableTimeConstrained() {
-  m32_stub("enableTimeConstrained");
+  // §8.5 — async. Ack via §8.6 timeConstrainedEnabled(federateTime).
+  m17NotWiredTime_("enableTimeConstrained");
 }
+
 void DLCRTIambassadorImpl::disableTimeConstrained() {
-  m32_stub("disableTimeConstrained");
+  // §8.7 — synchronous.
+  m17NotWiredTime_("disableTimeConstrained");
 }
-void DLCRTIambassadorImpl::timeAdvanceRequest(LogicalTime const&) {
-  m32_stub("timeAdvanceRequest");
+
+void DLCRTIambassadorImpl::timeAdvanceRequest(LogicalTime const& theTime) {
+  // §8.8 — async; grant via §8.13 timeAdvanceGrant(theTime).
+  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
+  double const m17_time_ = p ? p->getTime() : 0.0;
+  (void)m17_time_;
+  m17NotWiredTime_("timeAdvanceRequest");
 }
-void DLCRTIambassadorImpl::timeAdvanceRequestAvailable(LogicalTime const&) {
-  m32_stub("timeAdvanceRequestAvailable");
+
+void DLCRTIambassadorImpl::timeAdvanceRequestAvailable(
+    LogicalTime const& theTime) {
+  // §8.9 — async; grant via §8.13.
+  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
+  double const m17_time_ = p ? p->getTime() : 0.0;
+  (void)m17_time_;
+  m17NotWiredTime_("timeAdvanceRequestAvailable");
 }
-void DLCRTIambassadorImpl::nextMessageRequest(LogicalTime const&) {
-  m32_stub("nextMessageRequest");
+
+void DLCRTIambassadorImpl::nextMessageRequest(LogicalTime const& theTime) {
+  // §8.10 — async; grant via §8.13. NER anchors the tm_ner_pair fixture.
+  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
+  double const m17_time_ = p ? p->getTime() : 0.0;
+  (void)m17_time_;
+  m17NotWiredTime_("nextMessageRequest");
 }
-void DLCRTIambassadorImpl::nextMessageRequestAvailable(LogicalTime const&) {
-  m32_stub("nextMessageRequestAvailable");
+
+void DLCRTIambassadorImpl::nextMessageRequestAvailable(
+    LogicalTime const& theTime) {
+  // §8.11 — async; grant via §8.13.
+  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
+  double const m17_time_ = p ? p->getTime() : 0.0;
+  (void)m17_time_;
+  m17NotWiredTime_("nextMessageRequestAvailable");
 }
-void DLCRTIambassadorImpl::flushQueueRequest(LogicalTime const&) {
-  m32_stub("flushQueueRequest");
+
+void DLCRTIambassadorImpl::flushQueueRequest(LogicalTime const& theTime) {
+  // §8.12 — async; grant via §8.13.
+  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
+  double const m17_time_ = p ? p->getTime() : 0.0;
+  (void)m17_time_;
+  m17NotWiredTime_("flushQueueRequest");
 }
+
 void DLCRTIambassadorImpl::enableAsynchronousDelivery() {
-  m32_stub("enableAsynchronousDelivery");
+  // §8.14 — synchronous toggle.
+  m17NotWiredTime_("enableAsynchronousDelivery");
 }
+
 void DLCRTIambassadorImpl::disableAsynchronousDelivery() {
-  m32_stub("disableAsynchronousDelivery");
+  // §8.15 — synchronous toggle.
+  m17NotWiredTime_("disableAsynchronousDelivery");
 }
-bool DLCRTIambassadorImpl::queryGALT(LogicalTime&) { m32_stub("queryGALT"); }
-void DLCRTIambassadorImpl::queryLogicalTime(LogicalTime&) {
-  m32_stub("queryLogicalTime");
+
+bool DLCRTIambassadorImpl::queryGALT(LogicalTime& theTime) {
+  // §8.16 — out-param + bool. Returns false if GALT is undefined (no
+  //         regulating federates); otherwise assigns theTime = GALT.
+  (void)theTime;
+  m17NotWiredTime_("queryGALT");
 }
-bool DLCRTIambassadorImpl::queryLITS(LogicalTime&) { m32_stub("queryLITS"); }
-void DLCRTIambassadorImpl::modifyLookahead(LogicalTimeInterval const&) {
-  m32_stub("modifyLookahead");
+
+void DLCRTIambassadorImpl::queryLogicalTime(LogicalTime& theTime) {
+  // §8.17 — assigns federate's current logical time.
+  (void)theTime;
+  m17NotWiredTime_("queryLogicalTime");
 }
-void DLCRTIambassadorImpl::queryLookahead(LogicalTimeInterval&) {
-  m32_stub("queryLookahead");
+
+bool DLCRTIambassadorImpl::queryLITS(LogicalTime& theTime) {
+  // §8.18 — out-param + bool. Least incoming time stamp; false if none.
+  (void)theTime;
+  m17NotWiredTime_("queryLITS");
 }
-void DLCRTIambassadorImpl::retract(MessageRetractionHandle) {
-  m32_stub("retract");
+
+void DLCRTIambassadorImpl::modifyLookahead(
+    LogicalTimeInterval const& theLookahead) {
+  // §8.19 — synchronous. Requires TimeRegulation enabled.
+  auto const* p = dynamic_cast<HLAfloat64Interval const*>(&theLookahead);
+  double const m17_lookahead_ = p ? p->getInterval() : 0.0;
+  (void)m17_lookahead_;
+  m17NotWiredTime_("modifyLookahead");
 }
-void DLCRTIambassadorImpl::changeAttributeOrderType(ObjectInstanceHandle,
-                                                    AttributeHandleSet const&,
-                                                    OrderType) {
-  m32_stub("changeAttributeOrderType");
+
+void DLCRTIambassadorImpl::queryLookahead(LogicalTimeInterval& interval) {
+  // §8.20 — out-param. Requires TimeRegulation enabled.
+  (void)interval;
+  m17NotWiredTime_("queryLookahead");
 }
-void DLCRTIambassadorImpl::changeInteractionOrderType(InteractionClassHandle,
-                                                      OrderType) {
-  m32_stub("changeInteractionOrderType");
+
+void DLCRTIambassadorImpl::retract(MessageRetractionHandle theHandle) {
+  // §8.21 — retract a previously-sent TSO message by handle from
+  //         updateAttributeValues/sendInteraction/deleteObjectInstance
+  //         TSO overloads.
+  (void)theHandle;
+  m17NotWiredTime_("retract");
+}
+
+void DLCRTIambassadorImpl::changeAttributeOrderType(
+    ObjectInstanceHandle theObject,
+    AttributeHandleSet const& theAttributes,
+    OrderType theType) {
+  // §8.23 — per-attribute order change (TIMESTAMP ↔ RECEIVE).
+  (void)theObject;
+  (void)theAttributes;
+  (void)theType;
+  m17NotWiredTime_("changeAttributeOrderType");
+}
+
+void DLCRTIambassadorImpl::changeInteractionOrderType(
+    InteractionClassHandle theClass,
+    OrderType theType) {
+  // §8.24 — per-interaction-class order change (TIMESTAMP ↔ RECEIVE).
+  (void)theClass;
+  (void)theType;
+  m17NotWiredTime_("changeInteractionOrderType");
 }
 
 // ===== §9 DDM =====
