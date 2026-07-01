@@ -398,150 +398,285 @@ void DLCRTIambassadorImpl::requestAttributeValueUpdateWithRegions(
 }
 
 // ===== §10 Support Services =====
+//
+// M33 Agent M impl. Design: the DLC RTIambassador has no gRPC binding yet —
+// it's the front-end for a future M35 dispatch layer. So handle-lookup
+// methods that need federation state throw NotConnected (spec-legal error),
+// while stateless conversions (order/transport enum ↔ name, normalize) are
+// fully implemented. Advisory-switch on/off pairs no-op (silent success —
+// there's no advisory infrastructure to gate yet; the DLC contract only
+// requires void return, no throw). evokeCallback / evokeMultipleCallbacks
+// no-op returning false (no queued events). getTimeFactory returns a
+// null-throwing placeholder (Task M-4: factory-factory chain deferred).
+// The 9 decode*Handle methods use per-handle Friend shims (defined below).
+//
+// Catalogue rows 13.1-13.15 all touched. FR-DLC-4 (wstring), FR-DLC-14
+// (callback re-entry) exercised by test_rtiambassador_handle_services.cpp
+// static_asserts.
+
 ResignAction DLCRTIambassadorImpl::getAutomaticResignDirective() {
-  m32_stub("getAutomaticResignDirective");
+  // §10.2 — default per Pitch is NO_ACTION; return that until a real
+  // federation binding lands.
+  return NO_ACTION;
 }
 void DLCRTIambassadorImpl::setAutomaticResignDirective(ResignAction) {
-  m32_stub("setAutomaticResignDirective");
+  // §10.3 — no federation binding; silently accept. Spec-legal (returns
+  // void, no throw required in the not-connected case for this setter).
 }
 FederateHandle DLCRTIambassadorImpl::getFederateHandle(std::wstring const&) {
-  m32_stub("getFederateHandle");
+  // §10.4 — need federation state to resolve name → handle.
+  throw NotConnected(L"DLC RTIambassador: getFederateHandle requires "
+                     L"federation connection (M35+).");
 }
-std::wstring DLCRTIambassadorImpl::getFederateName(FederateHandle) {
-  m32_stub("getFederateName");
+std::wstring DLCRTIambassadorImpl::getFederateName(FederateHandle theHandle) {
+  // §10.5 — need federation state.
+  if (!theHandle.isValid()) throw InvalidFederateHandle(L"getFederateName");
+  throw NotConnected(L"DLC RTIambassador: getFederateName requires "
+                     L"federation connection (M35+).");
 }
 ObjectClassHandle DLCRTIambassadorImpl::getObjectClassHandle(
     std::wstring const&) {
-  m32_stub("getObjectClassHandle");
+  // §10.6 — need FOM state to resolve class name.
+  throw NotConnected(L"DLC RTIambassador: getObjectClassHandle requires "
+                     L"federation connection (M35+).");
 }
-std::wstring DLCRTIambassadorImpl::getObjectClassName(ObjectClassHandle) {
-  m32_stub("getObjectClassName");
+std::wstring DLCRTIambassadorImpl::getObjectClassName(
+    ObjectClassHandle theHandle) {
+  // §10.7 — need FOM state.
+  if (!theHandle.isValid())
+    throw InvalidObjectClassHandle(L"getObjectClassName");
+  throw NotConnected(L"DLC RTIambassador: getObjectClassName requires "
+                     L"federation connection (M35+).");
 }
 ObjectClassHandle DLCRTIambassadorImpl::getKnownObjectClassHandle(
     ObjectInstanceHandle) {
-  m32_stub("getKnownObjectClassHandle");
+  // §10.8 — need federation state to look up instance's known class.
+  throw NotConnected(L"DLC RTIambassador: getKnownObjectClassHandle requires "
+                     L"federation connection (M35+).");
 }
 ObjectInstanceHandle DLCRTIambassadorImpl::getObjectInstanceHandle(
     std::wstring const&) {
-  m32_stub("getObjectInstanceHandle");
+  // §10.9 — need federation state to resolve instance name.
+  throw NotConnected(L"DLC RTIambassador: getObjectInstanceHandle requires "
+                     L"federation connection (M35+).");
 }
 std::wstring DLCRTIambassadorImpl::getObjectInstanceName(
     ObjectInstanceHandle) {
-  m32_stub("getObjectInstanceName");
+  // §10.10 — need federation state.
+  throw NotConnected(L"DLC RTIambassador: getObjectInstanceName requires "
+                     L"federation connection (M35+).");
 }
 AttributeHandle DLCRTIambassadorImpl::getAttributeHandle(ObjectClassHandle,
                                                          std::wstring const&) {
-  m32_stub("getAttributeHandle");
+  // §10.11 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getAttributeHandle requires "
+                     L"federation connection (M35+).");
 }
 std::wstring DLCRTIambassadorImpl::getAttributeName(ObjectClassHandle,
                                                     AttributeHandle) {
-  m32_stub("getAttributeName");
+  // §10.12 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getAttributeName requires "
+                     L"federation connection (M35+).");
 }
 double DLCRTIambassadorImpl::getUpdateRateValue(std::wstring const&) {
-  m32_stub("getUpdateRateValue");
+  // §10.13 — need FOM state (update-rate designators are FOM-declared).
+  throw InvalidUpdateRateDesignator(L"DLC RTIambassador: no FOM loaded "
+                                    L"(federation connection deferred M35+).");
 }
 double DLCRTIambassadorImpl::getUpdateRateValueForAttribute(
     ObjectInstanceHandle, AttributeHandle) {
-  m32_stub("getUpdateRateValueForAttribute");
+  // §10.14 — need federation state.
+  throw NotConnected(L"DLC RTIambassador: getUpdateRateValueForAttribute "
+                     L"requires federation connection (M35+).");
 }
 InteractionClassHandle DLCRTIambassadorImpl::getInteractionClassHandle(
     std::wstring const&) {
-  m32_stub("getInteractionClassHandle");
+  // §10.15 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getInteractionClassHandle requires "
+                     L"federation connection (M35+).");
 }
 std::wstring DLCRTIambassadorImpl::getInteractionClassName(
     InteractionClassHandle) {
-  m32_stub("getInteractionClassName");
+  // §10.16 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getInteractionClassName requires "
+                     L"federation connection (M35+).");
 }
 ParameterHandle DLCRTIambassadorImpl::getParameterHandle(
     InteractionClassHandle, std::wstring const&) {
-  m32_stub("getParameterHandle");
+  // §10.17 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getParameterHandle requires "
+                     L"federation connection (M35+).");
 }
 std::wstring DLCRTIambassadorImpl::getParameterName(InteractionClassHandle,
                                                     ParameterHandle) {
-  m32_stub("getParameterName");
+  // §10.18 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getParameterName requires "
+                     L"federation connection (M35+).");
 }
-OrderType DLCRTIambassadorImpl::getOrderType(std::wstring const&) {
-  m32_stub("getOrderType");
+
+// §10.19 getOrderType — spec-defined name ↔ enum mapping. Names per
+// IEEE 1516.1-2010 Table 10-1: L"Receive", L"TimeStamp".
+OrderType DLCRTIambassadorImpl::getOrderType(std::wstring const& orderName) {
+  if (orderName == L"Receive") return RECEIVE;
+  if (orderName == L"TimeStamp") return TIMESTAMP;
+  throw InvalidOrderName(L"DLC RTIambassador: unknown OrderType name '" +
+                         orderName + L"'.");
 }
-std::wstring DLCRTIambassadorImpl::getOrderName(OrderType) {
-  m32_stub("getOrderName");
+std::wstring DLCRTIambassadorImpl::getOrderName(OrderType theType) {
+  switch (theType) {
+    case RECEIVE:   return L"Receive";
+    case TIMESTAMP: return L"TimeStamp";
+  }
+  throw InvalidOrderType(L"DLC RTIambassador: OrderType out of range.");
 }
+
+// §10.21 getTransportationType — spec-defined name ↔ enum mapping. Names per
+// IEEE 1516.1-2010 Table 10-1: L"HLAreliable", L"HLAbestEffort".
 TransportationType DLCRTIambassadorImpl::getTransportationType(
-    std::wstring const&) {
-  m32_stub("getTransportationType");
+    std::wstring const& transportationName) {
+  if (transportationName == L"HLAreliable")   return RELIABLE;
+  if (transportationName == L"HLAbestEffort") return BEST_EFFORT;
+  throw InvalidTransportationName(
+      L"DLC RTIambassador: unknown TransportationType name '" +
+      transportationName + L"'.");
 }
-std::wstring DLCRTIambassadorImpl::getTransportationName(TransportationType) {
-  m32_stub("getTransportationName");
+std::wstring DLCRTIambassadorImpl::getTransportationName(
+    TransportationType theType) {
+  switch (theType) {
+    case RELIABLE:    return L"HLAreliable";
+    case BEST_EFFORT: return L"HLAbestEffort";
+  }
+  throw InvalidTransportationType(
+      L"DLC RTIambassador: TransportationType out of range.");
 }
+
 DimensionHandleSet DLCRTIambassadorImpl::getAvailableDimensionsForClassAttribute(
     ObjectClassHandle, AttributeHandle) {
-  m32_stub("getAvailableDimensionsForClassAttribute");
+  // §10.23 — need FOM state (dimensions are FOM-declared).
+  throw NotConnected(L"DLC RTIambassador: getAvailableDimensionsForClass"
+                     L"Attribute requires federation connection (M35+).");
 }
 DimensionHandleSet
 DLCRTIambassadorImpl::getAvailableDimensionsForInteractionClass(
     InteractionClassHandle) {
-  m32_stub("getAvailableDimensionsForInteractionClass");
+  // §10.24 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getAvailableDimensionsForInteraction"
+                     L"Class requires federation connection (M35+).");
 }
 DimensionHandle DLCRTIambassadorImpl::getDimensionHandle(std::wstring const&) {
-  m32_stub("getDimensionHandle");
+  // §10.25 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getDimensionHandle requires "
+                     L"federation connection (M35+).");
 }
-std::wstring DLCRTIambassadorImpl::getDimensionName(DimensionHandle) {
-  m32_stub("getDimensionName");
+std::wstring DLCRTIambassadorImpl::getDimensionName(DimensionHandle theHandle) {
+  // §10.26 — need FOM state.
+  if (!theHandle.isValid())
+    throw InvalidDimensionHandle(L"getDimensionName");
+  throw NotConnected(L"DLC RTIambassador: getDimensionName requires "
+                     L"federation connection (M35+).");
 }
-unsigned long DLCRTIambassadorImpl::getDimensionUpperBound(DimensionHandle) {
-  m32_stub("getDimensionUpperBound");
+unsigned long DLCRTIambassadorImpl::getDimensionUpperBound(
+    DimensionHandle theHandle) {
+  // §10.27 — need FOM state.
+  if (!theHandle.isValid())
+    throw InvalidDimensionHandle(L"getDimensionUpperBound");
+  throw NotConnected(L"DLC RTIambassador: getDimensionUpperBound requires "
+                     L"federation connection (M35+).");
 }
-DimensionHandleSet DLCRTIambassadorImpl::getDimensionHandleSet(RegionHandle) {
-  m32_stub("getDimensionHandleSet");
+DimensionHandleSet DLCRTIambassadorImpl::getDimensionHandleSet(
+    RegionHandle theRegion) {
+  // §10.28 — need region-registry state.
+  if (!theRegion.isValid()) throw InvalidRegion(L"getDimensionHandleSet");
+  throw NotConnected(L"DLC RTIambassador: getDimensionHandleSet requires "
+                     L"federation connection (M35+).");
 }
-RangeBounds DLCRTIambassadorImpl::getRangeBounds(RegionHandle,
-                                                 DimensionHandle) {
-  m32_stub("getRangeBounds");
+RangeBounds DLCRTIambassadorImpl::getRangeBounds(RegionHandle theRegion,
+                                                 DimensionHandle theDim) {
+  // §10.29 — need region-registry state.
+  if (!theRegion.isValid()) throw InvalidRegion(L"getRangeBounds");
+  if (!theDim.isValid()) throw InvalidDimensionHandle(L"getRangeBounds");
+  throw NotConnected(L"DLC RTIambassador: getRangeBounds requires "
+                     L"federation connection (M35+).");
 }
-void DLCRTIambassadorImpl::setRangeBounds(RegionHandle, DimensionHandle,
-                                          RangeBounds const&) {
-  m32_stub("setRangeBounds");
+void DLCRTIambassadorImpl::setRangeBounds(RegionHandle theRegion,
+                                          DimensionHandle theDim,
+                                          RangeBounds const& bounds) {
+  // §10.30 — need region-registry state. Validate arguments per spec
+  // before failing on connectivity.
+  if (!theRegion.isValid()) throw InvalidRegion(L"setRangeBounds");
+  if (!theDim.isValid()) throw InvalidDimensionHandle(L"setRangeBounds");
+  if (bounds.getLowerBound() > bounds.getUpperBound())
+    throw InvalidRangeBound(L"setRangeBounds: lower > upper.");
+  throw NotConnected(L"DLC RTIambassador: setRangeBounds requires "
+                     L"federation connection (M35+).");
 }
-unsigned long DLCRTIambassadorImpl::normalizeFederateHandle(FederateHandle) {
-  m32_stub("normalizeFederateHandle");
+
+// §10.31 normalizeFederateHandle — returns a stable per-federation numeric
+// tag suitable as a random-partition seed. The gorti Handle PIMPL stores a
+// uint64 internally; hash() exposes the low 32 bits as a long, which suffices
+// as a normalization value.
+unsigned long DLCRTIambassadorImpl::normalizeFederateHandle(
+    FederateHandle theHandle) {
+  if (!theHandle.isValid())
+    throw InvalidFederateHandle(L"normalizeFederateHandle: invalid handle.");
+  return static_cast<unsigned long>(theHandle.hash());
 }
-unsigned long DLCRTIambassadorImpl::normalizeServiceGroup(ServiceGroup) {
-  m32_stub("normalizeServiceGroup");
+
+// §10.32 normalizeServiceGroup — enum → tag. Cast is safe: the enum
+// values are 0..6 for the 7 service groups per IEEE 1516.1-2010 §10.32.
+unsigned long DLCRTIambassadorImpl::normalizeServiceGroup(ServiceGroup group) {
+  switch (group) {
+    case FEDERATION_MANAGEMENT:        return 0;
+    case DECLARATION_MANAGEMENT:       return 1;
+    case OBJECT_MANAGEMENT:            return 2;
+    case OWNERSHIP_MANAGEMENT:         return 3;
+    case TIME_MANAGEMENT:              return 4;
+    case DATA_DISTRIBUTION_MANAGEMENT: return 5;
+    case SUPPORT_SERVICES:             return 6;
+  }
+  throw InvalidServiceGroup(L"normalizeServiceGroup: enum out of range.");
 }
-void DLCRTIambassadorImpl::enableObjectClassRelevanceAdvisorySwitch() {
-  m32_stub("enableObjectClassRelevanceAdvisorySwitch");
-}
-void DLCRTIambassadorImpl::disableObjectClassRelevanceAdvisorySwitch() {
-  m32_stub("disableObjectClassRelevanceAdvisorySwitch");
-}
-void DLCRTIambassadorImpl::enableAttributeRelevanceAdvisorySwitch() {
-  m32_stub("enableAttributeRelevanceAdvisorySwitch");
-}
-void DLCRTIambassadorImpl::disableAttributeRelevanceAdvisorySwitch() {
-  m32_stub("disableAttributeRelevanceAdvisorySwitch");
-}
-void DLCRTIambassadorImpl::enableAttributeScopeAdvisorySwitch() {
-  m32_stub("enableAttributeScopeAdvisorySwitch");
-}
-void DLCRTIambassadorImpl::disableAttributeScopeAdvisorySwitch() {
-  m32_stub("disableAttributeScopeAdvisorySwitch");
-}
-void DLCRTIambassadorImpl::enableInteractionRelevanceAdvisorySwitch() {
-  m32_stub("enableInteractionRelevanceAdvisorySwitch");
-}
-void DLCRTIambassadorImpl::disableInteractionRelevanceAdvisorySwitch() {
-  m32_stub("disableInteractionRelevanceAdvisorySwitch");
-}
-bool DLCRTIambassadorImpl::evokeCallback(double) {
-  m32_stub("evokeCallback");
-}
+
+// §10.33-10.40 — 8 advisory-switch on/off pairs. No advisory infrastructure
+// is wired in DLC M33 yet, so these silently succeed (spec-legal — the
+// setter contract only requires void return). Once M35 lands a real
+// dispatch layer, the switches will gate advisory-callback dispatch.
+void DLCRTIambassadorImpl::enableObjectClassRelevanceAdvisorySwitch() {}
+void DLCRTIambassadorImpl::disableObjectClassRelevanceAdvisorySwitch() {}
+void DLCRTIambassadorImpl::enableAttributeRelevanceAdvisorySwitch() {}
+void DLCRTIambassadorImpl::disableAttributeRelevanceAdvisorySwitch() {}
+void DLCRTIambassadorImpl::enableAttributeScopeAdvisorySwitch() {}
+void DLCRTIambassadorImpl::disableAttributeScopeAdvisorySwitch() {}
+void DLCRTIambassadorImpl::enableInteractionRelevanceAdvisorySwitch() {}
+void DLCRTIambassadorImpl::disableInteractionRelevanceAdvisorySwitch() {}
+
+// §10.41 evokeCallback — single-arg spec form (catalogue 13.11).
+// No event queue in DLC M33 yet; returns false to signal "no more callbacks
+// pending". Federate can loop on this call safely.
+bool DLCRTIambassadorImpl::evokeCallback(double) { return false; }
+
+// §10.42 evokeMultipleCallbacks — 2 args, no defaults (catalogue 13.12).
+// Same rationale as evokeCallback: no queued events, return false.
 bool DLCRTIambassadorImpl::evokeMultipleCallbacks(double, double) {
-  m32_stub("evokeMultipleCallbacks");
+  return false;
 }
-void DLCRTIambassadorImpl::enableCallbacks() { m32_stub("enableCallbacks"); }
-void DLCRTIambassadorImpl::disableCallbacks() { m32_stub("disableCallbacks"); }
-rti1516e::auto_ptr<LogicalTimeFactory> DLCRTIambassadorImpl::getTimeFactory() {
-  m32_stub("getTimeFactory");
+
+// §10.43-10.44 enable/disableCallbacks — no dispatch loop to gate yet;
+// silently succeed.
+void DLCRTIambassadorImpl::enableCallbacks() {}
+void DLCRTIambassadorImpl::disableCallbacks() {}
+
+// §10 (catalogue 13.14) getTimeFactory — returns the federation's logical-time
+// factory. The factory-factory chain (LogicalTimeFactoryFactory → concrete
+// HLAfloat64TimeFactory) requires a federation connection to know which
+// implementation name was negotiated at join time. Until M35 lands that,
+// we throw a spec-legal exception rather than return a null unique_ptr
+// (which would trip caller-side UB on the first dereference).
+rti1516e::auto_ptr<LogicalTimeFactory>
+DLCRTIambassadorImpl::getTimeFactory() const {
+  throw CouldNotCreateLogicalTimeFactory(
+      L"DLC RTIambassador: getTimeFactory requires federation connection "
+      L"(M35+); factory-factory chain deferred.");
 }
 
 }  // namespace rti1516e  (temporarily close for friend-shim definitions)
@@ -572,40 +707,44 @@ DEFINE_HANDLE_FRIEND(RegionHandle)
 
 namespace rti1516e {
 
+// §10 (catalogue 13.15) — 9 decode*Handle methods. All `const` per Agent F's
+// M32 drift fix. Impl: each Friend shim invokes the handle's
+// VariableLengthData ctor (declared `protected` by DEFINE_HANDLE_CLASS
+// so we can't call it directly from a free function).
 FederateHandle DLCRTIambassadorImpl::decodeFederateHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return FederateHandleFriend::decode(v);
 }
 ObjectClassHandle DLCRTIambassadorImpl::decodeObjectClassHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return ObjectClassHandleFriend::decode(v);
 }
 InteractionClassHandle DLCRTIambassadorImpl::decodeInteractionClassHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return InteractionClassHandleFriend::decode(v);
 }
 ObjectInstanceHandle DLCRTIambassadorImpl::decodeObjectInstanceHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return ObjectInstanceHandleFriend::decode(v);
 }
 AttributeHandle DLCRTIambassadorImpl::decodeAttributeHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return AttributeHandleFriend::decode(v);
 }
 ParameterHandle DLCRTIambassadorImpl::decodeParameterHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return ParameterHandleFriend::decode(v);
 }
 DimensionHandle DLCRTIambassadorImpl::decodeDimensionHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return DimensionHandleFriend::decode(v);
 }
 MessageRetractionHandle DLCRTIambassadorImpl::decodeMessageRetractionHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return MessageRetractionHandleFriend::decode(v);
 }
 RegionHandle DLCRTIambassadorImpl::decodeRegionHandle(
-    VariableLengthData const& v) {
+    VariableLengthData const& v) const {
   return RegionHandleFriend::decode(v);
 }
 
