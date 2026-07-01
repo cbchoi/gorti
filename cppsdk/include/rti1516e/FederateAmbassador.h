@@ -22,7 +22,15 @@
 
 #include "Types.h"
 
-namespace rti1516e {
+// M35 (Agent BF-2) — M17 shim deprecation gate. See Types.h for the pattern;
+// FederateAmbassador.h re-declares locally for header independence.
+#ifdef GORTI_ACCEPT_M17_SHIM
+#  define GORTI_M17_SHIM_DEPRECATED_FA /* silenced */
+#else
+#  define GORTI_M17_SHIM_DEPRECATED_FA \
+     [[deprecated("gorti M17 shim — use <RTI/...> per IEEE 1516.1-2010 DLC (M35). Define GORTI_ACCEPT_M17_SHIM to silence.")]]
+#endif
+namespace GORTI_M17_SHIM_DEPRECATED_FA rti1516e {
 
 class FederateAmbassador {
  public:

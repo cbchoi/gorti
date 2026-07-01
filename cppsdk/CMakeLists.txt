@@ -37,6 +37,21 @@ endif()
 # Standard CMake hygiene.
 add_compile_options(-Wall -Wextra -Wpedantic)
 
+# --- M35 (Agent BF-2) — M17 shim silencer ---------------------------------
+#
+# Every rti1516e:: header in cppsdk/include/rti1516e/ is annotated with a
+# [[deprecated]] namespace attribute guarded by #ifndef GORTI_ACCEPT_M17_SHIM.
+# We define the macro globally here so the internal build (M17 library, M17
+# tests, and the DLC bridges that #include M17 for delegation) stays quiet
+# during the M31-M35 transition. External consumers who directly include an
+# rti1516e/ header without defining the macro will see the deprecation
+# diagnostic — that is the intended migration signal toward <RTI/...>.
+#
+# When M17 is retired (post-M35), remove this line; any remaining reliance
+# on rti1516e:: symbols will then surface as a hard warning (or, under
+# -Werror, an error).
+add_compile_definitions(GORTI_ACCEPT_M17_SHIM)
+
 # --- Dependencies ---------------------------------------------------------
 
 find_package(Protobuf CONFIG REQUIRED)

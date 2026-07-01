@@ -26,7 +26,16 @@
 
 #include "Types.h"
 
-namespace rti1516e::encoding {
+// M35 (Agent BF-2) — M17 shim deprecation gate. See Types.h for the full
+// macro definition; the encoding namespace piggybacks on the same silencer.
+#ifdef GORTI_ACCEPT_M17_SHIM
+#  define GORTI_M17_SHIM_DEPRECATED_ENC /* silenced */
+#else
+#  define GORTI_M17_SHIM_DEPRECATED_ENC \
+     [[deprecated("gorti M17 shim — use <RTI/...> per IEEE 1516.1-2010 DLC (M35). Define GORTI_ACCEPT_M17_SHIM to silence.")]]
+#endif
+namespace rti1516e {
+namespace GORTI_M17_SHIM_DEPRECATED_ENC encoding {
 
 class EncodingError : public std::runtime_error {
   using std::runtime_error::runtime_error;
@@ -438,4 +447,5 @@ inline std::vector<VariableLengthData> decodeHLAfixedRecordAligned(
   return out;
 }
 
-}  // namespace rti1516e::encoding
+}  // namespace encoding
+}  // namespace rti1516e

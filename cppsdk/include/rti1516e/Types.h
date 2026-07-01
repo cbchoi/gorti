@@ -24,7 +24,21 @@
 #include <string>
 #include <vector>
 
-namespace rti1516e {
+// M35 (Agent BF-2) — M17 shim deprecation gate.
+// The rti1516e:: header hierarchy is gorti's pre-M32 shim; new federate code
+// should target the strict IEEE 1516.1-2010 DLC surface under <RTI/...>. The
+// namespace attribute fires a deprecation diagnostic on any unqualified use
+// of a name defined here, unless the consumer defines GORTI_ACCEPT_M17_SHIM.
+// Internal builds silence via -DGORTI_ACCEPT_M17_SHIM in cppsdk/CMakeLists.txt.
+// C++17 [dcl.attr.grammar]/6 places the attribute AFTER `namespace` and
+// BEFORE the identifier for a named-namespace-definition.
+#ifdef GORTI_ACCEPT_M17_SHIM
+#  define GORTI_M17_SHIM_DEPRECATED /* silenced */
+#else
+#  define GORTI_M17_SHIM_DEPRECATED \
+     [[deprecated("gorti M17 shim — use <RTI/...> per IEEE 1516.1-2010 DLC (M35). Define GORTI_ACCEPT_M17_SHIM to silence.")]]
+#endif
+namespace GORTI_M17_SHIM_DEPRECATED rti1516e {
 
 // Underlying integer width for every handle. Matches the proto wire
 // (uint64) and the Python SDK's int handles. Zero is reserved as the
