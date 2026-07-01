@@ -55,10 +55,14 @@ int main() {
     std::vector<std::wstring> fom_modules{L"./federation.fom.xml"};
     try {
       amb->createFederationExecution(L"om_helloworld_pubsub", fom_modules);
-      std::cout << "PUB: CREATE federation=om_helloworld_pubsub" << std::endl;
     } catch (const rti1516e::FederationExecutionAlreadyExists&) {
-      // Race-tolerant: another federate may have created it.
+      // Race-tolerant: another federate (or a prior run holding the
+      // manager's federation registry) may have created it. Per Pitch
+      // pRTI's golden trace, `PUB: CREATE` is unconditional — the spec
+      // §4.5 postcondition is "the named federation exists", which is
+      // true in both the created-just-now and already-existed branches.
     }
+    std::cout << "PUB: CREATE federation=om_helloworld_pubsub" << std::endl;
 
     amb->joinFederationExecution(L"publisher", L"om_helloworld_pubsub");
     std::cout << "PUB: JOIN federate=publisher" << std::endl;
