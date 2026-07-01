@@ -359,6 +359,36 @@ Spec tests: 11 in `rti/spec/M24/` + 4 in `pysdk/tests/spec/m24/` = 15 total.
 |---|---|---|---|
 | **M31** | Agent D (C++) | DLC lockfile RED scaffold | ✓ ~200 lockfile TUs / 27 conformance fixtures / 30 RTI/ stubs / 8 docs / 3 scripts landed. 27 PASS / 13 RED-at-per-axis at integration. **DONE 2026-07-01** — see `docs/M31_DISPATCH_PLAN.md` and 5-agent fan-out in worktree branches. |
 | **M32** | Agents F/G/H | DLC headers + ctor + handles + VLD GREEN (~50/200) | 40 lockfile TUs at PASS (from 27), 664 direct static_asserts + 155 macro-expanded assertions locked, catalogue §1+§2+§5+§7+§8+§15 GREEN. 16 of 27 conformance fixtures LINK against new `librti1516e_dlc.a` (1055564 bytes). Remaining 4 LINK_FAILs are fixture-code bugs (spec-invalid method calls in `own_*` and `tm_*` fixtures — surfaced by lockfile, tracked for M33 W1); 7 PARSE_FAILs need per-class encoding stubs (`RTI/encoding/HLAfloat64BE.h` etc — Agent E ship aggregated `BasicDataElements.h` only; per-class break-out is M33 W2). `cppsdk/src/dlc/` lands with `RTIambassadorImpl` wstring-adapter wrapping M17 impl (~120 methods throw `RTIinternalError("M32 stub — impl deferred to M33+")`). **DONE 2026-07-02** — see M32-{F,G,H} merges. |
+| **M33** | Agents I/J/K/L/M/N/O | DLC callbacks + exceptions + ownership + DDM + obj-mgmt (~100/200) | TBD lockfile TUs (from 40 → N). ~120 exception classes impl'd. FederateAmbassador expanded to ~40 methods with 3+3+3+2 overloads for the 4 event callbacks. §6+§7+§9+§10 sections of `cppsdk/src/dlc/RTIambassadorImpl.cpp` now real impl (no longer M32 stubs). N of 27 conformance fixtures LINK; M RUN end-to-end. **First gorti↔Pitch parity diff on `om_helloworld_pubsub`: NOT_YET_ATTEMPTED** (Agent O pre-merge measurement 2026-07-02: fixture compiles clean against M32 headers, but runtime attempt is blocked — `RTIambassador::connect()` throws `RTIinternalError("M32 stub — impl deferred to M33+")` at line 51 of `federate_publisher.cpp`; no `PUB: CONNECT` line reaches stdout). Re-attempt after Agents K (§4.2 `connect`), L (§6 register/update/send), and J (subscriber-side callback dispatch) merge. **IN PROGRESS 2026-07-02** — orchestrator fills counts + DONE date after 7-agent fan-out (I/J/K/L/M/N/O) merges. |
+
+#### M33 — DLC callbacks + exceptions + ownership + DDM + obj-mgmt (~100/200) — orchestrator placeholder
+
+Third milestone of the DLC compliance track. Flips catalogue sections **§3 (federation lifecycle behavioral) + §4 (FederateAmbassador callbacks) + §6 (~120 exception classes) + §10 (object mgmt behavioral) + §11 (ownership mgmt behavioral) + §12 (DDM behavioral) + §13 (support services)** from RED/M32-stub→GREEN per `docs/DLC_COMPLIANCE_PROGRAM.md §6`. Acceptance gate: `cppsdk/src/dlc/RTIambassadorImpl.cpp` §6+§7+§9+§10 sections no longer throw `RTIinternalError("M32 stub — impl deferred to M33+")`; ≥1 conformance fixture RUNS end-to-end against gorti rtid; first real gorti↔Pitch parity diff attempted on `om_helloworld_pubsub`.
+
+Seven-agent fan-out (I/J/K/L/M/N/O):
+
+- **Agent I** — Exception hierarchy: ~120 concrete exception classes derived from `rti1516e::Exception` (Annex C). Every RTI method that the spec declares to throw a specific exception now throws the concrete type, not `RTIinternalError`.
+- **Agent J** — FederateAmbassador callback surface: expand from Cut-1's minimal shape to ~40 methods per §4.4-§4.15 + §6.9-§6.20 + §7.4-§7.18 + §8.3-§8.13 (announce/synchronization + discover/reflect/receive/remove + ownership event callbacks + timeAdvanceGrant + save/restore callbacks). 3+3+3+2 overload count for the 4 canonical event callbacks (discover/reflect/receive/remove).
+- **Agent K** — Support services + Federation lifecycle behavioral: §10.2 handle lookups already GREEN via M17 transport; M33 adds `getObjectClassName` / `getAttributeName` / etc. reverse-lookup + `getDimensionUpperBound` + `getOrderType` + `getTransportationType` for DLC surface. §4.2/§4.5/§4.9/§4.10 connect/create/join/resign real impl (no longer M32 stub-throw).
+- **Agent L** — Object Management §6 real impl (not M32 stub): `registerObjectInstance` / `updateAttributeValues` / `sendInteraction` / `deleteObjectInstance` / `localDeleteObjectInstance` / `requestAttributeValueUpdate` / `changeAttributeTransportationType` / etc. plus the callback-fill for `discoverObjectInstance` / `reflectAttributeValues` / `receiveInteraction` / `removeObjectInstance`.
+- **Agent M** — Ownership Management §7 real impl: `unconditionalAttributeOwnershipDivestiture` / `negotiatedAttributeOwnershipDivestiture` / `attributeOwnershipAcquisition` / `queryAttributeOwnership` / `isAttributeOwnedByFederate` / the cancel variants / `divestIfWanted`. Wire through to M17 ownership transport.
+- **Agent N** — DDM §9 real impl: routing space + dimension lookups, region create/setRangeBounds/commit/delete/query, region-aware subscribe/unsubscribe (attribute + interaction), `registerObjectInstanceWithRegions` / `associateRegionsForUpdates` / `sendInteractionWithRegions` / `requestAttributeValueUpdateWithRegions`. Wire through to M17 DDM transport.
+- **Agent O** — Acceptance gate / CHANGELOG / PITCH_PARITY / spec-coverage refresh / **first gorti↔Pitch parity diff attempt on `om_helloworld_pubsub`** / memory rollup (this entry).
+
+Out of scope for M33 (defer to M34+):
+- Encoding helpers per-class break-out (catalogue §9) — M34 (`RTI/encoding/HLAfloat64BE.h` etc. as separate headers vs the aggregated `BasicDataElements.h`).
+- Time types full behavioral conformance (catalogue §14) — M34.
+- MOM full behavioral + `[[deprecated]]` on `rti1516e/RtiAmbassador.h` M17 transport surface — M35.
+- IVCT-derived conformance subset — M35.
+- Remaining PENDING Pitch goldens for 17 fixtures beyond `om_helloworld_pubsub` — M34+ as impl coverage expands (see `docs/PITCH_PARITY.md §"DLC fixture Pitch-capture status"`).
+
+Status reported by `scripts/check-milestones.sh check_m33` (6 probes). Spec-coverage matrix refreshed by `scripts/gen-spec-coverage.sh`.
+
+**Note:** The M33 row above ships with placeholder counts until Agents I/J/K/L/M/N merge; Agent O's final task (O-3) is to backfill those numbers + the parity-diff outcome + DONE date once the fan-out completes.
+
+Final M33 count + close date filled in by orchestrator after Agents I + J + K + L + M + N merge to main.
+
+---
 
 #### M32 — DLC headers + ctor + handles + VLD GREEN (~50/200) — orchestrator placeholder
 

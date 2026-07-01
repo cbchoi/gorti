@@ -1161,11 +1161,138 @@ check_m32() {
   else set_status M32 NOT_STARTED; printf "${DIM}M32: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M33: DLC callbacks + exceptions + ownership + DDM + obj-mgmt (~100/200 GREEN) ----------
+check_m33() {
+  section "M33 — DLC callbacks + exceptions + ownership + DDM + obj-mgmt (~100/200)"
+  echo "Exit (docs/DLC_COMPLIANCE_PROGRAM.md §6 M33 row): catalogue §3+§4+§6+§10+§11+§12+§13 flip RED/M32-stub→GREEN; ≥1 conformance fixture RUNS end-to-end; first gorti↔Pitch parity diff attempted"
+  local pass=0 total=6
+
+  # Probe 1: ~100 lockfile TUs GREEN (target from program doc; measure via
+  # compile-only heuristic like check_m32, threshold raised to 100).
+  local pass_count=0
+  if [ -d cppsdk/tests/dlc/lockfile ] && command -v g++ >/dev/null 2>&1; then
+    # shellcheck disable=SC2044
+    while IFS= read -r tu; do
+      if g++ -c -std=c++17 -I cppsdk/include "$tu" -o /dev/null 2>/dev/null; then
+        pass_count=$((pass_count+1))
+      fi
+    done < <(find cppsdk/tests/dlc/lockfile -name '*.cpp' 2>/dev/null)
+  fi
+  if [ "$pass_count" -ge 100 ]; then
+    present "≥100 lockfile TUs compile clean against headers (have $pass_count) — M33 GREEN target hit"
+    pass=$((pass+1))
+  else
+    pending "$pass_count / 100 lockfile TUs compile clean — M33 not yet at GREEN target"
+  fi
+
+  # Probe 2: ≥120 exception classes impl'd (~Annex C classes derived from
+  # rti1516e::Exception). Count `class X : public.*Exception` or `: public X`
+  # for known immediate bases across cppsdk/include/RTI/ and cppsdk/src/dlc/.
+  local exc_count=0
+  if [ -d cppsdk/include/RTI ]; then
+    exc_count=$(grep -rhE 'class\s+RTI_EXPORT\s+[A-Za-z0-9_]+\s*:\s*public\s+([A-Za-z0-9_]*Exception|[A-Za-z0-9_:]+Error)' \
+      cppsdk/include/RTI 2>/dev/null | wc -l | tr -d ' ')
+    # Fallback pattern without RTI_EXPORT decoration:
+    if [ "$exc_count" -lt 30 ]; then
+      exc_count=$(grep -rhE 'class\s+[A-Za-z0-9_]+\s*:\s*public\s+(rti1516e::)?Exception' \
+        cppsdk/include/RTI cppsdk/src/dlc 2>/dev/null | wc -l | tr -d ' ')
+    fi
+  fi
+  if [ "$exc_count" -ge 120 ]; then
+    present "≥120 concrete exception classes derived from Exception (have $exc_count)"
+    pass=$((pass+1))
+  else
+    pending "$exc_count / 120 concrete exception classes derived from Exception"
+  fi
+
+  # Probe 3: FederateAmbassador has ≥30 methods (M17 Cut-1 had ~10 -
+  # M33 target is ~40). Count `virtual ... (` lines in
+  # cppsdk/include/RTI/FederateAmbassador.h.
+  local fa_methods=0
+  if [ -f cppsdk/include/RTI/FederateAmbassador.h ]; then
+    fa_methods=$(grep -cE '^\s*virtual\s+[A-Za-z:_][^(]*\(' cppsdk/include/RTI/FederateAmbassador.h 2>/dev/null | tr -d ' ')
+    fa_methods="${fa_methods:-0}"
+  fi
+  if [ "$fa_methods" -ge 30 ]; then
+    present "FederateAmbassador.h has $fa_methods virtual methods (≥30 expected for M33)"
+    pass=$((pass+1))
+  else
+    pending "FederateAmbassador.h has only $fa_methods virtual methods (30 expected for M33)"
+  fi
+
+  # Probe 4: RTIambassadorImpl §6/§7/§9/§10 sections no longer throw
+  # "M32 stub — impl deferred to M33+". Count the actual `m32_stub("...")`
+  # call sites remaining in cppsdk/src/dlc/RTIambassadorImpl.cpp; when M33
+  # lands the per-section impls, this count drops from ~139 toward the
+  # M34+ residual (~40 for encoding/time/MOM per program §6 M34/M35 rows).
+  # M33 acceptance target: ≤80 call sites remaining after §6/§7/§9/§10
+  # impls land.
+  local m32_stub_remain=0
+  if [ -f cppsdk/src/dlc/RTIambassadorImpl.cpp ]; then
+    m32_stub_remain=$(grep -cE '\bm32_stub\s*\(' cppsdk/src/dlc/RTIambassadorImpl.cpp 2>/dev/null | tr -d ' ')
+    m32_stub_remain="${m32_stub_remain:-0}"
+  fi
+  if [ "$m32_stub_remain" -le 80 ]; then
+    present "RTIambassadorImpl.cpp has ≤80 m32_stub() call sites remaining (have $m32_stub_remain — §6/§7/§9/§10 impl'd)"
+    pass=$((pass+1))
+  else
+    pending "RTIambassadorImpl.cpp still has $m32_stub_remain m32_stub() call sites (≤80 expected after M33 §6+§7+§9+§10 impl)"
+  fi
+
+  # Probe 5: Real gorti↔Pitch parity diff result on om_helloworld_pubsub.
+  # Detect via a sentinel line in the CHANGELOG-MASTERPLAN.md or the fixture
+  # dir. Reports MATCH / PARTIAL / DIVERGE / NOT_YET_ATTEMPTED per the M33
+  # row template.
+  local parity_result="NOT_YET_ATTEMPTED"
+  if grep -qE 'First gorti↔Pitch parity diff on `?om_helloworld_pubsub`?:\s*MATCH' CHANGELOG-MASTERPLAN.md 2>/dev/null; then
+    parity_result="MATCH"
+  elif grep -qE 'First gorti↔Pitch parity diff on `?om_helloworld_pubsub`?:\s*PARTIAL' CHANGELOG-MASTERPLAN.md 2>/dev/null; then
+    parity_result="PARTIAL"
+  elif grep -qE 'First gorti↔Pitch parity diff on `?om_helloworld_pubsub`?:\s*DIVERGE' CHANGELOG-MASTERPLAN.md 2>/dev/null; then
+    parity_result="DIVERGE"
+  fi
+  case "$parity_result" in
+    MATCH)
+      present "First gorti↔Pitch parity diff on om_helloworld_pubsub: MATCH (historic — first identical-against-Pitch evidence)"
+      pass=$((pass+1))
+      ;;
+    PARTIAL)
+      present "First gorti↔Pitch parity diff on om_helloworld_pubsub: PARTIAL (see CHANGELOG for specific diffs)"
+      pass=$((pass+1))
+      ;;
+    DIVERGE)
+      pending "First gorti↔Pitch parity diff on om_helloworld_pubsub: DIVERGE (root-cause pending)"
+      ;;
+    NOT_YET_ATTEMPTED)
+      pending "First gorti↔Pitch parity diff on om_helloworld_pubsub: NOT_YET_ATTEMPTED (impls incomplete)"
+      ;;
+  esac
+
+  # Probe 6: CHANGELOG + PITCH_PARITY updated for M33.
+  local docs_ok=0
+  if grep -qE '^\| \*\*M33\*\*|^#### M33 — ' CHANGELOG-MASTERPLAN.md 2>/dev/null; then
+    docs_ok=$((docs_ok+1))
+  fi
+  if grep -qE 'M33-resolved|M33-in-progress|M33 catalogue progress|M33 progress' docs/PITCH_PARITY.md 2>/dev/null; then
+    docs_ok=$((docs_ok+1))
+  fi
+  if [ "$docs_ok" -eq 2 ]; then
+    present "CHANGELOG-MASTERPLAN.md + docs/PITCH_PARITY.md updated for M33"
+    pass=$((pass+1))
+  else
+    pending "CHANGELOG-MASTERPLAN.md and/or docs/PITCH_PARITY.md M33 update missing ($docs_ok / 2 present)"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M33 DONE; printf "${GRN}M33: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M33 IN_PROGRESS; printf "${YLW}M33: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M33 NOT_STARTED; printf "${DIM}M33: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28 M31 M32; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28 M31 M32 M33; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -1207,6 +1334,7 @@ check_m28
 check_m14
 check_m31
 check_m32
+check_m33
 print_summary
 
 exit "$REGRESSED"
