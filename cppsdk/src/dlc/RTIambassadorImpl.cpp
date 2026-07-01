@@ -403,52 +403,104 @@ void DLCRTIambassadorImpl::requestAttributeValueUpdate(
 }
 
 // ===== §7 Ownership Management =====
+//
+// M33-K: signature-parity impls per IEEE 1516.1-2010 §7.2-7.19 and
+// docs/DLC_DIVERGENCE_CATALOGUE.md §12 (rows 12.1-12.7). Bodies here
+// are deliberately minimal (no persistent ownership state; no
+// FederateAmbassador is bound on this impl until §4 connect() is
+// implemented in M34+). They satisfy the vtable + spec signature +
+// out-param contracts so §7 conformance fixtures LINK cleanly.
+//
+// Runtime callback delivery (requestDivestitureConfirmation,
+// attributeOwnershipAcquisitionNotification, informAttributeOwnership,
+// attributeIsNotOwned, attributeIsOwnedByRTI, attributeOwnershipUnavailable)
+// is deferred to M34+ once §4 `connect()` stores the bound
+// FederateAmbassador reference on the impl.
+
+// §7.2 — unconditional divest. Void return; no side-effects modeled.
 void DLCRTIambassadorImpl::unconditionalAttributeOwnershipDivestiture(
     ObjectInstanceHandle, AttributeHandleSet const&) {
-  m32_stub("unconditionalAttributeOwnershipDivestiture");
+  // no-op: real ownership bookkeeping deferred to M34+.
 }
+
+// §7.3 — negotiated divest (offer to subscribers). Callback delivery of
+// requestAttributeOwnershipAssumption on subscribers is deferred to M34+.
 void DLCRTIambassadorImpl::negotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle, AttributeHandleSet const&,
     VariableLengthData const&) {
-  m32_stub("negotiatedAttributeOwnershipDivestiture");
+  // no-op.
 }
+
+// §7.6 — confirm divest after §7.5 requestDivestitureConfirmation.
+// Catalogue row 12.1: M17 was absent; DLC adds it.
 void DLCRTIambassadorImpl::confirmDivestiture(ObjectInstanceHandle,
                                               AttributeHandleSet const&,
                                               VariableLengthData const&) {
-  m32_stub("confirmDivestiture");
+  // no-op.
 }
+
+// §7.8 — request ownership acquisition with a spec-mandatory tag.
+// Catalogue row 12.2: M17 lacked the tag; DLC adds it (BLOCKING).
 void DLCRTIambassadorImpl::attributeOwnershipAcquisition(
     ObjectInstanceHandle, AttributeHandleSet const&,
     VariableLengthData const&) {
-  m32_stub("attributeOwnershipAcquisition");
+  // no-op.
 }
+
+// §7.9 — acquire-if-available. Per spec this is (object, attributes)
+// with NO tag. Catalogue row 12.3: M17 absent; DLC adds it (MAJOR).
 void DLCRTIambassadorImpl::attributeOwnershipAcquisitionIfAvailable(
     ObjectInstanceHandle, AttributeHandleSet const&) {
-  m32_stub("attributeOwnershipAcquisitionIfAvailable");
+  // no-op.
 }
+
+// §7.12 — release-denied. Catalogue row 12.4: M17 absent; DLC adds
+// it (MAJOR).
 void DLCRTIambassadorImpl::attributeOwnershipReleaseDenied(
     ObjectInstanceHandle, AttributeHandleSet const&) {
-  m32_stub("attributeOwnershipReleaseDenied");
+  // no-op.
 }
+
+// §7.13 — divest-if-wanted. Spec has an out-param filled with the
+// attributes the RTI actually divested. Catalogue row 12.5: M17 had no
+// out-param; DLC adds it (BLOCKING). We clear the out-set — no owner
+// state means nothing was divested this call.
 void DLCRTIambassadorImpl::attributeOwnershipDivestitureIfWanted(
-    ObjectInstanceHandle, AttributeHandleSet const&, AttributeHandleSet&) {
-  m32_stub("attributeOwnershipDivestitureIfWanted");
+    ObjectInstanceHandle, AttributeHandleSet const&,
+    AttributeHandleSet& theDivestedAttributes) {
+  theDivestedAttributes.clear();
 }
+
+// §7.14 — cancel a pending negotiated divest.
 void DLCRTIambassadorImpl::cancelNegotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle, AttributeHandleSet const&) {
-  m32_stub("cancelNegotiatedAttributeOwnershipDivestiture");
+  // no-op.
 }
+
+// §7.15 — cancel a pending acquisition.
 void DLCRTIambassadorImpl::cancelAttributeOwnershipAcquisition(
     ObjectInstanceHandle, AttributeHandleSet const&) {
-  m32_stub("cancelAttributeOwnershipAcquisition");
+  // no-op.
 }
+
+// §7.17 — query ownership. Void return per spec; the answer arrives on
+// a §7.18 callback (informAttributeOwnership / attributeIsNotOwned /
+// attributeIsOwnedByRTI). Catalogue row 12.6 (BLOCKING): M17 returned a
+// synchronous OwnershipQueryResult; DLC drops the return + defers the
+// answer to the FederateAmbassador. M34+ will dispatch the callback on
+// the FederateAmbassador stored by connect().
 void DLCRTIambassadorImpl::queryAttributeOwnership(ObjectInstanceHandle,
                                                    AttributeHandle) {
-  m32_stub("queryAttributeOwnership");
+  // no-op: callback delivery deferred to M34+.
 }
+
+// §7.19 — is this attribute owned by THIS federate? Direct bool per
+// spec. Catalogue row 12.7 (COSMETIC): DLC matches M17 shape. Without
+// stored ownership state we return false conservatively — the fixture
+// won't observe true until M34+ wires real state.
 bool DLCRTIambassadorImpl::isAttributeOwnedByFederate(ObjectInstanceHandle,
                                                       AttributeHandle) {
-  m32_stub("isAttributeOwnedByFederate");
+  return false;
 }
 
 // ===== §8 Time Management =====

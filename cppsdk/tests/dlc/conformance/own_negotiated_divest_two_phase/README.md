@@ -9,7 +9,10 @@ ownership transfer state machine (figure 7.1):
    on **Bob** (§7.4).
 3. Bob calls `attributeOwnershipAcquisition(object, attrs, tag)` (§7.8 —
    the **tag** arg is the divergence catalogue row 12.2 BLOCKING fix).
-4. RTI fires `attributeOwnershipDivestitureNotification` on Alice (§7.5).
+4. RTI fires `requestDivestitureConfirmation(object, attrs)` on Alice
+   (§7.5 — spec-correct callback per IEEE 1516.1-2010
+   FederateAmbassador.h line 414; M31 fixture used the non-existent
+   `attributeOwnershipDivestitureNotification`; M33-K-2 fix).
 5. Alice calls `confirmDivestiture(object, attrs, tag)` (§7.6 — added
    per divergence catalogue row 12.1; gorti M17 had no equivalent).
 6. RTI fires `attributeOwnershipAcquisitionNotification(object, attrs, tag)`
@@ -28,7 +31,7 @@ Per TASK-362 traceability lint:
 - `ALICE: JOIN` — §4.9 joinFederationExecution
 - `ALICE: REGISTER` — §6.8 registerObjectInstance
 - `ALICE: NEGOTIATED_DIVEST` — §7.3 negotiatedAttributeOwnershipDivestiture
-- `ALICE: DIVESTITURE_NOTIFICATION` — §7.5 attributeOwnershipDivestitureNotification
+- `ALICE: REQUEST_DIVESTITURE_CONFIRMATION` — §7.5 requestDivestitureConfirmation
 - `ALICE: CONFIRM_DIVESTITURE` — §7.6 confirmDivestiture
 - `ALICE: RESIGN` — §4.10 resignFederationExecution
 

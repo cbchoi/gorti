@@ -98,10 +98,13 @@ int main(int argc, char** argv) {
       std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
 
-    // §7.9 — race: both bob and carol fire this simultaneously.
-    rti1516e::VariableLengthData tag;
+    // §7.9 — race: both bob and carol fire this simultaneously. Per
+    // IEEE 1516.1-2010 §7.9 (RTIambassador.h line 773-787), this method
+    // is (object, attributes) — NO tag arg. M33-K-3 fix: M31 fixture
+    // (Agent C) passed a 3rd tag arg matching §7.8 attributeOwnership-
+    // Acquisition; that signature is wrong for §7.9.
     amb->attributeOwnershipAcquisitionIfAvailable(fed.discovered_obj_,
-                                                  attrs, tag);
+                                                  attrs);
     std::cout << upper << ": ACQUIRE_IF_AVAILABLE attrs=[Position]"
               << std::endl;
 
