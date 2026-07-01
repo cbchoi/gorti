@@ -39,3 +39,35 @@ set_tests_properties(conformance__runtime_exceptions PROPERTIES
 if(TARGET dlc_conformance)
   add_dependencies(dlc_conformance test_conf__runtime_exceptions)
 endif()
+
+# --- M34 (Agent AD) — DLCFederateAmbassadorBridge delivery tests ----------
+#
+# Verifies the M17->DLC callback conversion layer that makes M34 conformance
+# fixtures verify events instead of just link. Uses mock DLC ambassador that
+# tracks method invocations; no RTI subprocess, no gRPC. Must PASS.
+# See cppsdk/src/dlc/FederateAmbassadorBridge.{h,cpp}.
+
+add_executable(test_conf__runtime_callback_bridge
+  test_callback_bridge.cpp
+)
+target_include_directories(test_conf__runtime_callback_bridge PRIVATE
+  "${CMAKE_SOURCE_DIR}/include"
+  "${CMAKE_SOURCE_DIR}"   # so `#include "src/dlc/FederateAmbassadorBridge.h"` resolves
+)
+target_link_libraries(test_conf__runtime_callback_bridge PRIVATE
+  rti1516e_dlc
+  GTest::gtest
+  GTest::gtest_main
+)
+target_compile_features(test_conf__runtime_callback_bridge PRIVATE cxx_std_17)
+
+add_test(NAME conformance__runtime_callback_bridge
+  COMMAND test_conf__runtime_callback_bridge)
+set_tests_properties(conformance__runtime_callback_bridge PROPERTIES
+  LABELS "conformance"
+  TIMEOUT 60
+)
+
+if(TARGET dlc_conformance)
+  add_dependencies(dlc_conformance test_conf__runtime_callback_bridge)
+endif()
