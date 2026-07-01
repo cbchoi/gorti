@@ -16,6 +16,7 @@
 // the re-entry policy. Without it, the catalogue 17.2 row has no
 // runtime witness.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

@@ -14,6 +14,7 @@
 //   commitRegionModifications — this drops the overlap, so the RTI
 //   fires `attributesOutOfScope` and stops delivering further reflects.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

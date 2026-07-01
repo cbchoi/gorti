@@ -4,6 +4,7 @@
 // update. The complementary subscriber is the one that exercises the
 // re-entrancy check.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

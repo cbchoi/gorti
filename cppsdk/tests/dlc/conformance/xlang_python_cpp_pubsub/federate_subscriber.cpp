@@ -14,6 +14,7 @@
 // reads 10.0 / 20.0 / 30.0 verbatim. Any divergence (endianness,
 // width, padding) shows up as a mismatched golden line.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

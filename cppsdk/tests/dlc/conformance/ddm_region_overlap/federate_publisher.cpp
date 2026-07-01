@@ -18,6 +18,7 @@
 //   Since association is over R_pub (always intersects R_sub), subscriber
 //   receives all three updates.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>
