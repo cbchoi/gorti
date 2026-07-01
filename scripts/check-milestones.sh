@@ -1330,7 +1330,9 @@ check_m35() {
   # reflect / receive / remove callbacks never fire.
   local bridge_install=0
   if [ -f cppsdk/src/dlc/RTIambassadorImpl.cpp ]; then
-    bridge_install=$(grep -cE 'callback_bridge_\s*=\s*std::make_unique' cppsdk/src/dlc/RTIambassadorImpl.cpp 2>/dev/null | tr -d ' ')
+    # -z: NUL-separated multiline match — the assignment wraps across lines
+    # (clang-format puts std::make_unique on the continuation line).
+    bridge_install=$(grep -czE 'callback_bridge_\s*=\s*\n?\s*std::make_unique' cppsdk/src/dlc/RTIambassadorImpl.cpp 2>/dev/null | tr -d ' ')
     bridge_install="${bridge_install:-0}"
   fi
   if [ "$bridge_install" -ge 1 ]; then
