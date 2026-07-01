@@ -101,3 +101,35 @@ set_tests_properties(conformance__runtime_encoding PROPERTIES
 if(TARGET dlc_conformance)
   add_dependencies(dlc_conformance test_conf__runtime_encoding)
 endif()
+
+# --- M35 (Agent BF) — MOM surface lockfile (catalogue row 16.1) ----------
+#
+# Compile-only lockfile-style shape assertion that the DLC RTIambassador
+# discovers `HLAobjectRoot.HLAmanager.HLAfederation` via the standard
+# `getObjectClassHandle(std::wstring const&)` call, with no bespoke MOM
+# helper on the DLC surface. See test_mom_surface.cpp for the
+# static_assert contract. GREEN test — WILL_FAIL unset, must PASS.
+
+add_executable(test_conf__runtime_mom_surface
+  test_mom_surface.cpp
+)
+target_include_directories(test_conf__runtime_mom_surface PRIVATE
+  "${CMAKE_SOURCE_DIR}/include"
+)
+target_link_libraries(test_conf__runtime_mom_surface PRIVATE
+  rti1516e_dlc
+  GTest::gtest
+  GTest::gtest_main
+)
+target_compile_features(test_conf__runtime_mom_surface PRIVATE cxx_std_17)
+
+add_test(NAME conformance__runtime_mom_surface
+  COMMAND test_conf__runtime_mom_surface)
+set_tests_properties(conformance__runtime_mom_surface PROPERTIES
+  LABELS "conformance"
+  TIMEOUT 60
+)
+
+if(TARGET dlc_conformance)
+  add_dependencies(dlc_conformance test_conf__runtime_mom_surface)
+endif()
