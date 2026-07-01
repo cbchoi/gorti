@@ -8,6 +8,7 @@
 // (federate_observer.cpp) is the one that watches the lifecycle via
 // standard pub/sub on HLAobjectRoot.HLAmanager.HLAfederate.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

@@ -18,6 +18,7 @@
 //   Step 5: advance to t=2; resign.
 // Expected: queryLookahead value drops 2.0 → 0.5; GALT visible to peer follows.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

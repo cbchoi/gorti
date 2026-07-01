@@ -278,7 +278,7 @@ class RTI_EXPORT RTIambassador {
   virtual RegionHandle createRegion(
       DimensionHandleSet const& theDimensions) = 0;
   virtual void commitRegionModifications(RegionHandleSet const& theRegions) = 0;
-  virtual void deleteRegion(RegionHandle theRegion) = 0;
+  virtual void deleteRegion(RegionHandle const& theRegion) = 0;
 
   virtual ObjectInstanceHandle registerObjectInstanceWithRegions(
       ObjectClassHandle theClass,

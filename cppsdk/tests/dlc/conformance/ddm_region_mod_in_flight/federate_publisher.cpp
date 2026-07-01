@@ -11,6 +11,7 @@
 //   times the subscriber's region modification to land between updates
 //   3 and 4 — see test_ddm_region_mod_in_flight.cpp for orchestration.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

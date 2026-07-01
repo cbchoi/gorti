@@ -11,6 +11,7 @@
 // so the subscriber's TSO delivery sequence is governed by the spec
 // canonical order (catalogue 17.1: TSO is strict — no RO-style re-sort).
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

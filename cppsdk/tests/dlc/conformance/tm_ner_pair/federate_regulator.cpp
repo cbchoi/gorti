@@ -14,6 +14,7 @@
 //           at each grant publish a Tick interaction with seq=t (TSO).
 // Expected golden: see expected.regulator.log.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

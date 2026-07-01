@@ -12,6 +12,7 @@
 // Scenario: enable constrained; NER to t=1, 2, 3, 4, 5; receive Tick callbacks
 //           under TSO between grants.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

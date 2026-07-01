@@ -11,6 +11,7 @@
 //   federate is "sub"; it joins LAST so all three publishers have
 //   already started.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>
