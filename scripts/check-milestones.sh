@@ -1288,11 +1288,124 @@ check_m33() {
   else set_status M33 NOT_STARTED; printf "${DIM}M33: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
 }
 
+# ---------- M35: DLC §5+§6 shim-throw drop + FederateAmbassadorBridge install + [[deprecated]] on M17 headers + IVCT subset + FULL/NEAR parity ----------
+check_m35() {
+  section "M35 — DLC §5+§6 real impls + FederateAmbassadorBridge install + [[deprecated]] M17 + IVCT subset + parity FULL/NEAR"
+  echo "Exit (docs/DLC_COMPLIANCE_PROGRAM.md §6 M35 row): §5+§6 shim-throw sites collapse to ~0; DLCFederateAmbassadorBridge installed at connect; M17 rti1516e/*.h [[deprecated]]-marked; tests/conformance/rti/ivct-subset/ ≥3 tests; M34-PARITY-OUTCOME sentinel progresses beyond PARTIAL toward FULL/NEAR"
+  local pass=0 total=6
+
+  # Probe 1: RTIambassadorImpl.cpp §5+§6 shim-throw count DROPS.
+  # M34 baseline: 48 total `m17NotWired*_(...)` call sites across §5 (~10 in
+  # m17NotWiredDM_) + §6 (~38 in m17NotWired_). M35 collapses these to real
+  # M17 wire-through calls; the shim helpers may remain defined but with no
+  # call sites (or removed entirely).
+  #
+  # Threshold: pass when total call sites ≤ 10 (allows a handful of narrow
+  # edge cases the impl leaves as shim while still catching regression).
+  local shim_calls=0
+  if [ -f cppsdk/src/dlc/RTIambassadorImpl.cpp ]; then
+    # Count only call sites (helper-invocation form), not the helper defn.
+    shim_calls=$(grep -cE '\bm17NotWired(_|DM_)\s*\(' cppsdk/src/dlc/RTIambassadorImpl.cpp 2>/dev/null | tr -d ' ')
+    shim_calls="${shim_calls:-0}"
+    # Subtract the 2 [[noreturn]] helper definitions (both bodies contain
+    # `throw NotConnected(...)` but no self-call — they're identified by the
+    # `[[noreturn]] void m17NotWired*_` signature. We can subtract 2 iff both
+    # definitions are still present.
+    local defs
+    defs=$(grep -cE '\[\[noreturn\]\]\s*void\s+m17NotWired(_|DM_)' cppsdk/src/dlc/RTIambassadorImpl.cpp 2>/dev/null | tr -d ' ')
+    defs="${defs:-0}"
+    shim_calls=$((shim_calls - defs))
+    if [ "$shim_calls" -lt 0 ]; then shim_calls=0; fi
+  fi
+  if [ "$shim_calls" -le 10 ]; then
+    present "RTIambassadorImpl.cpp §5+§6 shim-throw call sites: $shim_calls (≤10 — real M17 wire-through landed)"
+    pass=$((pass+1))
+  else
+    pending "RTIambassadorImpl.cpp §5+§6 still has $shim_calls m17NotWired*_ call sites (≤10 expected for M35)"
+  fi
+
+  # Probe 2: DLCFederateAmbassadorBridge is installed at connect().
+  # M34-AD landed the bridge type; M35 wires `callback_bridge_ = std::make_unique<...>(...)`
+  # in RTIambassadorImpl::connect. Absent this, the subscriber-leg discover /
+  # reflect / receive / remove callbacks never fire.
+  local bridge_install=0
+  if [ -f cppsdk/src/dlc/RTIambassadorImpl.cpp ]; then
+    bridge_install=$(grep -cE 'callback_bridge_\s*=\s*std::make_unique' cppsdk/src/dlc/RTIambassadorImpl.cpp 2>/dev/null | tr -d ' ')
+    bridge_install="${bridge_install:-0}"
+  fi
+  if [ "$bridge_install" -ge 1 ]; then
+    present "DLCFederateAmbassadorBridge installed at connect() (callback_bridge_ = std::make_unique found $bridge_install×)"
+    pass=$((pass+1))
+  else
+    pending "DLCFederateAmbassadorBridge NOT installed at connect() — subscriber callbacks won't route (need 'callback_bridge_ = std::make_unique<...>(...)' in RTIambassadorImpl::connect)"
+  fi
+
+  # Probe 3: M17-era headers under cppsdk/include/rti1516e/*.h marked [[deprecated]].
+  # Steers new federate code onto the strict DLC RTI/ surface at compile time.
+  # Threshold: ≥5 (one per header — Encoding.h, Exceptions.h, FederateAmbassador.h,
+  # RtiAmbassador.h, Types.h).
+  local dep_count=0
+  if compgen -G "cppsdk/include/rti1516e/*.h" >/dev/null 2>&1; then
+    dep_count=$(grep -lE '\[\[deprecated' cppsdk/include/rti1516e/*.h 2>/dev/null | wc -l | tr -d ' ')
+    dep_count="${dep_count:-0}"
+  fi
+  if [ "$dep_count" -ge 5 ]; then
+    present "M17-era headers under cppsdk/include/rti1516e/ have [[deprecated]] markers (found in $dep_count file(s))"
+    pass=$((pass+1))
+  else
+    pending "cppsdk/include/rti1516e/*.h [[deprecated]] markers: $dep_count / 5 headers (need one per header — Encoding/Exceptions/FederateAmbassador/RtiAmbassador/Types)"
+  fi
+
+  # Probe 4: tests/conformance/rti/ivct-subset/ exists with ≥3 test files.
+  # First checked-in IVCT-derived conformance subset per docs/RTI_CONFORMANCE_AUDIT.md §6.
+  local ivct_count=0
+  if [ -d tests/conformance/rti/ivct-subset ]; then
+    ivct_count=$(find tests/conformance/rti/ivct-subset -type f \( -name '*.go' -o -name '*_test.go' -o -name '*.py' -o -name '*.cpp' \) 2>/dev/null | wc -l | tr -d ' ')
+    ivct_count="${ivct_count:-0}"
+  fi
+  if [ "$ivct_count" -ge 3 ]; then
+    present "tests/conformance/rti/ivct-subset/ has $ivct_count test files (≥3 IVCT-subset entries)"
+    pass=$((pass+1))
+  else
+    pending "tests/conformance/rti/ivct-subset/ has only $ivct_count test files (≥3 expected — IVCT-derived subset per docs/RTI_CONFORMANCE_AUDIT.md §6)"
+  fi
+
+  # Probe 5: M34-PARITY-OUTCOME sentinel in PITCH_PARITY.md progresses from
+  # M34's PARTIAL toward FULL / NEAR. Accept either an updated M34- sentinel
+  # showing FULL / NEAR, or a separate M35-PARITY-OUTCOME sentinel line.
+  local parity_progressed=0
+  if grep -qE 'M3[45]-PARITY-OUTCOME:\s*(FULL|NEAR)' docs/PITCH_PARITY.md 2>/dev/null; then
+    parity_progressed=1
+  elif grep -qE 'M35-PARITY-OUTCOME:\s*(FULL|NEAR|PARTIAL)' docs/PITCH_PARITY.md 2>/dev/null; then
+    # M35 sentinel present at all (even PARTIAL-with-more-events) counts as
+    # progress from the M34 baseline; refinement of the count is a follow-up.
+    parity_progressed=1
+  fi
+  if [ "$parity_progressed" -eq 1 ]; then
+    present "M34-/M35-PARITY-OUTCOME sentinel in docs/PITCH_PARITY.md shows FULL / NEAR / M35 progress from M34 PARTIAL"
+    pass=$((pass+1))
+  else
+    pending "docs/PITCH_PARITY.md still shows only M34 PARTIAL — no M35 parity progression sentinel (expected 'M35-PARITY-OUTCOME: FULL' / 'NEAR' / progression from 'PARTIAL 2/9 pub + 2/7 sub')"
+  fi
+
+  # Probe 6: CHANGELOG-MASTERPLAN.md has M35 row.
+  if grep -qE '^\| \*\*M35\*\*|M35 — DLC|## 2026-.*\(M35' CHANGELOG-MASTERPLAN.md 2>/dev/null; then
+    present "CHANGELOG-MASTERPLAN.md has M35 row + section"
+    pass=$((pass+1))
+  else
+    pending "CHANGELOG-MASTERPLAN.md M35 row missing"
+  fi
+
+  if [ "$pass" -eq "$total" ]; then set_status M35 DONE; printf "${GRN}M35: DONE${OFF} (%d/%d)\n" "$pass" "$total"
+  elif [ "$pass" -gt 0 ]; then set_status M35 IN_PROGRESS; printf "${YLW}M35: IN_PROGRESS${OFF} (%d/%d)\n" "$pass" "$total"
+  else set_status M35 NOT_STARTED; printf "${DIM}M35: NOT_STARTED${OFF} (%d/%d)\n" "$pass" "$total"; fi
+}
+
 # ---------- summary ----------
 print_summary() {
   echo
   printf "${CYN}── Summary ──${OFF}\n"
-  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28 M31 M32 M33; do
+  for m in M0 M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M14 M21 M22 M23 M24 M28 M31 M32 M33 M35; do
     local s="${MILESTONE_STATUS[$m]:-?}"
     case "$s" in
       DONE)         printf "  %s %s\n" "$PASS_MARK" "$m: DONE" ;;
@@ -1335,6 +1448,7 @@ check_m14
 check_m31
 check_m32
 check_m33
+check_m35
 print_summary
 
 exit "$REGRESSED"

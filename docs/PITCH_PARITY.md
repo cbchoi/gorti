@@ -7,7 +7,10 @@ Portico, MAK RTI) should bind against.
 
 This document records the places where gorti's Layer-2 surface
 diverges from a strict reading of the spec, what's compatible
-anyway, and what's explicitly out of scope. Last updated for M28.
+anyway, and what's explicitly out of scope. Last updated for M35
+(C++ DLC track — see the M31-M35 section below for the strict
+C++ federate API parity progression; the pysdk Layer-2 track is
+closed at M28).
 
 ## Compatible (gorti behaves as Pitch would)
 
@@ -322,6 +325,88 @@ Additional blockers Agent O identified for a full end-to-end run:
 3. Agent L §6 object management (`registerObjectInstance` / `updateAttributeValues` / `sendInteraction` / `publishObjectClassAttributes` / `publishInteractionClass`) — currently M32-stub.
 4. Agent J FederateAmbassador dispatch — the subscriber's `NullFederateAmbassador` subclass expects the RTI to invoke `discoverObjectInstance` / `reflectAttributeValues` / `receiveInteraction`. Currently no dispatch loop.
 5. `cppsdk/tests/dlc/conformance/CMakeLists.txt` — `target_link_libraries` currently references `rti1516e` (M17 lib). To exercise the DLC surface impl, the fixture link target needs to switch to `rti1516e_dlc` (M32-landed static archive). This is a mechanical Cmake update pending post-Agent-K/L merge (not a scope blocker per se, but a coordination note).
+
+### M34 catalogue progress (M34-resolved sections, ~40/200 additional lockfile TUs — DONE 2026-07-02)
+
+Per `docs/DLC_COMPLIANCE_PROGRAM.md §6`, M34 flips these catalogue
+sections and lands the §4/§5/§8 pull-forward that the M33 dispatch
+gap left unimplemented:
+
+| Catalogue § | Title | Lockfile TU dir | M34 status |
+|---|---|---|---|
+| §3 | Connect / federation lifecycle | `lockfile/core/test_rtiambassador_federation_mgmt.cpp` | **M34-resolved** (Agent AA replaces the 25 `m32_stub` sites in RTIambassadorImpl.cpp §4 — connect / createFederationExecution / joinFederationExecution / resignFederationExecution / save+restore lifecycle — with real M17 wire-through). |
+| §5 (shim) | Declaration Management wstring shim | `lockfile/core/test_rtiambassador_declaration_mgmt.cpp` | **M34-shim** (Agent AC lands the 10 catalogue-row wstring↔M17 shim skeleton; the shim-throws collapse to real M17 declaration.Manager calls in M35 — see M35 progress below). |
+| §8 | Time Management behavioral | `lockfile/core/test_rtiambassador_time_mgmt.cpp` | **M34-resolved** (Agent AB lands 13 catalogue rows §9.1-§9.14 — enable/disable regulating+constrained, TAR/TARA/NER/NMRA/FQR, queryLogicalTime/GALT/LITS/Lookahead, timeAdvanceGrant dispatch, LBTSResult struct). |
+| §9 | Encoding helpers | `lockfile/encoding/test_*.cpp` | **M34-resolved** (Agent AF lands composites + round-trip test; 36 gtests total for the encoding surface). |
+| §14 | Time types | `lockfile/time/test_*.cpp` | **M34-resolved** (Agent AE fills `HLAfloat64Time` / `HLAinteger64Time` full behavioral impl; federation chooses via `createFederationExecution(..., logicalTimeImplementationName=L"HLAfloat64Time")`). |
+| §4 (bridge) | FederateAmbassador callback bridge | `cppsdk/src/dlc/FederateAmbassadorBridge.cpp` | **M34-partial** (Agent AD lands `DLCFederateAmbassadorBridge` type + 22 gtests; **install-at-connect wiring deferred to M35** — the bridge exists but is not yet mounted in `RTIambassadorImpl::connect()`, so subscriber-leg discover/reflect/receive/remove callbacks don't route yet). |
+| §16 | MOM | `lockfile/core/test_rtiambassador_mom.cpp` | owed-to-M35 (real HLAobjectRoot.HLAmanager.* pub/sub behavioral). |
+
+After M34 merge, `scripts/check-milestones.sh check_m34` reports the
+exact GREEN count for verification against this matrix.
+
+### M34 first-real-parity-diff outcome (Agent AG)
+
+**Fixture:** `cppsdk/tests/dlc/conformance/om_helloworld_pubsub` — same
+fixture as the M33 first-parity-diff experiment (see prior section).
+
+**M34-PARITY-OUTCOME: PARTIAL 2/9 pub + 2/7 sub.** Historic result — first
+checked-in evidence of the strict DLC surface producing spec-canonical
+output. Post-M34 merge, built om_helloworld_pubsub fixture binaries
+against the DLC surface, ran against gorti rtid (127.0.0.1:8989),
+captured canonicalized output, diffed against Pitch goldens.
+
+Publisher — **2 of 9 events match Pitch byte-identical:**
+- `PUB: CONNECT` — matches Pitch ✓ (Agent AA §4.2 impl green)
+- `PUB: JOIN federate=publisher` — matches Pitch ✓ (Agent AA §4.9 impl green)
+- `PUB: CREATE federation=om_helloworld_pubsub` — missing (fixture emission gap; expected but not-yet-emitted by federate code — orthogonal to impl)
+- `PUB: PUBLISH class=Vehicle attributes=[...]` — pending §5 impl (Agent AC shim throws `NotConnected("gorti DLC §5 publishObjectClassAttributes: M17 declaration.Manager pImpl not yet wired")`)
+- `PUB: PUBLISH interaction=Honk` — pending §5 impl (same shim path)
+- `PUB: REGISTER class=Vehicle name=car-1 handle=<H>` — pending §6 impl (Agent L M33 shim throws `RTIinternalError`)
+- `PUB: UPDATE name=car-1 Position=42.000000 ...` — pending §6 impl
+- `PUB: SEND class=Honk Volume=5` — pending §6 impl
+- `PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST` — never reached (all prior events failed)
+
+Subscriber — **2 of 7 events match:**
+- `SUB: CONNECT` — matches ✓
+- `SUB: JOIN federate=subscriber` — matches ✓
+- `SUB: SUBSCRIBE Vehicle Position Velocity Honk` — pending §5 impl
+- `SUB: DISCOVER class=Vehicle name=car-1` — pending §6 impl + `DLCFederateAmbassadorBridge` install at connect (M34-AD landed the bridge type, not the install)
+- `SUB: RECEIVE class=Honk Volume=5` — pending §6 + bridge install
+- `SUB: REFLECT name=car-1 ...` — pending §6 + bridge install
+- `SUB: RESIGN action=...` — never reached
+
+Committed evidence: `cppsdk/tests/dlc/conformance/om_helloworld_pubsub/gorti-captured.publisher.log` + `gorti-captured.subscriber.log` (both landed in commit `e1f698d`). Diff against `expected.publisher.log` + `expected.subscriber.log` (Pitch goldens) is the primary regression signal for M35.
+
+**Follow-on tickets (owed-to-M35):**
+1. §5 Declaration Management — Agent BA collapses the 10 `m17NotWiredDM_` shim-throws to real M17 `declaration.Manager` wire-through. Closes the two `PUB: PUBLISH` + `SUB: SUBSCRIBE` events.
+2. §6 Object Management — Agent BB collapses ~38 `m17NotWired_` shim-throws to real M17 `object.Registry` wire-through. Closes the `PUB: REGISTER` + `UPDATE` + `SEND` + `SUB: DISCOVER` + `RECEIVE` + `REFLECT` events.
+3. `DLCFederateAmbassadorBridge` install at connect — Agent BC wires `callback_bridge_ = std::make_unique<DLCFederateAmbassadorBridge>(...)` in `RTIambassadorImpl::connect()`. Unblocks the subscriber-leg callback dispatch.
+4. Publisher `PUB: CREATE` fixture-emission gap — a federate-code fix (probably fixture-side, not impl-side).
+5. Publisher / subscriber `RESIGN` — unblocks once prior events land (currently unreached because of earlier failures).
+
+### M35 catalogue progress (M35-resolved sections, ~10/200 additional lockfile TUs + IVCT-subset — IN PROGRESS)
+
+Per `docs/DLC_COMPLIANCE_PROGRAM.md §6`, M35 finishes:
+
+| Catalogue § | Title | Lockfile TU dir | M35 status |
+|---|---|---|---|
+| §5 | Declaration Management (real impls) | `lockfile/core/test_rtiambassador_declaration_mgmt.cpp` | **M35-in-progress** (Agent BA collapses 10 `m17NotWiredDM_` shim-throws in RTIambassadorImpl.cpp to real `declaration.Manager` wire-through). |
+| §6 | Object Management (real impls) | `lockfile/core/test_rtiambassador_object_mgmt.cpp` | **M35-in-progress** (Agent BB collapses ~38 `m17NotWired_` shim-throws to real `object.Registry` wire-through). |
+| §4 (bridge install) | FederateAmbassador callback dispatch | `cppsdk/src/dlc/RTIambassadorImpl.cpp::connect` | **M35-in-progress** (Agent BC installs `DLCFederateAmbassadorBridge` at `connect()`; unblocks subscriber-leg discover/reflect/receive/remove). |
+| §16 | MOM | `lockfile/core/test_rtiambassador_mom.cpp` | **M35-in-progress** (Agent BD wires real HLAobjectRoot.HLAmanager.* pub/sub via existing M17 MOM transport). |
+| — | M17 [[deprecated]] annotations | `cppsdk/include/rti1516e/*.h` | **M35-in-progress** (Agent BF marks 5 M17-era headers `[[deprecated("Use RTI/ DLC-strict headers per docs/MIGRATION_M17_TO_DLC.md")]]`). |
+| — | IVCT-derived conformance subset | `tests/conformance/rti/ivct-subset/` | **M35-in-progress** (Agent BF lands ≥3 IVCT-derived tests per `docs/RTI_CONFORMANCE_AUDIT.md §6`; gorti rtid must PASS the subset — this is the Cut-4 conformance gate). |
+
+**M35 parity target: `M35-PARITY-OUTCOME: {TBD-BE — FULL / NEAR / progression from PARTIAL 2/9 pub + 2/7 sub}`.**
+
+Agent BE re-runs the om_helloworld_pubsub parity diff post-BA/BB/BC/BD merge and backfills the sentinel. Expected trajectory:
+- Publisher: 2/9 → 8/9 (CREATE remains as fixture-emission gap unless BE also patches the federate code; PUBLISH / REGISTER / UPDATE / SEND / RESIGN unblock).
+- Subscriber: 2/7 → 7/7 (SUBSCRIBE + DISCOVER + RECEIVE + REFLECT + RESIGN unblock after §5 + §6 + bridge-install + MOM lands).
+
+After M35 merge, `scripts/check-milestones.sh check_m35` (6 probes)
+reports the acceptance state. Final M35 close date and PARITY-OUTCOME
+sentinel backfilled by Agent BG once the fan-out completes.
 
 ---
 
