@@ -48,7 +48,12 @@ foreach(dir ${FIXTURE_DIRS})
         target_include_directories(${_tgt} PRIVATE
           "${CMAKE_SOURCE_DIR}/include"
           "${CMAKE_CURRENT_SOURCE_DIR}/_harness")
-        target_link_libraries(${_tgt} PRIVATE rti1516e)
+        # M34: link the DLC library (which transitively pulls M17 for the
+        # bridged delegate). Prior to M34 this was PRIVATE rti1516e; that
+        # linked only against the M17 concrete class and left every
+        # <RTI/*> DLC symbol undefined, so the fixtures were WILL_FAIL=TRUE
+        # by construction. See docs/M31_DISPATCH_PLAN.md.
+        target_link_libraries(${_tgt} PRIVATE rti1516e_dlc)
         target_compile_features(${_tgt} PRIVATE cxx_std_17)
       endforeach()
 

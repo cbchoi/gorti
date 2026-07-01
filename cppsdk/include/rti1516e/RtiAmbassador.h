@@ -41,23 +41,33 @@ class RTIambassadorImpl;
 // in-memory blobs directly.
 using FomModuleList = std::vector<std::string>;
 
-// RTIambassador is the federate's primary handle on the RTI. One
+// M34 Agent AA — renamed from `RTIambassador` to `M17RTIambassador` so the
+// symbol mangling is distinct from the DLC spec-abstract
+// `rti1516e::RTIambassador` (declared in <RTI/RTIambassador.h>) that also
+// lives in `namespace rti1516e`. Both classes previously emitted the same
+// mangled ctor/dtor symbols, which broke the linker for any binary
+// (librti1516e_dlc.a) that transitively pulls the M17 impl. Existing M17
+// consumers keep `rti1516e::RTIambassador` via the `using` alias below —
+// alias uses do NOT emit new symbols; every method call still resolves
+// through `M17RTIambassador::*` at link time.
+//
+// M17RTIambassador is the federate's primary handle on the RTI. One
 // instance per federate; the lifetime spans connect..disconnect.
 //
 // Thread safety: synchronous calls are thread-safe — internal locking
 // serializes wire I/O. Override callback slots fire from the
 // tickCallback caller's thread (M17.6).
-class RTIambassador {
+class M17RTIambassador {
  public:
-  RTIambassador();
-  ~RTIambassador();
+  M17RTIambassador();
+  ~M17RTIambassador();
 
   // Move-only. The pimpl owns a grpc channel + per-federate state;
   // copying would split the channel/state ownership.
-  RTIambassador(const RTIambassador&) = delete;
-  RTIambassador& operator=(const RTIambassador&) = delete;
-  RTIambassador(RTIambassador&&) noexcept;
-  RTIambassador& operator=(RTIambassador&&) noexcept;
+  M17RTIambassador(const M17RTIambassador&) = delete;
+  M17RTIambassador& operator=(const M17RTIambassador&) = delete;
+  M17RTIambassador(M17RTIambassador&&) noexcept;
+  M17RTIambassador& operator=(M17RTIambassador&&) noexcept;
 
   // §4.2 connect — dial the RTI at the given URL.
   //
@@ -644,5 +654,13 @@ class RTIambassador {
  private:
   std::unique_ptr<RTIambassadorImpl> impl_;
 };
+
+// M34 Agent AA — Pitch-parity compat alias. Every M17 test / federate
+// that says `rti1516e::RTIambassador` keeps resolving through this alias
+// to the M17 concrete class; alias uses do NOT emit new mangled symbols,
+// so no ODR collision with <RTI/RTIambassador.h>'s DLC spec class of the
+// same name (the DLC symbol lives in a translation unit that never
+// includes THIS header).
+using RTIambassador = M17RTIambassador;
 
 }  // namespace rti1516e
