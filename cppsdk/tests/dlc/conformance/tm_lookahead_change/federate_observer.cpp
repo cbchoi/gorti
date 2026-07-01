@@ -10,6 +10,7 @@
 //   peers see has tracked the regulator's new (smaller) lookahead — this
 //   is the witness that modifyLookahead propagates to GALT (§8.19).
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>

@@ -16,6 +16,7 @@
 //           t = base+1 and record the grant. Identical lookahead (1.0)
 //           between requests so every grant has predictable timestamp.
 
+#include <RTI/RTIambassador.h>
 #include <RTI/RTIambassadorFactory.h>
 #include <RTI/NullFederateAmbassador.h>
 #include <RTI/Enums.h>
