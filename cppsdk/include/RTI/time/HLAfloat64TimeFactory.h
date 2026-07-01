@@ -7,8 +7,15 @@
 
 #include <RTI/SpecificConfig.h>
 #include <RTI/LogicalTimeFactory.h>
+#include <string>
 
 namespace rti1516e {
+
+// Per Pitch HLAfloat64TimeFactory.h:27 — the namespace-scope constant that
+// federates pass to LogicalTimeFactoryFactory::makeLogicalTimeFactory to
+// select this concrete factory. `const` at namespace scope gives internal
+// linkage by default, so the header-only definition is ODR-safe.
+const std::wstring HLAfloat64TimeName(L"HLAfloat64Time");
 
 class HLAfloat64Time;
 class HLAfloat64Interval;
