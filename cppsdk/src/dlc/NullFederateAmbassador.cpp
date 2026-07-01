@@ -1,14 +1,15 @@
 // IEEE 1516.1-2010 §10.42 / Annex A — NullFederateAmbassador default-no-op impls.
 //
-// gorti M32. All overrides are `{}` — federate code overrides only the
-// callbacks it cares about.
+// gorti M33 (Agent J). All overrides are `{}` — federate code overrides only
+// the callbacks it cares about. Signatures carry
+// RTI_THROW(FederateInternalError) per catalogue row 4.37 spec-parity.
 
 #include <RTI/NullFederateAmbassador.h>
 
 namespace rti1516e {
 
-NullFederateAmbassador::NullFederateAmbassador() = default;
-NullFederateAmbassador::~NullFederateAmbassador() RTI_NOEXCEPT = default;
+NullFederateAmbassador::NullFederateAmbassador() RTI_THROW(FederateInternalError) {}
+NullFederateAmbassador::~NullFederateAmbassador() RTI_NOEXCEPT {}
 
 // § 4 Federation Management.
 void NullFederateAmbassador::connectionLost(std::wstring const&) {}

@@ -1,12 +1,13 @@
 // IEEE 1516.1-2010 §10.42 / Annex A — RTI/NullFederateAmbassador.h
-// gorti M31 forward-declaration stub. Spec text reprinted with permission
-// from IEEE 1516.1(TM)-2010.
+// gorti M33 (Agent J). Spec text reprinted with permission from
+// IEEE 1516.1(TM)-2010.
 //
 // Concrete no-op subclass of FederateAmbassador (catalogue row 4.2).
 // Federates inherit from this when they only care about a subset of the
-// ~60 spec callbacks.
+// ~60 spec callbacks. Out-of-line no-op impls live in NullFederateAmbassador.cpp.
 //
-// M31 STUB form: each override declared but not defined; impl lands M33.
+// Catalogue rows covered: 4.1 (base), 4.2 (Null subclass), 4.3-4.36
+// (every callback). Row 4.37 (RTI_THROW) is applied on every override.
 
 #ifndef RTI_NullFederateAmbassador_h
 #define RTI_NullFederateAmbassador_h
@@ -17,160 +18,214 @@ namespace rti1516e {
 
 class RTI_EXPORT NullFederateAmbassador : public FederateAmbassador {
  public:
-  NullFederateAmbassador();
+  NullFederateAmbassador() RTI_THROW(FederateInternalError);
   virtual ~NullFederateAmbassador() RTI_NOEXCEPT;
 
   // §4 Federation Management — overrides.
-  virtual void connectionLost(std::wstring const& faultDescription) override;
+  virtual void connectionLost(std::wstring const& faultDescription)
+      RTI_THROW(FederateInternalError) override;
   virtual void reportFederationExecutions(
-      FederationExecutionInformationVector const&) override;
+      FederationExecutionInformationVector const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void synchronizationPointRegistrationSucceeded(
-      std::wstring const& label) override;
+      std::wstring const& label)
+      RTI_THROW(FederateInternalError) override;
   virtual void synchronizationPointRegistrationFailed(
       std::wstring const& label,
-      SynchronizationPointFailureReason reason) override;
+      SynchronizationPointFailureReason reason)
+      RTI_THROW(FederateInternalError) override;
   virtual void announceSynchronizationPoint(
       std::wstring const& label,
-      VariableLengthData const& theUserSuppliedTag) override;
+      VariableLengthData const& theUserSuppliedTag)
+      RTI_THROW(FederateInternalError) override;
   virtual void federationSynchronized(
       std::wstring const& label,
-      FederateHandleSet const& failedToSyncSet) override;
-  virtual void initiateFederateSave(std::wstring const& label) override;
+      FederateHandleSet const& failedToSyncSet)
+      RTI_THROW(FederateInternalError) override;
+  virtual void initiateFederateSave(std::wstring const& label)
+      RTI_THROW(FederateInternalError) override;
   virtual void initiateFederateSave(std::wstring const& label,
-                                    LogicalTime const& theTime) override;
-  virtual void federationSaved() override;
-  virtual void federationNotSaved(SaveFailureReason) override;
+                                    LogicalTime const& theTime)
+      RTI_THROW(FederateInternalError) override;
+  virtual void federationSaved()
+      RTI_THROW(FederateInternalError) override;
+  virtual void federationNotSaved(SaveFailureReason)
+      RTI_THROW(FederateInternalError) override;
   virtual void federationSaveStatusResponse(
-      FederateHandleSaveStatusPairVector const&) override;
-  virtual void requestFederationRestoreSucceeded(
-      std::wstring const& label) override;
-  virtual void requestFederationRestoreFailed(
-      std::wstring const& label) override;
-  virtual void federationRestoreBegun() override;
+      FederateHandleSaveStatusPairVector const&)
+      RTI_THROW(FederateInternalError) override;
+  virtual void requestFederationRestoreSucceeded(std::wstring const& label)
+      RTI_THROW(FederateInternalError) override;
+  virtual void requestFederationRestoreFailed(std::wstring const& label)
+      RTI_THROW(FederateInternalError) override;
+  virtual void federationRestoreBegun()
+      RTI_THROW(FederateInternalError) override;
   virtual void initiateFederateRestore(std::wstring const& label,
                                        std::wstring const& federateName,
-                                       FederateHandle handle) override;
-  virtual void federationRestored() override;
-  virtual void federationNotRestored(RestoreFailureReason) override;
+                                       FederateHandle handle)
+      RTI_THROW(FederateInternalError) override;
+  virtual void federationRestored()
+      RTI_THROW(FederateInternalError) override;
+  virtual void federationNotRestored(RestoreFailureReason)
+      RTI_THROW(FederateInternalError) override;
   virtual void federationRestoreStatusResponse(
-      FederateRestoreStatusVector const&) override;
+      FederateRestoreStatusVector const&)
+      RTI_THROW(FederateInternalError) override;
 
   // §5 Declaration Management — overrides.
-  virtual void startRegistrationForObjectClass(ObjectClassHandle) override;
-  virtual void stopRegistrationForObjectClass(ObjectClassHandle) override;
-  virtual void turnInteractionsOn(InteractionClassHandle) override;
-  virtual void turnInteractionsOff(InteractionClassHandle) override;
+  virtual void startRegistrationForObjectClass(ObjectClassHandle)
+      RTI_THROW(FederateInternalError) override;
+  virtual void stopRegistrationForObjectClass(ObjectClassHandle)
+      RTI_THROW(FederateInternalError) override;
+  virtual void turnInteractionsOn(InteractionClassHandle)
+      RTI_THROW(FederateInternalError) override;
+  virtual void turnInteractionsOff(InteractionClassHandle)
+      RTI_THROW(FederateInternalError) override;
 
   // §6 Object Management — overrides (3x reflect/receive/remove).
-  virtual void objectInstanceNameReservationSucceeded(
-      std::wstring const&) override;
-  virtual void objectInstanceNameReservationFailed(
-      std::wstring const&) override;
+  virtual void objectInstanceNameReservationSucceeded(std::wstring const&)
+      RTI_THROW(FederateInternalError) override;
+  virtual void objectInstanceNameReservationFailed(std::wstring const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void multipleObjectInstanceNameReservationSucceeded(
-      std::set<std::wstring> const&) override;
+      std::set<std::wstring> const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void multipleObjectInstanceNameReservationFailed(
-      std::set<std::wstring> const&) override;
+      std::set<std::wstring> const&)
+      RTI_THROW(FederateInternalError) override;
 
   virtual void discoverObjectInstance(ObjectInstanceHandle, ObjectClassHandle,
-                                      std::wstring const&) override;
+                                      std::wstring const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void discoverObjectInstance(ObjectInstanceHandle, ObjectClassHandle,
                                       std::wstring const&,
-                                      FederateHandle) override;
+                                      FederateHandle)
+      RTI_THROW(FederateInternalError) override;
 
   virtual void reflectAttributeValues(
       ObjectInstanceHandle, AttributeHandleValueMap const&,
       VariableLengthData const&, OrderType, TransportationType,
-      SupplementalReflectInfo) override;
+      SupplementalReflectInfo)
+      RTI_THROW(FederateInternalError) override;
   virtual void reflectAttributeValues(
       ObjectInstanceHandle, AttributeHandleValueMap const&,
       VariableLengthData const&, OrderType, TransportationType,
-      LogicalTime const&, OrderType, SupplementalReflectInfo) override;
+      LogicalTime const&, OrderType, SupplementalReflectInfo)
+      RTI_THROW(FederateInternalError) override;
   virtual void reflectAttributeValues(
       ObjectInstanceHandle, AttributeHandleValueMap const&,
       VariableLengthData const&, OrderType, TransportationType,
       LogicalTime const&, OrderType, MessageRetractionHandle,
-      SupplementalReflectInfo) override;
+      SupplementalReflectInfo)
+      RTI_THROW(FederateInternalError) override;
 
   virtual void receiveInteraction(
       InteractionClassHandle, ParameterHandleValueMap const&,
       VariableLengthData const&, OrderType, TransportationType,
-      SupplementalReceiveInfo) override;
+      SupplementalReceiveInfo)
+      RTI_THROW(FederateInternalError) override;
   virtual void receiveInteraction(
       InteractionClassHandle, ParameterHandleValueMap const&,
       VariableLengthData const&, OrderType, TransportationType,
-      LogicalTime const&, OrderType, SupplementalReceiveInfo) override;
+      LogicalTime const&, OrderType, SupplementalReceiveInfo)
+      RTI_THROW(FederateInternalError) override;
   virtual void receiveInteraction(
       InteractionClassHandle, ParameterHandleValueMap const&,
       VariableLengthData const&, OrderType, TransportationType,
       LogicalTime const&, OrderType, MessageRetractionHandle,
-      SupplementalReceiveInfo) override;
+      SupplementalReceiveInfo)
+      RTI_THROW(FederateInternalError) override;
 
   virtual void removeObjectInstance(ObjectInstanceHandle,
                                     VariableLengthData const&, OrderType,
-                                    SupplementalRemoveInfo) override;
+                                    SupplementalRemoveInfo)
+      RTI_THROW(FederateInternalError) override;
   virtual void removeObjectInstance(ObjectInstanceHandle,
                                     VariableLengthData const&, OrderType,
                                     LogicalTime const&, OrderType,
-                                    SupplementalRemoveInfo) override;
+                                    SupplementalRemoveInfo)
+      RTI_THROW(FederateInternalError) override;
   virtual void removeObjectInstance(ObjectInstanceHandle,
                                     VariableLengthData const&, OrderType,
                                     LogicalTime const&, OrderType,
                                     MessageRetractionHandle,
-                                    SupplementalRemoveInfo) override;
+                                    SupplementalRemoveInfo)
+      RTI_THROW(FederateInternalError) override;
 
   virtual void attributesInScope(ObjectInstanceHandle,
-                                 AttributeHandleSet const&) override;
+                                 AttributeHandleSet const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void attributesOutOfScope(ObjectInstanceHandle,
-                                    AttributeHandleSet const&) override;
+                                    AttributeHandleSet const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void provideAttributeValueUpdate(
       ObjectInstanceHandle, AttributeHandleSet const&,
-      VariableLengthData const&) override;
+      VariableLengthData const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void turnUpdatesOnForObjectInstance(
-      ObjectInstanceHandle, AttributeHandleSet const&) override;
+      ObjectInstanceHandle, AttributeHandleSet const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void turnUpdatesOnForObjectInstance(
       ObjectInstanceHandle, AttributeHandleSet const&,
-      std::wstring const&) override;
+      std::wstring const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void turnUpdatesOffForObjectInstance(
-      ObjectInstanceHandle, AttributeHandleSet const&) override;
+      ObjectInstanceHandle, AttributeHandleSet const&)
+      RTI_THROW(FederateInternalError) override;
 
   virtual void confirmAttributeTransportationTypeChange(
-      ObjectInstanceHandle, AttributeHandleSet, TransportationType) override;
+      ObjectInstanceHandle, AttributeHandleSet, TransportationType)
+      RTI_THROW(FederateInternalError) override;
   virtual void reportAttributeTransportationType(
-      ObjectInstanceHandle, AttributeHandle, TransportationType) override;
+      ObjectInstanceHandle, AttributeHandle, TransportationType)
+      RTI_THROW(FederateInternalError) override;
   virtual void confirmInteractionTransportationTypeChange(
-      InteractionClassHandle, TransportationType) override;
+      InteractionClassHandle, TransportationType)
+      RTI_THROW(FederateInternalError) override;
   virtual void reportInteractionTransportationType(
-      FederateHandle, InteractionClassHandle, TransportationType) override;
+      FederateHandle, InteractionClassHandle, TransportationType)
+      RTI_THROW(FederateInternalError) override;
 
   // §7 Ownership Management — overrides.
   virtual void requestAttributeOwnershipAssumption(
       ObjectInstanceHandle, AttributeHandleSet const&,
-      VariableLengthData const&) override;
+      VariableLengthData const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void requestDivestitureConfirmation(
-      ObjectInstanceHandle, AttributeHandleSet const&) override;
+      ObjectInstanceHandle, AttributeHandleSet const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void attributeOwnershipAcquisitionNotification(
       ObjectInstanceHandle, AttributeHandleSet const&,
-      VariableLengthData const&) override;
+      VariableLengthData const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void attributeOwnershipUnavailable(
-      ObjectInstanceHandle, AttributeHandleSet const&) override;
+      ObjectInstanceHandle, AttributeHandleSet const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void requestAttributeOwnershipRelease(
       ObjectInstanceHandle, AttributeHandleSet const&,
-      VariableLengthData const&) override;
+      VariableLengthData const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void confirmAttributeOwnershipAcquisitionCancellation(
-      ObjectInstanceHandle, AttributeHandleSet const&) override;
+      ObjectInstanceHandle, AttributeHandleSet const&)
+      RTI_THROW(FederateInternalError) override;
   virtual void informAttributeOwnership(ObjectInstanceHandle, AttributeHandle,
-                                        FederateHandle) override;
-  virtual void attributeIsNotOwned(ObjectInstanceHandle,
-                                   AttributeHandle) override;
-  virtual void attributeIsOwnedByRTI(ObjectInstanceHandle,
-                                     AttributeHandle) override;
+                                        FederateHandle)
+      RTI_THROW(FederateInternalError) override;
+  virtual void attributeIsNotOwned(ObjectInstanceHandle, AttributeHandle)
+      RTI_THROW(FederateInternalError) override;
+  virtual void attributeIsOwnedByRTI(ObjectInstanceHandle, AttributeHandle)
+      RTI_THROW(FederateInternalError) override;
 
   // §8 Time Management — overrides.
-  virtual void timeRegulationEnabled(LogicalTime const&) override;
-  virtual void timeConstrainedEnabled(LogicalTime const&) override;
-  virtual void timeAdvanceGrant(LogicalTime const&) override;
+  virtual void timeRegulationEnabled(LogicalTime const&)
+      RTI_THROW(FederateInternalError) override;
+  virtual void timeConstrainedEnabled(LogicalTime const&)
+      RTI_THROW(FederateInternalError) override;
+  virtual void timeAdvanceGrant(LogicalTime const&)
+      RTI_THROW(FederateInternalError) override;
 
-  virtual void requestRetraction(MessageRetractionHandle) override;
+  virtual void requestRetraction(MessageRetractionHandle)
+      RTI_THROW(FederateInternalError) override;
 };
 
 }  // namespace rti1516e
