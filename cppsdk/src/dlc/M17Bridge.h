@@ -30,20 +30,6 @@
 #include <string>
 #include <vector>
 
-// Forward-decl of the M17 FederateAmbassador under the shim-namespace name.
-// M35 Agent BD wires DLCFederateAmbassadorBridge (which derives from
-// `rti1516e_m17::FederateAmbassador` — see FederateAmbassadorBridge_m17_shim.h)
-// as the M17 callback sink at connect() time. The bind method takes the shim
-// name so RTIambassadorImpl.cpp — which already sees the shim via
-// FederateAmbassadorBridge.h — can pass the bridge pointer directly without
-// a cast. Inside M17Bridge.cpp the same class lives at
-// `::rti1516e::FederateAmbassador` (the shim is not active there); the impl
-// reinterpret_casts the incoming pointer — safe because both names refer to
-// the same class definition (identical layout + vtable).
-namespace rti1516e_m17 {
-class FederateAmbassador;
-}  // namespace rti1516e_m17
-
 namespace rti1516e {
 
 // SaveState / RestoreState mirror rti1516e::RTIambassador::SaveState /
@@ -77,14 +63,6 @@ class M17Bridge {
   void disconnect();
   // True between connect and disconnect.
   bool isConnected() const noexcept;
-
-  // §10.4 — install the M17 callback sink. M35 Agent BD wires the DLC-side
-  // DLCFederateAmbassadorBridge here so M17 callback deliveries convert to
-  // DLC callbacks on the user's FederateAmbassador. Must be called after
-  // connect() and before joinFederationExecution() (M17's Events RPC opens
-  // at join). Passing nullptr unbinds. The M17 impl retains the pointer
-  // by reference — the caller keeps the bridge alive until disconnect().
-  void bind_federate_ambassador(rti1516e_m17::FederateAmbassador* fed);
 
   // §4.5 — create a federation execution. `fom_modules` are file paths.
   void createFederationExecution(const std::string& name,
@@ -131,62 +109,6 @@ class M17Bridge {
   // §4.15 — current restore state for `label`.
   M17RestoreState queryRestoreState(const std::string& label);
 
-  // ---------- §5 Declaration Management (M35 Agent BB) --------------------
-  //
-  // Pitch shape (M17): (ObjectClassHandle cls, AttributeHandleSet attrs) — the
-  // handles are pre-resolved via §10.2 support services. The bridge accepts
-  // raw uint64 handles so DLC's typed handles (which store a VLD blob rather
-  // than a raw integer) can be adapted via the file-bottom Friend shims in
-  // RTIambassadorImpl.cpp (see raw{ObjectClass,Attribute,InteractionClass}
-  // Handle helpers). Empty attrs vector is spec-legal per M17 header comment
-  // — the manager records publish/subscribe intent without attribute bindings.
-  //
-  // The DLC-only extras `bool active` (row 11.9) and `wstring updateRate`
-  // (row 11.9/11.11) are NOT modeled on the M17 wire (M17 Cut-1 does not
-  // support passive subscription or per-subscription update-rate policies).
-  // The DLC caller strips them before invoking the bridge; the divergence is
-  // documented in docs/DLC_DIVERGENCE_CATALOGUE.md §11 rows 11.9 / 11.11.
-  //
-  // Throws std::runtime_error on M17 failure (see guard() prefix vocabulary).
-  void publishObjectClassAttributes(
-      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
-  void unpublishObjectClassAttributes(
-      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
-  void subscribeObjectClassAttributes(
-      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
-  void unsubscribeObjectClassAttributes(
-      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
-
-  void publishInteractionClass(std::uint64_t cls);
-  void unpublishInteractionClass(std::uint64_t cls);
-  void subscribeInteractionClass(std::uint64_t cls);
-  void unsubscribeInteractionClass(std::uint64_t cls);
-
-  // ---------- §10 Support Services (M35 Agent BH) -------------------------
-  //
-  // Name↔handle lookups against the joined federation's FOM. The M17
-  // ambassador caches results, so the same lookup does not re-hit the
-  // wire. Every accessor throws std::runtime_error on failure (namespace-
-  // prefixed by guard() so the DLC caller translates to the correct spec
-  // exception via translateBridgeError()).
-  //
-  // Uint64 handle values are M17's raw handle representation (uint64
-  // per-handle-type). DLC callers wrap them into typed handles via the
-  // makeXHandleFromUint64 helpers in RTIambassadorImpl.cpp.
-  std::uint64_t getObjectClassHandle(const std::string& name);
-  std::string   getObjectClassName(std::uint64_t handle);
-  std::uint64_t getAttributeHandle(std::uint64_t cls,
-                                   const std::string& name);
-  std::string   getAttributeName(std::uint64_t cls, std::uint64_t attr);
-  std::uint64_t getInteractionClassHandle(const std::string& name);
-  std::string   getInteractionClassName(std::uint64_t handle);
-  std::uint64_t getParameterHandle(std::uint64_t cls,
-                                   const std::string& name);
-  std::string   getParameterName(std::uint64_t cls, std::uint64_t param);
-
-  // §10.4 callback dispatch enable/disable. M17 has this natively.
-  void enableCallbacks();
-  void disableCallbacks();
   // ===== §6 Object Management (M35 Agent BC) =====
   //
   // Every §6 wire call requires the federate to be joined; M17 raises

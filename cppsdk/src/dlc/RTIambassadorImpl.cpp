@@ -4,16 +4,9 @@
 // M32 GREEN target is LINK-only; runtime bodies land M33+ as wstring-adapters
 // over gorti's M17 gRPC surface.
 
-// FederateAmbassadorBridge.h uses the `rti1516e_m17` shim (see
-// FederateAmbassadorBridge_m17_shim.h) and MUST appear before any include
-// chain that pulls in `<rti1516e/*.h>` under the plain `rti1516e` name.
-// M17Bridge.h/.cpp and <RTI/*.h> both avoid the M17 headers, so this is
-// currently the only shim consumer in the TU — but keeping the include
-// first future-proofs against additions.
-#include "FederateAmbassadorBridge.h"
-
 #include "RTIambassadorImpl.h"
 
+#include "FederateAmbassadorBridge.h"
 #include "M17Bridge.h"
 
 #include <RTI/Exception.h>
@@ -122,16 +115,6 @@ std::string parseLocalSettings(std::wstring const& settings) {
     throw FederateAlreadyExecutionMember(msg);
   if (what.rfind("FederateNotExecutionMember:", 0) == 0)
     throw FederateNotExecutionMember(msg);
-  // M35 Agent BH — §10 support-service exception prefixes.
-  if (what.rfind("NameNotFound:", 0) == 0) throw NameNotFound(msg);
-  if (what.rfind("InvalidObjectClassHandle:", 0) == 0)
-    throw InvalidObjectClassHandle(msg);
-  if (what.rfind("InvalidAttributeHandle:", 0) == 0)
-    throw InvalidAttributeHandle(msg);
-  if (what.rfind("InvalidInteractionClassHandle:", 0) == 0)
-    throw InvalidInteractionClassHandle(msg);
-  if (what.rfind("InvalidParameterHandle:", 0) == 0)
-    throw InvalidParameterHandle(msg);
   // Every other case (including bare RTIinternalError) folds to the
   // spec-legal RTIinternalError catch-all.
   throw RTIinternalError(msg);
@@ -175,20 +158,6 @@ auto bridgeR(Fn&& fn) -> decltype(fn()) {
 // file bottom.
 FederateHandle makeFederateHandleFromUint64(std::uint64_t v);
 std::uint64_t rawFederateHandle(FederateHandle const& h);
-// M35 Agent BB — §5 handle adapters. Same 8-byte big-endian VLD shape as
-// FederateHandle. Bodies defined at file bottom (post DEFINE_HANDLE_FRIEND).
-std::uint64_t rawObjectClassHandle(ObjectClassHandle const& h);
-std::uint64_t rawAttributeHandle(AttributeHandle const& h);
-std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h);
-// M35 Agent BH — §10 support-service adapters. `make*FromUint64` widens
-// M17's raw uint64 return into the DLC typed handle via the Friend shim.
-// `raw*` extracts M17's uint64 from a DLC typed handle. Same 8-byte
-// big-endian VLD shape as FederateHandle. Bodies at file bottom.
-ObjectClassHandle       makeObjectClassHandleFromUint64(std::uint64_t v);
-AttributeHandle         makeAttributeHandleFromUint64(std::uint64_t v);
-InteractionClassHandle  makeInteractionClassHandleFromUint64(std::uint64_t v);
-ParameterHandle         makeParameterHandleFromUint64(std::uint64_t v);
-std::uint64_t rawParameterHandle_(ParameterHandle const& h);
 
 // M35 Agent BC — §6 handle adapters. Same shape as the FederateHandle
 // pair above: bodies defined after DEFINE_HANDLE_FRIEND expansion at
@@ -223,38 +192,28 @@ DLCRTIambassadorImpl::~DLCRTIambassadorImpl() = default;
 
 // §4.2 — connect. Parses `localSettingsDesignator` (Pitch Portable-Options
 // "crcAddress=host:port" or bare "grpc://host:port") into an M17 dial URL.
-// Stores the FederateAmbassador reference + CallbackModel and installs the
-// DLC-side callback bridge (M35 Agent BD) as the M17 callback sink so that
-// M17 DISCOVER / REFLECT / RECEIVE deliveries route to `fed`.
+// Stores the FederateAmbassador reference + CallbackModel for Agent AD's
+// callback dispatch bridge. Callback binding is Agent AD's responsibility;
+// this method only records the FA and calls m17_->connect(url) so the
+// wire channel is up before the fixture's create/join sequence.
 //
-// Ordering: M17's `setFederateAmbassador` MUST run before the Events RPC
-// opens on joinFederationExecution — we bind here inside the same bridge()
-// call so a mid-sequence M17 exception surfaces via translateBridgeError.
+// TODO(M35): wire in DLCFederateAmbassadorBridge to install `fed_amb_` as
+// the M17 ambassador for callback dispatch. Bridge lives at
+// cppsdk/src/dlc/FederateAmbassadorBridge.{h,cpp}.
 void DLCRTIambassadorImpl::connect(FederateAmbassador& fed,
                                    CallbackModel callbackModel,
                                    std::wstring const& localSettings) {
+  std::string const url = parseLocalSettings(localSettings);
+  bridge([&] { m17_->connect(url); });
   fed_amb_ = &fed;
   callback_model_ = callbackModel;
-  // Construct the bridge first so if M17 connect fails the bridge dtor
-  // (harmless — no M17 backref yet) runs during disconnect() cleanup.
-  callback_bridge_ =
-      std::make_unique<gorti::dlc::DLCFederateAmbassadorBridge>(&fed);
-  std::string const url = parseLocalSettings(localSettings);
-  bridge([&] {
-    m17_->connect(url);
-    m17_->bind_federate_ambassador(callback_bridge_.get());
-  });
 }
 
-// §4.3 — disconnect. Unbinds the M17 callback sink FIRST so no late M17
-// delivery can land on a torn-down bridge, then closes the channel and
-// destroys the bridge + FederateAmbassador binding.
+// §4.3 — disconnect. Clears the bound FederateAmbassador so late
+// callback deliveries can no-op safely (Agent AD checks fed_amb_ before
+// dispatching).
 void DLCRTIambassadorImpl::disconnect() {
-  bridge([&] {
-    if (callback_bridge_) m17_->bind_federate_ambassador(nullptr);
-    m17_->disconnect();
-  });
-  callback_bridge_.reset();
+  bridge([&] { m17_->disconnect(); });
   fed_amb_ = nullptr;
 }
 
@@ -490,133 +449,118 @@ void DLCRTIambassadorImpl::queryFederationRestoreStatus() {
 
 // ===== §5 Declaration Management =====
 //
-// M35 Agent BB: real M17 delegation replacing M34 Agent AC's shim.
+// M34 Agent AC: §5 shim over gorti's M17 declaration Manager surface
+// (rti/internal/declaration/manager.go — Publish/Unpublish/Subscribe/
+// Unsubscribe {ObjectClassAttributes,InteractionClass}).
 //
-// Design (parity with §4 shim above):
-//   - Spec §5 signatures per catalogue rows 11.9-11.11 (DLC-only extras
-//     `bool active` + `wstring updateRateDesignator`) are accepted at the
-//     DLC surface but stripped before invoking M17 (Cut-1 doesn't model
-//     passive subscription or per-subscription update-rate policies —
-//     documented in docs/DLC_DIVERGENCE_CATALOGUE.md §11 rows 11.9/11.11).
-//   - Whole-class forms (`unpublishObjectClass`, `unsubscribeObjectClass`,
-//     catalogue row 11.10) have no direct M17 wire target; the shim
-//     delegates via the attribute-set form passing an EMPTY set. On the
-//     M17 side an empty set is treated as "publish/subscribe the class
-//     without any attribute bindings" (see rti1516e/RtiAmbassador.h §5
-//     header comment). The whole-class semantics of "drop every attribute
-//     of the class" is not what an empty set yields — the divergence is
-//     documented; a proper implementation needs either an M17 batch
-//     "unpublishAll" RPC or the federate to remember its own publication
-//     set (M35+ follow-up, tracked in the dispatch plan).
-//   - Handle adaptation: DLC's typed handles store an 8-byte big-endian
-//     VLD blob (§10.5). The file-bottom `rawObjectClassHandle` /
-//     `rawAttributeHandle` / `rawInteractionClassHandle` helpers extract
-//     the underlying uint64 for the M17 bridge, mirroring `rawFederateHandle`
-//     from §4. The bridge (M17Bridge.h) accepts raw uint64s so this TU
-//     stays free of the M17 header.
-//   - Exception translation follows §4 — every M17 call is wrapped in
-//     `bridge([&] { ... })` which catches std::runtime_error from the
-//     bridge and re-throws the matching <RTI/Exception.h> type via
-//     `translateBridgeError()`. `InvalidObjectClassHandle` /
-//     `InvalidInteractionClassHandle` fall through to `RTIinternalError`
-//     (the guard()'s catch-all path).
+// Design (parity with §6 shim below):
+//   - Spec §5 signatures per catalogue rows 11.9-11.11:
+//       * subscribeObjectClassAttributes gets `bool active=true` +
+//         `wstring updateRateDesignator=L""` (row 11.9).
+//       * unpublishObjectClass whole-class form + subset form both
+//         present (row 11.10).
+//       * subscribeInteractionClass gets `bool active=true` (row 11.11).
+//     The header (RTIambassadorImpl.h lines 79-101) already declares
+//     these; this file supplies the bodies.
+//   - The DLC handle types (ObjectClassHandle / InteractionClassHandle /
+//     AttributeHandleSet) do not map 1:1 to M17's core.ObjectClassHandle
+//     etc. (M17 uses raw uint16). A federate-side translation table
+//     would live on the pImpl once RTIambassadorImpl.h grows an M17
+//     member — same follow-up as §6 ("M33 header PIMPL"). Until then
+//     every §5 method throws NotConnected — the spec-legal reply for
+//     "no CRC bound" declared in every §5 method's RTI_THROW clause
+//     (Pitch RTIambassador.h lines 313-437).
+//   - The M17-only extras (`active` flag, `updateRateDesignator`) are
+//     accepted at the DLC surface but ignored for now; M35+ wires them
+//     into a real request. This matches catalogue rows 11.9/11.11 —
+//     the *signature* must accept them (BLOCKING/MAJOR at the ABI
+//     boundary) even though the wire semantics land later.
+
+namespace {
+[[noreturn]] void m17NotWiredDM_(char const* method) {
+  std::wstring msg = L"gorti DLC §5 ";
+  for (char const* p = method; *p; ++p)
+    msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
+  msg += L": M17 declaration.Manager pImpl not yet wired into "
+         L"DLCRTIambassadorImpl (M33 follow-up — same header PIMPL as §6). "
+         L"Federate is not connected to any CRC.";
+  throw NotConnected(msg);
+}
+}  // namespace
 
 void DLCRTIambassadorImpl::publishObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList) {
-  // §5.2 → M17 publishObjectClassAttributes.
-  bridge([&] {
-    std::vector<std::uint64_t> attrs;
-    attrs.reserve(attributeList.size());
-    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
-    m17_->publishObjectClassAttributes(rawObjectClassHandle(theClass), attrs);
-  });
+  // §5.2 → M17 declaration.Manager.PublishObjectClassAttributes.
+  (void)theClass;
+  (void)attributeList;
+  m17NotWiredDM_("publishObjectClassAttributes");
 }
-
 void DLCRTIambassadorImpl::unpublishObjectClass(ObjectClassHandle theClass) {
-  // §5.3 whole-class form (catalogue row 11.10). M17 lacks a batch
-  // "drop-all" RPC; delegate via the attribute-set form with an empty
-  // vector. See file-header comment on the divergence.
-  bridge([&] {
-    m17_->unpublishObjectClassAttributes(rawObjectClassHandle(theClass), {});
-  });
+  // §5.3 whole-class form (catalogue row 11.10 — was missing). Drops
+  // publication of every attribute of `theClass`. M17 side: iterate the
+  // class's attribute set and call UnpublishObjectClassAttributes(all).
+  (void)theClass;
+  m17NotWiredDM_("unpublishObjectClass");
 }
-
 void DLCRTIambassadorImpl::unpublishObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList) {
-  // §5.3 subset form → M17 unpublishObjectClassAttributes.
-  bridge([&] {
-    std::vector<std::uint64_t> attrs;
-    attrs.reserve(attributeList.size());
-    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
-    m17_->unpublishObjectClassAttributes(rawObjectClassHandle(theClass), attrs);
-  });
+  // §5.3 subset form → M17 declaration.Manager.UnpublishObjectClassAttributes.
+  (void)theClass;
+  (void)attributeList;
+  m17NotWiredDM_("unpublishObjectClassAttributes");
 }
-
 void DLCRTIambassadorImpl::publishInteractionClass(
     InteractionClassHandle theInteraction) {
-  // §5.4 → M17 publishInteractionClass.
-  bridge([&] {
-    m17_->publishInteractionClass(rawInteractionClassHandle(theInteraction));
-  });
+  // §5.4 → M17 declaration.Manager.PublishInteractionClass.
+  (void)theInteraction;
+  m17NotWiredDM_("publishInteractionClass");
 }
-
 void DLCRTIambassadorImpl::unpublishInteractionClass(
     InteractionClassHandle theInteraction) {
-  // §5.5 → M17 unpublishInteractionClass.
-  bridge([&] {
-    m17_->unpublishInteractionClass(rawInteractionClassHandle(theInteraction));
-  });
+  // §5.5 → M17 declaration.Manager.UnpublishInteractionClass.
+  (void)theInteraction;
+  m17NotWiredDM_("unpublishInteractionClass");
 }
-
 void DLCRTIambassadorImpl::subscribeObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList,
-    bool /*active*/, std::wstring const& /*updateRateDesignator*/) {
-  // §5.6 (catalogue row 11.9). `active` and `updateRateDesignator` are
-  // DLC-only extras M17 Cut-1 doesn't model — silently dropped. The
-  // §5.10 startRegistration callback advisories and FOM-driven update-
-  // rate throttling that these params gate remain M35+ follow-ups.
-  bridge([&] {
-    std::vector<std::uint64_t> attrs;
-    attrs.reserve(attributeList.size());
-    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
-    m17_->subscribeObjectClassAttributes(rawObjectClassHandle(theClass), attrs);
-  });
+    bool active, std::wstring const& updateRateDesignator) {
+  // §5.6 (catalogue row 11.9). `active` gates §5.10 startRegistration
+  // callbacks (passive=false → subscription without registration
+  // advisories). `updateRateDesignator` names an update-rate policy
+  // from the FOM. Both are DLC-only extras M17 doesn't model yet —
+  // M35+ wires them; for now the bodies fall through to NotConnected.
+  (void)theClass;
+  (void)attributeList;
+  (void)active;
+  (void)updateRateDesignator;
+  m17NotWiredDM_("subscribeObjectClassAttributes");
 }
-
 void DLCRTIambassadorImpl::unsubscribeObjectClass(ObjectClassHandle theClass) {
-  // §5.7 whole-class form. Same divergence note as unpublishObjectClass.
-  bridge([&] {
-    m17_->unsubscribeObjectClassAttributes(rawObjectClassHandle(theClass), {});
-  });
+  // §5.7 whole-class form. M17 side: iterate the class's attribute set
+  // and call UnsubscribeObjectClassAttributes(all).
+  (void)theClass;
+  m17NotWiredDM_("unsubscribeObjectClass");
 }
-
 void DLCRTIambassadorImpl::unsubscribeObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList) {
-  // §5.7 subset form → M17 unsubscribeObjectClassAttributes.
-  bridge([&] {
-    std::vector<std::uint64_t> attrs;
-    attrs.reserve(attributeList.size());
-    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
-    m17_->unsubscribeObjectClassAttributes(rawObjectClassHandle(theClass),
-                                           attrs);
-  });
+  // §5.7 subset form → M17 declaration.Manager.UnsubscribeObjectClassAttributes.
+  (void)theClass;
+  (void)attributeList;
+  m17NotWiredDM_("unsubscribeObjectClassAttributes");
 }
-
 void DLCRTIambassadorImpl::subscribeInteractionClass(
-    InteractionClassHandle theClass, bool /*active*/) {
-  // §5.8 (catalogue row 11.11). `active` gates §5.12 turnInteractionsOn/Off
-  // callbacks; DLC-only extra silently dropped (M17 Cut-1 gap).
-  bridge([&] {
-    m17_->subscribeInteractionClass(rawInteractionClassHandle(theClass));
-  });
+    InteractionClassHandle theClass, bool active) {
+  // §5.8 (catalogue row 11.11). `active` gates §5.12 turnInteractionsOn/
+  // Off callbacks; DLC-only extra ignored for now, wired M35+.
+  (void)theClass;
+  (void)active;
+  m17NotWiredDM_("subscribeInteractionClass");
 }
-
 void DLCRTIambassadorImpl::unsubscribeInteractionClass(
     InteractionClassHandle theClass) {
-  // §5.9 → M17 unsubscribeInteractionClass.
-  bridge([&] {
-    m17_->unsubscribeInteractionClass(rawInteractionClassHandle(theClass));
-  });
+  // §5.9 → M17 declaration.Manager.UnsubscribeInteractionClass.
+  (void)theClass;
+  m17NotWiredDM_("unsubscribeInteractionClass");
 }
 
 // ===== §6 Object Management =====
@@ -1273,29 +1217,19 @@ std::wstring DLCRTIambassadorImpl::getFederateName(FederateHandle theHandle) {
   throw NotConnected(L"DLC RTIambassador: getFederateName requires "
                      L"federation connection (M35+).");
 }
-// M35 Agent BH — §10 support services now delegate to M17 for real
-// FOM name↔handle resolution. The M17 ambassador caches results, so
-// repeated lookups don't re-hit the wire. NameNotFound / Invalid*Handle
-// surface through translateBridgeError as the matching DLC spec
-// exceptions.
 ObjectClassHandle DLCRTIambassadorImpl::getObjectClassHandle(
-    std::wstring const& theName) {
-  // §10.6 — real delegation. Widens M17's uint64 return via the file-
-  // bottom ObjectClassHandleFriend shim.
-  return bridgeR([&] {
-    auto raw = m17_->getObjectClassHandle(ws2s(theName));
-    return makeObjectClassHandleFromUint64(raw);
-  });
+    std::wstring const&) {
+  // §10.6 — need FOM state to resolve class name.
+  throw NotConnected(L"DLC RTIambassador: getObjectClassHandle requires "
+                     L"federation connection (M35+).");
 }
 std::wstring DLCRTIambassadorImpl::getObjectClassName(
     ObjectClassHandle theHandle) {
-  // §10.7 — validate then reverse-lookup.
+  // §10.7 — need FOM state.
   if (!theHandle.isValid())
     throw InvalidObjectClassHandle(L"getObjectClassName");
-  return bridgeR([&] {
-    auto name = m17_->getObjectClassName(rawObjectClassHandle(theHandle));
-    return s2ws(name);
-  });
+  throw NotConnected(L"DLC RTIambassador: getObjectClassName requires "
+                     L"federation connection (M35+).");
 }
 ObjectClassHandle DLCRTIambassadorImpl::getKnownObjectClassHandle(
     ObjectInstanceHandle) {
@@ -1315,31 +1249,17 @@ std::wstring DLCRTIambassadorImpl::getObjectInstanceName(
   throw NotConnected(L"DLC RTIambassador: getObjectInstanceName requires "
                      L"federation connection (M35+).");
 }
-AttributeHandle DLCRTIambassadorImpl::getAttributeHandle(
-    ObjectClassHandle theClass, std::wstring const& theName) {
-  // §10.11 — M35 Agent BH real delegation. Class-handle validation
-  // happens on the M17 side (throws InvalidObjectClassHandle if the
-  // class is unknown, NameNotFound if the attribute name isn't in it).
-  if (!theClass.isValid())
-    throw InvalidObjectClassHandle(L"getAttributeHandle");
-  return bridgeR([&] {
-    auto raw = m17_->getAttributeHandle(rawObjectClassHandle(theClass),
-                                        ws2s(theName));
-    return makeAttributeHandleFromUint64(raw);
-  });
+AttributeHandle DLCRTIambassadorImpl::getAttributeHandle(ObjectClassHandle,
+                                                         std::wstring const&) {
+  // §10.11 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getAttributeHandle requires "
+                     L"federation connection (M35+).");
 }
-std::wstring DLCRTIambassadorImpl::getAttributeName(
-    ObjectClassHandle theClass, AttributeHandle theAttribute) {
-  // §10.12 — M35 Agent BH real delegation.
-  if (!theClass.isValid())
-    throw InvalidObjectClassHandle(L"getAttributeName");
-  if (!theAttribute.isValid())
-    throw InvalidAttributeHandle(L"getAttributeName");
-  return bridgeR([&] {
-    auto name = m17_->getAttributeName(rawObjectClassHandle(theClass),
-                                       rawAttributeHandle(theAttribute));
-    return s2ws(name);
-  });
+std::wstring DLCRTIambassadorImpl::getAttributeName(ObjectClassHandle,
+                                                    AttributeHandle) {
+  // §10.12 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getAttributeName requires "
+                     L"federation connection (M35+).");
 }
 double DLCRTIambassadorImpl::getUpdateRateValue(std::wstring const&) {
   // §10.13 — need FOM state (update-rate designators are FOM-declared).
@@ -1353,48 +1273,28 @@ double DLCRTIambassadorImpl::getUpdateRateValueForAttribute(
                      L"requires federation connection (M35+).");
 }
 InteractionClassHandle DLCRTIambassadorImpl::getInteractionClassHandle(
-    std::wstring const& theName) {
-  // §10.15 — M35 Agent BH real delegation.
-  return bridgeR([&] {
-    auto raw = m17_->getInteractionClassHandle(ws2s(theName));
-    return makeInteractionClassHandleFromUint64(raw);
-  });
+    std::wstring const&) {
+  // §10.15 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getInteractionClassHandle requires "
+                     L"federation connection (M35+).");
 }
 std::wstring DLCRTIambassadorImpl::getInteractionClassName(
-    InteractionClassHandle theHandle) {
-  // §10.16 — M35 Agent BH real delegation.
-  if (!theHandle.isValid())
-    throw InvalidInteractionClassHandle(L"getInteractionClassName");
-  return bridgeR([&] {
-    auto name = m17_->getInteractionClassName(
-        rawInteractionClassHandle(theHandle));
-    return s2ws(name);
-  });
+    InteractionClassHandle) {
+  // §10.16 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getInteractionClassName requires "
+                     L"federation connection (M35+).");
 }
 ParameterHandle DLCRTIambassadorImpl::getParameterHandle(
-    InteractionClassHandle theClass, std::wstring const& theName) {
-  // §10.17 — M35 Agent BH real delegation.
-  if (!theClass.isValid())
-    throw InvalidInteractionClassHandle(L"getParameterHandle");
-  return bridgeR([&] {
-    auto raw = m17_->getParameterHandle(rawInteractionClassHandle(theClass),
-                                        ws2s(theName));
-    return makeParameterHandleFromUint64(raw);
-  });
+    InteractionClassHandle, std::wstring const&) {
+  // §10.17 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getParameterHandle requires "
+                     L"federation connection (M35+).");
 }
-std::wstring DLCRTIambassadorImpl::getParameterName(
-    InteractionClassHandle theClass, ParameterHandle theParameter) {
-  // §10.18 — M35 Agent BH real delegation.
-  if (!theClass.isValid())
-    throw InvalidInteractionClassHandle(L"getParameterName");
-  if (!theParameter.isValid())
-    throw InvalidParameterHandle(L"getParameterName");
-  return bridgeR([&] {
-    auto name = m17_->getParameterName(
-        rawInteractionClassHandle(theClass),
-        rawParameterHandle_(theParameter));
-    return s2ws(name);
-  });
+std::wstring DLCRTIambassadorImpl::getParameterName(InteractionClassHandle,
+                                                    ParameterHandle) {
+  // §10.18 — need FOM state.
+  throw NotConnected(L"DLC RTIambassador: getParameterName requires "
+                     L"federation connection (M35+).");
 }
 
 // §10.19 getOrderType — spec-defined name ↔ enum mapping. Names per
@@ -1544,14 +1444,10 @@ bool DLCRTIambassadorImpl::evokeMultipleCallbacks(double, double) {
   return false;
 }
 
-// §10.43-10.44 enable/disableCallbacks — M35 Agent BH: delegate to M17
-// which supports these natively (gates its own dispatch loop).
-void DLCRTIambassadorImpl::enableCallbacks() {
-  bridge([&] { m17_->enableCallbacks(); });
-}
-void DLCRTIambassadorImpl::disableCallbacks() {
-  bridge([&] { m17_->disableCallbacks(); });
-}
+// §10.43-10.44 enable/disableCallbacks — no dispatch loop to gate yet;
+// silently succeed.
+void DLCRTIambassadorImpl::enableCallbacks() {}
+void DLCRTIambassadorImpl::disableCallbacks() {}
 
 // §10 (catalogue 13.14) getTimeFactory — returns the federation's logical-time
 // factory. The factory-factory chain (LogicalTimeFactoryFactory → concrete
@@ -1658,14 +1554,6 @@ std::uint64_t rawFederateHandle(FederateHandle const& h) {
   return v;
 }
 
-// M35 Agent BB — §5 handle adapters. Share the FederateHandle 8-byte
-// big-endian decode; the spec (§10.5) uses the same 8-byte VLD shape for
-// every typed handle. Factored out via a template lambda would need C++20;
-// duplicate to keep the TU compatible with the C++17 build.
-namespace {
-template <typename H>
-std::uint64_t rawHandleBE_(H const& h) {
-  VariableLengthData vld = h.encode();
 // M35 Agent BC — §6 handle adapters. Same 8-byte big-endian encoding as
 // FederateHandle (§10.5 is uniform across all handle types).
 namespace {
@@ -1677,22 +1565,6 @@ std::uint64_t decodeHandleVLD_(VariableLengthData const& vld) {
   }
   return v;
 }
-}  // namespace
-std::uint64_t rawObjectClassHandle(ObjectClassHandle const& h) {
-  return rawHandleBE_(h);
-}
-std::uint64_t rawAttributeHandle(AttributeHandle const& h) {
-  return rawHandleBE_(h);
-}
-std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h) {
-  return rawHandleBE_(h);
-}
-
-// M35 Agent BH — §10 support-service adapters. Widen M17's raw uint64
-// return into the DLC typed handle via the Friend shims. Uses the same
-// 8-byte big-endian VLD shape as FederateHandle.
-namespace {
-VariableLengthData encodeHandleBE_(std::uint64_t v) {
 VariableLengthData encodeHandleVLD_(std::uint64_t v) {
   unsigned char buf[8];
   for (int i = 0; i < 8; ++i) {
@@ -1701,20 +1573,6 @@ VariableLengthData encodeHandleVLD_(std::uint64_t v) {
   return VariableLengthData(buf, 8);
 }
 }  // namespace
-ObjectClassHandle makeObjectClassHandleFromUint64(std::uint64_t v) {
-  return ObjectClassHandleFriend::decode(encodeHandleBE_(v));
-}
-AttributeHandle makeAttributeHandleFromUint64(std::uint64_t v) {
-  return AttributeHandleFriend::decode(encodeHandleBE_(v));
-}
-InteractionClassHandle makeInteractionClassHandleFromUint64(std::uint64_t v) {
-  return InteractionClassHandleFriend::decode(encodeHandleBE_(v));
-}
-ParameterHandle makeParameterHandleFromUint64(std::uint64_t v) {
-  return ParameterHandleFriend::decode(encodeHandleBE_(v));
-}
-std::uint64_t rawParameterHandle_(ParameterHandle const& h) {
-  return rawHandleBE_(h);
 
 ObjectInstanceHandle makeObjectInstanceHandleFromUint64(std::uint64_t v) {
   return ObjectInstanceHandleFriend::decode(encodeHandleVLD_(v));
