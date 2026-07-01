@@ -1,0 +1,9 @@
+FED: CONNECT
+FED: CREATE federation=alpha
+FED: CREATE federation=beta
+FED: CREATE federation=gamma
+FED: LIST_FEDERATION_EXECUTIONS
+FED: DESTROY federation=alpha
+FED: DESTROY federation=beta
+FED: DESTROY federation=gamma
+FED: DISCONNECT
