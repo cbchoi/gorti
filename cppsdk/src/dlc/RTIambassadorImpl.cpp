@@ -122,6 +122,16 @@ std::string parseLocalSettings(std::wstring const& settings) {
     throw FederateAlreadyExecutionMember(msg);
   if (what.rfind("FederateNotExecutionMember:", 0) == 0)
     throw FederateNotExecutionMember(msg);
+  // M35 Agent BH — §10 support-service exception prefixes.
+  if (what.rfind("NameNotFound:", 0) == 0) throw NameNotFound(msg);
+  if (what.rfind("InvalidObjectClassHandle:", 0) == 0)
+    throw InvalidObjectClassHandle(msg);
+  if (what.rfind("InvalidAttributeHandle:", 0) == 0)
+    throw InvalidAttributeHandle(msg);
+  if (what.rfind("InvalidInteractionClassHandle:", 0) == 0)
+    throw InvalidInteractionClassHandle(msg);
+  if (what.rfind("InvalidParameterHandle:", 0) == 0)
+    throw InvalidParameterHandle(msg);
   // Every other case (including bare RTIinternalError) folds to the
   // spec-legal RTIinternalError catch-all.
   throw RTIinternalError(msg);
@@ -170,6 +180,15 @@ std::uint64_t rawFederateHandle(FederateHandle const& h);
 std::uint64_t rawObjectClassHandle(ObjectClassHandle const& h);
 std::uint64_t rawAttributeHandle(AttributeHandle const& h);
 std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h);
+// M35 Agent BH — §10 support-service adapters. `make*FromUint64` widens
+// M17's raw uint64 return into the DLC typed handle via the Friend shim.
+// `raw*` extracts M17's uint64 from a DLC typed handle. Same 8-byte
+// big-endian VLD shape as FederateHandle. Bodies at file bottom.
+ObjectClassHandle       makeObjectClassHandleFromUint64(std::uint64_t v);
+AttributeHandle         makeAttributeHandleFromUint64(std::uint64_t v);
+InteractionClassHandle  makeInteractionClassHandleFromUint64(std::uint64_t v);
+ParameterHandle         makeParameterHandleFromUint64(std::uint64_t v);
+std::uint64_t rawParameterHandle_(ParameterHandle const& h);
 
 // Base class ctor/dtor — must have out-of-line definitions for the vtable.
 RTIambassador::RTIambassador() RTI_NOEXCEPT {}
@@ -1223,19 +1242,29 @@ std::wstring DLCRTIambassadorImpl::getFederateName(FederateHandle theHandle) {
   throw NotConnected(L"DLC RTIambassador: getFederateName requires "
                      L"federation connection (M35+).");
 }
+// M35 Agent BH — §10 support services now delegate to M17 for real
+// FOM name↔handle resolution. The M17 ambassador caches results, so
+// repeated lookups don't re-hit the wire. NameNotFound / Invalid*Handle
+// surface through translateBridgeError as the matching DLC spec
+// exceptions.
 ObjectClassHandle DLCRTIambassadorImpl::getObjectClassHandle(
-    std::wstring const&) {
-  // §10.6 — need FOM state to resolve class name.
-  throw NotConnected(L"DLC RTIambassador: getObjectClassHandle requires "
-                     L"federation connection (M35+).");
+    std::wstring const& theName) {
+  // §10.6 — real delegation. Widens M17's uint64 return via the file-
+  // bottom ObjectClassHandleFriend shim.
+  return bridgeR([&] {
+    auto raw = m17_->getObjectClassHandle(ws2s(theName));
+    return makeObjectClassHandleFromUint64(raw);
+  });
 }
 std::wstring DLCRTIambassadorImpl::getObjectClassName(
     ObjectClassHandle theHandle) {
-  // §10.7 — need FOM state.
+  // §10.7 — validate then reverse-lookup.
   if (!theHandle.isValid())
     throw InvalidObjectClassHandle(L"getObjectClassName");
-  throw NotConnected(L"DLC RTIambassador: getObjectClassName requires "
-                     L"federation connection (M35+).");
+  return bridgeR([&] {
+    auto name = m17_->getObjectClassName(rawObjectClassHandle(theHandle));
+    return s2ws(name);
+  });
 }
 ObjectClassHandle DLCRTIambassadorImpl::getKnownObjectClassHandle(
     ObjectInstanceHandle) {
@@ -1255,17 +1284,31 @@ std::wstring DLCRTIambassadorImpl::getObjectInstanceName(
   throw NotConnected(L"DLC RTIambassador: getObjectInstanceName requires "
                      L"federation connection (M35+).");
 }
-AttributeHandle DLCRTIambassadorImpl::getAttributeHandle(ObjectClassHandle,
-                                                         std::wstring const&) {
-  // §10.11 — need FOM state.
-  throw NotConnected(L"DLC RTIambassador: getAttributeHandle requires "
-                     L"federation connection (M35+).");
+AttributeHandle DLCRTIambassadorImpl::getAttributeHandle(
+    ObjectClassHandle theClass, std::wstring const& theName) {
+  // §10.11 — M35 Agent BH real delegation. Class-handle validation
+  // happens on the M17 side (throws InvalidObjectClassHandle if the
+  // class is unknown, NameNotFound if the attribute name isn't in it).
+  if (!theClass.isValid())
+    throw InvalidObjectClassHandle(L"getAttributeHandle");
+  return bridgeR([&] {
+    auto raw = m17_->getAttributeHandle(rawObjectClassHandle(theClass),
+                                        ws2s(theName));
+    return makeAttributeHandleFromUint64(raw);
+  });
 }
-std::wstring DLCRTIambassadorImpl::getAttributeName(ObjectClassHandle,
-                                                    AttributeHandle) {
-  // §10.12 — need FOM state.
-  throw NotConnected(L"DLC RTIambassador: getAttributeName requires "
-                     L"federation connection (M35+).");
+std::wstring DLCRTIambassadorImpl::getAttributeName(
+    ObjectClassHandle theClass, AttributeHandle theAttribute) {
+  // §10.12 — M35 Agent BH real delegation.
+  if (!theClass.isValid())
+    throw InvalidObjectClassHandle(L"getAttributeName");
+  if (!theAttribute.isValid())
+    throw InvalidAttributeHandle(L"getAttributeName");
+  return bridgeR([&] {
+    auto name = m17_->getAttributeName(rawObjectClassHandle(theClass),
+                                       rawAttributeHandle(theAttribute));
+    return s2ws(name);
+  });
 }
 double DLCRTIambassadorImpl::getUpdateRateValue(std::wstring const&) {
   // §10.13 — need FOM state (update-rate designators are FOM-declared).
@@ -1279,28 +1322,48 @@ double DLCRTIambassadorImpl::getUpdateRateValueForAttribute(
                      L"requires federation connection (M35+).");
 }
 InteractionClassHandle DLCRTIambassadorImpl::getInteractionClassHandle(
-    std::wstring const&) {
-  // §10.15 — need FOM state.
-  throw NotConnected(L"DLC RTIambassador: getInteractionClassHandle requires "
-                     L"federation connection (M35+).");
+    std::wstring const& theName) {
+  // §10.15 — M35 Agent BH real delegation.
+  return bridgeR([&] {
+    auto raw = m17_->getInteractionClassHandle(ws2s(theName));
+    return makeInteractionClassHandleFromUint64(raw);
+  });
 }
 std::wstring DLCRTIambassadorImpl::getInteractionClassName(
-    InteractionClassHandle) {
-  // §10.16 — need FOM state.
-  throw NotConnected(L"DLC RTIambassador: getInteractionClassName requires "
-                     L"federation connection (M35+).");
+    InteractionClassHandle theHandle) {
+  // §10.16 — M35 Agent BH real delegation.
+  if (!theHandle.isValid())
+    throw InvalidInteractionClassHandle(L"getInteractionClassName");
+  return bridgeR([&] {
+    auto name = m17_->getInteractionClassName(
+        rawInteractionClassHandle(theHandle));
+    return s2ws(name);
+  });
 }
 ParameterHandle DLCRTIambassadorImpl::getParameterHandle(
-    InteractionClassHandle, std::wstring const&) {
-  // §10.17 — need FOM state.
-  throw NotConnected(L"DLC RTIambassador: getParameterHandle requires "
-                     L"federation connection (M35+).");
+    InteractionClassHandle theClass, std::wstring const& theName) {
+  // §10.17 — M35 Agent BH real delegation.
+  if (!theClass.isValid())
+    throw InvalidInteractionClassHandle(L"getParameterHandle");
+  return bridgeR([&] {
+    auto raw = m17_->getParameterHandle(rawInteractionClassHandle(theClass),
+                                        ws2s(theName));
+    return makeParameterHandleFromUint64(raw);
+  });
 }
-std::wstring DLCRTIambassadorImpl::getParameterName(InteractionClassHandle,
-                                                    ParameterHandle) {
-  // §10.18 — need FOM state.
-  throw NotConnected(L"DLC RTIambassador: getParameterName requires "
-                     L"federation connection (M35+).");
+std::wstring DLCRTIambassadorImpl::getParameterName(
+    InteractionClassHandle theClass, ParameterHandle theParameter) {
+  // §10.18 — M35 Agent BH real delegation.
+  if (!theClass.isValid())
+    throw InvalidInteractionClassHandle(L"getParameterName");
+  if (!theParameter.isValid())
+    throw InvalidParameterHandle(L"getParameterName");
+  return bridgeR([&] {
+    auto name = m17_->getParameterName(
+        rawInteractionClassHandle(theClass),
+        rawParameterHandle_(theParameter));
+    return s2ws(name);
+  });
 }
 
 // §10.19 getOrderType — spec-defined name ↔ enum mapping. Names per
@@ -1450,10 +1513,14 @@ bool DLCRTIambassadorImpl::evokeMultipleCallbacks(double, double) {
   return false;
 }
 
-// §10.43-10.44 enable/disableCallbacks — no dispatch loop to gate yet;
-// silently succeed.
-void DLCRTIambassadorImpl::enableCallbacks() {}
-void DLCRTIambassadorImpl::disableCallbacks() {}
+// §10.43-10.44 enable/disableCallbacks — M35 Agent BH: delegate to M17
+// which supports these natively (gates its own dispatch loop).
+void DLCRTIambassadorImpl::enableCallbacks() {
+  bridge([&] { m17_->enableCallbacks(); });
+}
+void DLCRTIambassadorImpl::disableCallbacks() {
+  bridge([&] { m17_->disableCallbacks(); });
+}
 
 // §10 (catalogue 13.14) getTimeFactory — returns the federation's logical-time
 // factory. The factory-factory chain (LogicalTimeFactoryFactory → concrete
@@ -1583,6 +1650,34 @@ std::uint64_t rawAttributeHandle(AttributeHandle const& h) {
   return rawHandleBE_(h);
 }
 std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h) {
+  return rawHandleBE_(h);
+}
+
+// M35 Agent BH — §10 support-service adapters. Widen M17's raw uint64
+// return into the DLC typed handle via the Friend shims. Uses the same
+// 8-byte big-endian VLD shape as FederateHandle.
+namespace {
+VariableLengthData encodeHandleBE_(std::uint64_t v) {
+  unsigned char buf[8];
+  for (int i = 0; i < 8; ++i) {
+    buf[i] = static_cast<unsigned char>((v >> (56 - i * 8)) & 0xff);
+  }
+  return VariableLengthData(buf, 8);
+}
+}  // namespace
+ObjectClassHandle makeObjectClassHandleFromUint64(std::uint64_t v) {
+  return ObjectClassHandleFriend::decode(encodeHandleBE_(v));
+}
+AttributeHandle makeAttributeHandleFromUint64(std::uint64_t v) {
+  return AttributeHandleFriend::decode(encodeHandleBE_(v));
+}
+InteractionClassHandle makeInteractionClassHandleFromUint64(std::uint64_t v) {
+  return InteractionClassHandleFriend::decode(encodeHandleBE_(v));
+}
+ParameterHandle makeParameterHandleFromUint64(std::uint64_t v) {
+  return ParameterHandleFriend::decode(encodeHandleBE_(v));
+}
+std::uint64_t rawParameterHandle_(ParameterHandle const& h) {
   return rawHandleBE_(h);
 }
 

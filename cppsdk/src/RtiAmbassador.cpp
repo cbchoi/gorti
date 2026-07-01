@@ -256,7 +256,21 @@ class RTIambassadorImpl {
 
 M17RTIambassador::M17RTIambassador() : impl_(std::make_unique<RTIambassadorImpl>()) {}
 
-M17RTIambassador::~M17RTIambassador() = default;
+// M35 Agent BH — explicit destructor: stop the background event stream
+// BEFORE the RTIambassadorImpl unique_ptr default-destructs its
+// `std::thread stream_thread`. If stream_thread is still joinable at
+// destruction time (e.g. the federate threw between join and disconnect)
+// the std::thread dtor invokes std::terminate — killing exception
+// unwind through the fixture's `catch (Exception&)` block.
+//
+// stopEventStream() is idempotent (guarded by stream_running.exchange),
+// so calling it here has no side-effect when the caller already
+// disconnected. The impl unique_ptr then default-destructs safely.
+M17RTIambassador::~M17RTIambassador() {
+  if (impl_) {
+    impl_->stopEventStream();
+  }
+}
 
 M17RTIambassador::M17RTIambassador(M17RTIambassador&&) noexcept = default;
 M17RTIambassador& M17RTIambassador::operator=(M17RTIambassador&&) noexcept = default;
