@@ -157,6 +157,11 @@ auto bridgeR(Fn&& fn) -> decltype(fn()) {
 // file bottom.
 FederateHandle makeFederateHandleFromUint64(std::uint64_t v);
 std::uint64_t rawFederateHandle(FederateHandle const& h);
+// M35 Agent BB — §5 handle adapters. Same 8-byte big-endian VLD shape as
+// FederateHandle. Bodies defined at file bottom (post DEFINE_HANDLE_FRIEND).
+std::uint64_t rawObjectClassHandle(ObjectClassHandle const& h);
+std::uint64_t rawAttributeHandle(AttributeHandle const& h);
+std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h);
 
 // Base class ctor/dtor — must have out-of-line definitions for the vtable.
 RTIambassador::RTIambassador() RTI_NOEXCEPT {}
@@ -435,118 +440,133 @@ void DLCRTIambassadorImpl::queryFederationRestoreStatus() {
 
 // ===== §5 Declaration Management =====
 //
-// M34 Agent AC: §5 shim over gorti's M17 declaration Manager surface
-// (rti/internal/declaration/manager.go — Publish/Unpublish/Subscribe/
-// Unsubscribe {ObjectClassAttributes,InteractionClass}).
+// M35 Agent BB: real M17 delegation replacing M34 Agent AC's shim.
 //
-// Design (parity with §6 shim below):
-//   - Spec §5 signatures per catalogue rows 11.9-11.11:
-//       * subscribeObjectClassAttributes gets `bool active=true` +
-//         `wstring updateRateDesignator=L""` (row 11.9).
-//       * unpublishObjectClass whole-class form + subset form both
-//         present (row 11.10).
-//       * subscribeInteractionClass gets `bool active=true` (row 11.11).
-//     The header (RTIambassadorImpl.h lines 79-101) already declares
-//     these; this file supplies the bodies.
-//   - The DLC handle types (ObjectClassHandle / InteractionClassHandle /
-//     AttributeHandleSet) do not map 1:1 to M17's core.ObjectClassHandle
-//     etc. (M17 uses raw uint16). A federate-side translation table
-//     would live on the pImpl once RTIambassadorImpl.h grows an M17
-//     member — same follow-up as §6 ("M33 header PIMPL"). Until then
-//     every §5 method throws NotConnected — the spec-legal reply for
-//     "no CRC bound" declared in every §5 method's RTI_THROW clause
-//     (Pitch RTIambassador.h lines 313-437).
-//   - The M17-only extras (`active` flag, `updateRateDesignator`) are
-//     accepted at the DLC surface but ignored for now; M35+ wires them
-//     into a real request. This matches catalogue rows 11.9/11.11 —
-//     the *signature* must accept them (BLOCKING/MAJOR at the ABI
-//     boundary) even though the wire semantics land later.
-
-namespace {
-[[noreturn]] void m17NotWiredDM_(char const* method) {
-  std::wstring msg = L"gorti DLC §5 ";
-  for (char const* p = method; *p; ++p)
-    msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
-  msg += L": M17 declaration.Manager pImpl not yet wired into "
-         L"DLCRTIambassadorImpl (M33 follow-up — same header PIMPL as §6). "
-         L"Federate is not connected to any CRC.";
-  throw NotConnected(msg);
-}
-}  // namespace
+// Design (parity with §4 shim above):
+//   - Spec §5 signatures per catalogue rows 11.9-11.11 (DLC-only extras
+//     `bool active` + `wstring updateRateDesignator`) are accepted at the
+//     DLC surface but stripped before invoking M17 (Cut-1 doesn't model
+//     passive subscription or per-subscription update-rate policies —
+//     documented in docs/DLC_DIVERGENCE_CATALOGUE.md §11 rows 11.9/11.11).
+//   - Whole-class forms (`unpublishObjectClass`, `unsubscribeObjectClass`,
+//     catalogue row 11.10) have no direct M17 wire target; the shim
+//     delegates via the attribute-set form passing an EMPTY set. On the
+//     M17 side an empty set is treated as "publish/subscribe the class
+//     without any attribute bindings" (see rti1516e/RtiAmbassador.h §5
+//     header comment). The whole-class semantics of "drop every attribute
+//     of the class" is not what an empty set yields — the divergence is
+//     documented; a proper implementation needs either an M17 batch
+//     "unpublishAll" RPC or the federate to remember its own publication
+//     set (M35+ follow-up, tracked in the dispatch plan).
+//   - Handle adaptation: DLC's typed handles store an 8-byte big-endian
+//     VLD blob (§10.5). The file-bottom `rawObjectClassHandle` /
+//     `rawAttributeHandle` / `rawInteractionClassHandle` helpers extract
+//     the underlying uint64 for the M17 bridge, mirroring `rawFederateHandle`
+//     from §4. The bridge (M17Bridge.h) accepts raw uint64s so this TU
+//     stays free of the M17 header.
+//   - Exception translation follows §4 — every M17 call is wrapped in
+//     `bridge([&] { ... })` which catches std::runtime_error from the
+//     bridge and re-throws the matching <RTI/Exception.h> type via
+//     `translateBridgeError()`. `InvalidObjectClassHandle` /
+//     `InvalidInteractionClassHandle` fall through to `RTIinternalError`
+//     (the guard()'s catch-all path).
 
 void DLCRTIambassadorImpl::publishObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList) {
-  // §5.2 → M17 declaration.Manager.PublishObjectClassAttributes.
-  (void)theClass;
-  (void)attributeList;
-  m17NotWiredDM_("publishObjectClassAttributes");
+  // §5.2 → M17 publishObjectClassAttributes.
+  bridge([&] {
+    std::vector<std::uint64_t> attrs;
+    attrs.reserve(attributeList.size());
+    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
+    m17_->publishObjectClassAttributes(rawObjectClassHandle(theClass), attrs);
+  });
 }
+
 void DLCRTIambassadorImpl::unpublishObjectClass(ObjectClassHandle theClass) {
-  // §5.3 whole-class form (catalogue row 11.10 — was missing). Drops
-  // publication of every attribute of `theClass`. M17 side: iterate the
-  // class's attribute set and call UnpublishObjectClassAttributes(all).
-  (void)theClass;
-  m17NotWiredDM_("unpublishObjectClass");
+  // §5.3 whole-class form (catalogue row 11.10). M17 lacks a batch
+  // "drop-all" RPC; delegate via the attribute-set form with an empty
+  // vector. See file-header comment on the divergence.
+  bridge([&] {
+    m17_->unpublishObjectClassAttributes(rawObjectClassHandle(theClass), {});
+  });
 }
+
 void DLCRTIambassadorImpl::unpublishObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList) {
-  // §5.3 subset form → M17 declaration.Manager.UnpublishObjectClassAttributes.
-  (void)theClass;
-  (void)attributeList;
-  m17NotWiredDM_("unpublishObjectClassAttributes");
+  // §5.3 subset form → M17 unpublishObjectClassAttributes.
+  bridge([&] {
+    std::vector<std::uint64_t> attrs;
+    attrs.reserve(attributeList.size());
+    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
+    m17_->unpublishObjectClassAttributes(rawObjectClassHandle(theClass), attrs);
+  });
 }
+
 void DLCRTIambassadorImpl::publishInteractionClass(
     InteractionClassHandle theInteraction) {
-  // §5.4 → M17 declaration.Manager.PublishInteractionClass.
-  (void)theInteraction;
-  m17NotWiredDM_("publishInteractionClass");
+  // §5.4 → M17 publishInteractionClass.
+  bridge([&] {
+    m17_->publishInteractionClass(rawInteractionClassHandle(theInteraction));
+  });
 }
+
 void DLCRTIambassadorImpl::unpublishInteractionClass(
     InteractionClassHandle theInteraction) {
-  // §5.5 → M17 declaration.Manager.UnpublishInteractionClass.
-  (void)theInteraction;
-  m17NotWiredDM_("unpublishInteractionClass");
+  // §5.5 → M17 unpublishInteractionClass.
+  bridge([&] {
+    m17_->unpublishInteractionClass(rawInteractionClassHandle(theInteraction));
+  });
 }
+
 void DLCRTIambassadorImpl::subscribeObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList,
-    bool active, std::wstring const& updateRateDesignator) {
-  // §5.6 (catalogue row 11.9). `active` gates §5.10 startRegistration
-  // callbacks (passive=false → subscription without registration
-  // advisories). `updateRateDesignator` names an update-rate policy
-  // from the FOM. Both are DLC-only extras M17 doesn't model yet —
-  // M35+ wires them; for now the bodies fall through to NotConnected.
-  (void)theClass;
-  (void)attributeList;
-  (void)active;
-  (void)updateRateDesignator;
-  m17NotWiredDM_("subscribeObjectClassAttributes");
+    bool /*active*/, std::wstring const& /*updateRateDesignator*/) {
+  // §5.6 (catalogue row 11.9). `active` and `updateRateDesignator` are
+  // DLC-only extras M17 Cut-1 doesn't model — silently dropped. The
+  // §5.10 startRegistration callback advisories and FOM-driven update-
+  // rate throttling that these params gate remain M35+ follow-ups.
+  bridge([&] {
+    std::vector<std::uint64_t> attrs;
+    attrs.reserve(attributeList.size());
+    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
+    m17_->subscribeObjectClassAttributes(rawObjectClassHandle(theClass), attrs);
+  });
 }
+
 void DLCRTIambassadorImpl::unsubscribeObjectClass(ObjectClassHandle theClass) {
-  // §5.7 whole-class form. M17 side: iterate the class's attribute set
-  // and call UnsubscribeObjectClassAttributes(all).
-  (void)theClass;
-  m17NotWiredDM_("unsubscribeObjectClass");
+  // §5.7 whole-class form. Same divergence note as unpublishObjectClass.
+  bridge([&] {
+    m17_->unsubscribeObjectClassAttributes(rawObjectClassHandle(theClass), {});
+  });
 }
+
 void DLCRTIambassadorImpl::unsubscribeObjectClassAttributes(
     ObjectClassHandle theClass, AttributeHandleSet const& attributeList) {
-  // §5.7 subset form → M17 declaration.Manager.UnsubscribeObjectClassAttributes.
-  (void)theClass;
-  (void)attributeList;
-  m17NotWiredDM_("unsubscribeObjectClassAttributes");
+  // §5.7 subset form → M17 unsubscribeObjectClassAttributes.
+  bridge([&] {
+    std::vector<std::uint64_t> attrs;
+    attrs.reserve(attributeList.size());
+    for (auto const& a : attributeList) attrs.push_back(rawAttributeHandle(a));
+    m17_->unsubscribeObjectClassAttributes(rawObjectClassHandle(theClass),
+                                           attrs);
+  });
 }
+
 void DLCRTIambassadorImpl::subscribeInteractionClass(
-    InteractionClassHandle theClass, bool active) {
-  // §5.8 (catalogue row 11.11). `active` gates §5.12 turnInteractionsOn/
-  // Off callbacks; DLC-only extra ignored for now, wired M35+.
-  (void)theClass;
-  (void)active;
-  m17NotWiredDM_("subscribeInteractionClass");
+    InteractionClassHandle theClass, bool /*active*/) {
+  // §5.8 (catalogue row 11.11). `active` gates §5.12 turnInteractionsOn/Off
+  // callbacks; DLC-only extra silently dropped (M17 Cut-1 gap).
+  bridge([&] {
+    m17_->subscribeInteractionClass(rawInteractionClassHandle(theClass));
+  });
 }
+
 void DLCRTIambassadorImpl::unsubscribeInteractionClass(
     InteractionClassHandle theClass) {
-  // §5.9 → M17 declaration.Manager.UnsubscribeInteractionClass.
-  (void)theClass;
-  m17NotWiredDM_("unsubscribeInteractionClass");
+  // §5.9 → M17 unsubscribeInteractionClass.
+  bridge([&] {
+    m17_->unsubscribeInteractionClass(rawInteractionClassHandle(theClass));
+  });
 }
 
 // ===== §6 Object Management =====
@@ -1520,6 +1540,32 @@ std::uint64_t rawFederateHandle(FederateHandle const& h) {
     v = (v << 8) | p[i];
   }
   return v;
+}
+
+// M35 Agent BB — §5 handle adapters. Share the FederateHandle 8-byte
+// big-endian decode; the spec (§10.5) uses the same 8-byte VLD shape for
+// every typed handle. Factored out via a template lambda would need C++20;
+// duplicate to keep the TU compatible with the C++17 build.
+namespace {
+template <typename H>
+std::uint64_t rawHandleBE_(H const& h) {
+  VariableLengthData vld = h.encode();
+  auto const* p = static_cast<unsigned char const*>(vld.data());
+  std::uint64_t v = 0;
+  for (size_t i = 0; i < 8 && i < vld.size(); ++i) {
+    v = (v << 8) | p[i];
+  }
+  return v;
+}
+}  // namespace
+std::uint64_t rawObjectClassHandle(ObjectClassHandle const& h) {
+  return rawHandleBE_(h);
+}
+std::uint64_t rawAttributeHandle(AttributeHandle const& h) {
+  return rawHandleBE_(h);
+}
+std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h) {
+  return rawHandleBE_(h);
 }
 
 }  // namespace rti1516e
