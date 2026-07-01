@@ -255,6 +255,53 @@ goldens + the initial deviations row for `fm_create_join_resign`
 enumerators 3-6. M32 W1 surfaces additional rows as F's catalogue
 re-walk completes.)
 
+### M33 catalogue progress (M33-resolved sections, ~100/200 lockfile TUs — IN PROGRESS 2026-07-02)
+
+Per `docs/DLC_COMPLIANCE_PROGRAM.md §6`, M33 flips these catalogue
+sections from RED/M32-stub→GREEN:
+
+| Catalogue § | Title | Lockfile TU dir | M33 status |
+|---|---|---|---|
+| §3 | Connect / federation lifecycle | `lockfile/core/test_rtiambassador_federation_mgmt.cpp` | **M33-in-progress** (M32 landed ctor; M33 Agent K lands real §4.2/§4.5/§4.9/§4.10 behavioral impl — no longer M32 stub-throw). |
+| §4 | FederateAmbassador callbacks | `lockfile/core/test_federateambassador_signatures.cpp` | **M33-in-progress** (Agent J expands to ~40 methods with 3+3+3+2 overloads for the 4 canonical event callbacks — discoverObjectInstance / reflectAttributeValues / receiveInteraction / removeObjectInstance). |
+| §6 | Exceptions (~120 classes) | `lockfile/exceptions/test_*.cpp` | **M33-in-progress** (Agent I lands ~120 concrete Annex C exception subclasses derived from `rti1516e::Exception`; every spec-declared throw now throws the concrete type, not `RTIinternalError`). |
+| §10 | Object Management behavioral | `lockfile/core/test_rtiambassador_object_mgmt.cpp` | **M33-in-progress** (Agent L lands real impl — no longer M32 stub-throw — for `registerObjectInstance` / `updateAttributeValues` / `sendInteraction` / `deleteObjectInstance` / `localDeleteObjectInstance` / `requestAttributeValueUpdate` / `changeAttributeTransportationType`). |
+| §11 | Ownership Management behavioral | `lockfile/core/test_rtiambassador_ownership.cpp` | **M33-in-progress** (Agent M lands real impl for the 8 ownership RPCs wiring through to M17 ownership transport). |
+| §12 | DDM behavioral | `lockfile/core/test_rtiambassador_ddm.cpp` | **M33-in-progress** (Agent N lands real impl for routing spaces + dimensions + regions + region-aware subscribe/publish — wire through to M17 DDM transport). |
+| §13 | Support services | `lockfile/core/test_rtiambassador_support.cpp` | **M33-in-progress** (Agent K adds `getObjectClassName` / `getAttributeName` reverse-lookups + `getDimensionUpperBound` + `getOrderType` + `getTransportationType` for DLC surface). |
+| §9 | Encoding helpers | `lockfile/encoding/test_*.cpp` | owed-to-M34 (per-class break-out from aggregated `BasicDataElements.h`). |
+| §14 | Time types | `lockfile/time/test_*.cpp` | owed-to-M34 (full behavioral conformance beyond M32's basic ctor + operator). |
+| §16 | MOM | `lockfile/core/test_rtiambassador_mom.cpp` | owed-to-M35. |
+
+After M33 merge, `scripts/check-milestones.sh check_m33` reports the
+exact GREEN count for verification against this matrix. Agent O
+backfills the final row counts + the parity-diff outcome once the
+fan-out completes.
+
+### M33 first-parity-diff experiment (Agent O)
+
+**Fixture:** `cppsdk/tests/dlc/conformance/om_helloworld_pubsub` — the
+2026-06-30 Vehicle+Honk smoke generalized to the DLC-strict surface
+(§4.2 / §4.5 / §4.9 / §4.10 / §5.3 / §5.7 / §6.5 / §6.10 / §6.12 for
+publisher; §5.6 / §5.8 / §6.9 / §6.11 / §6.13 for subscriber).
+
+**Why this fixture:** M32-prep `8f6f50a` captured real Pitch goldens
+for BOTH the publisher and subscriber legs (`expected.publisher.log`
++ `expected.subscriber.log` — both CAPTURED status per the fixture
+table above). This is the ONLY fixture where a same-day gorti-vs-Pitch
+byte-identical comparison is possible with committed goldens as of M33
+open.
+
+**Prerequisites:** the parity-diff attempt requires Agents J (callbacks)
++ L (object mgmt real impl) + M (ownership — for the `CANCEL_THEN_DELETE_THEN_DIVEST`
+resign action) + potentially K (support services — the `getObjectClassHandle`
+/ `getAttributeHandle` chain the federate uses). Without these, the
+fixture throws `RTIinternalError("M32 stub — impl deferred to M33+")`
+at first non-ctor method call and no log is captured.
+
+**Outcome (backfilled by Agent O):** MATCH / PARTIAL / DIVERGE / NOT_YET_ATTEMPTED.
+See CHANGELOG M33 row for the specific result and follow-on tickets.
+
 ---
 
 ## Pitch deviations from spec
