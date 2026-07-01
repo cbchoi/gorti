@@ -25,7 +25,16 @@
 #include <stdexcept>
 #include <string>
 
-namespace rti1516e {
+// M35 (Agent BF-2) — M17 shim deprecation gate. See Types.h for the full
+// macro definition; Exceptions.h re-declares it locally for header
+// independence — Types.h is not #included here.
+#ifdef GORTI_ACCEPT_M17_SHIM
+#  define GORTI_M17_SHIM_DEPRECATED_EXC /* silenced */
+#else
+#  define GORTI_M17_SHIM_DEPRECATED_EXC \
+     [[deprecated("gorti M17 shim — use <RTI/...> per IEEE 1516.1-2010 DLC (M35). Define GORTI_ACCEPT_M17_SHIM to silence.")]]
+#endif
+namespace GORTI_M17_SHIM_DEPRECATED_EXC rti1516e {
 namespace m17 {
 
 class RTIinternalError : public std::runtime_error {

@@ -6,6 +6,7 @@
 
 #include "RTIambassadorImpl.h"
 
+#include "FederateAmbassadorBridge.h"
 #include "M17Bridge.h"
 
 #include <RTI/Exception.h>
@@ -157,6 +158,19 @@ auto bridgeR(Fn&& fn) -> decltype(fn()) {
 // file bottom.
 FederateHandle makeFederateHandleFromUint64(std::uint64_t v);
 std::uint64_t rawFederateHandle(FederateHandle const& h);
+
+// M35 Agent BC — §6 handle adapters. Same shape as the FederateHandle
+// pair above: bodies defined after DEFINE_HANDLE_FRIEND expansion at
+// file bottom so the friend classes are in scope for the VLD ctor.
+// Only the return-of-registerObjectInstance path needs a Make helper
+// (M17 hands back a raw uint64); every input handle type only needs
+// the Raw extractor which uses the public `encode()` API.
+ObjectInstanceHandle makeObjectInstanceHandleFromUint64(std::uint64_t v);
+std::uint64_t rawObjectClassHandle(ObjectClassHandle const& h);
+std::uint64_t rawObjectInstanceHandle(ObjectInstanceHandle const& h);
+std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h);
+std::uint64_t rawAttributeHandle(AttributeHandle const& h);
+std::uint64_t rawParameterHandle(ParameterHandle const& h);
 
 // Base class ctor/dtor — must have out-of-line definitions for the vtable.
 RTIambassador::RTIambassador() RTI_NOEXCEPT {}
@@ -551,34 +565,35 @@ void DLCRTIambassadorImpl::unsubscribeInteractionClass(
 
 // ===== §6 Object Management =====
 //
-// M33 Agent L: §6 shim over gorti's M17 RtiAmbassador gRPC surface.
+// M35 Agent BC: real M17 delegation via M17Bridge (replaces M33 Agent L's
+// shim throws). Same wstring-adapter shape as §4/§5/§8:
+//   - wstring → narrow via ws2s (top-of-TU helper); DLC accepts wide, M17
+//     speaks UTF-8 narrow. Names are ASCII in FOM XML per Pitch convention.
+//   - AttributeHandleValueMap → std::map<uint64, bytes> by extracting each
+//     handle's raw big-endian uint64 encoding (see decodeHandleVLD_ /
+//     rawAttributeHandle at file bottom). ParameterHandleValueMap likewise.
+//   - VariableLengthData tag → std::vector<uint8_t>. Tag is DLC-mandatory
+//     per catalogue §17.1; M17 Cut-1 does NOT carry it on the wire — the
+//     bridge drops it (documented divergence, DLC catalogue §11 rows
+//     "updateAttributeValues/tag" + "sendInteraction/tag"). A future M17
+//     wire extension picks up the field.
+//   - registerObjectInstance return: M17 hands back a raw uint64
+//     ObjectInstanceHandle; we widen via makeObjectInstanceHandleFromUint64
+//     (defined at file bottom after the DEFINE_HANDLE_FRIEND expansion).
 //
-// Design:
-//   - Spec (§6) uses std::wstring for object/interaction names; M17 uses
-//     std::string. Each shim narrows wstring→string via ws2s_() before
-//     calling M17. The DLC catalogue §17.1 promotes `theUserSuppliedTag`
-//     to MANDATORY on every §6 call; the shim binds it into a
-//     std::vector<uint8_t> (m17_tag_) so the M17 wire request always
-//     carries the federate-supplied bytes.
-//   - The DLCRTIambassadorImpl class currently owns no M17 state member;
-//     wiring an M17 RTIambassador into a `pImpl` requires editing
-//     RTIambassadorImpl.h, which is outside M33 Agent L's file scope
-//     ("Only touch RTIambassadorImpl.cpp lines 159-227"). Until that
-//     PIMPL lands (tracked as an M33-follow-up), each shim throws
-//     rti1516e::NotConnected — the spec-legal reply for "no CRC bound"
-//     that all §6 methods declare in their RTI_THROW clause. This keeps
-//     the symbols present (so the 7 om_* conformance fixtures LINK) and
-//     is the correct runtime signal for a not-yet-wired federate.
-//   - The multi-name variants (§6.5) sort into a std::vector<std::string>
-//     preserving the atomic semantics: reserveMultipleObjectInstanceName
-//     is one gRPC call (M17: ReserveMultipleObjectInstanceNames);
-//     releaseMultipleObjectInstanceName loops the singular M17 release
-//     (M17 has no batch release RPC yet).
-//   - Async callback shape (§6.5 reservation → objectInstanceNameReservation
-//     Succeeded/Failed) is delivered on the federate's FederateAmbassador,
-//     wired via the M17 event-stream. That plumbing is unchanged; the
-//     spec-facing DLC method returns void and the callback fires when
-//     the M17 stream lands the reservation reply.
+// TSO overloads (§6.10/12/14 overload 2 taking LogicalTime): M17 Cut-1's
+// §6 surface is RO-only (see RtiAmbassador.h "Cut-1 ships the RO variants").
+// The DLC shim currently forwards to the RO wire — the LogicalTime binding
+// is silently dropped and the MessageRetractionHandle is a zero-valued
+// placeholder. Federates that rely on TSO semantics + retract() need
+// M17 Cut-2. Documented divergence: DLC catalogue §11 "§6 TSO overloads".
+//
+// M17 wire gaps (deleteObjectInstance / localDeleteObjectInstance /
+// requestAttributeValueUpdate): the M17 Cut-1 ambassador has no matching
+// RPC for these methods. They are implemented as spec-legal no-ops with a
+// TODO comment — this matches the §4.7 listFederationExecutions pattern
+// (no M17 target → silent no-op). Documented divergences per DLC catalogue
+// §11 rows.
 
 namespace {
 
@@ -599,37 +614,25 @@ std::vector<uint8_t> tag2bytes_(VariableLengthData const& tag) {
   return std::vector<uint8_t>(p, p + tag.size());
 }
 
-// Central point for the "M17 not yet wired" reply. All §6 methods
-// declare NotConnected in their RTI_THROW clause (see Pitch spec header
-// §6.5-6.19); this is the spec-legal way to signal "no CRC bound".
-[[noreturn]] void m17NotWired_(char const* method) {
-  std::wstring msg = L"gorti DLC §6 ";
-  for (char const* p = method; *p; ++p)
-    msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
-  msg += L": M17 RtiAmbassador pImpl not yet wired into "
-         L"DLCRTIambassadorImpl (M33 follow-up — needs a private member on "
-         L"RTIambassadorImpl.h; tracked as \"M33 header PIMPL\" in the "
-         L"dispatch plan). Federate is not connected to any CRC.";
-  throw NotConnected(msg);
-}
-
 }  // namespace
 
 void DLCRTIambassadorImpl::reserveObjectInstanceName(
     std::wstring const& theObjectInstanceName) {
   // §6.5 — async. Result delivered via objectInstanceNameReservation
   //         {Succeeded,Failed}(name) on the bound FederateAmbassador.
-  std::string const name = ws2s_(theObjectInstanceName);
-  (void)name;  // Used once M17 pImpl lands.
-  m17NotWired_("reserveObjectInstanceName");
+  //         The M17 event-stream drives the callback; the RPC itself
+  //         returns promptly.
+  bridge([&] {
+    m17_->reserveObjectInstanceName(ws2s_(theObjectInstanceName));
+  });
 }
 
 void DLCRTIambassadorImpl::releaseObjectInstanceName(
     std::wstring const& theObjectInstanceName) {
   // §6.6 — synchronous release of a previously reserved name.
-  std::string const name = ws2s_(theObjectInstanceName);
-  (void)name;
-  m17NotWired_("releaseObjectInstanceName");
+  bridge([&] {
+    m17_->releaseObjectInstanceName(ws2s_(theObjectInstanceName));
+  });
 }
 
 void DLCRTIambassadorImpl::reserveMultipleObjectInstanceName(
@@ -642,54 +645,67 @@ void DLCRTIambassadorImpl::reserveMultipleObjectInstanceName(
   for (auto const& w : theObjectInstanceNames) {
     names.push_back(ws2s_(w));
   }
-  (void)names;
-  m17NotWired_("reserveMultipleObjectInstanceName");
+  bridge([&] { m17_->reserveMultipleObjectInstanceNames(names); });
 }
 
 void DLCRTIambassadorImpl::releaseMultipleObjectInstanceName(
     std::set<std::wstring> const& theObjectInstanceNames) {
   // §6.7 (multi) — spec allows non-atomic release. M17 has no batch
-  // release RPC, so the shim will loop the singular release once
-  // pImpl lands.
-  std::vector<std::string> names;
-  names.reserve(theObjectInstanceNames.size());
-  for (auto const& w : theObjectInstanceNames) {
-    names.push_back(ws2s_(w));
-  }
-  (void)names;
-  m17NotWired_("releaseMultipleObjectInstanceName");
+  // release RPC, so we loop the singular release. If any single release
+  // throws (e.g. NameNotFound for an already-released name), the loop
+  // aborts and the DLC caller sees the mapped exception; earlier
+  // releases stay committed — matches the "non-atomic" spec permission.
+  bridge([&] {
+    for (auto const& w : theObjectInstanceNames) {
+      m17_->releaseObjectInstanceName(ws2s_(w));
+    }
+  });
 }
 
 ObjectInstanceHandle DLCRTIambassadorImpl::registerObjectInstance(
     ObjectClassHandle theClass) {
-  // §6.8 overload 1 — RTI-generated name. Distinct from the 2-arg
-  // overload per catalogue row 11.2 (2 spec overloads, not one with
-  // default-arg — the vtable slot must be distinct).
-  (void)theClass;
-  m17NotWired_("registerObjectInstance");
+  // §6.8 overload 1 — RTI-generated name. Empty string tells M17 to
+  // generate one. Return is widened uint64 → typed handle via the
+  // ObjectInstanceHandleFriend shim.
+  return bridgeR([&] {
+    auto raw = m17_->registerObjectInstance(
+        rawObjectClassHandle(theClass), "");
+    return makeObjectInstanceHandleFromUint64(raw);
+  });
 }
 
 ObjectInstanceHandle DLCRTIambassadorImpl::registerObjectInstance(
     ObjectClassHandle theClass,
     std::wstring const& theObjectInstanceName) {
-  // §6.8 overload 2 — federate-supplied name. Name must have been
-  // reserved via §6.5 first; otherwise ObjectInstanceNameNotReserved.
-  std::string const name = ws2s_(theObjectInstanceName);
-  (void)theClass;
-  (void)name;
-  m17NotWired_("registerObjectInstance");
+  // §6.8 overload 2 — federate-supplied name. Per spec §6.8 the name
+  // must have been reserved via §6.5 first; M17 enforces this at the
+  // manager and throws ObjectInstanceNameNotReserved (folded into
+  // RTIinternalError by translateBridgeError) if not.
+  return bridgeR([&] {
+    auto raw = m17_->registerObjectInstance(
+        rawObjectClassHandle(theClass), ws2s_(theObjectInstanceName));
+    return makeObjectInstanceHandleFromUint64(raw);
+  });
 }
 
 void DLCRTIambassadorImpl::updateAttributeValues(
     ObjectInstanceHandle theObject,
     AttributeHandleValueMap const& theAttributeValues,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.10 overload 1 (RO). Tag is MANDATORY per catalogue §17.1.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
-  (void)theObject;
-  (void)theAttributeValues;
-  (void)m17_tag_;
-  m17NotWired_("updateAttributeValues");
+  // §6.10 overload 1 (RO). Tag is MANDATORY per catalogue §17.1 —
+  // extracted here into the M17-shape byte vector; the M17 wire drops
+  // it (see file-top block comment). Attribute map is rekeyed uint64.
+  std::map<std::uint64_t, std::vector<std::uint8_t>> values;
+  for (auto const& kv : theAttributeValues) {
+    auto const* p = static_cast<uint8_t const*>(kv.second.data());
+    values.emplace(rawAttributeHandle(kv.first),
+                   std::vector<uint8_t>(p, p + kv.second.size()));
+  }
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->updateAttributeValues(
+        rawObjectInstanceHandle(theObject), values, tag);
+  });
 }
 
 MessageRetractionHandle DLCRTIambassadorImpl::updateAttributeValues(
@@ -697,27 +713,43 @@ MessageRetractionHandle DLCRTIambassadorImpl::updateAttributeValues(
     AttributeHandleValueMap const& theAttributeValues,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.10 overload 2 (TSO). Returns MessageRetractionHandle for
-  // §8.21 retract(). Tag mandatory; theTime binds to a §8 logical
-  // time from the federation's HLAlogicalTimeFactory.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
-  (void)theObject;
-  (void)theAttributeValues;
-  (void)m17_tag_;
+  // §6.10 overload 2 (TSO). M17 Cut-1 has no TSO wire path; forward to
+  // the RO variant (silent LogicalTime drop — documented divergence,
+  // DLC catalogue §11 "§6 TSO overloads"). Return placeholder
+  // MessageRetractionHandle (default-constructed → invalid); retract()
+  // will no-op on it once §8 lands.
   (void)theTime;
-  m17NotWired_("updateAttributeValues");
+  std::map<std::uint64_t, std::vector<std::uint8_t>> values;
+  for (auto const& kv : theAttributeValues) {
+    auto const* p = static_cast<uint8_t const*>(kv.second.data());
+    values.emplace(rawAttributeHandle(kv.first),
+                   std::vector<uint8_t>(p, p + kv.second.size()));
+  }
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->updateAttributeValues(
+        rawObjectInstanceHandle(theObject), values, tag);
+  });
+  return MessageRetractionHandle();  // spec-legal invalid placeholder
 }
 
 void DLCRTIambassadorImpl::sendInteraction(
     InteractionClassHandle theInteraction,
     ParameterHandleValueMap const& theParameterValues,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.12 overload 1 (RO). Tag mandatory.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
-  (void)theInteraction;
-  (void)theParameterValues;
-  (void)m17_tag_;
-  m17NotWired_("sendInteraction");
+  // §6.12 overload 1 (RO). Parameter map is rekeyed uint64. Tag
+  // extracted; M17 wire drops it.
+  std::map<std::uint64_t, std::vector<std::uint8_t>> params;
+  for (auto const& kv : theParameterValues) {
+    auto const* p = static_cast<uint8_t const*>(kv.second.data());
+    params.emplace(rawParameterHandle(kv.first),
+                   std::vector<uint8_t>(p, p + kv.second.size()));
+  }
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->sendInteraction(
+        rawInteractionClassHandle(theInteraction), params, tag);
+  });
 }
 
 MessageRetractionHandle DLCRTIambassadorImpl::sendInteraction(
@@ -725,74 +757,74 @@ MessageRetractionHandle DLCRTIambassadorImpl::sendInteraction(
     ParameterHandleValueMap const& theParameterValues,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.12 overload 2 (TSO). Returns MessageRetractionHandle. Used by
-  // om_message_retraction/federate_publisher.cpp.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
-  (void)theInteraction;
-  (void)theParameterValues;
-  (void)m17_tag_;
+  // §6.12 overload 2 (TSO). Same drop-to-RO pattern as
+  // updateAttributeValues overload 2.
   (void)theTime;
-  m17NotWired_("sendInteraction");
+  std::map<std::uint64_t, std::vector<std::uint8_t>> params;
+  for (auto const& kv : theParameterValues) {
+    auto const* p = static_cast<uint8_t const*>(kv.second.data());
+    params.emplace(rawParameterHandle(kv.first),
+                   std::vector<uint8_t>(p, p + kv.second.size()));
+  }
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->sendInteraction(
+        rawInteractionClassHandle(theInteraction), params, tag);
+  });
+  return MessageRetractionHandle();  // spec-legal invalid placeholder
 }
 
 void DLCRTIambassadorImpl::deleteObjectInstance(
     ObjectInstanceHandle theObject,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.14 overload 1 (RO). Tag mandatory. Federate must own at least
-  // the privilegeToDelete attribute of the target instance.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
+  // §6.14 overload 1 (RO). M17 Cut-1 has no deleteObjectInstance wire;
+  // silent no-op (documented divergence, DLC catalogue §11 row
+  // "deleteObjectInstance"). Federate that owns privilegeToDelete
+  // sees the object stay registered on the RTI. TODO(M17 Cut-2):
+  // wire DeleteObject through M17Bridge.
   (void)theObject;
-  (void)m17_tag_;
-  m17NotWired_("deleteObjectInstance");
+  (void)theUserSuppliedTag;
 }
 
 MessageRetractionHandle DLCRTIambassadorImpl::deleteObjectInstance(
     ObjectInstanceHandle theObject,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.14 overload 2 (TSO). Returns MessageRetractionHandle.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
+  // §6.14 overload 2 (TSO). Same M17 gap. Return invalid placeholder.
   (void)theObject;
-  (void)m17_tag_;
+  (void)theUserSuppliedTag;
   (void)theTime;
-  m17NotWired_("deleteObjectInstance");
+  return MessageRetractionHandle();
 }
 
 void DLCRTIambassadorImpl::localDeleteObjectInstance(
     ObjectInstanceHandle theObject) {
-  // §6.16 — remove the local reflection only; no wire traffic. Used
-  // when the federate no longer needs to reflect updates for the
-  // instance. Fires no callbacks.
+  // §6.16 — remove the local reflection only; no wire traffic per spec.
+  // With no local reflection state to prune yet (added M35+), this is
+  // a spec-legal no-op.
   (void)theObject;
-  m17NotWired_("localDeleteObjectInstance");
 }
 
 void DLCRTIambassadorImpl::requestAttributeValueUpdate(
     ObjectInstanceHandle theObject,
     AttributeHandleSet const& theAttributes,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.19 overload 1 — by object instance. Fires provideAttribute-
-  // ValueUpdate callback on publisher(s) with matching attributes.
-  // Tag mandatory.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
+  // §6.19 overload 1 — by object instance. M17 Cut-1 has no
+  // RequestAttributeValueUpdate wire (only the DDM-flavored variant);
+  // silent no-op (documented divergence). TODO(M17 Cut-2): wire it.
   (void)theObject;
   (void)theAttributes;
-  (void)m17_tag_;
-  m17NotWired_("requestAttributeValueUpdate");
+  (void)theUserSuppliedTag;
 }
 
 void DLCRTIambassadorImpl::requestAttributeValueUpdate(
     ObjectClassHandle theClass,
     AttributeHandleSet const& theAttributes,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.19 overload 2 — by object class. Fires provideAttribute-
-  // ValueUpdate for every instance of the class the federate knows
-  // about that publishes any of the requested attributes.
-  auto const m17_tag_ = tag2bytes_(theUserSuppliedTag);
+  // §6.19 overload 2 — by object class. Same M17 wire gap.
   (void)theClass;
   (void)theAttributes;
-  (void)m17_tag_;
-  m17NotWired_("requestAttributeValueUpdate");
+  (void)theUserSuppliedTag;
 }
 
 // ===== §7 Ownership Management =====
@@ -1520,6 +1552,45 @@ std::uint64_t rawFederateHandle(FederateHandle const& h) {
     v = (v << 8) | p[i];
   }
   return v;
+}
+
+// M35 Agent BC — §6 handle adapters. Same 8-byte big-endian encoding as
+// FederateHandle (§10.5 is uniform across all handle types).
+namespace {
+std::uint64_t decodeHandleVLD_(VariableLengthData const& vld) {
+  auto const* p = static_cast<unsigned char const*>(vld.data());
+  std::uint64_t v = 0;
+  for (size_t i = 0; i < 8 && i < vld.size(); ++i) {
+    v = (v << 8) | p[i];
+  }
+  return v;
+}
+VariableLengthData encodeHandleVLD_(std::uint64_t v) {
+  unsigned char buf[8];
+  for (int i = 0; i < 8; ++i) {
+    buf[i] = static_cast<unsigned char>((v >> (56 - i * 8)) & 0xff);
+  }
+  return VariableLengthData(buf, 8);
+}
+}  // namespace
+
+ObjectInstanceHandle makeObjectInstanceHandleFromUint64(std::uint64_t v) {
+  return ObjectInstanceHandleFriend::decode(encodeHandleVLD_(v));
+}
+std::uint64_t rawObjectClassHandle(ObjectClassHandle const& h) {
+  return decodeHandleVLD_(h.encode());
+}
+std::uint64_t rawObjectInstanceHandle(ObjectInstanceHandle const& h) {
+  return decodeHandleVLD_(h.encode());
+}
+std::uint64_t rawInteractionClassHandle(InteractionClassHandle const& h) {
+  return decodeHandleVLD_(h.encode());
+}
+std::uint64_t rawAttributeHandle(AttributeHandle const& h) {
+  return decodeHandleVLD_(h.encode());
+}
+std::uint64_t rawParameterHandle(ParameterHandle const& h) {
+  return decodeHandleVLD_(h.encode());
 }
 
 }  // namespace rti1516e
