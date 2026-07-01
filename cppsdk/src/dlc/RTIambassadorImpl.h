@@ -15,6 +15,17 @@
 
 #include <memory>
 
+// M35 Agent BD — forward-decl of the callback bridge (full defn lives in
+// dlc/FederateAmbassadorBridge.h, which pulls in the M17 shim). Keeping
+// this a forward-decl lets DLCRTIambassadorImpl own the bridge via a
+// unique_ptr member without dragging the M17 shim into every TU that
+// includes this header.
+namespace gorti {
+namespace dlc {
+class DLCFederateAmbassadorBridge;
+}  // namespace dlc
+}  // namespace gorti
+
 namespace rti1516e {
 
 // Forward-decl only — full defn in dlc/M17Bridge.h. Keeping this a
@@ -387,6 +398,14 @@ class DLCRTIambassadorImpl : public RTIambassador {
   // thread) or HLA_EVOKED (dispatch only on evoke). Defaults to HLA_EVOKED
   // to match the Pitch pre-connect state (safe: no callbacks fire).
   CallbackModel callback_model_{HLA_EVOKED};
+
+  // M35 Agent BD — DLC-side callback dispatch bridge. Owns an
+  // rti1516e_m17::FederateAmbassador subclass (Agent AD's bridge) that
+  // converts M17 callback deliveries into DLC callback invocations on
+  // `fed_amb_`. Constructed by connect() and installed as the M17 callback
+  // sink via m17_->bind_federate_ambassador. Destroyed by disconnect() so
+  // late M17 deliveries have nowhere to land (M17 unbind happens first).
+  std::unique_ptr<gorti::dlc::DLCFederateAmbassadorBridge> callback_bridge_;
 };
 
 }  // namespace rti1516e

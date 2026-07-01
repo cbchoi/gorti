@@ -100,6 +100,21 @@ bool M17Bridge::isConnected() const noexcept {
   return impl_->amb->isConnected();
 }
 
+// M35 Agent BD — install the M17 callback sink. `fed` is declared under the
+// shim name `rti1516e_m17::FederateAmbassador*` in the header (see
+// M17Bridge.h), but this TU sees the M17 header without the shim, so the
+// same class lives at `::rti1516e::FederateAmbassador`. Both names refer to
+// the exact same class definition (identical layout + vtable); a
+// reinterpret_cast is safe and lets us hand the pointer to M17's
+// setFederateAmbassador. setFederateAmbassador is nothrow in M17 Cut-1;
+// still routed through `guard` for uniformity.
+void M17Bridge::bind_federate_ambassador(rti1516e_m17::FederateAmbassador* fed) {
+  guard("bind_federate_ambassador", [&] {
+    impl_->amb->setFederateAmbassador(
+        reinterpret_cast<::rti1516e::FederateAmbassador*>(fed));
+  });
+}
+
 // ---------- §4.5 / §4.6 create / destroy ----------------------------------
 
 void M17Bridge::createFederationExecution(
