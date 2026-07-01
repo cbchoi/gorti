@@ -134,7 +134,10 @@ T load_le(unsigned char const* in) {
   SimpleT Cls::get() const { return _impl->value; }                            \
   void Cls::set(SimpleT inData) { _impl->value = inData; }
 
-DEFINE_NUMERIC_IMPL(HLAboolean, bool, be)  // HLA-boolean = HLAinteger32BE with 0/1
+// HLAboolean is NOT a naive bool serialization — per Annex B it uses
+// HLAinteger32BE wire form (0 = false, 1 = true). sizeof(bool) is
+// platform-defined (1 on x86-64) so DEFINE_NUMERIC_IMPL wouldn't produce
+// spec-canonical bytes. Hand-rolled below.
 DEFINE_NUMERIC_IMPL(HLAbyte, Octet, be)
 DEFINE_NUMERIC_IMPL(HLAfloat32BE, float, be)
 DEFINE_NUMERIC_IMPL(HLAfloat32LE, float, le)
@@ -149,6 +152,84 @@ DEFINE_NUMERIC_IMPL(HLAinteger64LE, Integer64, le)
 DEFINE_NUMERIC_IMPL(HLAoctet, Octet, be)
 DEFINE_NUMERIC_IMPL(HLAASCIIchar, char, be)
 DEFINE_NUMERIC_IMPL(HLAunicodeChar, wchar_t, be)
+
+// -----------------------------------------------------------------------
+// HLAboolean — Annex B: uint32BE, 0/1. sizeof(bool) is 1 on x86-64 so we
+// cannot reuse DEFINE_NUMERIC_IMPL. Cross-check: gorti's golden vector
+// `boolean-true` = 00000001, `boolean-false` = 00000000
+// (tests/conformance/encoding_vectors.json).
+// -----------------------------------------------------------------------
+
+class HLAbooleanImplementation {
+ public:
+  bool value{false};
+  HLAbooleanImplementation() = default;
+  explicit HLAbooleanImplementation(bool v) : value(v) {}
+};
+
+HLAboolean::HLAboolean() : _impl(new HLAbooleanImplementation()) {}
+HLAboolean::HLAboolean(bool const& v) : _impl(new HLAbooleanImplementation(v)) {}
+HLAboolean::HLAboolean(bool* v)
+    : _impl(new HLAbooleanImplementation(v ? *v : false)) {}
+HLAboolean::HLAboolean(HLAboolean const& rhs)
+    : _impl(new HLAbooleanImplementation(*rhs._impl)) {}
+HLAboolean::~HLAboolean() { delete _impl; }
+
+rti1516e::auto_ptr<DataElement> HLAboolean::clone() const {
+  return rti1516e::auto_ptr<DataElement>(new HLAboolean(*this));
+}
+
+VariableLengthData HLAboolean::encode() const {
+  unsigned char buf[4];
+  std::uint32_t n = _impl->value ? 1u : 0u;
+  copy_be<std::uint32_t>(n, buf);
+  return VariableLengthData(buf, sizeof(buf));
+}
+void HLAboolean::encode(VariableLengthData& inData) const {
+  unsigned char buf[4];
+  std::uint32_t n = _impl->value ? 1u : 0u;
+  copy_be<std::uint32_t>(n, buf);
+  inData.setData(buf, sizeof(buf));
+}
+void HLAboolean::encodeInto(std::vector<Octet>& buffer) const {
+  unsigned char buf[4];
+  std::uint32_t n = _impl->value ? 1u : 0u;
+  copy_be<std::uint32_t>(n, buf);
+  for (int i = 0; i < 4; ++i) buffer.push_back(static_cast<Octet>(buf[i]));
+}
+void HLAboolean::decode(VariableLengthData const& inData) {
+  if (inData.size() < 4)
+    throw DecoderException(L"HLAboolean decode: buffer too small");
+  std::uint32_t n = load_be<std::uint32_t>(
+      static_cast<unsigned char const*>(inData.data()));
+  _impl->value = (n != 0);
+}
+size_t HLAboolean::decodeFrom(std::vector<Octet> const& buffer, size_t index) {
+  if (buffer.size() < index + 4)
+    throw DecoderException(L"HLAboolean decodeFrom: buffer too small");
+  unsigned char tmp[4];
+  for (int i = 0; i < 4; ++i)
+    tmp[i] = static_cast<unsigned char>(buffer[index + i]);
+  std::uint32_t n = load_be<std::uint32_t>(tmp);
+  _impl->value = (n != 0);
+  return index + 4;
+}
+size_t HLAboolean::getEncodedLength() const { return 4; }
+unsigned int HLAboolean::getOctetBoundary() const { return 4; }
+Integer64 HLAboolean::hash() const {
+  return _impl->value ? Integer64{1} : Integer64{0};
+}
+HLAboolean& HLAboolean::operator=(HLAboolean const& rhs) {
+  if (this != &rhs) *_impl = *rhs._impl;
+  return *this;
+}
+HLAboolean& HLAboolean::operator=(bool const& rhs) {
+  _impl->value = rhs;
+  return *this;
+}
+HLAboolean::operator bool() const { return _impl->value; }
+bool HLAboolean::get() const { return _impl->value; }
+void HLAboolean::set(bool inData) { _impl->value = inData; }
 
 // -----------------------------------------------------------------------
 // HLAoctetPair (2 bytes) — BE + LE. SimpleT is std::pair<Octet, Octet>.
