@@ -32,6 +32,16 @@ DLCRTIambassadorImpl::~DLCRTIambassadorImpl() = default;
 // ===== §4 Federation Management =====
 void DLCRTIambassadorImpl::connect(FederateAmbassador&, CallbackModel,
                                    std::wstring const&) {
+  // TODO(AA/M34): wire in the M34 callback bridge here.
+  //
+  //   1. Store the FederateAmbassador& in a `fed_ref_` member.
+  //   2. Construct `gorti::dlc::DLCFederateAmbassadorBridge bridge_(fed_ref_)`.
+  //   3. Install `bridge_` as the M17 ambassador on the underlying M17 impl.
+  //   4. Forward the CallbackModel + localSettingsDesignator to M17 connect.
+  //
+  // Bridge lives at cppsdk/src/dlc/FederateAmbassadorBridge.{h,cpp} and
+  // subclasses `rti1516e_m17::FederateAmbassador` (shimmed from M17). Tests:
+  // cppsdk/tests/dlc/conformance/_runtime/test_callback_bridge.cpp.
   m32_stub("connect");
 }
 void DLCRTIambassadorImpl::disconnect() { m32_stub("disconnect"); }

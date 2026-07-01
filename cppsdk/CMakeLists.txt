@@ -105,6 +105,10 @@ add_library(rti1516e_dlc STATIC
   src/dlc/LogicalTime.cpp
   src/dlc/RTIambassadorImpl.cpp
   src/dlc/RTIambassadorFactory.cpp
+  # M34 (Agent AD) — subscriber-side callback dispatch. Bridges M17-shaped
+  # FederateAmbassador callbacks into DLC-shaped ones (typed handles,
+  # wstring, LogicalTime). Installed by RTIambassadorImpl::connect().
+  src/dlc/FederateAmbassadorBridge.cpp
 )
 target_include_directories(rti1516e_dlc PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
