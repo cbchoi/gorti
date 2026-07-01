@@ -195,4 +195,74 @@ M17RestoreState M17Bridge::queryRestoreState(const std::string& label) {
   });
 }
 
+// ---------- §5 Declaration Management (M35 Agent BB) ----------------------
+//
+// Each shim rewraps raw uint64 handles as M17 typed handles (StrongHandle
+// wrapped over uint64 per include/rti1516e/Types.h). The AttributeHandleSet
+// is std::set<AttributeHandle>; we materialize it from the DLC-supplied
+// vector so callers don't have to know M17's set-based shape.
+
+namespace {
+::rti1516e::AttributeHandleSet toM17AttrSet(
+    const std::vector<std::uint64_t>& attrs) {
+  ::rti1516e::AttributeHandleSet out;
+  for (auto v : attrs) out.insert(::rti1516e::AttributeHandle{v});
+  return out;
+}
+}  // namespace
+
+void M17Bridge::publishObjectClassAttributes(
+    std::uint64_t cls, const std::vector<std::uint64_t>& attrs) {
+  guard("publishObjectClassAttributes", [&] {
+    impl_->amb->publishObjectClassAttributes(
+        ::rti1516e::ObjectClassHandle{cls}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::unpublishObjectClassAttributes(
+    std::uint64_t cls, const std::vector<std::uint64_t>& attrs) {
+  guard("unpublishObjectClassAttributes", [&] {
+    impl_->amb->unpublishObjectClassAttributes(
+        ::rti1516e::ObjectClassHandle{cls}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::subscribeObjectClassAttributes(
+    std::uint64_t cls, const std::vector<std::uint64_t>& attrs) {
+  guard("subscribeObjectClassAttributes", [&] {
+    impl_->amb->subscribeObjectClassAttributes(
+        ::rti1516e::ObjectClassHandle{cls}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::unsubscribeObjectClassAttributes(
+    std::uint64_t cls, const std::vector<std::uint64_t>& attrs) {
+  guard("unsubscribeObjectClassAttributes", [&] {
+    impl_->amb->unsubscribeObjectClassAttributes(
+        ::rti1516e::ObjectClassHandle{cls}, toM17AttrSet(attrs));
+  });
+}
+
+void M17Bridge::publishInteractionClass(std::uint64_t cls) {
+  guard("publishInteractionClass", [&] {
+    impl_->amb->publishInteractionClass(
+        ::rti1516e::InteractionClassHandle{cls});
+  });
+}
+void M17Bridge::unpublishInteractionClass(std::uint64_t cls) {
+  guard("unpublishInteractionClass", [&] {
+    impl_->amb->unpublishInteractionClass(
+        ::rti1516e::InteractionClassHandle{cls});
+  });
+}
+void M17Bridge::subscribeInteractionClass(std::uint64_t cls) {
+  guard("subscribeInteractionClass", [&] {
+    impl_->amb->subscribeInteractionClass(
+        ::rti1516e::InteractionClassHandle{cls});
+  });
+}
+void M17Bridge::unsubscribeInteractionClass(std::uint64_t cls) {
+  guard("unsubscribeInteractionClass", [&] {
+    impl_->amb->unsubscribeInteractionClass(
+        ::rti1516e::InteractionClassHandle{cls});
+  });
+}
+
 }  // namespace rti1516e

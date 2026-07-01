@@ -108,6 +108,37 @@ class M17Bridge {
   // §4.15 — current restore state for `label`.
   M17RestoreState queryRestoreState(const std::string& label);
 
+  // ---------- §5 Declaration Management (M35 Agent BB) --------------------
+  //
+  // Pitch shape (M17): (ObjectClassHandle cls, AttributeHandleSet attrs) — the
+  // handles are pre-resolved via §10.2 support services. The bridge accepts
+  // raw uint64 handles so DLC's typed handles (which store a VLD blob rather
+  // than a raw integer) can be adapted via the file-bottom Friend shims in
+  // RTIambassadorImpl.cpp (see raw{ObjectClass,Attribute,InteractionClass}
+  // Handle helpers). Empty attrs vector is spec-legal per M17 header comment
+  // — the manager records publish/subscribe intent without attribute bindings.
+  //
+  // The DLC-only extras `bool active` (row 11.9) and `wstring updateRate`
+  // (row 11.9/11.11) are NOT modeled on the M17 wire (M17 Cut-1 does not
+  // support passive subscription or per-subscription update-rate policies).
+  // The DLC caller strips them before invoking the bridge; the divergence is
+  // documented in docs/DLC_DIVERGENCE_CATALOGUE.md §11 rows 11.9 / 11.11.
+  //
+  // Throws std::runtime_error on M17 failure (see guard() prefix vocabulary).
+  void publishObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
+  void unpublishObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
+  void subscribeObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
+  void unsubscribeObjectClassAttributes(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs);
+
+  void publishInteractionClass(std::uint64_t cls);
+  void unpublishInteractionClass(std::uint64_t cls);
+  void subscribeInteractionClass(std::uint64_t cls);
+  void unsubscribeInteractionClass(std::uint64_t cls);
+
  private:
   // Full defn lives in M17Bridge.cpp; the M17 rti1516e::RTIambassador
   // member is stored here so no M17 type leaks into the header.
