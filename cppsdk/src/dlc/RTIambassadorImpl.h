@@ -336,26 +336,28 @@ class DLCRTIambassadorImpl : public RTIambassador {
   void enableCallbacks() override;
   void disableCallbacks() override;
 
-  rti1516e::auto_ptr<LogicalTimeFactory> getTimeFactory() override;
+  // §10 — Per Pitch RTIambassador.h:1769 the accessor is `const`.
+  rti1516e::auto_ptr<LogicalTimeFactory> getTimeFactory() const override;
 
+  // §10 — 9 decode*Handle methods. All `const` per Pitch RTIambassador.h:1776-1846.
   FederateHandle decodeFederateHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   ObjectClassHandle decodeObjectClassHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   InteractionClassHandle decodeInteractionClassHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   ObjectInstanceHandle decodeObjectInstanceHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   AttributeHandle decodeAttributeHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   ParameterHandle decodeParameterHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   DimensionHandle decodeDimensionHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   MessageRetractionHandle decodeMessageRetractionHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
   RegionHandle decodeRegionHandle(
-      VariableLengthData const& encodedValue) override;
+      VariableLengthData const& encodedValue) const override;
 };
 
 }  // namespace rti1516e
