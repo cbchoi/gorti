@@ -102,6 +102,7 @@ add_library(rti1516e_dlc STATIC
   src/dlc/DataElement.cpp
   src/dlc/EncodingExceptions.cpp
   src/dlc/BasicDataElements.cpp
+  src/dlc/LogicalTime.cpp
   src/dlc/RTIambassadorImpl.cpp
   src/dlc/RTIambassadorFactory.cpp
 )
