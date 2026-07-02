@@ -1299,6 +1299,16 @@ func (a ddmFilterAdapter) SubscribersForUpdate(
 	return a.m.SubscribersForUpdate(fed, cls, attr, rs)
 }
 
+// RegionSubscribersFor — M36 DC-1. Pass-through (no handle conversion
+// needed: the result is federate handles).
+func (a ddmFilterAdapter) RegionSubscribersFor(
+	fed core.FederationName,
+	cls core.ObjectClassHandle,
+	attr core.AttributeHandle,
+) []core.FederateHandle {
+	return a.m.RegionSubscribersFor(fed, cls, attr)
+}
+
 // Serve runs the gRPC + metrics listeners until ctx is canceled. Returns
 // the first non-graceful error from either listener.
 //

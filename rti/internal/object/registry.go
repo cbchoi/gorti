@@ -223,6 +223,21 @@ type DDMFilter interface {
 		attr core.AttributeHandle,
 		publisherRegions []DDMRegionHandle,
 	) []core.FederateHandle
+
+	// RegionSubscribersFor returns every federate holding a
+	// region-scoped subscription to (cls, attr), in sorted handle
+	// order, WITHOUT an overlap test. M36 DC-1: the Discover
+	// fan-out consults this for the register-time default-region
+	// case — the register/associate split means a freshly
+	// registered object has no publisher regions yet, and an
+	// unassociated update maps to the default region, which
+	// overlaps every subscriber region. nil when no region
+	// subscriptions exist (zero-cost path).
+	RegionSubscribersFor(
+		fed core.FederationName,
+		cls core.ObjectClassHandle,
+		attr core.AttributeHandle,
+	) []core.FederateHandle
 }
 
 // DDMRegionHandle is the typed handle the DDMFilter API uses. uint64

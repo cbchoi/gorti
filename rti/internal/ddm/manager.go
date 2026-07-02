@@ -613,6 +613,40 @@ func (m *Manager) SubscribersForUpdate(
 	return sortedFederateHandles(hits)
 }
 
+// RegionSubscribersFor returns every federate holding a region-scoped
+// subscription to (cls, attr), in sorted handle order, WITHOUT an
+// overlap test. M36 DC-1: the object.Registry's Discover fan-out uses
+// this when the freshly registered object has no publisher region
+// associations yet (gorti's register/associate split lands the
+// associations AFTER Register) — per IEEE 1516.1-2010 the unassociated
+// case is the default region, which overlaps every subscriber region,
+// so all region-scoped subscribers of the class attribute are in scope
+// for discovery.
+//
+// Zero-cost contract: when no region subscriptions exist for the pair
+// the method is one map miss and returns nil.
+func (m *Manager) RegionSubscribersFor(
+	fed core.FederationName,
+	cls core.ObjectClassHandle,
+	attr core.AttributeHandle,
+) []core.FederateHandle {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return nil
+	}
+	subs := st.objSubs[objAttrKey{cls: cls, attr: attr}]
+	if len(subs) == 0 {
+		return nil
+	}
+	hits := map[core.FederateHandle]struct{}{}
+	for _, s := range subs {
+		hits[s.subscriber] = struct{}{}
+	}
+	return sortedFederateHandles(hits)
+}
+
 // InteractionSubscribersForSend is the interaction-side analogue of
 // SubscribersForUpdate. Returns nil for the zero-cost (no producer
 // regions) path; callers fall back to the declaration.Manager.
