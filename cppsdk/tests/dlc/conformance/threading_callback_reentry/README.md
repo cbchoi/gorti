@@ -75,3 +75,29 @@ Implementing it is out of parity scope; this verdict documents the gap.
 Fixture-code delta for capture: publisher reservation wait loop switched
 from `evokeCallback(0.1)` to the suite-standard evoke-drain
 `evokeMultipleCallbacks(0.05, 0.1)` (no behavioral change to the golden).
+
+## M36 agent-DA verdict — SPEC-FULL 7/7 both sides
+
+FR-DLC-14 (catalogue 17.2) is implemented. `gorti::dlc::CallbackScope`
+(a save/restore RAII over `thread_local bool tls_in_callback`,
+`cppsdk/src/dlc/FederateAmbassadorBridge.{h,cpp}`) marks the callback
+context around every DLCFederateAmbassadorBridge dispatch; the DLC
+ambassador's `bridge()`/`bridgeR()` helpers
+(`cppsdk/src/dlc/RTIambassadorImpl.cpp`) throw the spec-mandated
+`CallNotAllowedFromWithinCallback` before any wire traffic when
+re-entered. §10.4-exempt services (`evokeCallback`,
+`evokeMultipleCallbacks`, `enableCallbacks`, `disableCallbacks`) route
+through unguarded forms, so evoke-drain loops inside callbacks stay
+legal.
+
+Captured run (`gorti-captured.{publisher,subscriber}.log`): the golden's
+witness line
+
+    SUB: CAUGHT exception=CallNotAllowedFromWithinCallback
+
+now matches exactly (M35 capture showed the re-entered call reaching
+rtid and failing for the unrelated attribute-ownership reason). The
+subsequent post-callback `resignFederationExecution` still succeeds —
+the guard clears on dispatch return. Unit witnesses:
+`_runtime/test_callback_bridge.cpp` BridgeReentrancy tests (flag set
+during dispatch, cleared after; nested save/restore).
