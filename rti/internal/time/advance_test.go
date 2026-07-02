@@ -34,11 +34,11 @@ func TestAdvanceMode_String_Stable(t *testing.T) {
 // when LBTS > requested (strict). Equality does not fire (forced-grant
 // path is solo-only and gated separately).
 func TestDecideGrant_NER_FullGrant_StrictGT(t *testing.T) {
-	d := decideGrant(ModeNER, 0, 5, 6, false)
+	d := decideGrant(ModeNER, 0, 5, 6, false, 0, false)
 	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
 		t.Errorf("NER LBTS>req: %+v, want fire@5 clear", d)
 	}
-	d = decideGrant(ModeNER, 0, 5, 5, false)
+	d = decideGrant(ModeNER, 0, 5, 5, false, 0, false)
 	if d.fire {
 		t.Errorf("NER LBTS==req (not solo): fired %+v, want hold (strict >)", d)
 	}
@@ -47,11 +47,11 @@ func TestDecideGrant_NER_FullGrant_StrictGT(t *testing.T) {
 // TestDecideGrant_NMRA_FullGrant_InclusiveGE: NMRA predicate fires at
 // equality — the M7 distinguishing semantic.
 func TestDecideGrant_NMRA_FullGrant_InclusiveGE(t *testing.T) {
-	d := decideGrant(ModeNMRA, 0, 5, 5, false)
+	d := decideGrant(ModeNMRA, 0, 5, 5, false, 0, false)
 	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
 		t.Errorf("NMRA LBTS==req: %+v, want fire@5 clear", d)
 	}
-	d = decideGrant(ModeNMRA, 0, 5, 4, false)
+	d = decideGrant(ModeNMRA, 0, 5, 4, false, 0, false)
 	if d.fire {
 		t.Errorf("NMRA LBTS<req (not solo): fired %+v, want hold", d)
 	}
@@ -67,7 +67,7 @@ func TestDecideGrant_NMRA_FullGrant_InclusiveGE(t *testing.T) {
 // not TAR's.
 func TestDecideGrant_TAR_HoldsBelowRequested_GrantsAtRequested(t *testing.T) {
 	// LBTS < req — TAR holds (pre-M37: fired @2).
-	d := decideGrant(ModeTAR, 0, 5, 2, false)
+	d := decideGrant(ModeTAR, 0, 5, 2, false, 0, false)
 	if d.fire {
 		t.Errorf("TAR LBTS<req: fired %+v, want hold (§8.10 grant only at requested time)", d)
 	}
@@ -75,7 +75,7 @@ func TestDecideGrant_TAR_HoldsBelowRequested_GrantsAtRequested(t *testing.T) {
 	// inclusive boundary preserves the zero-lookahead peer lockstep
 	// (two la=0 federates both TAR(t) → LBTS == t → both grant); see
 	// AdvanceMode.inclusiveLBTS.
-	d = decideGrant(ModeTAR, 0, 5, 5, false)
+	d = decideGrant(ModeTAR, 0, 5, 5, false, 0, false)
 	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
 		t.Errorf("TAR LBTS==req: %+v, want fire@5 clear (inclusive full grant)", d)
 	}
@@ -84,7 +84,7 @@ func TestDecideGrant_TAR_HoldsBelowRequested_GrantsAtRequested(t *testing.T) {
 // TestDecideGrant_TARA_FullGrantAtEqualLBTS: TARA's full-grant predicate
 // IS inclusive, so LBTS == req fires the full path (clearPending=true).
 func TestDecideGrant_TARA_FullGrantAtEqualLBTS(t *testing.T) {
-	d := decideGrant(ModeTARA, 0, 5, 5, false)
+	d := decideGrant(ModeTARA, 0, 5, 5, false, 0, false)
 	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
 		t.Errorf("TARA LBTS==req: %+v, want fire@5 clear", d)
 	}
@@ -95,32 +95,88 @@ func TestDecideGrant_TARA_FullGrantAtEqualLBTS(t *testing.T) {
 // TAR). Document this here so a cut-3 follow-up that diverges has an
 // explicit baseline.
 func TestDecideGrant_FQR_BehavesLikeTAR(t *testing.T) {
-	d := decideGrant(ModeFQR, 0, 5, 5, false)
+	d := decideGrant(ModeFQR, 0, 5, 5, false, 0, false)
 	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
 		t.Errorf("FQR LBTS==req: %+v, want fire@5 clear (cut-2 inclusive)", d)
 	}
-	d = decideGrant(ModeFQR, 0, 5, 2, false)
+	d = decideGrant(ModeFQR, 0, 5, 2, false, 0, false)
 	if !d.fire || d.time != core.LogicalTime(2) || !d.clearPending {
 		t.Errorf("FQR LBTS<req: %+v, want fire@2 clear (cut-2 incremental)", d)
 	}
 }
 
-// TestDecideGrant_NER_SolePending_ForcedGrant_KeepsPending: the M3 W2
-// escape hatch — sole-pending NER with LBTS<req emits a forced grant
-// at LBTS and KEEPS pending so the duplicate-NER check still fires.
-func TestDecideGrant_NER_SolePending_ForcedGrant_KeepsPending(t *testing.T) {
-	d := decideGrant(ModeNER, 0, 5, 2, true)
-	if !d.fire || d.time != core.LogicalTime(2) || d.clearPending {
-		t.Errorf("NER solo LBTS<req: %+v, want fire@2 keep-pending", d)
+// TestDecideGrant_NER_SolePending_NoTSO_Holds: M38 GA — IEEE
+// 1516.1-2010 §8.8 defines no interim grant: a sole-pending NER with
+// LBTS < requested and NO queued TSO message simply HOLDS. (The M3 W2
+// "forced grant at LBTS keeps pending" escape hatch this replaced was
+// spec-invisible extra chatter — the tm_tso_ordering extra GRANT and
+// the IVCT tc010 NER xfail.)
+func TestDecideGrant_NER_SolePending_NoTSO_Holds(t *testing.T) {
+	d := decideGrant(ModeNER, 0, 5, 2, true, 0, false)
+	if d.fire {
+		t.Errorf("NER solo LBTS<req no TSO: fired %+v, want hold (§8.8 — no interim grant)", d)
 	}
 }
 
-// TestDecideGrant_NMRA_SolePending_ForcedGrant_KeepsPending: NMRA
-// inherits the forced-grant escape hatch. Only NER and NMRA do.
-func TestDecideGrant_NMRA_SolePending_ForcedGrant_KeepsPending(t *testing.T) {
-	d := decideGrant(ModeNMRA, 0, 5, 2, true)
-	if !d.fire || d.time != core.LogicalTime(2) || d.clearPending {
-		t.Errorf("NMRA solo LBTS<req: %+v, want fire@2 keep-pending", d)
+// TestDecideGrant_NMRA_SolePending_NoTSO_Holds: NMRA (§8.9) holds the
+// same way. Only the queued-message path (below) or LBTS >= requested
+// completes the request.
+func TestDecideGrant_NMRA_SolePending_NoTSO_Holds(t *testing.T) {
+	d := decideGrant(ModeNMRA, 0, 5, 2, true, 0, false)
+	if d.fire {
+		t.Errorf("NMRA solo LBTS<req no TSO: fired %+v, want hold (§8.9 — no interim grant)", d)
+	}
+}
+
+// TestDecideGrant_NER_NextTSOTarget: M38 GA — §8.8: with a TSO message
+// queued below the requested time, the grant target is the message
+// time. NER needs LBTS strictly above the target (a same-time message
+// could still arrive at the boundary) and the grant COMPLETES the
+// request (clearPending).
+func TestDecideGrant_NER_NextTSOTarget(t *testing.T) {
+	// TSO at 1, LBTS 2 > 1 → grant at the message time, clear.
+	d := decideGrant(ModeNER, 0, 5, 2, false, 1, true)
+	if !d.fire || d.time != core.LogicalTime(1) || !d.clearPending {
+		t.Errorf("NER TSO@1 LBTS=2: %+v, want fire@1 clear (§8.8 min(requested, next TSO))", d)
+	}
+	// TSO at 2 == LBTS → hold (strict boundary).
+	d = decideGrant(ModeNER, 0, 5, 2, false, 2, true)
+	if d.fire {
+		t.Errorf("NER TSO@2 LBTS==2: fired %+v, want hold (strict >)", d)
+	}
+	// TSO above requested → target stays requested; LBTS 6 > 5 → @5.
+	d = decideGrant(ModeNER, 0, 5, 6, false, 9, true)
+	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
+		t.Errorf("NER TSO@9 req=5 LBTS=6: %+v, want fire@5 clear", d)
+	}
+	// TSO at-or-before currentTime is already releasable and must not
+	// drag the target into the past.
+	d = decideGrant(ModeNER, 3, 5, 2, false, 3, true)
+	if d.fire {
+		t.Errorf("NER TSO@currentTime LBTS<req: fired %+v, want hold", d)
+	}
+}
+
+// TestDecideGrant_NMRA_NextTSOTarget_Inclusive: §8.9 — the Available
+// variant grants at the message time when LBTS EQUALS it.
+func TestDecideGrant_NMRA_NextTSOTarget_Inclusive(t *testing.T) {
+	d := decideGrant(ModeNMRA, 0, 5, 2, false, 2, true)
+	if !d.fire || d.time != core.LogicalTime(2) || !d.clearPending {
+		t.Errorf("NMRA TSO@2 LBTS==2: %+v, want fire@2 clear (inclusive)", d)
+	}
+}
+
+// TestDecideGrant_TAR_IgnoresQueuedTSO: §8.10 — TAR grants at EXACTLY
+// the requested time; a queued TSO below it drains on emission
+// (§8.14) but never becomes the grant target.
+func TestDecideGrant_TAR_IgnoresQueuedTSO(t *testing.T) {
+	d := decideGrant(ModeTAR, 0, 5, 6, false, 1, true)
+	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
+		t.Errorf("TAR TSO@1 LBTS=6: %+v, want fire@5 clear (TSO does not retarget TAR)", d)
+	}
+	d = decideGrant(ModeTAR, 0, 5, 2, false, 1, true)
+	if d.fire {
+		t.Errorf("TAR TSO@1 LBTS=2<req: fired %+v, want hold (§8.10)", d)
 	}
 }
 
@@ -129,7 +185,7 @@ func TestDecideGrant_NMRA_SolePending_ForcedGrant_KeepsPending(t *testing.T) {
 // incremental path: sole-pending with LBTS < req simply HOLDS until
 // LBTS reaches the requested time (§8.10).
 func TestDecideGrant_TAR_NoForcedGrant_HoldsWhenSole(t *testing.T) {
-	d := decideGrant(ModeTAR, 0, 5, 2, true)
+	d := decideGrant(ModeTAR, 0, 5, 2, true, 0, false)
 	if d.fire {
 		t.Errorf("TAR solo LBTS<req: fired %+v, want hold (§8.10; no escape hatch, no incremental)", d)
 	}
@@ -138,7 +194,7 @@ func TestDecideGrant_TAR_NoForcedGrant_HoldsWhenSole(t *testing.T) {
 // TestDecideGrant_NER_NoProgress_Holds: when LBTS == currentTime, any
 // grant would produce zero progress. Hold (no emission).
 func TestDecideGrant_NER_NoProgress_Holds(t *testing.T) {
-	d := decideGrant(ModeNER, 5, 7, 5, true)
+	d := decideGrant(ModeNER, 5, 7, 5, true, 0, false)
 	if d.fire {
 		t.Errorf("NER LBTS==current: fired %+v, want hold (no progress)", d)
 	}
@@ -147,7 +203,7 @@ func TestDecideGrant_NER_NoProgress_Holds(t *testing.T) {
 // TestDecideGrant_TAR_NoProgress_Holds: same no-progress invariant for
 // the TAR family.
 func TestDecideGrant_TAR_NoProgress_Holds(t *testing.T) {
-	d := decideGrant(ModeTAR, 5, 7, 5, false)
+	d := decideGrant(ModeTAR, 5, 7, 5, false, 0, false)
 	if d.fire {
 		t.Errorf("TAR LBTS==current: fired %+v, want hold (no progress)", d)
 	}
@@ -191,9 +247,9 @@ func TestDispatchAdvance_DuplicatePending_BlocksAcrossModes(t *testing.T) {
 	ctx := context.Background()
 	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(1))
 	_ = mgr.EnableRegulation(ctx, "fed", 2, core.LogicalTime(1))
-	// fed1 NER — pending; LBTS=min(5+1, 0+1)=1 < 5, sole NER not solo
-	// (fed2 is regulating but not pending, so pending count=1 → forced
-	// grant at LBTS=1, KEEP pending).
+	// fed1 NER — pending; LBTS=min(5+1, 0+1)=1 < 5 and no queued TSO →
+	// the request HOLDS (M38 GA — §8.8 no interim grant) and stays
+	// outstanding.
 	if e := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
 		t.Fatalf("first NER: %v", e)
 	}

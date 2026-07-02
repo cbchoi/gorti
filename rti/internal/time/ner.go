@@ -41,9 +41,9 @@ var ErrDuplicateNER = core.ErrTimeAdvancingState
 //     time. Initialised to 0 on first interaction.
 //   - pendingNER: true while ANY mode's request is outstanding (queued
 //     but not yet granted). Name retained for binary-compat with M3
-//     consumers; treat as "pendingRequest". Cleared on full grant
-//     (NER full / NMRA full / every TAR/TARA/FQR grant); kept on NER /
-//     NMRA forced grant.
+//     consumers; treat as "pendingRequest". Cleared on every default-
+//     policy grant (M38 GA — §8.8 one request, one grant); alternative
+//     GrantStrategy implementations may keep it via ClearPending=false.
 //   - requestedTime: the t parameter of the outstanding request.
 //     Meaningful only when pendingNER is true.
 //   - mode: which AdvanceMode produced the outstanding request. Drives
@@ -286,12 +286,22 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 			if !ns.pendingNER {
 				continue
 			}
-			cands = append(cands, candidateGrant{
+			c := candidateGrant{
 				h:       k.h,
 				mode:    ns.mode,
 				current: ns.currentTime,
 				req:     ns.requestedTime,
-			})
+			}
+			// M38 GA — §8.8/§8.9 next-message input: earliest buffered
+			// TSO timestamp for this federate (buffer is FIFO by
+			// arrival, not sorted by timestamp — scan for the min).
+			for _, b := range ns.tsoBuffer {
+				if !c.hasTSO || float64(b.timestamp) < float64(c.nextTSO) {
+					c.nextTSO = b.timestamp
+					c.hasTSO = true
+				}
+			}
+			cands = append(cands, c)
 		}
 		ext.mu.Unlock()
 
@@ -317,6 +327,8 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 				Requested:   c.req,
 				LBTS:        lbts,
 				SolePending: solePending,
+				NextTSOTime: c.nextTSO,
+				HasTSO:      c.hasTSO,
 			})
 			if !d.Fire {
 				continue

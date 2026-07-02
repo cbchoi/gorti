@@ -264,12 +264,11 @@ func TestNERStrictGate(t *testing.T) {
 		t.Fatalf("NER: %v", err)
 	}
 	// LBTS = min(0+0, 0+0.5) = 0; NER requires LBTS > 1.0 — false.
-	// Sole-pending forced-grant DOES apply here (fed 2 has not requested),
-	// so we expect a forced grant. We don't pin the boundary; instead
-	// verify the federate's eventual logical time is bounded by t.
+	// M38 GA — §8.8: a blocked NER with no queued TSO emits NOTHING
+	// (the pre-M38 sole-pending forced grant is retired).
 	for _, g := range out.snapshot() {
-		if g.h == 1 && g.t > 1.0 {
-			t.Errorf("NER grant time = %v, exceeds requested t=1.0", g.t)
+		if g.h == 1 {
+			t.Errorf("NER below LBTS: unexpected grant %v (§8.8 — hold with no interim grant)", g.t)
 		}
 	}
 }
@@ -288,9 +287,11 @@ func TestNMRAInclusiveGate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("NMRA: %v", err)
 	}
+	// M38 GA — §8.9: same hold discipline as NER (inclusive boundary
+	// is not reachable here: LBTS = 0 < 1.0).
 	for _, g := range out.snapshot() {
-		if g.h == 1 && g.t > 1.0 {
-			t.Errorf("NMRA grant time = %v, exceeds requested t=1.0", g.t)
+		if g.h == 1 {
+			t.Errorf("NMRA below LBTS: unexpected grant %v (§8.9 — hold with no interim grant)", g.t)
 		}
 	}
 }
