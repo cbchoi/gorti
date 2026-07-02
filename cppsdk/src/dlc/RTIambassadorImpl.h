@@ -412,6 +412,12 @@ class DLCRTIambassadorImpl : public RTIambassador {
   std::mutex synth_mu_;
   std::deque<std::function<void()>> synth_queue_;
 
+  // M37 Agent EC-2 — §10.35/§10.36 attribute-scope-advisory switch,
+  // accept-and-record only: gorti's server emits AttributesIn/OutOfScope
+  // unconditionally on DDM region-overlap change (no per-federate gate on
+  // the wire). See the switch bodies in RTIambassadorImpl.cpp.
+  bool scope_advisory_recorded_{false};
+
   // ===== M34 pImpl for M17 delegation =====
   //
   // Owns the M17 concrete rti1516e::RTIambassador via an opaque bridge so

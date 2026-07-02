@@ -159,9 +159,13 @@ void M17Bridge::registerFederationSynchronizationPoint(
     impl_->amb->registerFederationSynchronizationPoint(label, tag, fs);
   });
 }
-void M17Bridge::synchronizationPointAchieved(const std::string& label) {
-  guard("synchronizationPointAchieved",
-        [&] { impl_->amb->synchronizationPointAchieved(label); });
+void M17Bridge::synchronizationPointAchieved(const std::string& label,
+                                             bool successfully) {
+  // M37 EC-2 — route through M17's §4.14 flag-carrying overload so
+  // successfully=false lands in the §4.15 failed-to-sync set.
+  guard("synchronizationPointAchieved", [&] {
+    impl_->amb->synchronizationPointAchieved(label, successfully);
+  });
 }
 
 // ---------- §4.16-28 save family ------------------------------------------
@@ -454,6 +458,33 @@ void M17Bridge::sendInteractionTimed(
   });
 }
 
+// ---------- §8.21/§8.22 retractable TSO sends (M37 Agent EC-2) -------------
+
+std::uint64_t M17Bridge::updateAttributeValuesRetractable(
+    std::uint64_t object,
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& values,
+    const std::vector<std::uint8_t>& tag, double logical_time) {
+  (void)tag;  // Divergence: M17 update wire has no tag field yet.
+  return guard("updateAttributeValuesRetractable", [&] {
+    return static_cast<std::uint64_t>(
+        impl_->amb->updateAttributeValuesRetractable(
+            ::rti1516e::ObjectInstanceHandle{object}, toM17ValueMap(values),
+            logical_time));
+  });
+}
+
+std::uint64_t M17Bridge::sendInteractionRetractable(
+    std::uint64_t interaction_class,
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& params,
+    const std::vector<std::uint8_t>& tag, double logical_time) {
+  (void)tag;  // Divergence: M17 send wire has no tag field yet.
+  return guard("sendInteractionRetractable", [&] {
+    return static_cast<std::uint64_t>(impl_->amb->sendInteractionRetractable(
+        ::rti1516e::InteractionClassHandle{interaction_class},
+        toM17ParamMap(params), logical_time));
+  });
+}
+
 
 // shim name `rti1516e_m17::FederateAmbassador*` in the header (see
 // M17Bridge.h), but this TU sees the M17 header without the shim, so the
@@ -581,17 +612,34 @@ void M17Bridge::unconditionalAttributeOwnershipDivestiture(
 }
 void M17Bridge::negotiatedAttributeOwnershipDivestiture(
     std::uint64_t object, const std::vector<std::uint64_t>& attrs,
-    const std::vector<std::uint8_t>& tag) {
+    const std::vector<std::uint8_t>& tag, bool two_phase) {
   guard("negotiatedAttributeOwnershipDivestiture", [&] {
     impl_->amb->negotiatedAttributeOwnershipDivestiture(
         ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs),
-        ::rti1516e::VariableLengthData{tag});
+        ::rti1516e::VariableLengthData{tag}, two_phase);
+  });
+}
+void M17Bridge::confirmDivestiture(std::uint64_t object,
+                                   const std::vector<std::uint64_t>& attrs) {
+  // M37 EC-2 — real §7.6 ConfirmDivestiture RPC (M37 Agent EA wire).
+  guard("confirmDivestiture", [&] {
+    impl_->amb->confirmDivestiture(::rti1516e::ObjectInstanceHandle{object},
+                                   toM17AttrSet(attrs));
   });
 }
 void M17Bridge::attributeOwnershipAcquisition(
     std::uint64_t object, const std::vector<std::uint64_t>& attrs) {
   guard("attributeOwnershipAcquisition", [&] {
     impl_->amb->attributeOwnershipAcquisition(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::attributeOwnershipAcquisitionIfAvailable(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs) {
+  // M37 EC-2 — real §7.9 if_available wire; the server answers the owned
+  // remainder with AttributeOwnershipUnavailable (§7.10).
+  guard("attributeOwnershipAcquisitionIfAvailable", [&] {
+    impl_->amb->attributeOwnershipAcquisitionIfAvailable(
         ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs));
   });
 }

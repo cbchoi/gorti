@@ -217,6 +217,9 @@ RegionHandle    makeRegionHandleFromUint64(std::uint64_t v);
 std::uint64_t rawDimensionHandle(DimensionHandle const& h);
 std::uint64_t rawRegionHandle(RegionHandle const& h);
 std::uint64_t rawMessageRetractionHandle(MessageRetractionHandle const& h);
+// M37 Agent EC-2 — widen M17's retractable-send return (raw uint64) into
+// the DLC typed handle. Body at file bottom.
+MessageRetractionHandle makeMessageRetractionHandleFromUint64(std::uint64_t v);
 
 RTIambassador::RTIambassador() RTI_NOEXCEPT {}
 RTIambassador::~RTIambassador() {}
@@ -462,13 +465,14 @@ void DLCRTIambassadorImpl::registerFederationSynchronizationPoint(
   });
 }
 
-// §4.14 — sync-point achieved. `successfully=false` maps to M17's
-// synchronizationPointAchieved followed by... M17 Cut-1 has no "failed"
-// variant; the shim always announces achieved. Divergence catalogued
-// (M17 lacks the "failed" achieve wire message).
+// §4.14 — sync-point achieved. M37 EC-2: `successfully` now rides M17's
+// flag-carrying overload (M37 Agent EA wire) — false still counts toward
+// completion but reports the federate in the §4.15 failed-to-sync set.
 void DLCRTIambassadorImpl::synchronizationPointAchieved(
-    std::wstring const& label, bool /*successfully*/) {
-  bridge([&] { m17_->synchronizationPointAchieved(ws2s(label)); });
+    std::wstring const& label, bool successfully) {
+  bridge([&] {
+    m17_->synchronizationPointAchieved(ws2s(label), successfully);
+  });
 }
 
 // §4.16 overload 1 — request save "now" (no logical-time pin).
@@ -847,12 +851,13 @@ MessageRetractionHandle DLCRTIambassadorImpl::updateAttributeValues(
     AttributeHandleValueMap const& theAttributeValues,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.10 overload 2 (TSO) — M36 Agent DA: real timed wire. The
+  // §6.10 overload 2 (TSO) — M36 Agent DA: real timed wire; M37 EC-2:
+  // routed via M17's retractable variant which allocates a REAL
+  // MessageRetractionHandle (per-federate monotonic counter). Pass it to
+  // retract() (§8.21) to cancel while buffered server-side. The
   // LogicalTime narrows to the HLAfloat64Time double the proto's
   // `optional double logical_time` carries; the server TSO gate buffers
-  // and releases per §8. MessageRetractionHandle remains an invalid
-  // placeholder (the client does not allocate §8.21 retraction handles
-  // yet — documented divergence, DLC catalogue §11).
+  // and releases per §8.
   double const t = narrowTime_(theTime, "updateAttributeValues");
   std::map<std::uint64_t, std::vector<std::uint8_t>> values;
   for (auto const& kv : theAttributeValues) {
@@ -861,11 +866,11 @@ MessageRetractionHandle DLCRTIambassadorImpl::updateAttributeValues(
                    std::vector<uint8_t>(p, p + kv.second.size()));
   }
   auto const tag = tag2bytes_(theUserSuppliedTag);
-  bridge([&] {
-    m17_->updateAttributeValuesTimed(
+  return bridgeR([&] {
+    auto const raw = m17_->updateAttributeValuesRetractable(
         rawObjectInstanceHandle(theObject), values, tag, t);
+    return makeMessageRetractionHandleFromUint64(raw);
   });
-  return MessageRetractionHandle();  // spec-legal invalid placeholder
 }
 
 void DLCRTIambassadorImpl::sendInteraction(
@@ -892,7 +897,8 @@ MessageRetractionHandle DLCRTIambassadorImpl::sendInteraction(
     ParameterHandleValueMap const& theParameterValues,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.12 overload 2 (TSO) — M36 Agent DA: real timed wire. Same
+  // §6.12 overload 2 (TSO) — M36 Agent DA: real timed wire; M37 EC-2:
+  // retractable variant returns the real MessageRetractionHandle. Same
   // narrow-and-send pattern as updateAttributeValues overload 2.
   double const t = narrowTime_(theTime, "sendInteraction");
   std::map<std::uint64_t, std::vector<std::uint8_t>> params;
@@ -902,11 +908,11 @@ MessageRetractionHandle DLCRTIambassadorImpl::sendInteraction(
                    std::vector<uint8_t>(p, p + kv.second.size()));
   }
   auto const tag = tag2bytes_(theUserSuppliedTag);
-  bridge([&] {
-    m17_->sendInteractionTimed(
+  return bridgeR([&] {
+    auto const raw = m17_->sendInteractionRetractable(
         rawInteractionClassHandle(theInteraction), params, tag, t);
+    return makeMessageRetractionHandleFromUint64(raw);
   });
-  return MessageRetractionHandle();  // spec-legal invalid placeholder
 }
 
 void DLCRTIambassadorImpl::deleteObjectInstance(
@@ -1020,24 +1026,31 @@ void DLCRTIambassadorImpl::unconditionalAttributeOwnershipDivestiture(
 }
 
 // §7.3 — negotiated divest (offer to subscribers). Subscribers see
-// requestAttributeOwnershipAssumption via the M17 event stream.
+// requestAttributeOwnershipAssumption via the M17 event stream. M37 EC-2:
+// two_phase=true engages the REAL §7.3/§7.6 protocol — the divester gets
+// requestDivestitureConfirmation and completes with confirmDivestiture().
 void DLCRTIambassadorImpl::negotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle theObject, AttributeHandleSet const& theAttributes,
     VariableLengthData const& theUserSuppliedTag) {
   bridge([&] {
     m17_->negotiatedAttributeOwnershipDivestiture(
         rawObjectInstanceHandle(theObject), attrs2raw_(theAttributes),
-        tag2bytes_(theUserSuppliedTag));
+        tag2bytes_(theUserSuppliedTag), /*two_phase=*/true);
   });
 }
 
-// §7.6 — confirm divest after §7.5 requestDivestitureConfirmation.
-// Catalogue row 12.1: no M17 wire — gorti's manager completes negotiated
-// transfers without a confirm leg. Spec-legal no-op (documented).
-void DLCRTIambassadorImpl::confirmDivestiture(ObjectInstanceHandle,
-                                              AttributeHandleSet const&,
-                                              VariableLengthData const&) {
-  // no-op: M17 wire gap (catalogue row 12.1).
+// §7.6 — confirm divest after §7.5 requestDivestitureConfirmation. M37
+// EC-2: real ConfirmDivestiture RPC via M17 (M37 Agent EA wire) — replaces
+// the catalogue-row-12.1 no-op. The DLC-mandatory tag is dropped at this
+// boundary (the M17 confirm wire carries none — same documented-drop
+// pattern as §7.8 acquisition, row 12.2).
+void DLCRTIambassadorImpl::confirmDivestiture(
+    ObjectInstanceHandle theObject, AttributeHandleSet const& theAttributes,
+    VariableLengthData const& /*theUserSuppliedTag*/) {
+  bridge([&] {
+    m17_->confirmDivestiture(rawObjectInstanceHandle(theObject),
+                             attrs2raw_(theAttributes));
+  });
 }
 
 // §7.8 — request ownership acquisition. Tag dropped (row 12.2, see
@@ -1052,32 +1065,18 @@ void DLCRTIambassadorImpl::attributeOwnershipAcquisition(
   });
 }
 
-// §7.9 — acquire-if-available. No M17 RPC; emulated per section comment.
+// §7.9 — acquire-if-available. M37 EC-2: real if_available wire (M37
+// Agent EA) — replaces CA's query-then-acquire emulation. The server
+// atomically grants the unowned subset and emits AttributeOwnershipUnavailable
+// (§7.10) for the owned remainder; the bridge delivers it like any other
+// wire callback (no client-side synthesis).
 void DLCRTIambassadorImpl::attributeOwnershipAcquisitionIfAvailable(
     ObjectInstanceHandle theObject,
     AttributeHandleSet const& desiredAttributes) {
-  auto const raw_obj = rawObjectInstanceHandle(theObject);
-  std::vector<std::uint64_t> unowned;
-  AttributeHandleSet unavailable;
   bridge([&] {
-    for (auto const& a : desiredAttributes) {
-      auto const q =
-          m17_->queryAttributeOwnership(raw_obj, rawAttributeHandle(a));
-      if (q.owned && q.owner != 0) {
-        unavailable.insert(a);
-      } else {
-        unowned.push_back(rawAttributeHandle(a));
-      }
-    }
-    if (!unowned.empty()) {
-      m17_->attributeOwnershipAcquisition(raw_obj, unowned);
-    }
+    m17_->attributeOwnershipAcquisitionIfAvailable(
+        rawObjectInstanceHandle(theObject), attrs2raw_(desiredAttributes));
   });
-  // §7.10 — synthesized delivery for the owned subset (M17 has no
-  // "unavailable" event; the query result IS the answer).
-  if (!unavailable.empty() && fed_amb_ != nullptr) {
-    fed_amb_->attributeOwnershipUnavailable(theObject, unavailable);
-  }
 }
 
 // §7.12 — release-denied. Catalogue row 12.4: no M17 wire (gorti's manager
@@ -1368,11 +1367,12 @@ void DLCRTIambassadorImpl::queryLookahead(LogicalTimeInterval& interval) {
 }
 
 void DLCRTIambassadorImpl::retract(MessageRetractionHandle theHandle) {
-  // §8.21 — retract by raw handle. The §6 TSO overloads currently return
-  // invalid placeholder handles (M17 wire is RO-only), so a fixture-made
-  // handle decodes to raw 0 — M17 treats an unmatched retract as OK per
-  // its header contract ("returns OK whether or not a buffered message
-  // matched").
+  // §8.21 — retract by raw handle via M17's Retract RPC. M37 EC-2: the §6
+  // TSO update/sendInteraction overloads now return REAL handles from the
+  // retractable wire variants, so this cancels a still-buffered TSO
+  // message for real; receivers that had it queued get §8.22
+  // requestRetraction. An unmatched/already-delivered handle is still OK
+  // per M17's header contract.
   auto const raw = rawMessageRetractionHandle(theHandle);
   bridge([&] { m17_->retract(raw); });
 }
@@ -1951,12 +1951,24 @@ unsigned long DLCRTIambassadorImpl::normalizeServiceGroup(ServiceGroup group) {
 // is wired in DLC M33 yet, so these silently succeed (spec-legal — the
 // setter contract only requires void return). Once M35 lands a real
 // dispatch layer, the switches will gate advisory-callback dispatch.
+//
+// M37 EC-2 — attribute SCOPE advisory pair: gorti's server emits
+// AttributesInScope/OutOfScope UNCONDITIONALLY whenever DDM region-overlap
+// membership changes (rti/internal/object/update.go emitScopeAdvisories;
+// there is no per-federate switch RPC on the wire). The DLC switch is
+// therefore accept-and-record only — the §6.17/§6.18 callbacks arrive
+// regardless of the recorded state. Documented divergence; a wire-level
+// per-federate gate is future-server territory.
 void DLCRTIambassadorImpl::enableObjectClassRelevanceAdvisorySwitch() {}
 void DLCRTIambassadorImpl::disableObjectClassRelevanceAdvisorySwitch() {}
 void DLCRTIambassadorImpl::enableAttributeRelevanceAdvisorySwitch() {}
 void DLCRTIambassadorImpl::disableAttributeRelevanceAdvisorySwitch() {}
-void DLCRTIambassadorImpl::enableAttributeScopeAdvisorySwitch() {}
-void DLCRTIambassadorImpl::disableAttributeScopeAdvisorySwitch() {}
+void DLCRTIambassadorImpl::enableAttributeScopeAdvisorySwitch() {
+  scope_advisory_recorded_ = true;  // accept-and-record (see block comment)
+}
+void DLCRTIambassadorImpl::disableAttributeScopeAdvisorySwitch() {
+  scope_advisory_recorded_ = false;  // accept-and-record (see block comment)
+}
 void DLCRTIambassadorImpl::enableInteractionRelevanceAdvisorySwitch() {}
 void DLCRTIambassadorImpl::disableInteractionRelevanceAdvisorySwitch() {}
 
@@ -2193,6 +2205,11 @@ std::uint64_t rawRegionHandle(RegionHandle const& h) {
 }
 std::uint64_t rawMessageRetractionHandle(MessageRetractionHandle const& h) {
   return decodeHandleVLD_(h.encode());
+}
+// M37 Agent EC-2 — retractable-send return widening.
+MessageRetractionHandle makeMessageRetractionHandleFromUint64(
+    std::uint64_t v) {
+  return MessageRetractionHandleFriend::decode(encodeHandleBE_(v));
 }
 
 }  // namespace rti1516e
