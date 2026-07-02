@@ -183,6 +183,14 @@ InteractionClassHandle  makeInteractionClassHandleFromUint64(std::uint64_t v);
 ParameterHandle         makeParameterHandleFromUint64(std::uint64_t v);
 std::uint64_t rawParameterHandle_(ParameterHandle const& h);
 
+// M36 Agent CA — §8/§9 handle adapters. Same 8-byte big-endian VLD shape.
+// Bodies at file bottom after the DEFINE_HANDLE_FRIEND expansion.
+DimensionHandle makeDimensionHandleFromUint64(std::uint64_t v);
+RegionHandle    makeRegionHandleFromUint64(std::uint64_t v);
+std::uint64_t rawDimensionHandle(DimensionHandle const& h);
+std::uint64_t rawRegionHandle(RegionHandle const& h);
+std::uint64_t rawMessageRetractionHandle(MessageRetractionHandle const& h);
+
 RTIambassador::RTIambassador() RTI_NOEXCEPT {}
 RTIambassador::~RTIambassador() {}
 
@@ -236,6 +244,7 @@ void DLCRTIambassadorImpl::disconnect() {
   });
   callback_bridge_.reset();
   fed_amb_ = nullptr;
+  ddm_default_space_ = 0;  // M36 CA-3 — re-resolve after a reconnect
 }
 
 // §4.5 overload 1 — single FOM module. Widens to the vector-form for
@@ -290,14 +299,24 @@ void DLCRTIambassadorImpl::destroyFederationExecution(
   });
 }
 
-// §4.7 — asynchronous list. Result arrives via the
-// `reportFederationExecutions` FederateAmbassador callback. M17 does not
-// yet expose ListFederationExecutions on the wire; the shim is a no-op
-// so fixtures that call this method don't error, but no callback fires
-// until M17 gains the service. Documented divergence: DLC catalogue §3
-// row 3.6 (deferred to M17 Cut-4).
+// §4.7 — list federation executions. M36 Agent CA-4: the wire's
+// rti.v1.FederationService/ListFederations is called synchronously through
+// the bridge's direct-stub path (M17's ambassador never surfaced a client
+// method), then the spec's §4.9 reportFederationExecutions callback is
+// synthesized on fed_amb_ (spec-legal: callback delivery mechanics are
+// RTI-defined). gorti's wire carries no per-federation logical-time
+// implementation name; every entry reports L"HLAfloat64Time" — the only
+// binding gorti negotiates (documented divergence, catalogue §3 row 3.6).
 void DLCRTIambassadorImpl::listFederationExecutions() {
-  // No-op — no M17 wire target yet.
+  auto const names =
+      bridgeR([&] { return m17_->listFederationExecutions(); });
+  if (fed_amb_ == nullptr) return;
+  FederationExecutionInformationVector infos;
+  infos.reserve(names.size());
+  for (auto const& n : names) {
+    infos.emplace_back(s2ws(n), L"HLAfloat64Time");
+  }
+  fed_amb_->reportFederationExecutions(infos);
 }
 
 // §4.9 overload 1 — join with `federateType` implying `federateName`
@@ -866,355 +885,642 @@ void DLCRTIambassadorImpl::requestAttributeValueUpdate(
 
 // ===== §7 Ownership Management =====
 //
-// M33-K: signature-parity impls per IEEE 1516.1-2010 §7.2-7.19 and
-// docs/DLC_DIVERGENCE_CATALOGUE.md §12 (rows 12.1-12.7). Bodies here
-// are deliberately minimal (no persistent ownership state; no
-// FederateAmbassador is bound on this impl until §4 connect() is
-// implemented in M34+). They satisfy the vtable + spec signature +
-// out-param contracts so §7 conformance fixtures LINK cleanly.
-//
-// Runtime callback delivery (requestDivestitureConfirmation,
-// attributeOwnershipAcquisitionNotification, informAttributeOwnership,
-// attributeIsNotOwned, attributeIsOwnedByRTI, attributeOwnershipUnavailable)
-// is deferred to M34+ once §4 `connect()` stores the bound
-// FederateAmbassador reference on the impl.
+// M36 Agent CA-1: real M17 delegation via M17Bridge (replaces M33-K's
+// signature-parity no-ops). Mapping notes (docs/DLC_DIVERGENCE_CATALOGUE.md
+// §12):
+//   - AttributeHandleSet flattens to vector<uint64> via attrs2raw_.
+//   - attributeOwnershipAcquisition: the DLC-mandatory tag (row 12.2) is
+//     dropped — M17's acquisition wire carries no tag (only the negotiated
+//     divestiture does). Same documented-drop pattern as §6.
+//   - queryAttributeOwnership: M17 answers synchronously; the DLC spec
+//     delivers via §7.18 callbacks. The impl calls M17 then invokes
+//     informAttributeOwnership / attributeIsNotOwned on the bound
+//     fed_amb_ directly (spec-legal: callback delivery mechanics are
+//     RTI-defined; matches the listFederationExecutions pattern).
+//   - acquisitionIfAvailable: no M17 RPC. Emulated: per-attribute query
+//     splits the set into unowned (delegated to acquisition — the grant
+//     arrives via the OwnershipAcquired event) and owned (synthesized
+//     §7.10 attributeOwnershipUnavailable on fed_amb_).
+//   - confirmDivestiture (row 12.1) + attributeOwnershipReleaseDenied
+//     (row 12.4): no M17 wire — spec-legal no-ops, documented divergence.
 
-// §7.2 — unconditional divest. Void return; no side-effects modeled.
+namespace {
+// AttributeHandleSet → raw uint64 vector for the bridge boundary.
+std::vector<std::uint64_t> attrs2raw_(AttributeHandleSet const& attrs) {
+  std::vector<std::uint64_t> out;
+  out.reserve(attrs.size());
+  for (auto const& a : attrs) out.push_back(rawAttributeHandle(a));
+  return out;
+}
+}  // namespace
+
+// §7.2 — unconditional divest.
 void DLCRTIambassadorImpl::unconditionalAttributeOwnershipDivestiture(
-    ObjectInstanceHandle, AttributeHandleSet const&) {
-  // no-op: real ownership bookkeeping deferred to M34+.
+    ObjectInstanceHandle theObject, AttributeHandleSet const& theAttributes) {
+  bridge([&] {
+    m17_->unconditionalAttributeOwnershipDivestiture(
+        rawObjectInstanceHandle(theObject), attrs2raw_(theAttributes));
+  });
 }
 
-// §7.3 — negotiated divest (offer to subscribers). Callback delivery of
-// requestAttributeOwnershipAssumption on subscribers is deferred to M34+.
+// §7.3 — negotiated divest (offer to subscribers). Subscribers see
+// requestAttributeOwnershipAssumption via the M17 event stream.
 void DLCRTIambassadorImpl::negotiatedAttributeOwnershipDivestiture(
-    ObjectInstanceHandle, AttributeHandleSet const&,
-    VariableLengthData const&) {
-  // no-op.
+    ObjectInstanceHandle theObject, AttributeHandleSet const& theAttributes,
+    VariableLengthData const& theUserSuppliedTag) {
+  bridge([&] {
+    m17_->negotiatedAttributeOwnershipDivestiture(
+        rawObjectInstanceHandle(theObject), attrs2raw_(theAttributes),
+        tag2bytes_(theUserSuppliedTag));
+  });
 }
 
 // §7.6 — confirm divest after §7.5 requestDivestitureConfirmation.
-// Catalogue row 12.1: M17 was absent; DLC adds it.
+// Catalogue row 12.1: no M17 wire — gorti's manager completes negotiated
+// transfers without a confirm leg. Spec-legal no-op (documented).
 void DLCRTIambassadorImpl::confirmDivestiture(ObjectInstanceHandle,
                                               AttributeHandleSet const&,
                                               VariableLengthData const&) {
-  // no-op.
+  // no-op: M17 wire gap (catalogue row 12.1).
 }
 
-// §7.8 — request ownership acquisition with a spec-mandatory tag.
-// Catalogue row 12.2: M17 lacked the tag; DLC adds it (BLOCKING).
+// §7.8 — request ownership acquisition. Tag dropped (row 12.2, see
+// section comment). Acquisition outcome arrives via the OwnershipAcquired
+// event → attributeOwnershipAcquisitionNotification on fed_amb_.
 void DLCRTIambassadorImpl::attributeOwnershipAcquisition(
-    ObjectInstanceHandle, AttributeHandleSet const&,
-    VariableLengthData const&) {
-  // no-op.
+    ObjectInstanceHandle theObject, AttributeHandleSet const& desiredAttributes,
+    VariableLengthData const& /*theUserSuppliedTag*/) {
+  bridge([&] {
+    m17_->attributeOwnershipAcquisition(rawObjectInstanceHandle(theObject),
+                                        attrs2raw_(desiredAttributes));
+  });
 }
 
-// §7.9 — acquire-if-available. Per spec this is (object, attributes)
-// with NO tag. Catalogue row 12.3: M17 absent; DLC adds it (MAJOR).
+// §7.9 — acquire-if-available. No M17 RPC; emulated per section comment.
 void DLCRTIambassadorImpl::attributeOwnershipAcquisitionIfAvailable(
-    ObjectInstanceHandle, AttributeHandleSet const&) {
-  // no-op.
+    ObjectInstanceHandle theObject,
+    AttributeHandleSet const& desiredAttributes) {
+  auto const raw_obj = rawObjectInstanceHandle(theObject);
+  std::vector<std::uint64_t> unowned;
+  AttributeHandleSet unavailable;
+  bridge([&] {
+    for (auto const& a : desiredAttributes) {
+      auto const q =
+          m17_->queryAttributeOwnership(raw_obj, rawAttributeHandle(a));
+      if (q.owned && q.owner != 0) {
+        unavailable.insert(a);
+      } else {
+        unowned.push_back(rawAttributeHandle(a));
+      }
+    }
+    if (!unowned.empty()) {
+      m17_->attributeOwnershipAcquisition(raw_obj, unowned);
+    }
+  });
+  // §7.10 — synthesized delivery for the owned subset (M17 has no
+  // "unavailable" event; the query result IS the answer).
+  if (!unavailable.empty() && fed_amb_ != nullptr) {
+    fed_amb_->attributeOwnershipUnavailable(theObject, unavailable);
+  }
 }
 
-// §7.12 — release-denied. Catalogue row 12.4: M17 absent; DLC adds
-// it (MAJOR).
+// §7.12 — release-denied. Catalogue row 12.4: no M17 wire (gorti's manager
+// has no release-request/deny leg — acquisition against an owned attribute
+// simply does not transfer). Spec-legal no-op, documented divergence.
 void DLCRTIambassadorImpl::attributeOwnershipReleaseDenied(
     ObjectInstanceHandle, AttributeHandleSet const&) {
-  // no-op.
+  // no-op: M17 wire gap (catalogue row 12.4).
 }
 
-// §7.13 — divest-if-wanted. Spec has an out-param filled with the
-// attributes the RTI actually divested. Catalogue row 12.5: M17 had no
-// out-param; DLC adds it (BLOCKING). We clear the out-set — no owner
-// state means nothing was divested this call.
+// §7.13 — divest-if-wanted. M17's RPC returns no divested set (row 12.5);
+// the out-param is reconstructed by post-querying ownership: any requested
+// attribute this federate no longer owns after the call was divested.
 void DLCRTIambassadorImpl::attributeOwnershipDivestitureIfWanted(
-    ObjectInstanceHandle, AttributeHandleSet const&,
+    ObjectInstanceHandle theObject, AttributeHandleSet const& theAttributes,
     AttributeHandleSet& theDivestedAttributes) {
   theDivestedAttributes.clear();
+  auto const raw_obj = rawObjectInstanceHandle(theObject);
+  bridge([&] {
+    m17_->attributeOwnershipDivestitureIfWanted(raw_obj,
+                                                attrs2raw_(theAttributes));
+    for (auto const& a : theAttributes) {
+      if (!m17_->isAttributeOwnedByFederate(raw_obj, rawAttributeHandle(a))) {
+        theDivestedAttributes.insert(a);
+      }
+    }
+  });
 }
 
 // §7.14 — cancel a pending negotiated divest.
 void DLCRTIambassadorImpl::cancelNegotiatedAttributeOwnershipDivestiture(
-    ObjectInstanceHandle, AttributeHandleSet const&) {
-  // no-op.
+    ObjectInstanceHandle theObject, AttributeHandleSet const& theAttributes) {
+  bridge([&] {
+    m17_->cancelNegotiatedAttributeOwnershipDivestiture(
+        rawObjectInstanceHandle(theObject), attrs2raw_(theAttributes));
+  });
 }
 
 // §7.15 — cancel a pending acquisition.
 void DLCRTIambassadorImpl::cancelAttributeOwnershipAcquisition(
-    ObjectInstanceHandle, AttributeHandleSet const&) {
-  // no-op.
+    ObjectInstanceHandle theObject, AttributeHandleSet const& theAttributes) {
+  bridge([&] {
+    m17_->cancelAttributeOwnershipAcquisition(
+        rawObjectInstanceHandle(theObject), attrs2raw_(theAttributes));
+  });
 }
 
-// §7.17 — query ownership. Void return per spec; the answer arrives on
-// a §7.18 callback (informAttributeOwnership / attributeIsNotOwned /
-// attributeIsOwnedByRTI). Catalogue row 12.6 (BLOCKING): M17 returned a
-// synchronous OwnershipQueryResult; DLC drops the return + defers the
-// answer to the FederateAmbassador. M34+ will dispatch the callback on
-// the FederateAmbassador stored by connect().
-void DLCRTIambassadorImpl::queryAttributeOwnership(ObjectInstanceHandle,
-                                                   AttributeHandle) {
-  // no-op: callback delivery deferred to M34+.
+// §7.17 — query ownership. Synchronous M17 answer converted to the spec's
+// §7.18 callback delivery on fed_amb_ (see section comment). owner==0 with
+// owned==true would be mid-transfer; both unowned cases map to
+// attributeIsNotOwned.
+void DLCRTIambassadorImpl::queryAttributeOwnership(
+    ObjectInstanceHandle theObject, AttributeHandle theAttribute) {
+  auto const q = bridgeR([&] {
+    return m17_->queryAttributeOwnership(rawObjectInstanceHandle(theObject),
+                                         rawAttributeHandle(theAttribute));
+  });
+  if (fed_amb_ == nullptr) return;
+  if (q.owned && q.owner != 0) {
+    fed_amb_->informAttributeOwnership(theObject, theAttribute,
+                                       makeFederateHandleFromUint64(q.owner));
+  } else {
+    fed_amb_->attributeIsNotOwned(theObject, theAttribute);
+  }
 }
 
-// §7.19 — is this attribute owned by THIS federate? Direct bool per
-// spec. Catalogue row 12.7 (COSMETIC): DLC matches M17 shape. Without
-// stored ownership state we return false conservatively — the fixture
-// won't observe true until M34+ wires real state.
-bool DLCRTIambassadorImpl::isAttributeOwnedByFederate(ObjectInstanceHandle,
-                                                      AttributeHandle) {
-  return false;
+// §7.19 — is this attribute owned by THIS federate? Direct bool per spec
+// (row 12.7: DLC matches M17 shape).
+bool DLCRTIambassadorImpl::isAttributeOwnedByFederate(
+    ObjectInstanceHandle theObject, AttributeHandle theAttribute) {
+  return bridgeR([&] {
+    return m17_->isAttributeOwnedByFederate(rawObjectInstanceHandle(theObject),
+                                            rawAttributeHandle(theAttribute));
+  });
 }
 
 // ===== §8 Time Management =====
 //
-// M34 Agent AB: §8 shim over gorti's M17 time surface.
-//
-// Design:
-//   - Spec (§8) parameters LogicalTime const& and LogicalTimeInterval const&
-//     are pure-abstract; gorti M17 speaks double. Each shim narrows to
-//     double via `dynamic_cast<HLAfloat64Time const*>(&lt)->getTime()`
-//     (resp. HLAfloat64Interval::getInterval()). Federation-scope logical-
-//     time bindings other than HLAfloat64Time are not supported (catalogue
-//     §9 rows 9.1/9.4). When the concrete type is not HLAfloat64Time the
-//     dynamic_cast returns nullptr and we fall through to the M17-not-wired
-//     branch; a future pImpl wiring will replace the guard with a proper
-//     InvalidLogicalTime throw.
-//   - Like §6, DLCRTIambassadorImpl currently owns no M17 client member;
-//     wiring one requires editing RTIambassadorImpl.h, which is outside
-//     M34 Agent AB's file scope ("Only touch RTIambassadorImpl.cpp §8").
-//     Until that pImpl lands each shim throws rti1516e::NotConnected via
-//     `m17NotWiredTime_` — spec-legal per every §8 method's RTI_THROW
-//     clause (see Pitch RTIambassador.h §8.2-8.24). This keeps the 13
-//     catalogue §9 rows LINKed for the tm_* conformance fixtures.
-//   - Async ack shape (enableTimeRegulation → timeRegulationEnabled;
-//     enableTimeConstrained → timeConstrainedEnabled; TAR/NER/FQR →
-//     timeAdvanceGrant) is delivered on the federate's FederateAmbassador
-//     via the M17 event-stream once the pImpl lands.
+// M36 Agent CA-2: real M17 delegation via M17Bridge (replaces M34 Agent
+// AB's m17NotWiredTime_ throws). Design:
+//   - Spec parameters LogicalTime const& / LogicalTimeInterval const& are
+//     pure-abstract; gorti M17 speaks double (HLAfloat64Time wire shape).
+//     Each shim narrows via dynamic_cast to the HLAfloat64 concrete and
+//     throws InvalidLogicalTime / InvalidLookahead when a foreign
+//     LogicalTime binding is passed (catalogue §9 rows 9.1/9.4).
+//   - Query out-params widen by assigning into the caller's LogicalTime&
+//     via dynamic_cast to HLAfloat64Time& + setTime (resp. setInterval).
+//   - Async ack synthesis: M17's Enable{Regulation,Constrained} RPCs are
+//     synchronous with NO ack event on the stream. The spec's §8.3/§8.6
+//     acks (timeRegulationEnabled / timeConstrainedEnabled) are therefore
+//     synthesized on fed_amb_ directly after the RPC returns OK, carrying
+//     the federate's current logical time from queryLogicalTime. Spec-legal:
+//     callback delivery mechanics are RTI-defined (same pattern as
+//     queryAttributeOwnership / listFederationExecutions).
+//   - TAR/TARA/NER/NMRA/FQR grants stay fully async: the manager emits
+//     TimeAdvanceGrant on the event stream → DLCFederateAmbassadorBridge
+//     wraps as HLAfloat64Time → fed_amb_->timeAdvanceGrant.
+//   - changeAttributeOrderType / changeInteractionOrderType: no M17 wire
+//     (order type is FOM-declared in gorti). Spec-legal no-ops, documented
+//     divergence (catalogue §9 rows 9.13/9.14 pattern — same as §6 gaps).
 //
 // Catalogue §9 rows 9.1-9.14 (FR-DLC-8).
 
 namespace {
 
-// Central point for the "M17 §8 not yet wired" reply. Every §8 method
-// declares NotConnected in its RTI_THROW clause; NotConnected is the
-// spec-legal signal for "no CRC bound" and correctly reflects the M17-
-// pImpl-not-installed state.
-[[noreturn]] void m17NotWiredTime_(char const* method) {
-  std::wstring msg = L"gorti DLC §8 ";
-  for (char const* p = method; *p; ++p)
-    msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*p)));
-  msg += L": M17 time surface not yet wired into DLCRTIambassadorImpl "
-         L"(M34 follow-up — needs a private M17 client member on "
-         L"RTIambassadorImpl.h; tracked as \"M34 header pImpl\" in the "
-         L"dispatch plan). Federate is not connected to any CRC.";
-  throw NotConnected(msg);
+// LogicalTime → double. Throws InvalidLogicalTime on a non-HLAfloat64Time
+// binding (gorti federations negotiate HLAfloat64Time unconditionally).
+double narrowTime_(LogicalTime const& t, char const* method) {
+  auto const* p = dynamic_cast<HLAfloat64Time const*>(&t);
+  if (p == nullptr) {
+    std::wstring msg = L"gorti DLC §8 ";
+    for (char const* c = method; *c; ++c)
+      msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*c)));
+    msg += L": LogicalTime binding must be HLAfloat64Time.";
+    throw InvalidLogicalTime(msg);
+  }
+  return p->getTime();
+}
+
+// LogicalTimeInterval → double. Throws InvalidLookahead on a foreign type.
+double narrowInterval_(LogicalTimeInterval const& i, char const* method) {
+  auto const* p = dynamic_cast<HLAfloat64Interval const*>(&i);
+  if (p == nullptr) {
+    std::wstring msg = L"gorti DLC §8 ";
+    for (char const* c = method; *c; ++c)
+      msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*c)));
+    msg += L": LogicalTimeInterval binding must be HLAfloat64Interval.";
+    throw InvalidLookahead(msg);
+  }
+  return p->getInterval();
+}
+
+// double → caller's LogicalTime& out-param. Same binding constraint.
+void widenTime_(LogicalTime& t, double value, char const* method) {
+  auto* p = dynamic_cast<HLAfloat64Time*>(&t);
+  if (p == nullptr) {
+    std::wstring msg = L"gorti DLC §8 ";
+    for (char const* c = method; *c; ++c)
+      msg.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*c)));
+    msg += L": LogicalTime binding must be HLAfloat64Time.";
+    throw InvalidLogicalTime(msg);
+  }
+  p->setTime(value);
 }
 
 }  // namespace
 
 void DLCRTIambassadorImpl::enableTimeRegulation(
     LogicalTimeInterval const& theLookahead) {
-  // §8.2 — async. Federate must be joined; ack arrives asynchronously via
-  //        §8.3 timeRegulationEnabled(federateTime) on FederateAmbassador.
-  //        gorti M17 uses double; narrow via HLAfloat64Interval concrete.
-  auto const* p = dynamic_cast<HLAfloat64Interval const*>(&theLookahead);
-  double const m17_lookahead_ = p ? p->getInterval() : 0.0;
-  (void)m17_lookahead_;
-  m17NotWiredTime_("enableTimeRegulation");
+  // §8.2 — M17's EnableTimeRegulation RPC is synchronous; the §8.3
+  // timeRegulationEnabled(federateTime) ack is synthesized (see section
+  // comment).
+  double const lookahead = narrowInterval_(theLookahead,
+                                           "enableTimeRegulation");
+  double federate_time = 0.0;
+  bridge([&] {
+    m17_->enableTimeRegulation(lookahead);
+    federate_time = m17_->queryLogicalTime();
+  });
+  if (fed_amb_ != nullptr) {
+    HLAfloat64Time const t(federate_time);
+    fed_amb_->timeRegulationEnabled(t);
+  }
 }
 
 void DLCRTIambassadorImpl::disableTimeRegulation() {
   // §8.4 — synchronous per spec (no async ack).
-  m17NotWiredTime_("disableTimeRegulation");
+  bridge([&] { m17_->disableTimeRegulation(); });
 }
 
 void DLCRTIambassadorImpl::enableTimeConstrained() {
-  // §8.5 — async. Ack via §8.6 timeConstrainedEnabled(federateTime).
-  m17NotWiredTime_("enableTimeConstrained");
+  // §8.5 — §8.6 timeConstrainedEnabled(federateTime) ack synthesized.
+  double federate_time = 0.0;
+  bridge([&] {
+    m17_->enableTimeConstrained();
+    federate_time = m17_->queryLogicalTime();
+  });
+  if (fed_amb_ != nullptr) {
+    HLAfloat64Time const t(federate_time);
+    fed_amb_->timeConstrainedEnabled(t);
+  }
 }
 
 void DLCRTIambassadorImpl::disableTimeConstrained() {
   // §8.7 — synchronous.
-  m17NotWiredTime_("disableTimeConstrained");
+  bridge([&] { m17_->disableTimeConstrained(); });
 }
 
 void DLCRTIambassadorImpl::timeAdvanceRequest(LogicalTime const& theTime) {
   // §8.8 — async; grant via §8.13 timeAdvanceGrant(theTime).
-  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
-  double const m17_time_ = p ? p->getTime() : 0.0;
-  (void)m17_time_;
-  m17NotWiredTime_("timeAdvanceRequest");
+  double const t = narrowTime_(theTime, "timeAdvanceRequest");
+  bridge([&] { m17_->timeAdvanceRequest(t); });
 }
 
 void DLCRTIambassadorImpl::timeAdvanceRequestAvailable(
     LogicalTime const& theTime) {
   // §8.9 — async; grant via §8.13.
-  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
-  double const m17_time_ = p ? p->getTime() : 0.0;
-  (void)m17_time_;
-  m17NotWiredTime_("timeAdvanceRequestAvailable");
+  double const t = narrowTime_(theTime, "timeAdvanceRequestAvailable");
+  bridge([&] { m17_->timeAdvanceRequestAvailable(t); });
 }
 
 void DLCRTIambassadorImpl::nextMessageRequest(LogicalTime const& theTime) {
   // §8.10 — async; grant via §8.13. NER anchors the tm_ner_pair fixture.
-  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
-  double const m17_time_ = p ? p->getTime() : 0.0;
-  (void)m17_time_;
-  m17NotWiredTime_("nextMessageRequest");
+  double const t = narrowTime_(theTime, "nextMessageRequest");
+  bridge([&] { m17_->nextMessageRequest(t); });
 }
 
 void DLCRTIambassadorImpl::nextMessageRequestAvailable(
     LogicalTime const& theTime) {
   // §8.11 — async; grant via §8.13.
-  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
-  double const m17_time_ = p ? p->getTime() : 0.0;
-  (void)m17_time_;
-  m17NotWiredTime_("nextMessageRequestAvailable");
+  double const t = narrowTime_(theTime, "nextMessageRequestAvailable");
+  bridge([&] { m17_->nextMessageRequestAvailable(t); });
 }
 
 void DLCRTIambassadorImpl::flushQueueRequest(LogicalTime const& theTime) {
   // §8.12 — async; grant via §8.13.
-  auto const* p = dynamic_cast<HLAfloat64Time const*>(&theTime);
-  double const m17_time_ = p ? p->getTime() : 0.0;
-  (void)m17_time_;
-  m17NotWiredTime_("flushQueueRequest");
+  double const t = narrowTime_(theTime, "flushQueueRequest");
+  bridge([&] { m17_->flushQueueRequest(t); });
 }
 
 void DLCRTIambassadorImpl::enableAsynchronousDelivery() {
   // §8.14 — synchronous toggle.
-  m17NotWiredTime_("enableAsynchronousDelivery");
+  bridge([&] { m17_->enableAsynchronousDelivery(); });
 }
 
 void DLCRTIambassadorImpl::disableAsynchronousDelivery() {
   // §8.15 — synchronous toggle.
-  m17NotWiredTime_("disableAsynchronousDelivery");
+  bridge([&] { m17_->disableAsynchronousDelivery(); });
 }
 
 bool DLCRTIambassadorImpl::queryGALT(LogicalTime& theTime) {
-  // §8.16 — out-param + bool. Returns false if GALT is undefined (no
-  //         regulating federates); otherwise assigns theTime = GALT.
-  (void)theTime;
-  m17NotWiredTime_("queryGALT");
+  // §8.16 — out-param + bool. false when GALT is undefined (no other
+  // regulating federate); theTime untouched in that case per spec.
+  auto const r = bridgeR([&] { return m17_->queryGALT(); });
+  if (!r.finite) return false;
+  widenTime_(theTime, r.time, "queryGALT");
+  return true;
 }
 
 void DLCRTIambassadorImpl::queryLogicalTime(LogicalTime& theTime) {
   // §8.17 — assigns federate's current logical time.
-  (void)theTime;
-  m17NotWiredTime_("queryLogicalTime");
+  auto const t = bridgeR([&] { return m17_->queryLogicalTime(); });
+  widenTime_(theTime, t, "queryLogicalTime");
 }
 
 bool DLCRTIambassadorImpl::queryLITS(LogicalTime& theTime) {
   // §8.18 — out-param + bool. Least incoming time stamp; false if none.
-  (void)theTime;
-  m17NotWiredTime_("queryLITS");
+  auto const r = bridgeR([&] { return m17_->queryLITS(); });
+  if (!r.finite) return false;
+  widenTime_(theTime, r.time, "queryLITS");
+  return true;
 }
 
 void DLCRTIambassadorImpl::modifyLookahead(
     LogicalTimeInterval const& theLookahead) {
-  // §8.19 — synchronous. Requires TimeRegulation enabled.
-  auto const* p = dynamic_cast<HLAfloat64Interval const*>(&theLookahead);
-  double const m17_lookahead_ = p ? p->getInterval() : 0.0;
-  (void)m17_lookahead_;
-  m17NotWiredTime_("modifyLookahead");
+  // §8.19 — synchronous. Requires TimeRegulation enabled (M17 enforces).
+  double const lookahead = narrowInterval_(theLookahead, "modifyLookahead");
+  bridge([&] { m17_->modifyLookahead(lookahead); });
 }
 
 void DLCRTIambassadorImpl::queryLookahead(LogicalTimeInterval& interval) {
-  // §8.20 — out-param. Requires TimeRegulation enabled.
-  (void)interval;
-  m17NotWiredTime_("queryLookahead");
+  // §8.20 — out-param. Requires TimeRegulation enabled (M17 enforces).
+  auto const v = bridgeR([&] { return m17_->queryLookahead(); });
+  auto* p = dynamic_cast<HLAfloat64Interval*>(&interval);
+  if (p == nullptr) {
+    throw InvalidLookahead(
+        L"gorti DLC §8 queryLookahead: LogicalTimeInterval binding must be "
+        L"HLAfloat64Interval.");
+  }
+  p->setInterval(v);
 }
 
 void DLCRTIambassadorImpl::retract(MessageRetractionHandle theHandle) {
-  // §8.21 — retract a previously-sent TSO message by handle from
-  //         updateAttributeValues/sendInteraction/deleteObjectInstance
-  //         TSO overloads.
-  (void)theHandle;
-  m17NotWiredTime_("retract");
+  // §8.21 — retract by raw handle. The §6 TSO overloads currently return
+  // invalid placeholder handles (M17 wire is RO-only), so a fixture-made
+  // handle decodes to raw 0 — M17 treats an unmatched retract as OK per
+  // its header contract ("returns OK whether or not a buffered message
+  // matched").
+  auto const raw = rawMessageRetractionHandle(theHandle);
+  bridge([&] { m17_->retract(raw); });
 }
 
 void DLCRTIambassadorImpl::changeAttributeOrderType(
     ObjectInstanceHandle theObject,
     AttributeHandleSet const& theAttributes,
     OrderType theType) {
-  // §8.23 — per-attribute order change (TIMESTAMP ↔ RECEIVE).
+  // §8.23 — per-attribute order change. No M17 wire: gorti's delivery
+  // order is FOM-declared per attribute (see federation.fom.xml <order>).
+  // Spec-legal no-op, documented divergence (see section comment).
   (void)theObject;
   (void)theAttributes;
   (void)theType;
-  m17NotWiredTime_("changeAttributeOrderType");
 }
 
 void DLCRTIambassadorImpl::changeInteractionOrderType(
     InteractionClassHandle theClass,
     OrderType theType) {
-  // §8.24 — per-interaction-class order change (TIMESTAMP ↔ RECEIVE).
+  // §8.24 — per-interaction-class order change. Same M17 wire gap as
+  // §8.23; spec-legal no-op, documented divergence.
   (void)theClass;
   (void)theType;
-  m17NotWiredTime_("changeInteractionOrderType");
 }
 
 // ===== §9 DDM =====
-RegionHandle DLCRTIambassadorImpl::createRegion(DimensionHandleSet const&) {
-  m32_stub("createRegion");
+//
+// M36 Agent CA-3: real M17 delegation via M17Bridge (replaces the M32
+// stubs). Shape notes:
+//   - gorti's DDM wire is HLA 1.3-shaped (routing spaces). The FOM parser
+//     drops every 1516e <dimension> into the implicit routing space
+//     "default" (rti/internal/ddm/state.go populateFromFOM), so the DLC's
+//     space-less §9 surface resolves that one space lazily via
+//     ddmDefaultSpace_() and threads its handle through createRegion /
+//     getDimensionHandle.
+//   - AttributeHandleSetRegionHandleSetPairVector flattens per-pair: the
+//     subscribe/unsubscribe/requestUpdate shims loop the pairs into
+//     M17's (attrs, regions) form; the register/associate shims merge the
+//     pairs into M17's AttributeRegionMap (map<attr, region-set>).
+//   - `bool active` / `wstring updateRateDesignator` on the subscribe
+//     overloads are dropped exactly like §5 (documented divergence,
+//     catalogue §11 rows 11.9/11.11).
+//   - sendInteractionWithRegions: DLC-mandatory tag dropped (M17 wire has
+//     no tag on the DDM send — same as §6); the TSO overload narrows
+//     LogicalTime to M17's optional<double> and returns an invalid
+//     placeholder MessageRetractionHandle (same contract as §6 TSO).
+
+namespace {
+// RegionHandleSet → raw uint64 vector for the bridge boundary.
+std::vector<std::uint64_t> regions2raw_(RegionHandleSet const& regions) {
+  std::vector<std::uint64_t> out;
+  out.reserve(regions.size());
+  for (auto const& r : regions) out.push_back(rawRegionHandle(r));
+  return out;
 }
-void DLCRTIambassadorImpl::commitRegionModifications(RegionHandleSet const&) {
-  m32_stub("commitRegionModifications");
+// Pair-vector → M17-shaped map<attr, region-vector>. Later pairs merge
+// into earlier ones (spec allows one attribute in multiple pairs; the
+// region sets union).
+std::map<std::uint64_t, std::vector<std::uint64_t>> pairs2attrRegions_(
+    AttributeHandleSetRegionHandleSetPairVector const& pairs) {
+  std::map<std::uint64_t, std::vector<std::uint64_t>> out;
+  for (auto const& pr : pairs) {
+    auto const raw_regions = regions2raw_(pr.second);
+    for (auto const& a : pr.first) {
+      auto& v = out[rawAttributeHandle(a)];
+      v.insert(v.end(), raw_regions.begin(), raw_regions.end());
+    }
+  }
+  return out;
 }
-void DLCRTIambassadorImpl::deleteRegion(RegionHandle const&) {
-  m32_stub("deleteRegion");
+}  // namespace
+
+// Lazily resolves gorti's implicit "default" routing space (see section
+// comment). Requires a joined federate — M17's LookupRoutingSpace RPC
+// enforces that, and the resulting spec exception surfaces unchanged.
+std::uint64_t DLCRTIambassadorImpl::ddmDefaultSpace_() {
+  if (ddm_default_space_ == 0) {
+    ddm_default_space_ =
+        bridgeR([&] { return m17_->getRoutingSpaceHandle("default"); });
+  }
+  return ddm_default_space_;
 }
 
+RegionHandle DLCRTIambassadorImpl::createRegion(
+    DimensionHandleSet const& theDimensions) {
+  // §9.2 — create in the implicit default routing space.
+  if (theDimensions.empty())
+    throw InvalidDimensionHandle(L"createRegion: empty dimension set.");
+  std::vector<std::uint64_t> dims;
+  dims.reserve(theDimensions.size());
+  for (auto const& d : theDimensions) dims.push_back(rawDimensionHandle(d));
+  auto const space = ddmDefaultSpace_();
+  return bridgeR([&] {
+    return makeRegionHandleFromUint64(m17_->createRegion(space, dims));
+  });
+}
+
+void DLCRTIambassadorImpl::commitRegionModifications(
+    RegionHandleSet const& theRegions) {
+  // §9.3 — publish pending range-bound changes federation-wide.
+  bridge([&] { m17_->commitRegionModifications(regions2raw_(theRegions)); });
+}
+
+void DLCRTIambassadorImpl::deleteRegion(RegionHandle const& theRegion) {
+  // §9.4 — delete; M17 auto-unbinds subscribers/publishers.
+  if (!theRegion.isValid()) throw InvalidRegion(L"deleteRegion");
+  bridge([&] { m17_->deleteRegion(rawRegionHandle(theRegion)); });
+}
+
+// §9.5 registerObjectInstanceWithRegions — fused emulation. gorti's
+// RegisterObjectInstanceWithRegions RPC is a Cut-3 stub: it returns
+// ObjectHandle 0 and records nothing (see rti/internal/transport/grpc/
+// ddm.go "Cut-3 simplification" comment — the caller must pair it with a
+// plain RegisterObject). The DLC shim therefore registers the object
+// through the real §6.8 path first, then binds the per-attribute regions
+// via AssociateRegionsForUpdates — the exact fused-call pattern the
+// Python SDK's federation.RegisterObjectInstanceWithRegions uses.
 ObjectInstanceHandle DLCRTIambassadorImpl::registerObjectInstanceWithRegions(
-    ObjectClassHandle, AttributeHandleSetRegionHandleSetPairVector const&) {
-  m32_stub("registerObjectInstanceWithRegions");
+    ObjectClassHandle theClass,
+    AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions) {
+  // Overload 1 — RTI-generated name.
+  return bridgeR([&] {
+    auto raw = m17_->registerObjectInstance(rawObjectClassHandle(theClass), "");
+    m17_->associateRegionsForUpdates(raw,
+                                     pairs2attrRegions_(attributesAndRegions));
+    return makeObjectInstanceHandleFromUint64(raw);
+  });
 }
 ObjectInstanceHandle DLCRTIambassadorImpl::registerObjectInstanceWithRegions(
-    ObjectClassHandle, AttributeHandleSetRegionHandleSetPairVector const&,
-    std::wstring const&) {
-  m32_stub("registerObjectInstanceWithRegions");
+    ObjectClassHandle theClass,
+    AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions,
+    std::wstring const& theObjectInstanceName) {
+  // Overload 2 — federate-supplied (pre-reserved) name.
+  return bridgeR([&] {
+    auto raw = m17_->registerObjectInstance(rawObjectClassHandle(theClass),
+                                            ws2s(theObjectInstanceName));
+    m17_->associateRegionsForUpdates(raw,
+                                     pairs2attrRegions_(attributesAndRegions));
+    return makeObjectInstanceHandleFromUint64(raw);
+  });
 }
 
 void DLCRTIambassadorImpl::associateRegionsForUpdates(
-    ObjectInstanceHandle, AttributeHandleSetRegionHandleSetPairVector const&) {
-  m32_stub("associateRegionsForUpdates");
+    ObjectInstanceHandle theObject,
+    AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions) {
+  // §9.6 — bind per-attribute regions on an existing object.
+  bridge([&] {
+    m17_->associateRegionsForUpdates(rawObjectInstanceHandle(theObject),
+                                     pairs2attrRegions_(attributesAndRegions));
+  });
 }
 void DLCRTIambassadorImpl::unassociateRegionsForUpdates(
-    ObjectInstanceHandle, AttributeHandleSetRegionHandleSetPairVector const&) {
-  m32_stub("unassociateRegionsForUpdates");
+    ObjectInstanceHandle theObject,
+    AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions) {
+  // §9.7 — drop per-attribute region bindings.
+  bridge([&] {
+    m17_->unassociateRegionsForUpdates(
+        rawObjectInstanceHandle(theObject),
+        pairs2attrRegions_(attributesAndRegions));
+  });
 }
 
 void DLCRTIambassadorImpl::subscribeObjectClassAttributesWithRegions(
-    ObjectClassHandle, AttributeHandleSetRegionHandleSetPairVector const&,
-    bool, std::wstring const&) {
-  m32_stub("subscribeObjectClassAttributesWithRegions");
+    ObjectClassHandle theClass,
+    AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions,
+    bool /*active*/, std::wstring const& /*updateRateDesignator*/) {
+  // §9.8 — per-pair delegation; active/updateRate dropped (see section
+  // comment).
+  bridge([&] {
+    for (auto const& pr : attributesAndRegions) {
+      m17_->subscribeObjectClassAttributesWithRegions(
+          rawObjectClassHandle(theClass), attrs2raw_(pr.first),
+          regions2raw_(pr.second));
+    }
+  });
 }
 void DLCRTIambassadorImpl::unsubscribeObjectClassAttributesWithRegions(
-    ObjectClassHandle, AttributeHandleSetRegionHandleSetPairVector const&) {
-  m32_stub("unsubscribeObjectClassAttributesWithRegions");
+    ObjectClassHandle theClass,
+    AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions) {
+  // §9.9 — per-pair delegation.
+  bridge([&] {
+    for (auto const& pr : attributesAndRegions) {
+      m17_->unsubscribeObjectClassAttributesWithRegions(
+          rawObjectClassHandle(theClass), attrs2raw_(pr.first),
+          regions2raw_(pr.second));
+    }
+  });
 }
 
 void DLCRTIambassadorImpl::subscribeInteractionClassWithRegions(
-    InteractionClassHandle, RegionHandleSet const&, bool) {
-  m32_stub("subscribeInteractionClassWithRegions");
+    InteractionClassHandle theClass, RegionHandleSet const& theRegions,
+    bool /*active*/) {
+  // §9.10 — active dropped (see section comment).
+  bridge([&] {
+    m17_->subscribeInteractionClassWithRegions(
+        rawInteractionClassHandle(theClass), regions2raw_(theRegions));
+  });
 }
 void DLCRTIambassadorImpl::unsubscribeInteractionClassWithRegions(
-    InteractionClassHandle, RegionHandleSet const&) {
-  m32_stub("unsubscribeInteractionClassWithRegions");
+    InteractionClassHandle theClass, RegionHandleSet const& theRegions) {
+  // §9.11.
+  bridge([&] {
+    m17_->unsubscribeInteractionClassWithRegions(
+        rawInteractionClassHandle(theClass), regions2raw_(theRegions));
+  });
 }
 
 void DLCRTIambassadorImpl::sendInteractionWithRegions(
-    InteractionClassHandle, ParameterHandleValueMap const&,
-    RegionHandleSet const&, VariableLengthData const&) {
-  m32_stub("sendInteractionWithRegions");
+    InteractionClassHandle theInteraction,
+    ParameterHandleValueMap const& theParameterValues,
+    RegionHandleSet const& theRegions,
+    VariableLengthData const& /*theUserSuppliedTag*/) {
+  // §9.12 overload 1 (RO). Tag dropped (M17 DDM send carries none).
+  std::map<std::uint64_t, std::vector<std::uint8_t>> params;
+  for (auto const& kv : theParameterValues) {
+    auto const* p = static_cast<uint8_t const*>(kv.second.data());
+    params.emplace(rawParameterHandle(kv.first),
+                   std::vector<uint8_t>(p, p + kv.second.size()));
+  }
+  bridge([&] {
+    m17_->sendInteractionWithRegions(rawInteractionClassHandle(theInteraction),
+                                     params, regions2raw_(theRegions),
+                                     std::nullopt);
+  });
 }
 MessageRetractionHandle DLCRTIambassadorImpl::sendInteractionWithRegions(
-    InteractionClassHandle, ParameterHandleValueMap const&,
-    RegionHandleSet const&, VariableLengthData const&, LogicalTime const&) {
-  m32_stub("sendInteractionWithRegions");
+    InteractionClassHandle theInteraction,
+    ParameterHandleValueMap const& theParameterValues,
+    RegionHandleSet const& theRegions,
+    VariableLengthData const& /*theUserSuppliedTag*/,
+    LogicalTime const& theTime) {
+  // §9.12 overload 2 (TSO). Time narrows to M17's optional<double>;
+  // placeholder retraction handle (same contract as §6 TSO overloads).
+  double const t = narrowTime_(theTime, "sendInteractionWithRegions");
+  std::map<std::uint64_t, std::vector<std::uint8_t>> params;
+  for (auto const& kv : theParameterValues) {
+    auto const* p = static_cast<uint8_t const*>(kv.second.data());
+    params.emplace(rawParameterHandle(kv.first),
+                   std::vector<uint8_t>(p, p + kv.second.size()));
+  }
+  bridge([&] {
+    m17_->sendInteractionWithRegions(rawInteractionClassHandle(theInteraction),
+                                     params, regions2raw_(theRegions),
+                                     std::optional<double>(t));
+  });
+  return MessageRetractionHandle();  // spec-legal invalid placeholder
 }
+
 void DLCRTIambassadorImpl::requestAttributeValueUpdateWithRegions(
-    ObjectClassHandle, AttributeHandleSetRegionHandleSetPairVector const&,
-    VariableLengthData const&) {
-  m32_stub("requestAttributeValueUpdateWithRegions");
+    ObjectClassHandle theClass,
+    AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions,
+    VariableLengthData const& theUserSuppliedTag) {
+  // §9.13 — per-pair delegation; tag passes through (M17 carries it).
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    for (auto const& pr : attributesAndRegions) {
+      m17_->requestAttributeValueUpdateWithRegions(
+          rawObjectClassHandle(theClass), attrs2raw_(pr.first),
+          regions2raw_(pr.second), tag);
+    }
+  });
 }
 
 // ===== §10 Support Services =====
@@ -1427,10 +1733,16 @@ DLCRTIambassadorImpl::getAvailableDimensionsForInteractionClass(
   throw NotConnected(L"DLC RTIambassador: getAvailableDimensionsForInteraction"
                      L"Class requires federation connection (M35+).");
 }
-DimensionHandle DLCRTIambassadorImpl::getDimensionHandle(std::wstring const&) {
-  // §10.25 — need FOM state.
-  throw NotConnected(L"DLC RTIambassador: getDimensionHandle requires "
-                     L"federation connection (M35+).");
+DimensionHandle DLCRTIambassadorImpl::getDimensionHandle(
+    std::wstring const& theName) {
+  // §10.25 — M36 Agent CA-3 real delegation. 1516e dimensions live in
+  // gorti's implicit "default" routing space (see §9 section comment);
+  // the space handle resolves lazily and the M17 lookup runs against it.
+  auto const space = ddmDefaultSpace_();
+  return bridgeR([&] {
+    return makeDimensionHandleFromUint64(
+        m17_->getDimensionHandle(space, ws2s(theName)));
+  });
 }
 std::wstring DLCRTIambassadorImpl::getDimensionName(DimensionHandle theHandle) {
   // §10.26 — need FOM state.
@@ -1456,23 +1768,37 @@ DimensionHandleSet DLCRTIambassadorImpl::getDimensionHandleSet(
 }
 RangeBounds DLCRTIambassadorImpl::getRangeBounds(RegionHandle theRegion,
                                                  DimensionHandle theDim) {
-  // §10.29 — need region-registry state.
+  // §10.29 — M36 Agent CA-3 real delegation via M17 queryBounds. A region
+  // with no committed bounds for the dimension reports found=false; the
+  // spec maps that to RegionDoesNotContainSpecifiedDimension.
   if (!theRegion.isValid()) throw InvalidRegion(L"getRangeBounds");
   if (!theDim.isValid()) throw InvalidDimensionHandle(L"getRangeBounds");
-  throw NotConnected(L"DLC RTIambassador: getRangeBounds requires "
-                     L"federation connection (M35+).");
+  auto const r = bridgeR([&] {
+    return m17_->queryRangeBounds(rawRegionHandle(theRegion),
+                                  rawDimensionHandle(theDim));
+  });
+  if (!r.found) {
+    throw RegionDoesNotContainSpecifiedDimension(
+        L"getRangeBounds: region has no bounds for the dimension.");
+  }
+  return RangeBounds(static_cast<unsigned long>(r.lower),
+                     static_cast<unsigned long>(r.upper));
 }
 void DLCRTIambassadorImpl::setRangeBounds(RegionHandle theRegion,
                                           DimensionHandle theDim,
                                           RangeBounds const& bounds) {
-  // §10.30 — need region-registry state. Validate arguments per spec
-  // before failing on connectivity.
+  // §10.30 — M36 Agent CA-3 real delegation. Validate arguments per spec
+  // before hitting the wire.
   if (!theRegion.isValid()) throw InvalidRegion(L"setRangeBounds");
   if (!theDim.isValid()) throw InvalidDimensionHandle(L"setRangeBounds");
   if (bounds.getLowerBound() > bounds.getUpperBound())
     throw InvalidRangeBound(L"setRangeBounds: lower > upper.");
-  throw NotConnected(L"DLC RTIambassador: setRangeBounds requires "
-                     L"federation connection (M35+).");
+  bridge([&] {
+    m17_->setRangeBounds(rawRegionHandle(theRegion),
+                         rawDimensionHandle(theDim),
+                         static_cast<std::uint64_t>(bounds.getLowerBound()),
+                         static_cast<std::uint64_t>(bounds.getUpperBound()));
+  });
 }
 
 // §10.31 normalizeFederateHandle — returns a stable per-federation numeric
@@ -1718,6 +2044,23 @@ ParameterHandle makeParameterHandleFromUint64(std::uint64_t v) {
 std::uint64_t rawParameterHandle_(ParameterHandle const& h) {
   // Convert BC's decodeHandleVLD_ result to BE via encode round-trip.
   return rawParameterHandle(h);  // same uint64 as BC's version
+}
+
+// M36 Agent CA — §8/§9 handle adapter bodies.
+DimensionHandle makeDimensionHandleFromUint64(std::uint64_t v) {
+  return DimensionHandleFriend::decode(encodeHandleBE_(v));
+}
+RegionHandle makeRegionHandleFromUint64(std::uint64_t v) {
+  return RegionHandleFriend::decode(encodeHandleBE_(v));
+}
+std::uint64_t rawDimensionHandle(DimensionHandle const& h) {
+  return decodeHandleVLD_(h.encode());
+}
+std::uint64_t rawRegionHandle(RegionHandle const& h) {
+  return decodeHandleVLD_(h.encode());
+}
+std::uint64_t rawMessageRetractionHandle(MessageRetractionHandle const& h) {
+  return decodeHandleVLD_(h.encode());
 }
 
 }  // namespace rti1516e
