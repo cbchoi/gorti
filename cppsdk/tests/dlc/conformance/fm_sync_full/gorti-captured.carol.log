@@ -1,0 +1,6 @@
+CAROL: CONNECT
+CAROL: JOIN federate=CAROL
+CAROL: ANNOUNCE_SYNC label=checkpoint
+CAROL: ACHIEVED label=checkpoint successfully=true
+CAROL: FEDERATION_SYNCHRONIZED label=checkpoint failedToSyncSet.size=0
+CAROL: RESIGN

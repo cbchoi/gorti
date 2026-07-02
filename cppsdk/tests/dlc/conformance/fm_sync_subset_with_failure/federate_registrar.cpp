@@ -65,7 +65,7 @@ int main() {
               << std::endl;
 
     for (int i = 0; i < 200 && !fed.registered_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);  // caller-thread drain (gorti M17 buffers; harmless yield under Pitch)
     }
 
     // Hold long enough for the subset sync to play out.

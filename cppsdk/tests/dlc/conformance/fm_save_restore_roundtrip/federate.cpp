@@ -130,8 +130,12 @@ int main() {
     amb->requestFederationSave(L"checkpoint-1");
     std::cout << "FED: REQUEST_FEDERATION_SAVE label=checkpoint-1" << std::endl;
 
+    // Wait loops drain via §10.42 evokeMultipleCallbacks. Legal under
+    // HLA_IMMEDIATE on both RTIs (Pitch delivers on background threads and
+    // the evoke is a harmless yield; gorti M17 buffers events and drains
+    // them on the evoking thread). Emits no canonical lines.
     for (int i = 0; i < 200 && !fed.save_initiated_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     // §4.18 federateSaveBegun — divergence catalogue row 3.12.
@@ -143,7 +147,7 @@ int main() {
     std::cout << "FED: FEDERATE_SAVE_COMPLETE" << std::endl;
 
     for (int i = 0; i < 200 && !fed.saved_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
@@ -158,14 +162,14 @@ int main() {
               << std::endl;
 
     for (int i = 0; i < 200 && !fed.restore_initiated_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->federateRestoreComplete();
     std::cout << "FED: FEDERATE_RESTORE_COMPLETE" << std::endl;
 
     for (int i = 0; i < 200 && !fed.restored_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

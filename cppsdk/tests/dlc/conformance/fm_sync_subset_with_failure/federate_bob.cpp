@@ -58,7 +58,7 @@ int main() {
     std::cout << "BOB: JOIN federate=bob" << std::endl;
 
     for (int i = 0; i < 400 && !fed.announced_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);  // caller-thread drain (gorti M17 buffers; harmless yield under Pitch)
     }
 
     amb->synchronizationPointAchieved(L"checkpoint", true);
@@ -66,7 +66,7 @@ int main() {
               << std::endl;
 
     for (int i = 0; i < 400 && !fed.synchronized_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);  // caller-thread drain (gorti M17 buffers; harmless yield under Pitch)
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

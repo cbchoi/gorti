@@ -45,6 +45,33 @@ Per TASK-362 traceability lint:
 - `CAROL: FEDERATION_SYNCHRONIZED` — §4.15 federationSynchronized
 - `CAROL: RESIGN` — §4.10 resignFederationExecution
 
-## M31 status
+## Status (M35 parity pass)
 
-RED. Goldens are `TBD-pitch-capture` until Agent E TASK-363 clears.
+Goldens are spec-derived: Pitch Free's 2-federate EULA cap blocks a
+3-federate capture, so a clean diff would be **SPEC-FULL**, not
+Pitch-FULL.
+
+**SPEC-PARTIAL 6/17** (registrar 2/5, bob 2/6, carol 2/6). All legs
+match through CONNECT + JOIN; everything after is blocked by four
+wire/bridge gaps, none fixture-fixable:
+
+1. **`getFederateHandle` (§10.4)** — DLC stub throws unconditionally
+   ("requires federation connection (M35+)",
+   cppsdk/src/dlc/RTIambassadorImpl.cpp). The registrar cannot build
+   the {bob, carol} FederateHandleSet, so
+   `registerFederationSynchronizationPoint` (2-arg §4.11 — which IS
+   wired end-to-end, required_federates travels the M17 wire) is never
+   reached, and bob/carol's `synchronizationPointAchieved` then fails
+   with "synchronization point not registered" (cascade).
+2. **§4.12 `synchronizationPointRegistrationSucceeded`** — no ack
+   event on the M17 wire, no FederateAmbassadorBridge dispatch path
+   (same gap as fm_sync_full).
+3. **§4.14 `successfully=false`** — DLC shim drops the flag (M17 has
+   no failed-achieve wire message; documented divergence at the shim),
+   so carol's failed achieve would be recorded as success.
+4. **§4.15 `failedToSyncSet`** — the bridge forwards an empty set (M17
+   `federationSynchronized` carries only the label); golden expects
+   `failedToSyncSet.size=1`.
+
+Wait loops drain via `evokeMultipleCallbacks` (gorti M17 buffers
+callbacks for caller-thread drain; harmless yield under Pitch).

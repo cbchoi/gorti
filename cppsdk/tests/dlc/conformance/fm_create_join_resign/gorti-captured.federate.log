@@ -1,0 +1,36 @@
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=UNCONDITIONALLY_DIVEST_ATTRIBUTES
+FED: DISCONNECT
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=DELETE_OBJECTS
+FED: DISCONNECT
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=CANCEL_PENDING_OWNERSHIP_ACQUISITIONS
+FED: DISCONNECT
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=DELETE_OBJECTS_THEN_DIVEST
+FED: DISCONNECT
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
+FED: DISCONNECT
+FED: CONNECT
+FED: CREATE federation=fm_create_join_resign
+FED: JOIN federate=resigner
+FED: REGISTER name=car-1 handle=<H>
+FED: RESIGN action=NO_ACTION
+FED: DISCONNECT

@@ -87,7 +87,7 @@ int main() {
     std::cout << "REG: REGISTER_SYNC_POINT label=checkpoint" << std::endl;
 
     for (int i = 0; i < 100 && !fed.announced_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);  // caller-thread drain (gorti M17 buffers; harmless yield under Pitch)
     }
 
     // §4.14 synchronizationPointAchieved — explicit successfully=true.
@@ -96,7 +96,7 @@ int main() {
               << std::endl;
 
     for (int i = 0; i < 200 && !fed.synchronized_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);  // caller-thread drain (gorti M17 buffers; harmless yield under Pitch)
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

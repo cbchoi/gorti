@@ -81,11 +81,39 @@ int main() {
       rti1516e::AttributeHandleSet attrs;
       attrs.insert(pos);
       amb->publishObjectClassAttributes(vehicle, attrs);
-      amb->registerObjectInstance(vehicle, L"car-1");
+      // Name-collision tolerance, same pattern as the CREATE/AlreadyExists
+      // catch above: divest/cancel/no-action resigns legally leave car-1
+      // alive in the federation (§4.10 — only the DELETE_OBJECTS-flavored
+      // actions remove instances), so an in-process iteration re-registers
+      // a name that may still exist. Under Pitch the silent §4.6 destroy
+      // below fully resets the execution and this catch never fires; under
+      // gorti destroyFederationExecution does not yet cascade to the object
+      // registry (see README "gorti in-process iteration notes"), so the
+      // stale name surfaces here as ObjectInstanceNameInUse/RTIinternalError.
+      try {
+        amb->registerObjectInstance(vehicle, L"car-1");
+      } catch (const rti1516e::ObjectInstanceNameInUse&) {
+      } catch (const rti1516e::RTIinternalError& e) {
+        if (ws2s(e.what()).find("already registered") == std::string::npos) {
+          throw;
+        }
+      }
       std::cout << "FED: REGISTER name=car-1 handle=<H>" << std::endl;
 
       amb->resignFederationExecution(c.action);
       std::cout << "FED: RESIGN action=" << c.name << std::endl;
+
+      // §4.6 destroyFederationExecution — silent teardown between rounds so
+      // each sub-scenario starts hermetic (divest-flavored resigns leave
+      // car-1 alive in the federation, which would collide with the next
+      // round's registerObjectInstance). No federate is joined at this
+      // point, so destroy is legal under both RTIs; tolerated exceptions
+      // cover racing sub-scenario orderings. Emits no golden lines.
+      try {
+        amb->destroyFederationExecution(L"fm_create_join_resign");
+      } catch (const rti1516e::FederatesCurrentlyJoined&) {
+      } catch (const rti1516e::FederationExecutionDoesNotExist&) {
+      }
 
       amb->disconnect();
       std::cout << "FED: DISCONNECT" << std::endl;
