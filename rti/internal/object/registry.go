@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
@@ -146,10 +147,11 @@ type Options struct {
 	// of all class attributes (M8 W1, FR-OWN-5).
 	//
 	// The hook receives the assigned object handle, the producing
-	// federate, and the object class. The attribute set is fixed
-	// to the cut-1 fanoutAttrProbe range — the same range the
-	// registry already uses for Discover fan-out — pending the
-	// FOM-driven enumeration follow-up tracked at fanoutAttrProbe.
+	// federate, and the object class. The attribute set is the
+	// registrant's PUBLISHED attributes (probed over the cut-1
+	// fanoutAttrProbe range) plus the implicit
+	// HLAprivilegeToDeleteObject attribute — see initialOwnedAttrs
+	// (M36 DC-3/DC-4).
 	//
 	// MUST NOT block; the registry calls it synchronously before
 	// returning to the caller of Register.
@@ -416,14 +418,49 @@ func (r *Registry) Register(
 
 	r.fanoutDiscover(ctx, fed, st, producer, inst)
 	if r.opts.OnRegister != nil {
-		// Cut-1: the same fixed attribute range used by Discover
-		// fan-out is forwarded to the OnRegister hook. FOM-driven
-		// enumeration is the follow-up tracked at fanoutAttrProbe.
-		attrs := make([]core.AttributeHandle, len(fanoutAttrProbe))
-		copy(attrs, fanoutAttrProbe)
-		r.opts.OnRegister(fed, producer, assigned, cls, attrs)
+		// M36 DC-3: seed initial ownership ONLY for attributes the
+		// registrant actually publishes (plus the implicit privilege
+		// attribute, DC-4) — the pre-M36 blanket fanoutAttrProbe
+		// seeding made the registrant "owner" of attributes it never
+		// published, so §7.17 queries on unpublished attributes
+		// wrongly answered informAttributeOwnership instead of
+		// attributeIsNotOwned.
+		r.opts.OnRegister(fed, producer, assigned, cls, r.initialOwnedAttrs(ctx, fed, producer, cls))
 	}
 	return assigned, canonical, nil
+}
+
+// initialOwnedAttrs resolves the attribute set the registrant owns at
+// registration time (IEEE 1516.1-2010 §7 / FR-OWN-5):
+//
+//  1. every class attribute the producer PUBLISHES — probed over the
+//     cut-1 fanoutAttrProbe range (FOM-driven enumeration remains the
+//     follow-up tracked at fanoutAttrProbe);
+//  2. the implicit HLAprivilegeToDeleteObject attribute (M36 DC-4):
+//     every object class implicitly has it and the registrant owns it,
+//     whether or not it was explicitly published. Resolution goes
+//     through the federation FOM handle (the MIM merge declares it on
+//     HLAobjectRoot; subclass resolution walks the inheritance chain).
+//
+// Result is sorted + deduplicated for deterministic eventlog /
+// ownership-map seeding.
+func (r *Registry) initialOwnedAttrs(ctx context.Context, fed core.FederationName, producer core.FederateHandle, cls core.ObjectClassHandle) []core.AttributeHandle {
+	attrs := make([]core.AttributeHandle, 0, len(fanoutAttrProbe)+1)
+	for _, a := range fanoutAttrProbe {
+		for _, h := range r.opts.Declarations.PublishersFor(ctx, fed, cls, a) {
+			if h == producer {
+				attrs = append(attrs, a)
+				break
+			}
+		}
+	}
+	if fh, err := r.opts.FOMs.Get(ctx, fed); err == nil && fh != nil && fh.IsValid() {
+		if priv, ok := fh.LookupAttribute(cls, "HLAprivilegeToDeleteObject"); ok && priv != core.InvalidAttributeHandle && !slices.Contains(attrs, priv) {
+			attrs = append(attrs, priv)
+		}
+	}
+	slices.Sort(attrs)
+	return attrs
 }
 
 // producerPublishesAnyAttrOf reports whether `producer` publishes at least
