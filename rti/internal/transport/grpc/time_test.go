@@ -383,12 +383,26 @@ func TestFQRGrantTimeBoundedByLBTS(t *testing.T) {
 	}
 }
 
-// 203.9 — NER with logical_time < currentTime+lookahead → InvalidArgument
+// 203.9 — NER with logical_time < currentTime → InvalidArgument
 // + logical_time_already_passed (TASK-202c remap).
+//
+// M36 DB-1: the pre-M36 server floored the target at currentTime +
+// lookahead, so this test used to trigger the rejection from time 0
+// with lookahead 5 and a request of 1.0. Per IEEE 1516.1 §8.8 that
+// request is legal (lookahead constrains outgoing TSO timestamps, not
+// the advance target), so the test now advances the sole regulator to
+// 5.0 first and asserts the remap on a genuinely past request.
 func TestNERTimeAlreadyPassed(t *testing.T) {
 	t.Parallel()
 	svc, _, _ := timeServiceFixture(t)
-	helperEnableReg(t, svc, "fed", 1, 5.0) // currentTime=0, lookahead=5 → request must be > 5
+	helperEnableReg(t, svc, "fed", 1, 5.0)
+	// Sole regulator: NER to 5.0 full-grants immediately (LBTS = 10).
+	if _, err := svc.NextMessageRequest(context.Background(), &rtiv1.NERRequest{
+		WireVersion: wireV1(), FederationName: "fed", FederateHandle: 1, LogicalTime: 5.0,
+	}); err != nil {
+		t.Fatalf("NER to 5.0: %v", err)
+	}
+	// currentTime is now 5.0 — requesting 1.0 is in the past.
 	_, err := svc.NextMessageRequest(context.Background(), &rtiv1.NERRequest{
 		WireVersion: wireV1(), FederationName: "fed", FederateHandle: 1, LogicalTime: 1.0,
 	})
