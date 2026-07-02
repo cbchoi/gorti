@@ -31,12 +31,12 @@ int main(int argc, char** argv) {
   std::string fom = "./federation.fom.xml";
   std::string name = "member";
   int dwell_ms = 500;
-  for (int i = 1; i + 1 < argc; i += 2) {
+  for (int i = 1; i < argc; ++i) {
     std::string k = argv[i];
-    if (k == "--url") url = argv[i + 1];
-    else if (k == "--fom") fom = argv[i + 1];
-    else if (k == "--name") name = argv[i + 1];
-    else if (k == "--dwell-ms") dwell_ms = std::stoi(argv[i + 1]);
+    if (k == "--url" && i + 1 < argc) url = argv[++i];
+    else if (k == "--fom" && i + 1 < argc) fom = argv[++i];
+    else if (k == "--name" && i + 1 < argc) name = argv[++i];
+    else if (k == "--dwell-ms" && i + 1 < argc) dwell_ms = std::stoi(argv[++i]);
   }
 
   rti1516e::RTIambassadorFactory factory;

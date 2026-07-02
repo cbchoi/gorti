@@ -5,18 +5,16 @@
 # canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
 # spec-cites: see README.md
 # Each line below cites the spec sentence its presence enforces.
-#
-# M37 EB amendment: per-step order is SEND then GRANT (pre-M37: GRANT
-# then SEND). §8.1.2 forbids a regulating federate sending TSO below
-# logicalTime + lookahead; the old order stamped Tick(t) at t AFTER
-# being granted to t with lookahead 1.0 (t < t+1 — InvalidLogicalTime
-# on a strict RTI). The canonical pattern sends at the exact boundary
-# (logicalTime t-1 + lookahead 1.0 = t) BEFORE the §8.8 NER(t).
+# GOLDEN AMENDED (M37 agent-ED, 2026-07-02): SEND now precedes the
+# GRANT of the same step. The skeleton golden encoded an illegal
+# federate (§8.1.2): it advanced to t and THEN sent stamped t —
+# ts < current+lookahead. Legal NER cycle: at t-1 send stamped t
+# (= current+lookahead boundary, legal), then NER(t) -> GRANT t.
 REG: CONNECT                                            # §4.2
 REG: JOIN federate=regulator                            # §4.9
 REG: PUBLISH interaction=Tick                           # §5.4
 REG: TIME_REGULATION_ENABLED time=0.000000              # §8.3 callback (async ack of §8.2)
-REG: SEND interaction=Tick seq=1 time=1                 # §6.12 TSO sendInteraction at the §8.1.2 boundary
+REG: SEND interaction=Tick seq=1 time=1                 # §6.12 TSO sendInteraction
 REG: GRANT time=1.000000                                # §8.13 grant for §8.8 NER(1)
 REG: SEND interaction=Tick seq=2 time=2                 # §6.12
 REG: GRANT time=2.000000                                # §8.13

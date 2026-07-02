@@ -53,3 +53,10 @@ RED by design. The federate TUs reference `rti1516e::*` impl symbols
 that don't exist; CMake property `WILL_FAIL TRUE` per dispatch plan §3
 criterion 2. Goldens are hand-authored from spec text and marked
 `TBD-pitch-capture` until Agent E's TASK-363 (Pitch EULA review) clears.
+
+## M37 ED re-verdict (2026-07-02) — scripted driver
+
+`_harness/run_fixture.sh om_helloworld_pubsub` (driver smoke fixture;
+`driver.conf`: subscriber first, publisher gated on `SUB: SUBSCRIBE`).
+**FULL — subscriber 7/7, publisher 9/9**; captured logs byte-identical
+with the committed capture.

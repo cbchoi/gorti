@@ -75,3 +75,19 @@ wire/bridge gaps, none fixture-fixable:
 
 Wait loops drain via `evokeMultipleCallbacks` (gorti M17 buffers
 callbacks for caller-thread drain; harmless yield under Pitch).
+
+## M37 ED re-verdict (2026-07-02) — scripted driver
+
+`_harness/run_fixture.sh fm_sync_subset_with_failure` (protocol in
+`driver.conf`: alice/registrar first, bob and carol gated on JOIN
+markers inside alice's 700 ms window). Deterministic result:
+**SPEC-PARTIAL 14/17** (registrar 4/5, bob 5/6, carol 5/6) — the M35
+6/17 baseline no longer reproduces because M36 closed the
+`getFederateHandle` stub + announce cascade + `successfully=false`
+gaps. Exactly two residual gap kinds, both M37 EA proto verticals:
+
+- `REG: SYNC_REGISTRATION_SUCCEEDED` missing (§4.12 — no wire ack
+  event; same gap as fm_sync_full).
+- `FEDERATION_SYNCHRONIZED ... failedToSyncSet.size=0` on bob+carol
+  where golden wants `size=1` (§4.15 — failedToSyncSet forwarded
+  empty).

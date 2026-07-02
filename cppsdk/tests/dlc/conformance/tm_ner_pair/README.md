@@ -88,31 +88,26 @@ lookahead-floor item already on the M36 Go backlog covers this.
   granted instantly before the regulator enables regulation.
 - All wait loops use the §10.42 evoke-drain pattern.
 
-## gorti parity status (M37, agent-EB)
+## M37 ED — §8.1.2 fixture fix + re-verdict (2026-07-02)
 
-Re-verdict: **SPEC-FULL 30/30** (regulator 15/15, constrained 15/15,
-both byte-identical to the goldens after canonicalization) with the
-strict per-step order — every `CON: RECV time=N` precedes its
-`CON: GRANT time=N`. Three changes landed:
+The regulator skeleton advanced FIRST (NER to t, grant) and THEN sent
+Tick stamped t — from logical time t with lookahead 1.0 that is
+ts < current+lookahead, illegal per §8.1.2. No server-side check
+existed pre-M37, so it "passed"; the M37 EB-3 outgoing-TSO validation
+correctly rejects it (InvalidLogicalTime), which deadlocked the pair.
+Pitch would throw on the same call — the golden was never
+Pitch-captured. Fixed to the legal NER cycle: at t-1 send Tick stamped
+t (exactly current+lookahead — the legality boundary, inclusive), then
+NER(t). Golden pair order amended accordingly (SEND before GRANT;
+header note in expected.regulator.log).
 
-1. **Go, EB-2 (§8.14)** — `rti/internal/time/ner.go` `emitGrant`
-   drains buffered TSO BEFORE sending the grant, so the released
-   Tick@N always precedes the grant to N on the constrained stream.
-2. **Go, EB-3 (§8.1.2)** — server-side outgoing-TSO validation:
-   regulating senders must stamp ts >= logicalTime + lookahead
-   (boundary inclusive). This is the lookahead-floor item from the
-   M36 backlog; Pitch enforces the same rule.
-3. **Fixture amendment (spec-justified)** — the regulator now sends
-   Tick(t) BEFORE its NER(t), at the exact §8.1.2 boundary
-   (logicalTime t-1 + lookahead 1.0 = t). The pre-M37 order
-   (grant(t) → send at t) stamped every Tick BELOW the floor
-   (t < t+1.0): illegal per §8.1.2 and rejected by gorti since EB-3
-   (and by Pitch always — see the M35 note above). The send-first
-   order is the canonical HLA pattern and makes the lockstep
-   deterministic: Tick(t) is ingested and buffered server-side before
-   the regulator's NER(t) can raise LBTS past t, so the constrained
-   grant to t always releases Tick(t) first. `expected.regulator.log`
-   updated accordingly (SEND before GRANT per step); the constrained
-   golden is unchanged.
+Driver re-verdict (`_harness/run_fixture.sh tm_ner_pair`):
 
-Captured run: `gorti-captured.{regulator,constrained}.log`.
+- vs main rtid (0ea07d1): regulator **FULL 15/15**; constrained
+  **10/15** — the §8.14 GRANT-before-RECV swap on every step
+  (rti/internal/time ner.go grant-before-delivery).
+- vs main + M37 EB branch (EB-2 §8.14 drain-before-grant + EB-3
+  validation): **constrained FULL 15/15, regulator FULL 15/15** — the
+  fixture goes fully green once both the server order fix and the
+  legal send pattern are in place. Committed captures are from this
+  run.

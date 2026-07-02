@@ -69,10 +69,10 @@ class SubFed : public rti1516e::NullFederateAmbassador {
 int main(int argc, char** argv) {
   std::string url = "grpc://127.0.0.1:8080";
   std::string fom = "./federation.fom.xml";
-  for (int i = 1; i + 1 < argc; i += 2) {
+  for (int i = 1; i < argc; ++i) {
     std::string k = argv[i];
-    if (k == "--url") url = argv[i + 1];
-    else if (k == "--fom") fom = argv[i + 1];
+    if (k == "--url" && i + 1 < argc) url = argv[++i];
+    else if (k == "--fom" && i + 1 < argc) fom = argv[++i];
   }
 
   rti1516e::RTIambassadorFactory factory;
@@ -98,6 +98,18 @@ int main(int argc, char** argv) {
 
   amb->enableTimeConstrained();
   while (!fed.constrained) amb->evokeMultipleCallbacks(0.05, 0.1);
+
+  // Launch-order gate (§8.16 queryGALT, same pattern as tm_ner_pair's
+  // constrained federate): GALT is defined iff at least one regulating
+  // federate exists. Without this the NER below races the publishers'
+  // §8.2 enableTimeRegulation — a constrained federate with no regulator
+  // present is granted straight to t=2, and the T=1.0 Ticks land in the
+  // subscriber's past (0 RECVs; the M37 orchestrator's raced re-run).
+  // Emits no golden events (queries are not logged).
+  {
+    rti1516e::HLAfloat64Time galt(0.0);
+    while (!amb->queryGALT(galt)) amb->evokeMultipleCallbacks(0.05, 0.1);
+  }
 
   // NER walk to t=2 so that t=1 messages are delivered. §8.8 allows the
   // grant to land EARLY at a message time (or, under gorti's interim NER

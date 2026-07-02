@@ -1,2 +1,6 @@
 BOB: CONNECT
 BOB: JOIN federate=bob
+BOB: ANNOUNCE_SYNC label=checkpoint
+BOB: ACHIEVED label=checkpoint successfully=true
+BOB: FEDERATION_SYNCHRONIZED label=checkpoint failedToSyncSet.size=0
+BOB: RESIGN

@@ -52,10 +52,10 @@ class RegulatorFed : public rti1516e::NullFederateAmbassador {
 int main(int argc, char** argv) {
   std::string url = "grpc://127.0.0.1:8080";
   std::string fom = "./federation.fom.xml";
-  for (int i = 1; i + 1 < argc; i += 2) {
+  for (int i = 1; i < argc; ++i) {
     std::string k = argv[i];
-    if (k == "--url") url = argv[i + 1];
-    else if (k == "--fom") fom = argv[i + 1];
+    if (k == "--url" && i + 1 < argc) url = argv[++i];
+    else if (k == "--fom" && i + 1 < argc) fom = argv[++i];
   }
 
   rti1516e::RTIambassadorFactory factory;
@@ -90,20 +90,13 @@ int main(int argc, char** argv) {
 
   auto seqParam = amb->getParameterHandle(ick, L"seq");
   for (int t = 1; t <= 5; ++t) {
-    // §6.12 send Tick(seq=t) with theTime=t (TSO) BEFORE the §8.8 NER.
-    //
-    // M37 EB fixture amendment (spec justification): §8.1.2 forbids a
-    // time-regulating federate from sending TSO with timestamp below
-    // logicalTime + lookahead. The pre-M37 order (NER(t) → grant(t) →
-    // send at t) stamped every Tick BELOW the floor (t < t + 1.0) — a
-    // strict RTI rejects it with InvalidLogicalTime, and gorti does so
-    // since the M37 outgoing-TSO validation landed. The canonical HLA
-    // pattern sends at the exact boundary first (logicalTime = t-1,
-    // lookahead = 1.0 → floor = t, timestamp = t is legal), THEN
-    // advances. This also makes the constrained peer's lockstep
-    // deterministic: Tick(t) is ingested (and buffered server-side)
-    // before this federate's NER(t) can raise LBTS past t, so the
-    // peer's grant to t always releases Tick(t) first (§8.14).
+    // §6.12 send Tick(seq=t) stamped theTime=t (TSO) BEFORE advancing:
+    // at logical time t-1 with lookahead 1.0 the timestamp t is exactly
+    // current+lookahead — the §8.1.2 legality boundary. (M37 ED fix: the
+    // skeleton advanced FIRST and then sent stamped t from logical time
+    // t, i.e. ts < current+lookahead — illegal per §8.1.2; the M37 EB-3
+    // server-side validation correctly rejects it. Pitch would throw
+    // InvalidLogicalTime on the same call.)
     rti1516e::HLAfloat64Time target(static_cast<double>(t));
     rti1516e::HLAinteger32BE seq(t);
     rti1516e::ParameterHandleValueMap params;

@@ -98,3 +98,34 @@ Residual (Go server, Agent DB):
   (OnFederateResign never re-runs tryGrantPending; LBTS -> +Inf after
   the last publisher resigns but the kept pending NER(2.0) is never
   re-granted). Both single-site fixes in rti/internal/time.
+
+## M37 ED re-verdict (2026-07-02) — scripted driver
+
+Run via `_harness/run_fixture.sh tm_tso_ordering` (launch protocol now
+encoded in `driver.conf`, not prose). Deterministic across 3 consecutive
+runs: **subscriber 9/9 golden lines matched (+1 extra), publishers FULL
+5/5 each.**
+
+- ALL nine subscriber golden lines now appear in order — including the
+  three §8.15 tie-break RECVs (alice→bob→carol) and
+  `SUB: GRANT time=2.000000` (previously missing).
+- Sole residual: extra `SUB: GRANT time=1.000000` printed before the
+  RECVs. Re-run against main + the M37 EB branch (EB-2 §8.14
+  drain-before-grant): identical 9/9 (+1) — so this is NOT the §8.14
+  drain-order defect (tm_ner_pair goes FULL/FULL on that branch). It
+  is gorti's interim NER semantics: the "forced grant at LBTS keeps
+  pending" fires GRANT 1.0 before the publishers' T=1.0 Ticks have
+  arrived (nothing buffered to drain); under strict §8.8/§8.13 no
+  intermediate grant callback is emitted for a still-pending NER.
+  Server-side (rti/internal/time ner.go), M37 EB/follow-on.
+
+Fixture fixes that made this deterministic (M37 ED):
+
+1. `federate_subscriber.cpp` now gates its NER on §8.16 `queryGALT`
+   being defined (same pattern as tm_ner_pair): without it, an NER
+   issued before any publisher enables regulation is granted straight
+   to t=2 and the T=1.0 Ticks land in the subscriber's past — the
+   0-RECV raced re-run the M37 orchestrator observed.
+2. `federate_publisher.cpp` argv loop rewritten from pair-stepping
+   (`i += 2`, alignment-sensitive: any positional/`--k=v` token made
+   `--url` silently fall back to 8080) to token-scanning (`++i`).
