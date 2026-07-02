@@ -153,9 +153,59 @@ class DLCFederateAmbassadorBridge : public rti1516e_m17::FederateAmbassador {
       const rti1516e_m17::VariableLengthData& tag) override;
 
   // §4.15 — federation is synchronized at `label`. The DLC callback takes a
-  // FederateHandleSet of federates that failed to sync; M17 does not carry
-  // that data so the bridge passes an empty set.
+  // FederateHandleSet of federates that failed to sync; the legacy 1-arg M17
+  // slot does not carry that data so the bridge passes an empty set.
   void federationSynchronized(const std::string& label) override;
+
+  // §4.15 — M37 Agent EC-1: the failed-set-carrying M17 slot (M37 Agent EA
+  // wire). Converts the raw failed_to_sync vector into the DLC
+  // FederateHandleSet per the divergence catalogue §4.15 failedToSyncSet
+  // parameter.
+  void federationSynchronized(
+      const std::string& label,
+      const std::vector<rti1516e_m17::FederateHandle>& failed_to_sync)
+      override;
+
+  // ===== §4.12 sync-point registration acks (M37 Agent EC-1) =====
+
+  // §4.12 — the sync-point registration THIS federate issued was accepted.
+  void synchronizationPointRegistrationSucceeded(
+      const std::string& label) override;
+
+  // §4.12 — the registration was rejected. The M17 SyncPointFailureReason
+  // maps onto the DLC SynchronizationPointFailureReason enum; kUnspecified
+  // folds to SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE (the DLC enum has no
+  // unspecified value — documented mapping, see conv::to_dlc_sync_fail).
+  void synchronizationPointRegistrationFailed(
+      const std::string& label, SyncPointFailureReason reason) override;
+
+  // ===== §5.10-13 declaration advisories (M37 Agent EC-1) =====
+
+  void startRegistrationForObjectClass(
+      rti1516e_m17::ObjectClassHandle object_class) override;
+  void stopRegistrationForObjectClass(
+      rti1516e_m17::ObjectClassHandle object_class) override;
+  void turnInteractionsOn(
+      rti1516e_m17::InteractionClassHandle interaction_class) override;
+  void turnInteractionsOff(
+      rti1516e_m17::InteractionClassHandle interaction_class) override;
+
+  // ===== §6.17-18 DDM scope advisories (M37 Agent EC-1) =====
+
+  void attributesInScope(
+      rti1516e_m17::ObjectInstanceHandle object,
+      const rti1516e_m17::AttributeHandleSet& attributes) override;
+  void attributesOutOfScope(
+      rti1516e_m17::ObjectInstanceHandle object,
+      const rti1516e_m17::AttributeHandleSet& attributes) override;
+
+  // ===== §8.22 retraction (M37 Agent EC-1) =====
+
+  // §8.22 — the DLC callback carries only the MessageRetractionHandle; the
+  // M17 sender FederateHandle is dropped (DLC signature divergence).
+  void requestRetraction(
+      rti1516e_m17::FederateHandle sender,
+      rti1516e_m17::MessageRetractionHandle retraction_handle) override;
 
   // ===== §7 Ownership Management =====
 
@@ -180,6 +230,20 @@ class DLCFederateAmbassadorBridge : public rti1516e_m17::FederateAmbassador {
       rti1516e_m17::ObjectInstanceHandle object,
       const rti1516e_m17::AttributeHandleSet& attributes) override;
 
+  // §7.10 — the §7.9 acquire-if-available could not grant the listed
+  // attributes; nothing was queued. M37 Agent EC-1 (real wire — replaces
+  // CA's client-side synthesis).
+  void attributeOwnershipUnavailable(
+      rti1516e_m17::ObjectInstanceHandle object,
+      const rti1516e_m17::AttributeHandleSet& attributes) override;
+
+  // §7.11 — a peer queued an acquisition against attributes THIS federate
+  // owns; tag passes through. M37 Agent EC-1.
+  void requestAttributeOwnershipRelease(
+      rti1516e_m17::ObjectInstanceHandle object,
+      const rti1516e_m17::AttributeHandleSet& attributes,
+      const rti1516e_m17::VariableLengthData& tag) override;
+
   // ===== §4 Save/Restore =====
 
   // §4.17 — begin federation save. Timestamp presence selects the DLC
@@ -194,11 +258,28 @@ class DLCFederateAmbassadorBridge : public rti1516e_m17::FederateAmbassador {
   // RTI_UNABLE_TO_SAVE (M17 does not carry a reason).
   void federationNotSaved(const std::string& label) override;
 
-  // §4.27 — begin federate restore. DLC signature adds a federate name
-  // (not carried on M17) — the bridge passes an empty wstring.
+  // §4.27 — begin federate restore (legacy 2-arg M17 slot). DLC signature
+  // adds a federate name (not carried on the 2-arg slot) — the bridge
+  // passes an empty wstring.
   void initiateFederateRestore(
       const std::string& label,
       rti1516e_m17::FederateHandle federate_handle) override;
+
+  // §4.26 — the name-carrying 3-arg M17 slot (M37 Agent EA wire); the
+  // save-time federate name forwards for real. M37 Agent EC-1.
+  void initiateFederateRestore(
+      const std::string& label,
+      const std::string& federate_name,
+      rti1516e_m17::FederateHandle federate_handle) override;
+
+  // §4.25 — restore-request acks. The DLC Failed signature drops the M17
+  // reason string (spec carries no reason on §4.25). M37 Agent EC-1.
+  void requestFederationRestoreSucceeded(const std::string& label) override;
+  void requestFederationRestoreFailed(const std::string& label,
+                                      const std::string& reason) override;
+
+  // §4.26 — a federation restore is beginning. M37 Agent EC-1.
+  void federationRestoreBegun() override;
 
   // §4.29 — DLC omits label from federation{Restored,NotRestored}.
   void federationRestored(const std::string& label) override;
@@ -251,6 +332,17 @@ rti1516e::ParameterHandleValueMap to_dlc_param_map(
 // (set<class AttributeHandle>).
 rti1516e::AttributeHandleSet to_dlc_attr_set(
     const rti1516e_m17::AttributeHandleSet& s);
+
+// M37 Agent EC-1 — M17 failed-to-sync vector -> DLC FederateHandleSet
+// (§4.15 failedToSyncSet parameter).
+rti1516e::FederateHandleSet to_dlc_fed_set(
+    const std::vector<rti1516e_m17::FederateHandle>& v);
+
+// M37 Agent EC-1 — M17 SyncPointFailureReason -> DLC enum. kUnspecified
+// folds to SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE (the DLC enum carries
+// no unspecified value; §4.12 reasons are exactly the two spec causes).
+rti1516e::SynchronizationPointFailureReason to_dlc_sync_fail(
+    rti1516e_m17::FederateAmbassador::SyncPointFailureReason r);
 
 }  // namespace conv
 

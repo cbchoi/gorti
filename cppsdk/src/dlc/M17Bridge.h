@@ -89,8 +89,12 @@ class M17Bridge {
       const std::string& label,
       const std::vector<std::uint8_t>& tag,
       const std::vector<std::uint64_t>& required_federates);
-  // §4.14 — this federate has achieved the sync point.
-  void synchronizationPointAchieved(const std::string& label);
+  // §4.14 — this federate has achieved the sync point. `successfully`
+  // (M37 Agent EC-2) rides M17's flag-carrying overload; false still
+  // counts toward completion but lands the federate in the §4.15
+  // failed-to-sync set.
+  void synchronizationPointAchieved(const std::string& label,
+                                    bool successfully = true);
 
   // §4.16 — request a federation save. When `save_time` has a value it
   // pins the save to that logical time; otherwise "save now".
@@ -196,6 +200,24 @@ class M17Bridge {
                                  const std::vector<std::uint8_t>& tag,
                                  double logical_time);
 
+  // ---------- §8.21/§8.22 retractable TSO sends (M37 Agent EC-2) -----------
+  //
+  // Same shape as the *Timed variants but routed through M17's retractable
+  // overloads, which allocate and return a MessageRetractionHandle (raw
+  // uint64; per-federate monotonic counter). Pass the value to retract()
+  // to cancel while the message is still buffered server-side. Tag remains
+  // the documented §11 wire divergence (dropped).
+  std::uint64_t updateAttributeValuesRetractable(
+      std::uint64_t object,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& values,
+      const std::vector<std::uint8_t>& tag,
+      double logical_time);
+  std::uint64_t sendInteractionRetractable(
+      std::uint64_t interaction_class,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& params,
+      const std::vector<std::uint8_t>& tag,
+      double logical_time);
+
   // ---------- §7 Ownership Management (M36 Agent CA-1) ---------------------
   //
   // Straight uint64/std shims over M17's Cut-3 ownership surface (M17.15).
@@ -205,10 +227,24 @@ class M17Bridge {
   // the negotiated divestiture.
   void unconditionalAttributeOwnershipDivestiture(
       std::uint64_t object, const std::vector<std::uint64_t>& attrs);
+  // §7.3 — `two_phase` (M37 Agent EC-2): true runs the real §7.3/§7.6
+  // protocol — the divester gets requestDivestitureConfirmation and the
+  // transfer completes only on confirmDivestiture(). false keeps the
+  // pre-M37 one-phase behavior.
   void negotiatedAttributeOwnershipDivestiture(
       std::uint64_t object, const std::vector<std::uint64_t>& attrs,
-      const std::vector<std::uint8_t>& tag);
+      const std::vector<std::uint8_t>& tag, bool two_phase = false);
+  // §7.6 — complete a two-phase negotiated divestiture (M37 Agent EC-2;
+  // real ConfirmDivestiture RPC — replaces the documented DLC no-op).
+  void confirmDivestiture(std::uint64_t object,
+                          const std::vector<std::uint64_t>& attrs);
   void attributeOwnershipAcquisition(
+      std::uint64_t object, const std::vector<std::uint64_t>& attrs);
+  // §7.9 — acquire ONLY the currently-available attributes; the server
+  // emits AttributeOwnershipUnavailable (§7.10) for the owned remainder
+  // and queues nothing. M37 Agent EC-2 (replaces CA's query-then-acquire
+  // emulation).
+  void attributeOwnershipAcquisitionIfAvailable(
       std::uint64_t object, const std::vector<std::uint64_t>& attrs);
   void cancelNegotiatedAttributeOwnershipDivestiture(
       std::uint64_t object, const std::vector<std::uint64_t>& attrs);

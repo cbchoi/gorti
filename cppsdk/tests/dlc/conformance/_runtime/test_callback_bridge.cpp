@@ -10,6 +10,10 @@
 // conformance fixtures verify events instead of just link.
 
 #include "src/dlc/FederateAmbassadorBridge.h"
+// M37 Agent EC-4 — DLC ambassador impl for the deferred synthesized-callback
+// queue tests. Safe alongside the shim'd bridge header: this header only
+// sees the DLC dialect (<RTI/RTIambassador.h> + opaque M17Bridge fwd-decl).
+#include "src/dlc/RTIambassadorImpl.h"
 
 #include <RTI/Enums.h>
 #include <RTI/Handle.h>
@@ -161,12 +165,119 @@ class TrackingDLCFed : public rti1516e::NullFederateAmbassador {
   struct FedSyncCall {
     std::wstring label;
     std::size_t failed_set_size;
+    rti1516e::FederateHandleSet failed;
   };
   std::vector<FedSyncCall> fed_syncs;
   void federationSynchronized(std::wstring const& label,
                               rti1516e::FederateHandleSet const& failed)
       RTI_THROW(rti1516e::FederateInternalError) override {
-    fed_syncs.push_back({label, failed.size()});
+    fed_syncs.push_back({label, failed.size(), failed});
+  }
+
+  // M37 Agent EC-1 — §4.12 sync-point registration acks.
+  std::vector<std::wstring> sync_reg_ok;
+  struct SyncRegFailCall {
+    std::wstring label;
+    rti1516e::SynchronizationPointFailureReason reason;
+  };
+  std::vector<SyncRegFailCall> sync_reg_fail;
+  void synchronizationPointRegistrationSucceeded(std::wstring const& label)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    sync_reg_ok.push_back(label);
+  }
+  void synchronizationPointRegistrationFailed(
+      std::wstring const& label,
+      rti1516e::SynchronizationPointFailureReason reason)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    sync_reg_fail.push_back({label, reason});
+  }
+
+  // M37 Agent EC-1 — §5.10-13 declaration advisories.
+  std::vector<rti1516e::ObjectClassHandle> start_registrations;
+  std::vector<rti1516e::ObjectClassHandle> stop_registrations;
+  std::vector<rti1516e::InteractionClassHandle> interactions_on;
+  std::vector<rti1516e::InteractionClassHandle> interactions_off;
+  void startRegistrationForObjectClass(rti1516e::ObjectClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    start_registrations.push_back(c);
+  }
+  void stopRegistrationForObjectClass(rti1516e::ObjectClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    stop_registrations.push_back(c);
+  }
+  void turnInteractionsOn(rti1516e::InteractionClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    interactions_on.push_back(c);
+  }
+  void turnInteractionsOff(rti1516e::InteractionClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    interactions_off.push_back(c);
+  }
+
+  // M37 Agent EC-1 — §6.17-18 scope advisories.
+  struct ScopeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+  };
+  std::vector<ScopeCall> in_scope_calls;
+  std::vector<ScopeCall> out_of_scope_calls;
+  void attributesInScope(rti1516e::ObjectInstanceHandle obj,
+                         rti1516e::AttributeHandleSet const& attrs)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    in_scope_calls.push_back({obj, attrs});
+  }
+  void attributesOutOfScope(rti1516e::ObjectInstanceHandle obj,
+                            rti1516e::AttributeHandleSet const& attrs)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    out_of_scope_calls.push_back({obj, attrs});
+  }
+
+  // M37 Agent EC-1 — §7.10 unavailable / §7.11 release request.
+  std::vector<ScopeCall> ownership_unavailable_calls;
+  void attributeOwnershipUnavailable(rti1516e::ObjectInstanceHandle obj,
+                                     rti1516e::AttributeHandleSet const& attrs)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ownership_unavailable_calls.push_back({obj, attrs});
+  }
+  struct ReleaseRequestCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::vector<std::uint8_t> tag_bytes;
+  };
+  std::vector<ReleaseRequestCall> release_requests;
+  void requestAttributeOwnershipRelease(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& attrs,
+      rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    release_requests.push_back({obj, attrs, std::move(bytes)});
+  }
+
+  // M37 Agent EC-1 — §4.25/§4.26 restore acks + begun.
+  std::vector<std::wstring> restore_req_ok;
+  std::vector<std::wstring> restore_req_fail;
+  int restore_begun_count = 0;
+  void requestFederationRestoreSucceeded(std::wstring const& label)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    restore_req_ok.push_back(label);
+  }
+  void requestFederationRestoreFailed(std::wstring const& label)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    restore_req_fail.push_back(label);
+  }
+  void federationRestoreBegun()
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++restore_begun_count;
+  }
+
+  // M37 Agent EC-1 — §8.22 requestRetraction.
+  std::vector<rti1516e::MessageRetractionHandle> retraction_requests;
+  void requestRetraction(rti1516e::MessageRetractionHandle h)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    retraction_requests.push_back(h);
   }
 
   // Save / restore.
@@ -747,6 +858,217 @@ TEST(BridgeDelivery, ProvideAttributeValueUpdateConvertsSetAndTag) {
   EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0x01}));
 }
 
+// ===== M37 Agent EC-1 — new M17 slot converters =====
+
+TEST(BridgeDeliveryM37, SyncPointRegistrationSucceededWidensLabel) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.synchronizationPointRegistrationSucceeded("SP_REG");
+  ASSERT_EQ(mock.sync_reg_ok.size(), 1u);
+  EXPECT_EQ(mock.sync_reg_ok.front(), std::wstring(L"SP_REG"));
+}
+
+TEST(BridgeDeliveryM37, SyncPointRegistrationFailedMapsReasonEnum) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  using M17Reason =
+      rti1516e_m17::FederateAmbassador::SyncPointFailureReason;
+  bridge.synchronizationPointRegistrationFailed(
+      "SP_DUP", M17Reason::kSynchronizationPointLabelNotUnique);
+  bridge.synchronizationPointRegistrationFailed(
+      "SP_MISSING", M17Reason::kSynchronizationSetMemberNotJoined);
+  // kUnspecified folds to LABEL_NOT_UNIQUE (documented mapping).
+  bridge.synchronizationPointRegistrationFailed("SP_UNSPEC",
+                                                M17Reason::kUnspecified);
+  ASSERT_EQ(mock.sync_reg_fail.size(), 3u);
+  EXPECT_EQ(mock.sync_reg_fail[0].label, std::wstring(L"SP_DUP"));
+  EXPECT_EQ(mock.sync_reg_fail[0].reason,
+            rti1516e::SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE);
+  EXPECT_EQ(mock.sync_reg_fail[1].reason,
+            rti1516e::SYNCHRONIZATION_SET_MEMBER_NOT_JOINED);
+  EXPECT_EQ(mock.sync_reg_fail[2].reason,
+            rti1516e::SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE);
+}
+
+TEST(BridgeDeliveryM37, FederationSynchronizedForwardsFailedSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  std::vector<rti1516e_m17::FederateHandle> failed{
+      rti1516e_m17::FederateHandle{3}, rti1516e_m17::FederateHandle{5}};
+  bridge.federationSynchronized("SP_B", failed);
+  ASSERT_EQ(mock.fed_syncs.size(), 1u);
+  auto const& call = mock.fed_syncs.front();
+  EXPECT_EQ(call.label, std::wstring(L"SP_B"));
+  EXPECT_EQ(call.failed_set_size, 2u);
+  EXPECT_EQ(call.failed.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(3)),
+            1u);
+  EXPECT_EQ(call.failed.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(5)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, StartRegistrationForObjectClassConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.startRegistrationForObjectClass(
+      rti1516e_m17::ObjectClassHandle{0xA1});
+  ASSERT_EQ(mock.start_registrations.size(), 1u);
+  EXPECT_EQ(mock.start_registrations.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectClassHandle>(
+                0xA1ULL));
+}
+
+TEST(BridgeDeliveryM37, StopRegistrationForObjectClassConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.stopRegistrationForObjectClass(
+      rti1516e_m17::ObjectClassHandle{0xA2});
+  ASSERT_EQ(mock.stop_registrations.size(), 1u);
+  EXPECT_EQ(mock.stop_registrations.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectClassHandle>(
+                0xA2ULL));
+}
+
+TEST(BridgeDeliveryM37, TurnInteractionsOnConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.turnInteractionsOn(rti1516e_m17::InteractionClassHandle{0xB1});
+  ASSERT_EQ(mock.interactions_on.size(), 1u);
+  EXPECT_EQ(mock.interactions_on.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
+                0xB1ULL));
+}
+
+TEST(BridgeDeliveryM37, TurnInteractionsOffConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.turnInteractionsOff(rti1516e_m17::InteractionClassHandle{0xB2});
+  ASSERT_EQ(mock.interactions_off.size(), 1u);
+  EXPECT_EQ(mock.interactions_off.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
+                0xB2ULL));
+}
+
+TEST(BridgeDeliveryM37, AttributesInScopeConvertsHandleAndSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{31});
+  attrs.insert(rti1516e_m17::AttributeHandle{32});
+  bridge.attributesInScope(rti1516e_m17::ObjectInstanceHandle{0xC1}, attrs);
+  ASSERT_EQ(mock.in_scope_calls.size(), 1u);
+  auto const& call = mock.in_scope_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xC1ULL));
+  EXPECT_EQ(call.attrs.size(), 2u);
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(31)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, AttributesOutOfScopeConvertsHandleAndSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{33});
+  bridge.attributesOutOfScope(rti1516e_m17::ObjectInstanceHandle{0xC2},
+                              attrs);
+  ASSERT_EQ(mock.out_of_scope_calls.size(), 1u);
+  auto const& call = mock.out_of_scope_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xC2ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(33)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, AttributeOwnershipUnavailableConverts) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{41});
+  bridge.attributeOwnershipUnavailable(
+      rti1516e_m17::ObjectInstanceHandle{0xD1}, attrs);
+  ASSERT_EQ(mock.ownership_unavailable_calls.size(), 1u);
+  auto const& call = mock.ownership_unavailable_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xD1ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(41)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, RequestAttributeOwnershipReleaseForwardsTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{51});
+  rti1516e_m17::VariableLengthData tag = {0xFE, 0xED};
+  bridge.requestAttributeOwnershipRelease(
+      rti1516e_m17::ObjectInstanceHandle{0xD2}, attrs, tag);
+  ASSERT_EQ(mock.release_requests.size(), 1u);
+  auto const& call = mock.release_requests.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xD2ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(51)),
+            1u);
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0xFE, 0xED}));
+}
+
+TEST(BridgeDeliveryM37, InitiateRestoreThreeArgForwardsFederateName) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.initiateFederateRestore("checkpoint-2", "fed-alpha",
+                                 rti1516e_m17::FederateHandle{9});
+  ASSERT_EQ(mock.restore_initiates.size(), 1u);
+  auto const& call = mock.restore_initiates.front();
+  EXPECT_EQ(call.label, std::wstring(L"checkpoint-2"));
+  EXPECT_EQ(call.federate_name, std::wstring(L"fed-alpha"));
+  EXPECT_EQ(call.handle,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(9));
+}
+
+TEST(BridgeDeliveryM37, RequestRestoreSucceededWidensLabel) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.requestFederationRestoreSucceeded("snap-1");
+  ASSERT_EQ(mock.restore_req_ok.size(), 1u);
+  EXPECT_EQ(mock.restore_req_ok.front(), std::wstring(L"snap-1"));
+}
+
+TEST(BridgeDeliveryM37, RequestRestoreFailedDropsReasonPerDLCSignature) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.requestFederationRestoreFailed("snap-2", "unknown label");
+  ASSERT_EQ(mock.restore_req_fail.size(), 1u);
+  EXPECT_EQ(mock.restore_req_fail.front(), std::wstring(L"snap-2"));
+}
+
+TEST(BridgeDeliveryM37, FederationRestoreBegunForwards) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationRestoreBegun();
+  EXPECT_EQ(mock.restore_begun_count, 1);
+}
+
+TEST(BridgeDeliveryM37, RequestRetractionDropsSenderConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.requestRetraction(rti1516e_m17::FederateHandle{2},
+                           rti1516e_m17::MessageRetractionHandle{0xE7});
+  ASSERT_EQ(mock.retraction_requests.size(), 1u);
+  EXPECT_EQ(
+      mock.retraction_requests.front(),
+      gorti::dlc::conv::to_dlc_handle<rti1516e::MessageRetractionHandle>(
+          0xE7ULL));
+}
+
 // ===== M36 Agent DA — FR-DLC-14 re-entrancy witness =====
 
 // Observer federate that samples gorti::dlc::tls_in_callback from INSIDE a
@@ -772,6 +1094,60 @@ TEST(BridgeReentrancy, TlsFlagSetDuringDispatchClearedAfter) {
                                 rti1516e_m17::ObjectClassHandle{2}, "car-1");
   EXPECT_TRUE(probe.flag_inside_callback);
   // RAII CallbackScope must restore the flag after dispatch returns.
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+}
+
+// ===== M37 Agent EC-4 — deferred synthesized-callback queue =====
+//
+// DLC-synthesized callbacks (regulation/constrained acks, query-ownership
+// answers, federation-execution reports) must NOT fire inside the
+// triggering call — they deliver at the next evoke, matching Pitch's
+// async ordering. The real synthesis sites all require a live wire, so
+// these tests drive the queue through the public test seam; the enqueue
+// path is byte-identical to what the synthesis sites use.
+
+TEST(DeferredSynthesis, CallbackHeldUntilEvokeCallback) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  bool fired = false;
+  amb.testEnqueueSynthesizedCallback([&] { fired = true; });
+  // Not delivered inside the triggering call.
+  EXPECT_FALSE(fired);
+  // evokeCallback drains exactly one pending synthesized callback and
+  // reports that a callback fired.
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_TRUE(fired);
+}
+
+TEST(DeferredSynthesis, EvokeCallbackDrainsOnePerCall) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  int fired = 0;
+  amb.testEnqueueSynthesizedCallback([&] { ++fired; });
+  amb.testEnqueueSynthesizedCallback([&] { ++fired; });
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_EQ(fired, 1);
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_EQ(fired, 2);
+}
+
+TEST(DeferredSynthesis, EvokeMultipleDrainsAllPendingInOrder) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  std::vector<int> order;
+  amb.testEnqueueSynthesizedCallback([&] { order.push_back(1); });
+  amb.testEnqueueSynthesizedCallback([&] { order.push_back(2); });
+  EXPECT_TRUE(amb.evokeMultipleCallbacks(0.0, 0.0));
+  EXPECT_EQ(order, (std::vector<int>{1, 2}));
+}
+
+TEST(DeferredSynthesis, DispatchRunsUnderCallbackScope) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  bool in_scope = false;
+  amb.testEnqueueSynthesizedCallback(
+      [&] { in_scope = gorti::dlc::tls_in_callback; });
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  // FR-DLC-14 — the synthesized dispatch marks the callback context so
+  // re-entering the ambassador from inside it still throws.
+  EXPECT_TRUE(in_scope);
   EXPECT_FALSE(gorti::dlc::tls_in_callback);
 }
 
