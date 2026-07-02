@@ -69,12 +69,27 @@ type federationState struct {
 
 	instances    map[core.ObjectHandle]*objectInstance
 	nameToHandle map[string]core.ObjectHandle
+
+	// discovered records which (subscriber, object) pairs have been
+	// sent a DiscoverObjectInstance — by the register-time fan-out OR
+	// the M37 EB-4 retroactive subscribe-time path — so the §6.9
+	// discover is idempotent per (subscriber, object) regardless of
+	// subscribe/register ordering. Entries for an object are dropped
+	// when the instance is deleted.
+	discovered map[discoverKey]struct{}
+}
+
+// discoverKey identifies one delivered DiscoverObjectInstance.
+type discoverKey struct {
+	sub core.FederateHandle
+	obj core.ObjectHandle
 }
 
 func newFederationState() *federationState {
 	return &federationState{
 		instances:    map[core.ObjectHandle]*objectInstance{},
 		nameToHandle: map[string]core.ObjectHandle{},
+		discovered:   map[discoverKey]struct{}{},
 	}
 }
 

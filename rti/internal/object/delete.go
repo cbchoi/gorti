@@ -91,6 +91,13 @@ func (r *Registry) Delete(
 	cls := inst.cls
 	delete(st.instances, obj)
 	delete(st.nameToHandle, inst.name)
+	// M37 EB-4 — drop the (subscriber, object) discover records for
+	// the deleted instance so the idempotency table doesn't leak.
+	for k := range st.discovered {
+		if k.obj == obj {
+			delete(st.discovered, k)
+		}
+	}
 	st.mu.Unlock()
 
 	// (d) Build the envelope. ts is *core.LogicalTime; map to
