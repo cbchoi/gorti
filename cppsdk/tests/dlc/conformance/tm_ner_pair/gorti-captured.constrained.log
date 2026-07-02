@@ -2,14 +2,14 @@ CON: CONNECT
 CON: JOIN federate=constrained
 CON: SUBSCRIBE interaction=Tick active=true
 CON: TIME_CONSTRAINED_ENABLED time=0.000000
-CON: GRANT time=1.000000
 CON: RECV interaction=Tick time=1.000000 order=TIMESTAMP
-CON: GRANT time=2.000000
+CON: GRANT time=1.000000
 CON: RECV interaction=Tick time=2.000000 order=TIMESTAMP
-CON: GRANT time=3.000000
+CON: GRANT time=2.000000
 CON: RECV interaction=Tick time=3.000000 order=TIMESTAMP
-CON: GRANT time=4.000000
+CON: GRANT time=3.000000
 CON: RECV interaction=Tick time=4.000000 order=TIMESTAMP
-CON: GRANT time=5.000000
+CON: GRANT time=4.000000
 CON: RECV interaction=Tick time=5.000000 order=TIMESTAMP
+CON: GRANT time=5.000000
 CON: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

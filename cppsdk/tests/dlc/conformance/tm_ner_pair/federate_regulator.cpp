@@ -90,19 +90,25 @@ int main(int argc, char** argv) {
 
   auto seqParam = amb->getParameterHandle(ick, L"seq");
   for (int t = 1; t <= 5; ++t) {
-    // §8.8 NER to t.
+    // §6.12 send Tick(seq=t) stamped theTime=t (TSO) BEFORE advancing:
+    // at logical time t-1 with lookahead 1.0 the timestamp t is exactly
+    // current+lookahead — the §8.1.2 legality boundary. (M37 ED fix: the
+    // skeleton advanced FIRST and then sent stamped t from logical time
+    // t, i.e. ts < current+lookahead — illegal per §8.1.2; the M37 EB-3
+    // server-side validation correctly rejects it. Pitch would throw
+    // InvalidLogicalTime on the same call.)
     rti1516e::HLAfloat64Time target(static_cast<double>(t));
-    double priorGrant = fed.lastGrant;
-    amb->nextMessageRequest(target);
-    while (fed.lastGrant == priorGrant) amb->evokeMultipleCallbacks(0.05, 0.1);
-
-    // §6.12 send Tick(seq=t) with theTime=t (TSO).
     rti1516e::HLAinteger32BE seq(t);
     rti1516e::ParameterHandleValueMap params;
     params[seqParam] = seq.encode();
     rti1516e::VariableLengthData tag;  // empty tag
     amb->sendInteraction(ick, params, tag, target);
     std::printf("REG: SEND interaction=Tick seq=%d time=%d\n", t, t);
+
+    // §8.8 NER to t.
+    double priorGrant = fed.lastGrant;
+    amb->nextMessageRequest(target);
+    while (fed.lastGrant == priorGrant) amb->evokeMultipleCallbacks(0.05, 0.1);
   }
 
   // §4.10 resign + destroy.

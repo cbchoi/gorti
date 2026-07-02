@@ -87,3 +87,27 @@ lookahead-floor item already on the M36 Go backlog covers this.
   (= a regulating federate exists); without it the constrained side is
   granted instantly before the regulator enables regulation.
 - All wait loops use the §10.42 evoke-drain pattern.
+
+## M37 ED — §8.1.2 fixture fix + re-verdict (2026-07-02)
+
+The regulator skeleton advanced FIRST (NER to t, grant) and THEN sent
+Tick stamped t — from logical time t with lookahead 1.0 that is
+ts < current+lookahead, illegal per §8.1.2. No server-side check
+existed pre-M37, so it "passed"; the M37 EB-3 outgoing-TSO validation
+correctly rejects it (InvalidLogicalTime), which deadlocked the pair.
+Pitch would throw on the same call — the golden was never
+Pitch-captured. Fixed to the legal NER cycle: at t-1 send Tick stamped
+t (exactly current+lookahead — the legality boundary, inclusive), then
+NER(t). Golden pair order amended accordingly (SEND before GRANT;
+header note in expected.regulator.log).
+
+Driver re-verdict (`_harness/run_fixture.sh tm_ner_pair`):
+
+- vs main rtid (0ea07d1): regulator **FULL 15/15**; constrained
+  **10/15** — the §8.14 GRANT-before-RECV swap on every step
+  (rti/internal/time ner.go grant-before-delivery).
+- vs main + M37 EB branch (EB-2 §8.14 drain-before-grant + EB-3
+  validation): **constrained FULL 15/15, regulator FULL 15/15** — the
+  fixture goes fully green once both the server order fix and the
+  legal send pattern are in place. Committed captures are from this
+  run.
