@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
   std::printf("PUB: COMMIT_REGION region=<R>\n");
 
   amb->reserveObjectInstanceName(L"sensor-1");
-  while (!fed.reservation_ok) amb->evokeCallback(0.1);
+  while (!fed.reservation_ok) amb->evokeMultipleCallbacks(0.05, 0.1);
 
   rti1516e::AttributeHandleSetRegionHandleSetPairVector pairs;
   pairs.push_back(std::make_pair(attrs, regions));
@@ -98,7 +98,9 @@ int main(int argc, char** argv) {
     values[vAttr] = v.encode();
     amb->updateAttributeValues(inst, values, tag);
     std::printf("PUB: UPDATE name=sensor-1 Value=%d.000000\n", i);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    // 150 ms spacing gives the subscriber's reflect-counted region modify
+    // (see federate_subscriber.cpp) a clean window between updates 3 and 4.
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
   }
 
   amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

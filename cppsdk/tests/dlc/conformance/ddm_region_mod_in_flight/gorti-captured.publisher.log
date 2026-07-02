@@ -1,0 +1,14 @@
+PUB: CONNECT
+PUB: JOIN federate=pub
+PUB: PUBLISH class=Sensor attributes=[Value]
+PUB: CREATE_REGION dim=Channel lower=40 upper=60
+PUB: COMMIT_REGION region=<R>
+PUB: NAME_RESERVED name=sensor-1
+PUB: REGISTER class=Sensor name=sensor-1
+PUB: UPDATE name=sensor-1 Value=1.000000
+PUB: UPDATE name=sensor-1 Value=2.000000
+PUB: UPDATE name=sensor-1 Value=3.000000
+PUB: UPDATE name=sensor-1 Value=4.000000
+PUB: UPDATE name=sensor-1 Value=5.000000
+PUB: UPDATE name=sensor-1 Value=6.000000
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

@@ -40,3 +40,44 @@ Real Pitch capture (TASK-350) will record the actual witnessed sequence; `script
 - `expected.publisher.log`
 - `expected.subscriber.log`
 - `test_ddm_region_mod_in_flight.cpp`
+
+## gorti parity status (M35, parity-CE)
+
+Publisher **FULL 14/14**; subscriber **PARTIAL 11/14**. Captured run:
+`gorti-captured.{publisher,subscriber}.log` (canonicalized).
+
+The fixture's core assertion — an IN-FLIGHT setRangeBounds +
+commitRegionModifications changes routing mid-stream — WORKS: reflects
+1..3 arrive through the [40,50] overlap, and after the shrink to [0,30]
+reflects 4..6 are correctly filtered out (`update.go`
+subscribersForUpdate re-evaluates the DDM overlap per update, so the
+recommit takes effect immediately).
+
+Missing events (exactly three):
+
+1. `SUB: DISCOVER name=sensor-1` — same gap as ddm_region_overlap:
+   `rti/internal/object/discover.go` fanoutDiscover consults only
+   `Declarations.SubscribersFor`; region-only subscribers (ddm.Manager
+   tables) are invisible to it.
+2. `SUB: IN_SCOPE attributes=[Value]` (§6.17 attributesInScope) and
+3. `SUB: OUT_OF_SCOPE attributes=[Value]` (§6.18 attributesOutOfScope) —
+   structurally absent end-to-end (catalogue row 4.23 'absent'
+   confirmed): no FederateEvent oneof slot in proto/rti/v1/stream.proto
+   (only discover/reflect/receive/grant family), no Go emitter — the
+   scope TRANSITION information exists at the filtering site
+   (subscribersForUpdate observes the overlap becoming empty) but is
+   never materialised as an advisory event — and no conversion in
+   cppsdk/src/dlc/FederateAmbassadorBridge.cpp. The §6.27
+   enableAttributeScopeAdvisorySwitch the fixture calls is a documented
+   DLC no-op (RTIambassadorImpl.cpp:1838).
+
+Missing impl: (a) DDM-aware discover fanout; (b) AttributesInScope /
+AttributesOutOfScope proto events + server-side scope-transition
+detection on subscribe/commit/associate changes + bridge conversion +
+advisory-switch plumbing.
+
+Fixture-side changes (no golden edits; per the golden header the
+scenario "documents the contract, not the exact interleave"):
+subscriber counts reflects and modifies its region after the 3rd
+(instead of racing a fixed 180 ms pump), publisher spaces updates
+150 ms apart, reservation wait uses evoke-drain.
