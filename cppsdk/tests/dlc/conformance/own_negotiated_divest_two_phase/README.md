@@ -91,3 +91,13 @@ Missing impl for spec-faithful two-phase: a ConfirmDivestiture RPC,
 server-side pending state that holds the transfer between the
 acquirer's §7.8 and the divester's §7.6, and completion emission only
 on confirm.
+
+## M37 EE re-verdict (2026-07-02) — integrated main, REAL two-phase
+
+**SPEC-FULL 14/14** (alice 7/7, bob 7/7) re-confirmed against the real
+§7.6 two-phase handshake (M37 EA/EC: ConfirmDivestiture RPC; the M35
+"eager one-phase transfer inside the acquirer's RPC" residual is
+gone). The golden's order — alice REQUEST_DIVESTITURE_CONFIRMATION →
+alice CONFIRM_DIVESTITURE → bob ACQUISITION_NOTIFICATION — is now
+produced by the actual gated transfer rather than emulation. No
+residual.
