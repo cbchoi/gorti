@@ -75,9 +75,10 @@ int main() {
     const auto obj = amb->registerObjectInstance(vehicle, L"car-1");
     std::cout << "ALICE: REGISTER name=car-1 handle=<H>" << std::endl;
 
-    // Wait for §7.11 from Bob's acquisition request.
+    // Wait for §7.11 from Bob's acquisition request. gorti M17 drains
+    // callbacks on the evoking thread, so the loop must evoke.
     for (int i = 0; i < 200 && !fed.release_requested_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     // §7.12 attributeOwnershipReleaseDenied — refuse.
@@ -86,7 +87,9 @@ int main() {
     std::cout << "ALICE: RELEASE_DENIED attrs=[Position]" << std::endl;
 
     // Stay joined a bit to confirm no further transfer happens.
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    for (int i = 0; i < 20; ++i) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
+    }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
     std::cout << "ALICE: RESIGN" << std::endl;

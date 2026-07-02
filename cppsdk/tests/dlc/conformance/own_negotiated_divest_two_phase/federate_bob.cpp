@@ -92,9 +92,11 @@ int main() {
     amb->publishObjectClassAttributes(vehicle, attrs);
     amb->subscribeObjectClassAttributes(vehicle, attrs, true, L"");
 
-    // Wait for §7.4 assumption request.
+    // Wait for §7.4 assumption request (evoke-drain: gorti M17
+    // delivers callbacks on the evoking thread; §6.9 discover drains
+    // through the same loop first).
     for (int i = 0; i < 200 && !fed.assumption_requested_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     rti1516e::VariableLengthData tag;
@@ -102,9 +104,9 @@ int main() {
                                        fed.pending_attrs_, tag);
     std::cout << "BOB: OWNERSHIP_ACQUISITION" << std::endl;
 
-    // Wait for §7.7 acquisition notification.
+    // Wait for §7.7 acquisition notification (evoke-drain).
     for (int i = 0; i < 200 && !fed.acquired_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
