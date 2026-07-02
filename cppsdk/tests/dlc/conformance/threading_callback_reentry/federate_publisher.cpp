@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
   std::printf("PUB: PUBLISH class=Vehicle attributes=[Position]\n");
 
   amb->reserveObjectInstanceName(L"car-1");
-  while (!fed.reservation_ok) amb->evokeCallback(0.1);
+  while (!fed.reservation_ok) amb->evokeMultipleCallbacks(0.05, 0.1);
 
   auto inst = amb->registerObjectInstance(vClass, L"car-1");
   std::printf("PUB: REGISTER class=Vehicle name=car-1\n");

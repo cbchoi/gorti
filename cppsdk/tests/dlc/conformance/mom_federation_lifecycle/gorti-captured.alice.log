@@ -1,0 +1,3 @@
+alice: CONNECT
+alice: JOIN federate=alice
+alice: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

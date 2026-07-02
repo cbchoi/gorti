@@ -41,3 +41,47 @@ The fixture is the runtime witness that all four columns map to the same gRPC pa
 - `expected.python_pub.log`
 - `expected.cpp_sub.log`
 - `test_xlang_python_cpp_pubsub.cpp`
+
+## parity-CF verdict (M35 wave 2)
+
+**PARTIAL 16/17** (python_pub **8/8**, cpp_sub **8/9**) — and the
+fixture's core claim, cross-language byte-identity, is **fully proven**:
+all three pysdk-emitted `struct.pack(">d", v)` HLAfloat64BE payloads
+were decoded byte-identically by the DLC `rti1516e::HLAfloat64BE`
+decoder (`REFLECT Position=10.000000 / 20.000000 / 30.000000` verbatim),
+plus DISCOVER carried the reserved name `car-1` across the str→wstring
+boundary. Catalogue rows 4.19 / 4.20 / 14.2 witnessed end-to-end.
+
+Sole missing event: `SUB: REMOVE`. Root cause traced (server never
+emits it in this scenario — not a DLC decode gap):
+
+- pysdk Layer 2 `resignFederationExecution("CANCEL_THEN_DELETE_THEN_DIVEST")`
+  **discards the action** (`del action  # accepted for API compat`,
+  `pysdk/rti1516e/standard.py` resignFederationExecution) and Layer 1
+  always puts `RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES` on the
+  wire (`pysdk/rti1516e/_transport.py:423`).
+- With no delete-objects resign semantics requested, rtid performs no
+  instance deletion on resign, so no remove event exists for the C++
+  subscriber to receive. (Consistent with the M34 om_helloworld_pubsub
+  capture, which also shows no REMOVE after publisher resign.)
+- Secondary (masked) gap, inherited from parity-CC's om_delete_object_tso
+  finding: even when the server emits remove=12, the DLC-side
+  removeObjectInstance bridge converter is absent — so the REMOVE line
+  would still be missing until both gaps close.
+
+Run/environment notes (for reproduction):
+- Interpreter: `~/.local/bin/python3.11` with
+  `PYTHONPATH=<worktree>/pysdk:<repo>/.venv/lib/python3.11/site-packages`
+  (the repo `.venv/bin/python` symlink now resolves to system 3.12 and
+  cannot see its own 3.11 site-packages — venv broken by an OS upgrade).
+- `pysdk/rti1516e/_generated` (rti.v1 proto stubs) must exist; in a
+  worktree, symlink it from the main checkout (gitignored, like
+  `cppsdk/_generated`).
+- `python_pub.py` fix: dropped the `tag=b""` kwarg — pysdk M28
+  `updateAttributeValues(object_handle, values, timestamp=None)` has no
+  tag parameter. The §6.10 mandatory user-supplied tag is a pysdk
+  surface divergence (catalogue 17.1); the golden locks value bytes,
+  not the tag, so the fixture stays valid.
+- `federate_subscriber.cpp`: pump switched to the suite-standard
+  evoke-drain `evokeMultipleCallbacks(0.05, 0.1)` with early exit on
+  REMOVE (golden unchanged).

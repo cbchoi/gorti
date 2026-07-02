@@ -1,0 +1,4 @@
+OBS: CONNECT
+OBS: JOIN federate=observer
+OBS: SUBSCRIBE class=HLAobjectRoot.HLAmanager.HLAfederate attributes=[HLAfederateHandle,HLAfederateName] active=true
+OBS: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
