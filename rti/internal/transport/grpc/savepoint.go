@@ -40,7 +40,7 @@ func newSavepointService(mgr core.SavepointCoordinator) *savepointService {
 // ErrSaveBundleNotFound) are not in core.* — they live in the savepoint
 // package — so the shared errToStatus does not handle them; this helper
 // fills the gap.
-func savepointErrToStatus(err error) error {
+func savepointErrToStatus(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -50,7 +50,7 @@ func savepointErrToStatus(err error) error {
 	case errors.Is(err, savepoint.ErrSaveBundleExists):
 		return status.Error(codes.AlreadyExists, err.Error())
 	default:
-		return errToStatus(err)
+		return errToStatus(ctx, err)
 	}
 }
 
@@ -76,7 +76,7 @@ func (s *savepointService) RequestFederationSave(
 		req.GetLabel(),
 		saveTime,
 	); err != nil {
-		return nil, savepointErrToStatus(err)
+		return nil, savepointErrToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -97,7 +97,7 @@ func (s *savepointService) FederateSaveComplete(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, savepointErrToStatus(err)
+		return nil, savepointErrToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -118,7 +118,7 @@ func (s *savepointService) FederateSaveNotComplete(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, savepointErrToStatus(err)
+		return nil, savepointErrToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -183,7 +183,7 @@ func (s *savepointService) RequestFederationRestore(
 		)
 	}
 	if err != nil {
-		return nil, savepointErrToStatus(err)
+		return nil, savepointErrToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -204,7 +204,7 @@ func (s *savepointService) FederateRestoreComplete(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, savepointErrToStatus(err)
+		return nil, savepointErrToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -239,7 +239,7 @@ func (s *savepointService) AbortFederationSave(
 		return nil, err
 	}
 	if err := s.mgr.AbortSave(ctx, core.FederationName(req.GetFederationName())); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -256,7 +256,7 @@ func (s *savepointService) AbortFederationRestore(
 		return nil, err
 	}
 	if err := s.mgr.AbortRestore(ctx, core.FederationName(req.GetFederationName())); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }

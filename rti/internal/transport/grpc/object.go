@@ -34,7 +34,7 @@ func (s *objectService) RegisterObjectInstance(ctx context.Context, req *rtiv1.R
 		req.GetObjectName(),
 	)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.RegisterObjectResponse{
 		ObjectHandle: uint64(handle),
@@ -65,7 +65,7 @@ func (s *objectService) UpdateAttributeValues(ctx context.Context, req *rtiv1.Up
 			toLogicalTime(req.LogicalTime),
 			rh,
 		); err != nil {
-			return nil, errToStatus(err)
+			return nil, errToStatus(ctx, err)
 		}
 		return &rtiv1.Empty{}, nil
 	}
@@ -77,7 +77,7 @@ func (s *objectService) UpdateAttributeValues(ctx context.Context, req *rtiv1.Up
 		attrs,
 		toLogicalTime(req.LogicalTime),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -102,7 +102,7 @@ func (s *objectService) SendInteraction(ctx context.Context, req *rtiv1.SendInte
 			toLogicalTime(req.LogicalTime),
 			rh,
 		); err != nil {
-			return nil, errToStatus(err)
+			return nil, errToStatus(ctx, err)
 		}
 		return &rtiv1.Empty{}, nil
 	}
@@ -114,7 +114,7 @@ func (s *objectService) SendInteraction(ctx context.Context, req *rtiv1.SendInte
 		params,
 		toLogicalTime(req.LogicalTime),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -167,7 +167,7 @@ func (s *objectService) DeleteObjectInstance(ctx context.Context, req *rtiv1.Del
 		toLogicalTime(req.LogicalTime),
 		req.GetUserSuppliedTag(),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -183,7 +183,7 @@ func (s *objectService) LocalDeleteObjectInstance(ctx context.Context, req *rtiv
 		core.FederateHandle(req.GetFederateHandle()),
 		core.ObjectHandle(req.GetObjectHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -205,7 +205,7 @@ func (s *objectService) RequestAttributeValueUpdate(ctx context.Context, req *rt
 		attrs,
 		req.GetUserSuppliedTag(),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -227,7 +227,7 @@ func (s *objectService) RequestClassAttributeValueUpdate(ctx context.Context, re
 		attrs,
 		req.GetUserSuppliedTag(),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -249,7 +249,7 @@ func (s *objectService) ChangeAttributeTransportationType(ctx context.Context, r
 		attrs,
 		protoTransportTypeToCore(req.GetTransportType()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -266,7 +266,7 @@ func (s *objectService) ChangeInteractionTransportationType(ctx context.Context,
 		core.InteractionClassHandle(req.GetInteractionClassHandle()),
 		protoTransportTypeToCore(req.GetTransportType()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -328,7 +328,7 @@ func (s *objectService) ReserveObjectInstanceName(ctx context.Context, req *rtiv
 		core.FederateHandle(req.GetFederateHandle()),
 		req.GetObjectName(),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -347,7 +347,7 @@ func (s *objectService) ReleaseObjectInstanceName(ctx context.Context, req *rtiv
 		core.FederateHandle(req.GetFederateHandle()),
 		req.GetObjectName(),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -366,7 +366,7 @@ func (s *objectService) ReserveMultipleObjectInstanceNames(ctx context.Context, 
 		core.FederateHandle(req.GetFederateHandle()),
 		req.GetObjectNames(),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }

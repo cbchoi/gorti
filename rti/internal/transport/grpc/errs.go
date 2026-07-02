@@ -10,6 +10,7 @@
 package grpc
 
 import (
+	"context"
 	"errors"
 
 	"google.golang.org/grpc/codes"
@@ -24,12 +25,19 @@ import (
 // to the wire if it's not a documented sentinel, but DO retain the
 // text via status.Error so logs remain useful.
 //
-// Returns nil for nil input so callers can `return errToStatus(err)`
+// M39 Agent HB: ctx is the RPC context (unary handler ctx, or
+// stream.Context() for streaming handlers). When the sentinel has an
+// Annex C identity, the `rti-spec-exception` trailer is attached here —
+// this is the ONE choke point every handler error already flows
+// through (see spec_exception.go for the cross-SDK contract).
+//
+// Returns nil for nil input so callers can `return errToStatus(ctx, err)`
 // uniformly on the happy path.
-func errToStatus(err error) error {
+func errToStatus(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
+	attachSpecException(ctx, err)
 	switch {
 	// NotFound — entity (federation / class / attribute / region / etc) does not exist.
 	case errors.Is(err, core.ErrFederationNotFound),

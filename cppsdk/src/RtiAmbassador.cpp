@@ -92,19 +92,68 @@ std::string readFomBytes(const std::string& path) {
   return out.str();
 }
 
+// M39 Agent HB — metadata-first spec-exception dispatch.
+//
+// The RTI attaches the Annex C exception class name as TRAILING gRPC
+// metadata under `rti-spec-exception` (contract: cppsdk/src/dlc/README.md).
+// When the name matches one of the m17 typed classes we throw that class
+// directly; otherwise the m17::SpecException carrier preserves the name so
+// M17Bridge::guard() re-emits it as the DLC prefix vocabulary.
+[[noreturn]] void throwSpecNamed(const std::string& spec,
+                                 const std::string& msg) {
+  // X-list over the m17 typed exception set (Exceptions.h). Names are
+  // identical to the Annex C class names, so guard()'s per-class prefix
+  // equals the spec name either way.
+#define GORTI_M17_SPEC_CASE(Name) \
+  if (spec == #Name) throw Name(msg);
+  GORTI_M17_SPEC_CASE(FederationExecutionAlreadyExists)
+  GORTI_M17_SPEC_CASE(FederationExecutionDoesNotExist)
+  GORTI_M17_SPEC_CASE(FederateAlreadyExecutionMember)
+  GORTI_M17_SPEC_CASE(FederateNotExecutionMember)
+  GORTI_M17_SPEC_CASE(ConnectionFailed)
+  GORTI_M17_SPEC_CASE(NotConnected)
+  GORTI_M17_SPEC_CASE(AlreadyConnected)
+  GORTI_M17_SPEC_CASE(NameNotFound)
+  GORTI_M17_SPEC_CASE(InvalidObjectClassHandle)
+  GORTI_M17_SPEC_CASE(InvalidAttributeHandle)
+  GORTI_M17_SPEC_CASE(InvalidInteractionClassHandle)
+  GORTI_M17_SPEC_CASE(InvalidParameterHandle)
+  GORTI_M17_SPEC_CASE(ObjectClassNotPublished)
+  GORTI_M17_SPEC_CASE(ObjectInstanceNotKnown)
+  GORTI_M17_SPEC_CASE(InteractionClassNotPublished)
+#undef GORTI_M17_SPEC_CASE
+  throw SpecException(spec, msg);
+}
+
 // Translate a gRPC status into the matching IEEE 1516.1 Annex C
-// exception. The detail string is the server-side error sentinel
-// (rti/internal/core/errors.go); substring-match keeps the table
-// compact at the cost of being slightly approximate.
+// exception.
+//
+// Primary channel (M39): the `rti-spec-exception` trailing-metadata
+// key carries the Annex C exception class name — machine-readable, no
+// string coupling. Requires the ClientContext the failed RPC ran on
+// (trailing metadata is only populated after the call finishes).
+//
+// Legacy fallback (DEPRECATED): when the key is absent (pre-M39 rtid,
+// third-party RTIs), sniff the detail string — the server-side error
+// sentinel text from rti/internal/core/errors.go — and finally
+// dispatch on the bare gRPC status code.
 //
 // Unmatched codes fall through to RTIinternalError carrying the
 // original gRPC code + message.
 [[noreturn]] void throwFromStatus(const grpc::Status& s,
+                                  const grpc::ClientContext& ctx,
                                   std::string_view operation) {
   const auto detail = s.error_message();
   const auto code = s.error_code();
   std::string msg = std::string(operation) + ": " + detail;
 
+  // --- Primary: structured spec-exception trailer -----------------------
+  const auto& trailers = ctx.GetServerTrailingMetadata();
+  if (auto it = trailers.find("rti-spec-exception"); it != trailers.end()) {
+    throwSpecNamed(std::string(it->second.data(), it->second.size()), msg);
+  }
+
+  // --- DEPRECATED legacy fallback (absent trailer only) ------------------
   // Detail-string sniffing for the per-error-class dispatch. Mirrors
   // pysdk's _grpc_errors.translate_rpc_error.
   if (detail.find("federation already exists") != std::string::npos) {
@@ -347,7 +396,7 @@ void M17RTIambassador::createFederationExecution(
   rti::v1::CreateFederationResponse resp;
   const auto status = impl_->federation_stub->CreateFederation(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "createFederationExecution");
+    throwFromStatus(status, ctx, "createFederationExecution");
   }
 }
 
@@ -363,7 +412,7 @@ void M17RTIambassador::destroyFederationExecution(
   rti::v1::Empty resp;
   const auto status = impl_->federation_stub->DestroyFederation(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "destroyFederationExecution");
+    throwFromStatus(status, ctx, "destroyFederationExecution");
   }
 }
 
@@ -387,7 +436,7 @@ FederateHandle M17RTIambassador::joinFederationExecution(
   rti::v1::JoinFederationResponse resp;
   const auto status = impl_->federation_stub->JoinFederation(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "joinFederationExecution");
+    throwFromStatus(status, ctx, "joinFederationExecution");
   }
 
   impl_->federate_handle = FederateHandle(resp.federate_handle());
@@ -422,7 +471,7 @@ void M17RTIambassador::resignFederationExecution() {
   rti::v1::Empty resp;
   const auto status = impl_->federation_stub->ResignFederation(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "resignFederationExecution");
+    throwFromStatus(status, ctx, "resignFederationExecution");
   }
 
   impl_->joined = false;
@@ -454,7 +503,7 @@ ObjectClassHandle M17RTIambassador::getObjectClassHandle(
   rti::v1::GetObjectClassHandleResponse resp;
   const auto status = impl_->support_stub->GetObjectClassHandle(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getObjectClassHandle(" + name + ")");
+    throwFromStatus(status, ctx, "getObjectClassHandle(" + name + ")");
   }
   const auto h = resp.class_handle();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -480,7 +529,7 @@ std::string M17RTIambassador::getObjectClassName(ObjectClassHandle handle) {
   rti::v1::GetObjectClassNameResponse resp;
   const auto status = impl_->support_stub->GetObjectClassName(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getObjectClassName");
+    throwFromStatus(status, ctx, "getObjectClassName");
   }
   const auto& name = resp.class_name();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -509,7 +558,7 @@ AttributeHandle M17RTIambassador::getAttributeHandle(ObjectClassHandle cls,
   rti::v1::GetAttributeHandleResponse resp;
   const auto status = impl_->support_stub->GetAttributeHandle(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getAttributeHandle(" + name + ")");
+    throwFromStatus(status, ctx, "getAttributeHandle(" + name + ")");
   }
   const auto h = resp.attribute_handle();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -538,7 +587,7 @@ std::string M17RTIambassador::getAttributeName(ObjectClassHandle cls,
   rti::v1::GetAttributeNameResponse resp;
   const auto status = impl_->support_stub->GetAttributeName(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getAttributeName");
+    throwFromStatus(status, ctx, "getAttributeName");
   }
   const auto& name = resp.attribute_name();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -566,7 +615,7 @@ InteractionClassHandle M17RTIambassador::getInteractionClassHandle(
   const auto status =
       impl_->support_stub->GetInteractionClassHandle(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getInteractionClassHandle(" + name + ")");
+    throwFromStatus(status, ctx, "getInteractionClassHandle(" + name + ")");
   }
   const auto h = resp.class_handle();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -594,7 +643,7 @@ std::string M17RTIambassador::getInteractionClassName(
   const auto status =
       impl_->support_stub->GetInteractionClassName(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getInteractionClassName");
+    throwFromStatus(status, ctx, "getInteractionClassName");
   }
   const auto& name = resp.class_name();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -623,7 +672,7 @@ ParameterHandle M17RTIambassador::getParameterHandle(
   rti::v1::GetParameterHandleResponse resp;
   const auto status = impl_->support_stub->GetParameterHandle(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getParameterHandle(" + name + ")");
+    throwFromStatus(status, ctx, "getParameterHandle(" + name + ")");
   }
   const auto h = resp.parameter_handle();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -652,7 +701,7 @@ std::string M17RTIambassador::getParameterName(InteractionClassHandle cls,
   rti::v1::GetParameterNameResponse resp;
   const auto status = impl_->support_stub->GetParameterName(&ctx, req, &resp);
   if (!status.ok()) {
-    throwFromStatus(status, "getParameterName");
+    throwFromStatus(status, ctx, "getParameterName");
   }
   const auto& name = resp.parameter_name();
   std::lock_guard<std::mutex> g(impl_->cache_mu);
@@ -677,7 +726,7 @@ ObjectInstanceHandle M17RTIambassador::getObjectInstanceHandle(
   grpc::ClientContext ctx;
   rti::v1::GetObjectInstanceHandleResponse resp;
   const auto s = impl_->support_stub->GetObjectInstanceHandle(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "getObjectInstanceHandle(" + name + ")");
+  if (!s.ok()) throwFromStatus(s, ctx, "getObjectInstanceHandle(" + name + ")");
   return ObjectInstanceHandle(resp.object_handle());
 }
 
@@ -694,7 +743,7 @@ std::string M17RTIambassador::getObjectInstanceName(ObjectInstanceHandle handle)
   grpc::ClientContext ctx;
   rti::v1::GetObjectInstanceNameResponse resp;
   const auto s = impl_->support_stub->GetObjectInstanceName(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "getObjectInstanceName");
+  if (!s.ok()) throwFromStatus(s, ctx, "getObjectInstanceName");
   return resp.object_name();
 }
 
@@ -714,7 +763,7 @@ void M17RTIambassador::reserveObjectInstanceName(const std::string& name) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->ReserveObjectInstanceName(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "reserveObjectInstanceName");
+  if (!s.ok()) throwFromStatus(s, ctx, "reserveObjectInstanceName");
 }
 
 void M17RTIambassador::reserveMultipleObjectInstanceNames(
@@ -735,7 +784,7 @@ void M17RTIambassador::reserveMultipleObjectInstanceNames(
   rti::v1::Empty resp;
   const auto s =
       impl_->object_stub->ReserveMultipleObjectInstanceNames(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "reserveMultipleObjectInstanceNames");
+  if (!s.ok()) throwFromStatus(s, ctx, "reserveMultipleObjectInstanceNames");
 }
 
 void M17RTIambassador::releaseObjectInstanceName(const std::string& name) {
@@ -752,7 +801,7 @@ void M17RTIambassador::releaseObjectInstanceName(const std::string& name) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->ReleaseObjectInstanceName(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "releaseObjectInstanceName");
+  if (!s.ok()) throwFromStatus(s, ctx, "releaseObjectInstanceName");
 }
 
 // --- M17.11 §8 Time Management ---------------------------------------------
@@ -790,7 +839,7 @@ void M17RTIambassador::enableTimeRegulation(double lookahead) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->EnableTimeRegulation(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "enableTimeRegulation");
+  if (!s.ok()) throwFromStatus(s, ctx, "enableTimeRegulation");
 }
 
 void M17RTIambassador::disableTimeRegulation() {
@@ -803,7 +852,7 @@ void M17RTIambassador::disableTimeRegulation() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->DisableTimeRegulation(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "disableTimeRegulation");
+  if (!s.ok()) throwFromStatus(s, ctx, "disableTimeRegulation");
 }
 
 void M17RTIambassador::enableTimeConstrained() {
@@ -816,7 +865,7 @@ void M17RTIambassador::enableTimeConstrained() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->EnableTimeConstrained(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "enableTimeConstrained");
+  if (!s.ok()) throwFromStatus(s, ctx, "enableTimeConstrained");
 }
 
 void M17RTIambassador::disableTimeConstrained() {
@@ -829,7 +878,7 @@ void M17RTIambassador::disableTimeConstrained() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->DisableTimeConstrained(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "disableTimeConstrained");
+  if (!s.ok()) throwFromStatus(s, ctx, "disableTimeConstrained");
 }
 
 void M17RTIambassador::modifyLookahead(double lookahead) {
@@ -843,7 +892,7 @@ void M17RTIambassador::modifyLookahead(double lookahead) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->ModifyLookahead(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "modifyLookahead");
+  if (!s.ok()) throwFromStatus(s, ctx, "modifyLookahead");
 }
 
 void M17RTIambassador::timeAdvanceRequest(double time) {
@@ -857,7 +906,7 @@ void M17RTIambassador::timeAdvanceRequest(double time) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->TimeAdvanceRequest(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "timeAdvanceRequest");
+  if (!s.ok()) throwFromStatus(s, ctx, "timeAdvanceRequest");
 }
 
 void M17RTIambassador::timeAdvanceRequestAvailable(double time) {
@@ -872,7 +921,7 @@ void M17RTIambassador::timeAdvanceRequestAvailable(double time) {
   rti::v1::Empty resp;
   const auto s =
       impl_->time_stub->TimeAdvanceRequestAvailable(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "timeAdvanceRequestAvailable");
+  if (!s.ok()) throwFromStatus(s, ctx, "timeAdvanceRequestAvailable");
 }
 
 void M17RTIambassador::nextMessageRequest(double time) {
@@ -886,7 +935,7 @@ void M17RTIambassador::nextMessageRequest(double time) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->NextMessageRequest(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "nextMessageRequest");
+  if (!s.ok()) throwFromStatus(s, ctx, "nextMessageRequest");
 }
 
 void M17RTIambassador::nextMessageRequestAvailable(double time) {
@@ -901,7 +950,7 @@ void M17RTIambassador::nextMessageRequestAvailable(double time) {
   rti::v1::Empty resp;
   const auto s =
       impl_->time_stub->NextMessageRequestAvailable(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "nextMessageRequestAvailable");
+  if (!s.ok()) throwFromStatus(s, ctx, "nextMessageRequestAvailable");
 }
 
 void M17RTIambassador::flushQueueRequest(double time) {
@@ -915,7 +964,7 @@ void M17RTIambassador::flushQueueRequest(double time) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->time_stub->FlushQueueRequest(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "flushQueueRequest");
+  if (!s.ok()) throwFromStatus(s, ctx, "flushQueueRequest");
 }
 
 double M17RTIambassador::queryLogicalTime() {
@@ -928,7 +977,7 @@ double M17RTIambassador::queryLogicalTime() {
   grpc::ClientContext ctx;
   rti::v1::QueryFederateTimeResponse resp;
   const auto s = impl_->time_stub->QueryLogicalTime(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryLogicalTime");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryLogicalTime");
   return resp.logical_time();
 }
 
@@ -942,7 +991,7 @@ double M17RTIambassador::queryLookahead() {
   grpc::ClientContext ctx;
   rti::v1::QueryLookaheadResponse resp;
   const auto s = impl_->time_stub->QueryLookahead(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryLookahead");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryLookahead");
   return resp.lookahead();
 }
 
@@ -955,7 +1004,7 @@ M17RTIambassador::LBTSResult RTIambassador::queryLBTS() {
   grpc::ClientContext ctx;
   rti::v1::QueryLBTSResponse resp;
   const auto s = impl_->time_stub->QueryLBTS(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryLBTS");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryLBTS");
   return LBTSResult{resp.lbts(), resp.finite()};
 }
 
@@ -969,7 +1018,7 @@ M17RTIambassador::GALTResult RTIambassador::queryGALT() {
   grpc::ClientContext ctx;
   rti::v1::QueryGALTResponse resp;
   const auto s = impl_->time_stub->QueryGALT(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryGALT");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryGALT");
   return GALTResult{resp.galt(), resp.finite()};
 }
 
@@ -983,7 +1032,7 @@ M17RTIambassador::LITSResult RTIambassador::queryLITS() {
   grpc::ClientContext ctx;
   rti::v1::QueryLITSResponse resp;
   const auto s = impl_->time_stub->QueryLITS(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryLITS");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryLITS");
   return LITSResult{resp.lits(), resp.finite()};
 }
 
@@ -998,7 +1047,7 @@ void M17RTIambassador::enableAsynchronousDelivery() {
   rti::v1::Empty resp;
   const auto s =
       impl_->time_stub->EnableAsynchronousDelivery(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "enableAsynchronousDelivery");
+  if (!s.ok()) throwFromStatus(s, ctx, "enableAsynchronousDelivery");
 }
 
 void M17RTIambassador::disableAsynchronousDelivery() {
@@ -1012,7 +1061,7 @@ void M17RTIambassador::disableAsynchronousDelivery() {
   rti::v1::Empty resp;
   const auto s =
       impl_->time_stub->DisableAsynchronousDelivery(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "disableAsynchronousDelivery");
+  if (!s.ok()) throwFromStatus(s, ctx, "disableAsynchronousDelivery");
 }
 
 // --- M17.13 §11 MOM ambassador delegates ---------------------------------
@@ -1041,7 +1090,7 @@ M17RTIambassador::queryFederationAttributes() {
   grpc::ClientContext ctx;
   rti::v1::QueryFederationAttributesResponse resp;
   const auto s = impl_->mom_stub->QueryFederationAttributes(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryFederationAttributes");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryFederationAttributes");
   FederationAttributes out;
   out.federation_name = resp.federation_name();
   out.federate_handles.reserve(resp.federate_handles_size());
@@ -1067,7 +1116,7 @@ M17RTIambassador::queryFederateAttributes(FederateHandle federate) {
   grpc::ClientContext ctx;
   rti::v1::QueryFederateAttributesResponse resp;
   const auto s = impl_->mom_stub->QueryFederateAttributes(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryFederateAttributes");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryFederateAttributes");
   FederateAttributes out;
   out.found = resp.found();
   out.federate_handle = FederateHandle(resp.federate_handle());
@@ -1101,7 +1150,7 @@ M17RTIambassador::enumerateMomInstances() {
   grpc::ClientContext ctx;
   rti::v1::EnumerateMomInstancesResponse resp;
   const auto s = impl_->mom_stub->EnumerateMomInstances(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "enumerateMomInstances");
+  if (!s.ok()) throwFromStatus(s, ctx, "enumerateMomInstances");
   std::vector<MomInstance> out;
   out.reserve(resp.instances_size());
   for (const auto& inst : resp.instances()) {
@@ -1147,7 +1196,7 @@ void M17RTIambassador::registerFederationSynchronizationPoint(
   rti::v1::Empty resp;
   const auto s =
       impl_->sync_stub->RegisterFederationSynchronizationPoint(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "registerFederationSynchronizationPoint");
+  if (!s.ok()) throwFromStatus(s, ctx, "registerFederationSynchronizationPoint");
 }
 
 void M17RTIambassador::synchronizationPointAchieved(const std::string& label) {
@@ -1165,7 +1214,7 @@ void M17RTIambassador::synchronizationPointAchieved(const std::string& label) {
   rti::v1::Empty resp;
   const auto s =
       impl_->sync_stub->SynchronizationPointAchieved(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
+  if (!s.ok()) throwFromStatus(s, ctx, "synchronizationPointAchieved");
 }
 
 // §4.14 (M37 Agent EA) — achieve with the explicit `successfully` flag.
@@ -1188,7 +1237,7 @@ void M17RTIambassador::synchronizationPointAchieved(const std::string& label,
   rti::v1::Empty resp;
   const auto s =
       impl_->sync_stub->SynchronizationPointAchieved(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
+  if (!s.ok()) throwFromStatus(s, ctx, "synchronizationPointAchieved");
 }
 
 // --- M17.15 §7 Ownership Management ---------------------------------------
@@ -1236,7 +1285,7 @@ void M17RTIambassador::unconditionalAttributeOwnershipDivestiture(
   rti::v1::Empty resp;
   const auto s = impl_->ownership_stub->UnconditionalAttributeOwnershipDivestiture(
       &ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "unconditionalAttributeOwnershipDivestiture");
+  if (!s.ok()) throwFromStatus(s, ctx, "unconditionalAttributeOwnershipDivestiture");
 }
 
 void M17RTIambassador::negotiatedAttributeOwnershipDivestiture(
@@ -1257,7 +1306,7 @@ void M17RTIambassador::negotiatedAttributeOwnershipDivestiture(
   rti::v1::Empty resp;
   const auto s = impl_->ownership_stub->NegotiatedAttributeOwnershipDivestiture(
       &ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "negotiatedAttributeOwnershipDivestiture");
+  if (!s.ok()) throwFromStatus(s, ctx, "negotiatedAttributeOwnershipDivestiture");
 }
 
 // §7.6 (M37 Agent EA) — complete a two-phase negotiated divestiture.
@@ -1272,7 +1321,7 @@ void M17RTIambassador::confirmDivestiture(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ownership_stub->ConfirmDivestiture(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "confirmDivestiture");
+  if (!s.ok()) throwFromStatus(s, ctx, "confirmDivestiture");
 }
 
 void M17RTIambassador::attributeOwnershipAcquisition(
@@ -1287,7 +1336,7 @@ void M17RTIambassador::attributeOwnershipAcquisition(
   rti::v1::Empty resp;
   const auto s =
       impl_->ownership_stub->AttributeOwnershipAcquisition(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisition");
+  if (!s.ok()) throwFromStatus(s, ctx, "attributeOwnershipAcquisition");
 }
 
 // §7.9 (M37 Agent EA) — same RPC with the additive if_available flag;
@@ -1306,7 +1355,7 @@ void M17RTIambassador::attributeOwnershipAcquisitionIfAvailable(
   rti::v1::Empty resp;
   const auto s =
       impl_->ownership_stub->AttributeOwnershipAcquisition(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisitionIfAvailable");
+  if (!s.ok()) throwFromStatus(s, ctx, "attributeOwnershipAcquisitionIfAvailable");
 }
 
 void M17RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
@@ -1324,7 +1373,7 @@ void M17RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
       impl_->ownership_stub->CancelNegotiatedAttributeOwnershipDivestiture(
           &ctx, req, &resp);
   if (!s.ok())
-    throwFromStatus(s, "cancelNegotiatedAttributeOwnershipDivestiture");
+    throwFromStatus(s, ctx, "cancelNegotiatedAttributeOwnershipDivestiture");
 }
 
 void M17RTIambassador::cancelAttributeOwnershipAcquisition(
@@ -1340,7 +1389,7 @@ void M17RTIambassador::cancelAttributeOwnershipAcquisition(
   rti::v1::Empty resp;
   const auto s = impl_->ownership_stub->CancelAttributeOwnershipAcquisition(
       &ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "cancelAttributeOwnershipAcquisition");
+  if (!s.ok()) throwFromStatus(s, ctx, "cancelAttributeOwnershipAcquisition");
 }
 
 void M17RTIambassador::attributeOwnershipDivestitureIfWanted(
@@ -1356,7 +1405,7 @@ void M17RTIambassador::attributeOwnershipDivestitureIfWanted(
   rti::v1::Empty resp;
   const auto s = impl_->ownership_stub->AttributeOwnershipDivestitureIfWanted(
       &ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "attributeOwnershipDivestitureIfWanted");
+  if (!s.ok()) throwFromStatus(s, ctx, "attributeOwnershipDivestitureIfWanted");
 }
 
 M17RTIambassador::OwnershipQueryResult RTIambassador::queryAttributeOwnership(
@@ -1372,7 +1421,7 @@ M17RTIambassador::OwnershipQueryResult RTIambassador::queryAttributeOwnership(
   grpc::ClientContext ctx;
   rti::v1::QueryOwnershipResponse resp;
   const auto s = impl_->ownership_stub->QueryAttributeOwnership(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryAttributeOwnership");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryAttributeOwnership");
   return OwnershipQueryResult{FederateHandle(resp.owner_federate_handle()),
                               resp.owned()};
 }
@@ -1391,7 +1440,7 @@ bool M17RTIambassador::isAttributeOwnedByFederate(
   grpc::ClientContext ctx;
   rti::v1::IsOwnedResponse resp;
   const auto s = impl_->ownership_stub->IsAttributeOwnedByFederate(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "isAttributeOwnedByFederate");
+  if (!s.ok()) throwFromStatus(s, ctx, "isAttributeOwnedByFederate");
   return resp.owned();
 }
 
@@ -1428,7 +1477,7 @@ void M17RTIambassador::requestFederationSave(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->savepoint_stub->RequestFederationSave(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "requestFederationSave");
+  if (!s.ok()) throwFromStatus(s, ctx, "requestFederationSave");
 }
 
 void M17RTIambassador::federateSaveComplete() {
@@ -1441,7 +1490,7 @@ void M17RTIambassador::federateSaveComplete() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->savepoint_stub->FederateSaveComplete(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "federateSaveComplete");
+  if (!s.ok()) throwFromStatus(s, ctx, "federateSaveComplete");
 }
 
 void M17RTIambassador::federateSaveNotComplete() {
@@ -1454,7 +1503,7 @@ void M17RTIambassador::federateSaveNotComplete() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->savepoint_stub->FederateSaveNotComplete(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "federateSaveNotComplete");
+  if (!s.ok()) throwFromStatus(s, ctx, "federateSaveNotComplete");
 }
 
 void M17RTIambassador::abortFederationSave() {
@@ -1466,7 +1515,7 @@ void M17RTIambassador::abortFederationSave() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->savepoint_stub->AbortFederationSave(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "abortFederationSave");
+  if (!s.ok()) throwFromStatus(s, ctx, "abortFederationSave");
 }
 
 M17RTIambassador::SaveState RTIambassador::querySaveState(const std::string& label) {
@@ -1479,7 +1528,7 @@ M17RTIambassador::SaveState RTIambassador::querySaveState(const std::string& lab
   grpc::ClientContext ctx;
   rti::v1::QuerySaveStateResponse resp;
   const auto s = impl_->savepoint_stub->QuerySaveState(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "querySaveState");
+  if (!s.ok()) throwFromStatus(s, ctx, "querySaveState");
   return static_cast<SaveState>(resp.state());
 }
 
@@ -1494,7 +1543,7 @@ void M17RTIambassador::requestFederationRestore(const std::string& label) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->savepoint_stub->RequestFederationRestore(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "requestFederationRestore");
+  if (!s.ok()) throwFromStatus(s, ctx, "requestFederationRestore");
 }
 
 void M17RTIambassador::federateRestoreComplete() {
@@ -1507,7 +1556,7 @@ void M17RTIambassador::federateRestoreComplete() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->savepoint_stub->FederateRestoreComplete(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "federateRestoreComplete");
+  if (!s.ok()) throwFromStatus(s, ctx, "federateRestoreComplete");
 }
 
 void M17RTIambassador::abortFederationRestore() {
@@ -1519,7 +1568,7 @@ void M17RTIambassador::abortFederationRestore() {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->savepoint_stub->AbortFederationRestore(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "abortFederationRestore");
+  if (!s.ok()) throwFromStatus(s, ctx, "abortFederationRestore");
 }
 
 M17RTIambassador::RestoreState RTIambassador::queryRestoreState(
@@ -1533,7 +1582,7 @@ M17RTIambassador::RestoreState RTIambassador::queryRestoreState(
   grpc::ClientContext ctx;
   rti::v1::QueryRestoreStateResponse resp;
   const auto s = impl_->savepoint_stub->QueryRestoreState(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryRestoreState");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryRestoreState");
   return static_cast<RestoreState>(resp.state());
 }
 
@@ -1580,7 +1629,7 @@ RoutingSpaceHandle M17RTIambassador::getRoutingSpaceHandle(
   grpc::ClientContext ctx;
   rti::v1::LookupRoutingSpaceResponse resp;
   const auto s = impl_->ddm_stub->LookupRoutingSpace(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "getRoutingSpaceHandle");
+  if (!s.ok()) throwFromStatus(s, ctx, "getRoutingSpaceHandle");
   if (!resp.found()) {
     throw NameNotFound("getRoutingSpaceHandle: unknown routing space '" +
                        name + "'");
@@ -1601,7 +1650,7 @@ DimensionHandle M17RTIambassador::getDimensionHandle(
   grpc::ClientContext ctx;
   rti::v1::LookupDimensionResponse resp;
   const auto s = impl_->ddm_stub->LookupDimension(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "getDimensionHandle");
+  if (!s.ok()) throwFromStatus(s, ctx, "getDimensionHandle");
   if (!resp.found()) {
     throw NameNotFound("getDimensionHandle: unknown dimension '" + name +
                        "' in routing space");
@@ -1623,7 +1672,7 @@ RegionHandle M17RTIambassador::createRegion(
   grpc::ClientContext ctx;
   rti::v1::CreateRegionResponse resp;
   const auto s = impl_->ddm_stub->CreateRegion(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "createRegion");
+  if (!s.ok()) throwFromStatus(s, ctx, "createRegion");
   return RegionHandle(resp.region_handle());
 }
 
@@ -1644,7 +1693,7 @@ void M17RTIambassador::setRangeBounds(RegionHandle region,
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ddm_stub->SetRangeBounds(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "setRangeBounds");
+  if (!s.ok()) throwFromStatus(s, ctx, "setRangeBounds");
 }
 
 void M17RTIambassador::commitRegionModifications(
@@ -1659,7 +1708,7 @@ void M17RTIambassador::commitRegionModifications(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ddm_stub->CommitRegionModifications(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "commitRegionModifications");
+  if (!s.ok()) throwFromStatus(s, ctx, "commitRegionModifications");
 }
 
 void M17RTIambassador::deleteRegion(RegionHandle region) {
@@ -1673,7 +1722,7 @@ void M17RTIambassador::deleteRegion(RegionHandle region) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ddm_stub->DeleteRegion(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "deleteRegion");
+  if (!s.ok()) throwFromStatus(s, ctx, "deleteRegion");
 }
 
 M17RTIambassador::QueryBoundsResult RTIambassador::queryBounds(
@@ -1688,7 +1737,7 @@ M17RTIambassador::QueryBoundsResult RTIambassador::queryBounds(
   grpc::ClientContext ctx;
   rti::v1::QueryBoundsResponse resp;
   const auto s = impl_->ddm_stub->QueryBounds(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "queryBounds");
+  if (!s.ok()) throwFromStatus(s, ctx, "queryBounds");
   QueryBoundsResult out;
   out.found = resp.found();
   if (resp.has_bounds()) {
@@ -1718,7 +1767,7 @@ void M17RTIambassador::subscribeObjectClassAttributesWithRegions(
   rti::v1::Empty resp;
   const auto s =
       impl_->ddm_stub->SubscribeObjectClassAttributesWithRegions(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "subscribeObjectClassAttributesWithRegions");
+  if (!s.ok()) throwFromStatus(s, ctx, "subscribeObjectClassAttributesWithRegions");
 }
 
 void M17RTIambassador::subscribeInteractionClassWithRegions(
@@ -1737,7 +1786,7 @@ void M17RTIambassador::subscribeInteractionClassWithRegions(
   rti::v1::Empty resp;
   const auto s =
       impl_->ddm_stub->SubscribeInteractionClassWithRegions(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "subscribeInteractionClassWithRegions");
+  if (!s.ok()) throwFromStatus(s, ctx, "subscribeInteractionClassWithRegions");
 }
 
 void M17RTIambassador::unsubscribeObjectClassAttributesWithRegions(
@@ -1759,7 +1808,7 @@ void M17RTIambassador::unsubscribeObjectClassAttributesWithRegions(
   const auto s =
       impl_->ddm_stub->UnsubscribeObjectClassAttributesWithRegions(&ctx, req, &resp);
   if (!s.ok())
-    throwFromStatus(s, "unsubscribeObjectClassAttributesWithRegions");
+    throwFromStatus(s, ctx, "unsubscribeObjectClassAttributesWithRegions");
 }
 
 void M17RTIambassador::unsubscribeInteractionClassWithRegions(
@@ -1778,7 +1827,7 @@ void M17RTIambassador::unsubscribeInteractionClassWithRegions(
   rti::v1::Empty resp;
   const auto s =
       impl_->ddm_stub->UnsubscribeInteractionClassWithRegions(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "unsubscribeInteractionClassWithRegions");
+  if (!s.ok()) throwFromStatus(s, ctx, "unsubscribeInteractionClassWithRegions");
 }
 
 M17RTIambassador::RegisterWithRegionsResult
@@ -1799,7 +1848,7 @@ M17RTIambassador::registerObjectInstanceWithRegions(
   rti::v1::RegisterObjectWithRegionsResponse resp;
   const auto s =
       impl_->ddm_stub->RegisterObjectInstanceWithRegions(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "registerObjectInstanceWithRegions");
+  if (!s.ok()) throwFromStatus(s, ctx, "registerObjectInstanceWithRegions");
   return RegisterWithRegionsResult{
       ObjectInstanceHandle(resp.object_handle()), resp.object_name()};
 }
@@ -1818,7 +1867,7 @@ void M17RTIambassador::associateRegionsForUpdates(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ddm_stub->AssociateRegionsForUpdates(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "associateRegionsForUpdates");
+  if (!s.ok()) throwFromStatus(s, ctx, "associateRegionsForUpdates");
 }
 
 void M17RTIambassador::unassociateRegionsForUpdates(
@@ -1836,7 +1885,7 @@ void M17RTIambassador::unassociateRegionsForUpdates(
   rti::v1::Empty resp;
   const auto s =
       impl_->ddm_stub->UnassociateRegionsForUpdates(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "unassociateRegionsForUpdates");
+  if (!s.ok()) throwFromStatus(s, ctx, "unassociateRegionsForUpdates");
 }
 
 void M17RTIambassador::sendInteractionWithRegions(
@@ -1860,7 +1909,7 @@ void M17RTIambassador::sendInteractionWithRegions(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ddm_stub->SendInteractionWithRegions(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "sendInteractionWithRegions");
+  if (!s.ok()) throwFromStatus(s, ctx, "sendInteractionWithRegions");
 }
 
 void M17RTIambassador::requestAttributeValueUpdateWithRegions(
@@ -1883,7 +1932,7 @@ void M17RTIambassador::requestAttributeValueUpdateWithRegions(
   rti::v1::Empty resp;
   const auto s =
       impl_->ddm_stub->RequestAttributeValueUpdateWithRegions(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "requestAttributeValueUpdateWithRegions");
+  if (!s.ok()) throwFromStatus(s, ctx, "requestAttributeValueUpdateWithRegions");
 }
 
 // --- M17.4 §5 publish / subscribe declarations -----------------------------
@@ -1929,7 +1978,7 @@ void M17RTIambassador::publishObjectClassAttributes(
   rti::v1::Empty resp;
   const auto s =
       impl_->declaration_stub->PublishObjectClassAttributes(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "publishObjectClassAttributes");
+  if (!s.ok()) throwFromStatus(s, ctx, "publishObjectClassAttributes");
 }
 
 void M17RTIambassador::unpublishObjectClassAttributes(
@@ -1942,7 +1991,7 @@ void M17RTIambassador::unpublishObjectClassAttributes(
   rti::v1::Empty resp;
   const auto s =
       impl_->declaration_stub->UnpublishObjectClassAttributes(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "unpublishObjectClassAttributes");
+  if (!s.ok()) throwFromStatus(s, ctx, "unpublishObjectClassAttributes");
 }
 
 void M17RTIambassador::subscribeObjectClassAttributes(
@@ -1955,7 +2004,7 @@ void M17RTIambassador::subscribeObjectClassAttributes(
   rti::v1::Empty resp;
   const auto s =
       impl_->declaration_stub->SubscribeObjectClassAttributes(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "subscribeObjectClassAttributes");
+  if (!s.ok()) throwFromStatus(s, ctx, "subscribeObjectClassAttributes");
 }
 
 void M17RTIambassador::unsubscribeObjectClassAttributes(
@@ -1968,7 +2017,7 @@ void M17RTIambassador::unsubscribeObjectClassAttributes(
   rti::v1::Empty resp;
   const auto s = impl_->declaration_stub->UnsubscribeObjectClassAttributes(
       &ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "unsubscribeObjectClassAttributes");
+  if (!s.ok()) throwFromStatus(s, ctx, "unsubscribeObjectClassAttributes");
 }
 
 void M17RTIambassador::publishInteractionClass(InteractionClassHandle cls) {
@@ -1982,7 +2031,7 @@ void M17RTIambassador::publishInteractionClass(InteractionClassHandle cls) {
   rti::v1::Empty resp;
   const auto s =
       impl_->declaration_stub->PublishInteractionClass(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "publishInteractionClass");
+  if (!s.ok()) throwFromStatus(s, ctx, "publishInteractionClass");
 }
 
 void M17RTIambassador::unpublishInteractionClass(InteractionClassHandle cls) {
@@ -1996,7 +2045,7 @@ void M17RTIambassador::unpublishInteractionClass(InteractionClassHandle cls) {
   rti::v1::Empty resp;
   const auto s =
       impl_->declaration_stub->UnpublishInteractionClass(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "unpublishInteractionClass");
+  if (!s.ok()) throwFromStatus(s, ctx, "unpublishInteractionClass");
 }
 
 void M17RTIambassador::subscribeInteractionClass(InteractionClassHandle cls) {
@@ -2010,7 +2059,7 @@ void M17RTIambassador::subscribeInteractionClass(InteractionClassHandle cls) {
   rti::v1::Empty resp;
   const auto s =
       impl_->declaration_stub->SubscribeInteractionClass(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "subscribeInteractionClass");
+  if (!s.ok()) throwFromStatus(s, ctx, "subscribeInteractionClass");
 }
 
 void M17RTIambassador::unsubscribeInteractionClass(InteractionClassHandle cls) {
@@ -2024,7 +2073,7 @@ void M17RTIambassador::unsubscribeInteractionClass(InteractionClassHandle cls) {
   rti::v1::Empty resp;
   const auto s =
       impl_->declaration_stub->UnsubscribeInteractionClass(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "unsubscribeInteractionClass");
+  if (!s.ok()) throwFromStatus(s, ctx, "unsubscribeInteractionClass");
 }
 
 // --- M17.5 §6 register / update / send -----------------------------------
@@ -2041,7 +2090,7 @@ ObjectInstanceHandle M17RTIambassador::registerObjectInstance(
   grpc::ClientContext ctx;
   rti::v1::RegisterObjectResponse resp;
   const auto s = impl_->object_stub->RegisterObjectInstance(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "registerObjectInstance");
+  if (!s.ok()) throwFromStatus(s, ctx, "registerObjectInstance");
   return ObjectInstanceHandle(resp.object_handle());
 }
 
@@ -2061,7 +2110,7 @@ void M17RTIambassador::updateAttributeValues(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->UpdateAttributeValues(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
+  if (!s.ok()) throwFromStatus(s, ctx, "updateAttributeValues");
 }
 
 void M17RTIambassador::sendInteraction(
@@ -2079,7 +2128,7 @@ void M17RTIambassador::sendInteraction(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "sendInteraction");
+  if (!s.ok()) throwFromStatus(s, ctx, "sendInteraction");
 }
 
 // --- M36 Agent DA — §6 TSO variants + delete / request-update wire ---------
@@ -2103,7 +2152,7 @@ void M17RTIambassador::updateAttributeValues(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->UpdateAttributeValues(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
+  if (!s.ok()) throwFromStatus(s, ctx, "updateAttributeValues");
 }
 
 void M17RTIambassador::sendInteraction(
@@ -2123,7 +2172,7 @@ void M17RTIambassador::sendInteraction(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "sendInteraction");
+  if (!s.ok()) throwFromStatus(s, ctx, "sendInteraction");
 }
 
 // §8.21/§8.22 (M37 Agent EA) — TSO sends carrying a freshly-allocated
@@ -2149,7 +2198,7 @@ MessageRetractionHandle M17RTIambassador::updateAttributeValuesRetractable(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->UpdateAttributeValues(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
+  if (!s.ok()) throwFromStatus(s, ctx, "updateAttributeValues");
   return handle;
 }
 
@@ -2173,7 +2222,7 @@ MessageRetractionHandle M17RTIambassador::sendInteractionRetractable(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "sendInteraction");
+  if (!s.ok()) throwFromStatus(s, ctx, "sendInteraction");
   return handle;
 }
 
@@ -2191,7 +2240,7 @@ void M17RTIambassador::deleteObjectInstance(
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->DeleteObjectInstance(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "deleteObjectInstance");
+  if (!s.ok()) throwFromStatus(s, ctx, "deleteObjectInstance");
 }
 
 void M17RTIambassador::requestAttributeValueUpdate(
@@ -2209,7 +2258,7 @@ void M17RTIambassador::requestAttributeValueUpdate(
   rti::v1::Empty resp;
   const auto s =
       impl_->object_stub->RequestAttributeValueUpdate(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "requestAttributeValueUpdate");
+  if (!s.ok()) throwFromStatus(s, ctx, "requestAttributeValueUpdate");
 }
 
 void M17RTIambassador::requestAttributeValueUpdate(
@@ -2227,7 +2276,7 @@ void M17RTIambassador::requestAttributeValueUpdate(
   rti::v1::Empty resp;
   const auto s =
       impl_->object_stub->RequestClassAttributeValueUpdate(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "requestAttributeValueUpdate(class)");
+  if (!s.ok()) throwFromStatus(s, ctx, "requestAttributeValueUpdate(class)");
 }
 
 // --- M36 Agent DA — §10.24/§10.25 federate name<->handle -------------------
@@ -2242,7 +2291,7 @@ FederateHandle M17RTIambassador::getFederateHandle(
   rti::v1::ListFederationMembersResponse resp;
   const auto s =
       impl_->federation_stub->ListFederationMembers(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "getFederateHandle");
+  if (!s.ok()) throwFromStatus(s, ctx, "getFederateHandle");
   for (const auto& m : resp.members()) {
     if (m.federate_name() == federate_name) {
       return FederateHandle(m.federate_handle());
@@ -2261,7 +2310,7 @@ std::string M17RTIambassador::getFederateName(FederateHandle handle) {
   rti::v1::ListFederationMembersResponse resp;
   const auto s =
       impl_->federation_stub->ListFederationMembers(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "getFederateName");
+  if (!s.ok()) throwFromStatus(s, ctx, "getFederateName");
   for (const auto& m : resp.members()) {
     if (m.federate_handle() == handle.raw()) return m.federate_name();
   }
@@ -2281,7 +2330,7 @@ void M17RTIambassador::retract(MessageRetractionHandle handle) {
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->object_stub->Retract(&ctx, req, &resp);
-  if (!s.ok()) throwFromStatus(s, "retract");
+  if (!s.ok()) throwFromStatus(s, ctx, "retract");
 }
 
 // --- M17.6 §10.4 tickCallback + FederateAmbassador ------------------------
