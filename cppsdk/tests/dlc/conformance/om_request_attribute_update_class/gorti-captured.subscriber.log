@@ -1,5 +1,7 @@
 SUB: CONNECT
 SUB: JOIN
 SUB: SUBSCRIBE Vehicle Position Velocity
+SUB: DISCOVER name=car-cls handle=<H>
 SUB: REQUEST_UPDATE class=Vehicle attrs=[Position,Velocity]
+SUB: REFLECT name=car-cls Position=11 Velocity=22
 SUB: RESIGN

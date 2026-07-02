@@ -1,4 +1,6 @@
 PUB: CONNECT
 PUB: JOIN
 PUB: REGISTER name=car-inst handle=<H>
+PUB: PROVIDE_UPDATE_INSTANCE handle=<H> attrs=2
+PUB: UPDATE name=car-inst Position=33.000000 Velocity=44.000000
 PUB: RESIGN

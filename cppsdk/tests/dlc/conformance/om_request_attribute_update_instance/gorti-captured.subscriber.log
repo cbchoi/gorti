@@ -1,5 +1,7 @@
 SUB: CONNECT
 SUB: JOIN
 SUB: SUBSCRIBE Vehicle Position Velocity
+SUB: DISCOVER name=car-inst handle=<H>
 SUB: REQUEST_UPDATE_INSTANCE handle=<H> attrs=[Position,Velocity]
+SUB: REFLECT name=car-inst Position=33 Velocity=44
 SUB: RESIGN
