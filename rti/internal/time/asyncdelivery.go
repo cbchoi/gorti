@@ -84,19 +84,31 @@ func (m *Manager) ShouldDeliverNow(fed core.FederationName, h core.FederateHandl
 // consults the gate has already finished its outbox lookup; this call
 // just stores. Release happens later via releaseBufferedTSO (called
 // from emitGrant or EnableAsynchronousDelivery).
-func (m *Manager) BufferTSO(_ context.Context, fed core.FederationName, h core.FederateHandle, ts core.LogicalTime, evt core.OutboundEvent) error {
+//
+// M38 GA — §8.8 arrival poke: a newly buffered TSO message may be
+// exactly the "next message" a pending NMR/NMRA is waiting on (its
+// timestamp can pull the grant target down below LBTS), so buffering
+// re-evaluates the federation's pending grants. Best-effort like the
+// M36 DB-2 resign re-run: the buffering itself already succeeded, and
+// grant-emission failures surface through the stream layer.
+func (m *Manager) BufferTSO(ctx context.Context, fed core.FederationName, h core.FederateHandle, ts core.LogicalTime, evt core.OutboundEvent) error {
 	ext := extOf(m)
 	ext.mu.Lock()
-	defer ext.mu.Unlock()
 	ns := ext.getOrCreateLocked(fed, h)
 	ns.tsoBuffer = append(ns.tsoBuffer, bufferedTSOEvent{timestamp: ts, event: evt})
+	poke := ns.pendingNER && ns.mode.usesNextMessageTarget()
+	ext.mu.Unlock()
+	if poke {
+		_ = m.tryGrantPending(ctx, fed)
+	}
 	return nil
 }
 
 // BufferTSOWithRetraction is BufferTSO + retraction-handle tracking.
-// M20.2 — see core.TSODeliveryGate interface comment.
+// M20.2 — see core.TSODeliveryGate interface comment. Carries the same
+// M38 GA §8.8 arrival poke as BufferTSO.
 func (m *Manager) BufferTSOWithRetraction(
-	_ context.Context,
+	ctx context.Context,
 	fed core.FederationName,
 	h core.FederateHandle,
 	ts core.LogicalTime,
@@ -106,7 +118,6 @@ func (m *Manager) BufferTSOWithRetraction(
 ) error {
 	ext := extOf(m)
 	ext.mu.Lock()
-	defer ext.mu.Unlock()
 	ns := ext.getOrCreateLocked(fed, h)
 	ns.tsoBuffer = append(ns.tsoBuffer, bufferedTSOEvent{
 		timestamp:        ts,
@@ -114,6 +125,11 @@ func (m *Manager) BufferTSOWithRetraction(
 		sender:           sender,
 		retractionHandle: retractionHandle,
 	})
+	poke := ns.pendingNER && ns.mode.usesNextMessageTarget()
+	ext.mu.Unlock()
+	if poke {
+		_ = m.tryGrantPending(ctx, fed)
+	}
 	return nil
 }
 

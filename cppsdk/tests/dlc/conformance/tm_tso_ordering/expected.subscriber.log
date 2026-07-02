@@ -12,6 +12,16 @@
 # Per §8.15 the spec mandates: within a single logical-time bucket, TSO
 # deliveries are ordered by ascending FederateHandle. Publishers join in
 # the canonical order [alice, bob, carol] so their handles are ascending.
+#
+# M38 GA re-derivation: the subscriber NER-walks to t=2 via repeated
+# nextMessageRequest(2.0). §8.8: with the publishers' T=1.0 Ticks queued
+# while the first NMR is pending, that request COMPLETES at
+# min(2.0, 1.0) = 1.0 — GRANT 1.0 lands after the three RECVs (§8.14);
+# the re-issued NMR(2.0) then grants at 2.0 once the publishers'
+# advance/resign lifts LBTS past it. The pre-M38 golden modelled a
+# single GRANT 2.0 (the "no pending message" timeline), which is
+# unreachable here: the fixture's launch protocol guarantees the NMR is
+# issued (GALT-gated) before the dwell-delayed T=1.0 sends.
 SUB: CONNECT                                                           # §4.2
 SUB: JOIN federate=sub                                                 # §4.9
 SUB: SUBSCRIBE interaction=Tick active=true                            # §5.6 (catalogue 11.11 — active flag)
@@ -19,5 +29,6 @@ SUB: TIME_CONSTRAINED_ENABLED time=0.000000                            # §8.6
 SUB: RECV interaction=Tick time=1.000000 seq=1 source=alice order=TIMESTAMP  # §8.15 — lowest FederateHandle wins tie-break
 SUB: RECV interaction=Tick time=1.000000 seq=1 source=bob order=TIMESTAMP    # §8.15
 SUB: RECV interaction=Tick time=1.000000 seq=1 source=carol order=TIMESTAMP  # §8.15
-SUB: GRANT time=2.000000                                               # §8.13
+SUB: GRANT time=1.000000                                               # §8.8 — NMR(2.0) completes at min(2.0, next-TSO-time 1.0), AFTER the deliveries (§8.14)
+SUB: GRANT time=2.000000                                               # §8.13 — re-issued NMR(2.0); no TSO left, grant at the requested time
 SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                      # §4.10

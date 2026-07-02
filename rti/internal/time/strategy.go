@@ -75,13 +75,21 @@ func DefaultLBTSStrategy() LBTSStrategy { return defaultLBTS{} }
 //   - Requested    : the t parameter of the outstanding request.
 //   - LBTS         : the current LBTS over the regulating set.
 //   - SolePending  : true when this is the only pending request in the
-//     federation (relevant only for NER/NMRA forced grant).
+//     federation. M38 GA: the default policy no longer consults it (the
+//     NER/NMRA forced-grant hatch is retired); kept for alternative
+//     strategies.
+//   - NextTSOTime  : earliest buffered TSO timestamp queued for the
+//     requester (M38 GA — the §8.8/§8.9 next-message grant target
+//     input). Meaningful only when HasTSO is true.
+//   - HasTSO       : whether any TSO message is queued for the requester.
 type GrantContext struct {
 	Mode        AdvanceMode
 	CurrentTime core.LogicalTime
 	Requested   core.LogicalTime
 	LBTS        core.LogicalTime
 	SolePending bool
+	NextTSOTime core.LogicalTime
+	HasTSO      bool
 }
 
 // GrantDecision is the output of a strategy's DecideGrant call. It
@@ -92,8 +100,9 @@ type GrantContext struct {
 //
 // Fire == false means hold (the request stays pending untouched).
 // ClearPending == true means the post-grant disposition is "full grant"
-// (clear pendingNER); false means the NER/NMRA forced-grant escape
-// hatch (advance currentTime but keep pending).
+// (clear pendingNER); false advances currentTime but keeps the request
+// pending. M38 GA: the default policy always clears (§8.8: one request,
+// one grant); keep-pending remains available to alternative strategies.
 type GrantDecision struct {
 	Fire         bool
 	Time         core.LogicalTime
@@ -129,7 +138,7 @@ type defaultGrant struct{}
 
 // DecideGrant delegates to the package-level decideGrant function.
 func (defaultGrant) DecideGrant(c GrantContext) GrantDecision {
-	d := decideGrant(c.Mode, c.CurrentTime, c.Requested, c.LBTS, c.SolePending)
+	d := decideGrant(c.Mode, c.CurrentTime, c.Requested, c.LBTS, c.SolePending, c.NextTSOTime, c.HasTSO)
 	return GrantDecision{
 		Fire:         d.fire,
 		Time:         d.time,

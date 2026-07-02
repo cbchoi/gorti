@@ -111,23 +111,29 @@ int main(int argc, char** argv) {
     while (!amb->queryGALT(galt)) amb->evokeMultipleCallbacks(0.05, 0.1);
   }
 
-  // NER walk to t=2 so that t=1 messages are delivered. §8.8 allows the
-  // grant to land EARLY at a message time (or, under gorti's interim NER
-  // semantics — advance.go "sole-pending forced grant at LBTS keeps
-  // pending" — at LBTS) below the target, so keep pumping until the walk
-  // actually reaches t=2; intermediate grants print and are visible in
-  // the capture.
-  // gorti M17 gap: OnFederateResign (rti/internal/time/manager.go) drops the
-  // resigned regulator's state but never re-runs tryGrantPending, so a
-  // pending NER that becomes grantable only when the last regulator resigns
-  // is never re-granted — waiting strictly for t=2 hangs forever. Bound the
-  // drain (~6 s) so the capture records every grant that does fire.
+  // NER walk to t=2 so that t=1 messages are delivered. Per §8.8 a
+  // nextMessageRequest COMPLETES at min(requested, next-TSO-message
+  // time): with the publishers' T=1.0 Ticks queued, the first NMR(2.0)
+  // is granted at 1.0 (after the three RECVs — §8.14), so the walk must
+  // RE-ISSUE the request after every early grant until it reaches the
+  // target — one grant per request, §8.8 defines no interim callbacks
+  // (M38 GA; the pre-M38 single-request loop relied on gorti's retired
+  // "forced grant at LBTS keeps pending" interim semantics).
+  // The drain stays bounded (~6 s) purely as a hang guard.
   {
     rti1516e::HLAfloat64Time target(2.0);
     amb->nextMessageRequest(target);
+    double requestedFrom = fed.lastGrant;
     int rounds = 0;
-    while (fed.lastGrant < 2.0 - 1e-9 && rounds++ < 60)
+    while (fed.lastGrant < 2.0 - 1e-9 && rounds++ < 60) {
       amb->evokeMultipleCallbacks(0.05, 0.1);
+      if (fed.lastGrant > requestedFrom + 1e-9 && fed.lastGrant < 2.0 - 1e-9) {
+        // Early grant at a message time below the target (§8.8):
+        // request completed — walk on.
+        requestedFrom = fed.lastGrant;
+        amb->nextMessageRequest(target);
+      }
+    }
   }
 
   amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

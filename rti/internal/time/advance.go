@@ -11,10 +11,13 @@ import (
 // 1516.1-2010 §8 primitive that produced it. tryGrantPending dispatches
 // per-mode grant conditions:
 //
-//   - ModeNER  (§8.10 NextMessageRequest)         — full grant requires LBTS > t;
-//     sole-pending forced grant at LBTS keeps pending.
-//   - ModeNMRA (§8.12 NextMessageRequestAvailable) — full grant requires LBTS >= t;
-//     sole-pending forced grant at LBTS keeps pending.
+//   - ModeNER  (§8.8 NextMessageRequest)          — grant lands at
+//     min(t, next queued TSO time) and requires LBTS strictly above the
+//     grant time; otherwise the request stays pending (M38 GA — no
+//     interim grant; the pre-M38 sole-pending forced grant at LBTS is
+//     retired).
+//   - ModeNMRA (§8.9 NextMessageRequestAvailable) — same grant target,
+//     inclusive boundary (LBTS >= grant time).
 //   - ModeTAR  (§8.10 TimeAdvanceRequest)         — grant fires at min(t, LBTS) whenever
 //     it produces forward progress (LBTS != t case).
 //     No "sole-pending" gate: incremental grants are
@@ -67,17 +70,21 @@ func (m AdvanceMode) String() string {
 	}
 }
 
-// allowsForcedGrant reports whether the mode uses the "sole-pending →
-// grant at LBTS, KEEP pending" escape hatch documented on tryGrantPending.
+// usesNextMessageTarget reports whether the mode's grant target is
+// min(requestedTime, earliest queued TSO timestamp for the requester) —
+// the IEEE 1516.1-2010 §8.8/§8.9 next-message semantics. Only NER and
+// NMRA: their contract is "advance me to the next relevant message, or
+// to t if none arrives first". TAR / TARA / FQR grants target the
+// requested time itself; queued TSO at-or-before the grant time drains
+// on emission (§8.14, emitGrant → releaseBufferedTSO).
 //
-// Only NER and NMRA use it: their semantics is "wake me at the next
-// available logical time, advance my currentTime to that time, but my
-// outstanding request remains until I reach the originally-requested t".
-//
-// TAR / TARA / FQR clear pending on every grant — they are
-// "advance-as-far-as-you-can" primitives, not "wait for next message"
-// primitives.
-func (m AdvanceMode) allowsForcedGrant() bool {
+// M38 GA: this replaces the pre-M38 allowsForcedGrant "sole-pending →
+// grant at LBTS, KEEP pending" escape hatch. §8.8 defines no interim
+// grant: a next-message request either completes (at the message time
+// or the requested time) or stays pending until a TSO arrival
+// (asyncdelivery.go BufferTSO poke) or an LBTS raise (peer advance,
+// lookahead change, membership change) re-evaluates it.
+func (m AdvanceMode) usesNextMessageTarget() bool {
 	return m == ModeNER || m == ModeNMRA
 }
 
@@ -95,10 +102,9 @@ func (m AdvanceMode) allowsForcedGrant() bool {
 // requested time and buffered TSO at higher timestamps never released
 // (om_delete_object_tso 15/16).
 //
-// NER / NMRA never do: with multiple pending peers they wait for LBTS
-// to satisfy the strict-or-inclusive comparison against requestedTime
-// (their sole-pending forced grant keeps pending — see
-// allowsForcedGrant).
+// NER / NMRA never do: they wait for LBTS to satisfy the
+// strict-or-inclusive comparison against the §8.8/§8.9 grant target
+// (see usesNextMessageTarget).
 func (m AdvanceMode) allowsIncrementalGrant() bool {
 	return m == ModeFQR
 }
@@ -133,8 +139,9 @@ type grantDecision struct {
 	// time is the grant time (federate.currentTime advances to this).
 	time core.LogicalTime
 	// clearPending is true when pendingNER should be cleared after the
-	// grant. NER / NMRA forced grants set this to false (keep pending);
-	// every other grant clears.
+	// grant. M38 GA: every fired grant now clears — the field is kept
+	// so alternative GrantStrategy implementations (alt_*.go) can still
+	// model keep-pending policies.
 	clearPending bool
 }
 
@@ -149,41 +156,57 @@ type grantDecision struct {
 //   - requested    : the t parameter of the outstanding request.
 //   - lbts         : current LBTS over the regulating set.
 //   - solePending  : true when this is the only pending request in the
-//     federation (relevant only for NER/NMRA forced grant).
+//     federation. M38 GA: unused by the default policy (the forced-grant
+//     hatch it gated is retired); retained for GrantContext parity so
+//     alternative strategies can still consult it.
+//   - nextTSO      : earliest buffered TSO timestamp queued for the
+//     requester (asyncdelivery.go tsoBuffer). Meaningful iff hasTSO.
+//   - hasTSO       : whether any TSO message is queued for the requester.
 //
 // Returns a grantDecision; when fire is false the request stays pending
 // untouched.
-func decideGrant(mode AdvanceMode, currentTime, requested, lbts core.LogicalTime, solePending bool) grantDecision {
+func decideGrant(mode AdvanceMode, currentTime, requested, lbts core.LogicalTime, solePending bool, nextTSO core.LogicalTime, hasTSO bool) grantDecision {
+	_ = solePending // M38 GA: see docstring — kept for strategy-API parity.
 	rt := float64(requested)
 	ct := float64(currentTime)
 	lb := float64(lbts)
 
-	// Full grant predicate: strict for NER/TAR, inclusive for NMRA/TARA/FQR.
-	fullGrant := lb > rt
+	// §8.8/§8.9 — NER/NMRA grant target: min(requested, next queued TSO
+	// time). A queued message at-or-before currentTime is already
+	// releasable (it drains with any grant, releaseBufferedTSO) and
+	// cannot pull the target below the federate's present time.
+	target := rt
+	if mode.usesNextMessageTarget() && hasTSO {
+		if nt := float64(nextTSO); nt > ct && nt < rt {
+			target = nt
+		}
+	}
+
+	// Full grant predicate against the target: strict for NER/TAR,
+	// inclusive for NMRA/TARA/FQR. Strictness guarantees no further TSO
+	// message at exactly the grant time can arrive afterwards (§8.8:
+	// every message at the grant time is delivered before the grant);
+	// the Available variants accept same-time stragglers post-grant
+	// (§8.9/§8.11) and so allow the boundary.
+	fullGrant := lb > target
 	if mode.inclusiveLBTS() {
-		fullGrant = lb >= rt
+		fullGrant = lb >= target
 	}
 	if fullGrant {
-		return grantDecision{fire: true, time: requested, clearPending: true}
+		return grantDecision{fire: true, time: core.LogicalTime(target), clearPending: true}
 	}
 
-	// TAR family: emit incremental grant at LBTS whenever LBTS produces
-	// forward progress (lbts > currentTime). Clear pending — TAR's "one
-	// request → one grant" contract.
-	if mode.allowsIncrementalGrant() {
-		if lb > ct {
-			return grantDecision{fire: true, time: lbts, clearPending: true}
-		}
-		return grantDecision{}
+	// FQR: emit incremental grant at LBTS whenever LBTS produces
+	// forward progress (lbts > currentTime). Clear pending — "one
+	// request → one grant".
+	if mode.allowsIncrementalGrant() && lb > ct {
+		return grantDecision{fire: true, time: lbts, clearPending: true}
 	}
 
-	// NER / NMRA forced-grant escape hatch: only when this federate is
-	// the sole pending request in the federation AND LBTS is below
-	// requested. Forced grant lands at LBTS; pending stays so the
-	// duplicate-request check still fires until peers catch up.
-	if mode.allowsForcedGrant() && solePending && lb < rt && lb > ct {
-		return grantDecision{fire: true, time: lbts, clearPending: false}
-	}
+	// M38 GA — everything else HOLDS. §8.8 defines no interim grant for
+	// a pending next-message request; re-evaluation happens on TSO
+	// arrival (BufferTSO poke), LBTS raises, and resign/membership
+	// events.
 	return grantDecision{}
 }
 
@@ -266,6 +289,11 @@ type candidateGrant struct {
 	mode    AdvanceMode
 	current core.LogicalTime
 	req     core.LogicalTime
+	// nextTSO / hasTSO — M38 GA: earliest timestamp among the
+	// federate's buffered TSO events at snapshot time, feeding the
+	// §8.8/§8.9 next-message grant target in decideGrant.
+	nextTSO core.LogicalTime
+	hasTSO  bool
 }
 
 func sortCandidates(cs []candidateGrant) {

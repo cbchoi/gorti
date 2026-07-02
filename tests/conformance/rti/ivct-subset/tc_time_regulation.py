@@ -178,11 +178,10 @@ def test_tc010_ner_delivers_tso_before_grant(
     TSO reflect is delivered BEFORE its grant, never after.
 
     Hard assertions: TSO buffering (no delivery before the advance),
-    delivery-before-grant ordering, and the TSO timestamp on the reflect.
-    xfail: the §8.10 grant-lands-on-message-time refinement — gorti's
-    time.Manager decides NER grants purely from LBTS (advance.go
-    decideGrant has no TSO-queue time input), so the grant lands at LBTS
-    instead of the pending message time.
+    delivery-before-grant ordering, the TSO timestamp on the reflect,
+    and the §8.8/§8.10 grant-lands-on-message-time refinement (M38 GA:
+    decideGrant takes the earliest buffered TSO timestamp; the grant is
+    min(requested, next-TSO-time), no longer LBTS).
     """
     pub = join(rtid_url, federation_name, "pub")
     sub = join(rtid_url, federation_name, "sub")
@@ -222,13 +221,12 @@ def test_tc010_ner_delivers_tso_before_grant(
         assert reflect["timestamp"] == 5.0, (
             "§8.14: the delivered reflect must carry its TSO timestamp"
         )
-        # §8.10 — NER's grant should land ON the message time (t=5).
-        if got["time"] != 5.0:
-            pytest.xfail(
-                "gorti gap: NER grants at LBTS, not at the next TSO message "
-                "time — rti/internal/time/advance.go decideGrant has no "
-                f"TSO-queue time input (granted at {got['time']}, wanted 5.0)"
-            )
+        # §8.8/§8.10 — NER's grant lands ON the message time (t=5), not
+        # at LBTS (=11 here). M38 GA fixed decideGrant to take the
+        # next-TSO-message time.
+        assert got["time"] == 5.0, (
+            f"§8.8: NER must grant at the next TSO message time 5.0, got {got['time']}"
+        )
     finally:
         leave(sub)
         leave(pub)

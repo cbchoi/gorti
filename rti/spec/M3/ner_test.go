@@ -96,7 +96,10 @@ func TestSpec_M3_NER_SoleRegulator_GrantsImmediately(t *testing.T) {
 // from federate 1 to t=5 cannot be granted until federate 2 advances
 // past LBTS = min(t1+l1, t2+l2). Specifically: fed1 lookahead=1,
 // fed2 lookahead=2 (both at time 0 initially).
-//   - fed1 NER(5): LBTS = min(5+1, 0+2) = 2. Grant at 2 (not 5).
+//   - fed1 NER(5): LBTS = min(5+1, 0+2) = 2 < 5, no queued TSO → the
+//     request HOLDS with no grant (M38 GA — IEEE 1516.1-2010 §8.8
+//     defines no interim grant; the pre-M38 forced grant at LBTS is
+//     retired).
 //   - Then fed2 NER(5): LBTS = min(5+1, 5+2) = 6. Both grant at 5.
 //
 // Implements: FR-TM-2, FR-TM-3.
@@ -109,18 +112,26 @@ func TestSpec_M3_NER_TwoRegulators_GrantWaits(t *testing.T) {
 	_ = mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(1.0))
 	_ = mgr.EnableRegulation(ctx, "fed", 2, core.LogicalTime(2.0))
 
-	// fed1 requests advance to 5; LBTS = min(5+1, 0+2) = 2 → grant at 2
+	// fed1 requests advance to 5; LBTS = min(5+1, 0+2) = 2 → hold.
 	if err := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(5.0)); err != nil {
 		t.Fatalf("NER fed1: %v", err)
 	}
-	// fed2 has not yet NER'd; the grant for fed1 must be ≤ 2 (cannot exceed LBTS).
-	sent := outbox.SentTo("fed", 1)
-	if len(sent) == 0 {
-		t.Fatal("fed1 expected to receive a grant after first NER")
+	// fed2 has not yet NER'd: fed1's request must WAIT (§8.8 — no
+	// grant below the requested time without a queued TSO message).
+	if sent := outbox.SentTo("fed", 1); len(sent) != 0 {
+		t.Fatalf("fed1 received %v before LBTS covered its request, want none", sent)
 	}
-	// (Specific grant time assertion deferred — implementation may grant
-	// at LBTS or hold for fed2; both are valid HLA behaviors. The spec
-	// asserts only "a grant was issued.")
+	// fed2's own NER(5) promotes its floor to 5+2=7 → LBTS = 6 > 5:
+	// both pending requests complete at exactly t=5.
+	if err := mgr.NextMessageRequest(ctx, "fed", 2, core.LogicalTime(5.0)); err != nil {
+		t.Fatalf("NER fed2: %v", err)
+	}
+	for _, h := range []core.FederateHandle{1, 2} {
+		sent := outbox.SentTo("fed", h)
+		if len(sent) != 1 {
+			t.Fatalf("fed%d grants = %v, want exactly one at 5", h, sent)
+		}
+	}
 }
 
 // TestSpec_M3_NER_DuplicateRequestRejected: a federate cannot have two

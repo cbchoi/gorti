@@ -74,7 +74,9 @@ type timedStats struct {
 	// TicksCompleted is the per-federate NER count actually issued.
 	TicksCompleted int
 	// GrantsObserved is the count of TimeAdvanceGrant events delivered
-	// through the outbox. May be > Ticks when forced grants occur.
+	// through the outbox. May be < Ticks when requests are still held
+	// pending at shutdown (M38 GA — §8.8: a blocked NER emits no
+	// interim grant).
 	GrantsObserved int
 	// HaltsObserved counts FederationHalted events delivered through
 	// the outbox.
@@ -182,9 +184,9 @@ func runTimedNERLoop(ctx context.Context, rt *timedRuntime, cfg timedConfig, cur
 }
 
 // runTimedNERTick performs one round-robin NER pass over every
-// (non-skipped) federate. ErrDuplicateNER is swallowed (forced-grant
-// federates remain pending until peers catch up); any other error is
-// surfaced to the caller. Mutates currentTimes for federates whose
+// (non-skipped) federate. ErrDuplicateNER is swallowed (a blocked NER
+// stays pending until peers raise LBTS — M38 GA, §8.8); any other
+// error is surfaced to the caller. Mutates currentTimes for federates whose
 // NER was accepted.
 func runTimedNERTick(ctx context.Context, rt *timedRuntime, cfg timedConfig, currentTimes []core.LogicalTime, skipEnabled bool, tick int) error {
 	for i := range cfg.Lookaheads {
@@ -203,9 +205,9 @@ func runTimedNERTick(ctx context.Context, rt *timedRuntime, cfg timedConfig, cur
 			currentTimes[i] = target
 		case errors.Is(err, timepkg.ErrDuplicateNER):
 			// Federate has an outstanding pending NER from a
-			// previous tick (forced grant kept it pending);
-			// peers' future NER calls will eventually push LBTS
-			// up and the grant will arrive.
+			// previous tick (held below LBTS, §8.8); peers'
+			// future NER calls will eventually push LBTS up and
+			// the grant will arrive.
 		default:
 			return fmt.Errorf("timed: NER fed %d tick %d: %w", h, tick, err)
 		}
