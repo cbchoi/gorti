@@ -2,14 +2,14 @@ REG: CONNECT
 REG: JOIN federate=regulator
 REG: PUBLISH interaction=Tick
 REG: TIME_REGULATION_ENABLED time=0.000000
-REG: GRANT time=1.000000
 REG: SEND interaction=Tick seq=1 time=1
-REG: GRANT time=2.000000
+REG: GRANT time=1.000000
 REG: SEND interaction=Tick seq=2 time=2
-REG: GRANT time=3.000000
+REG: GRANT time=2.000000
 REG: SEND interaction=Tick seq=3 time=3
-REG: GRANT time=4.000000
+REG: GRANT time=3.000000
 REG: SEND interaction=Tick seq=4 time=4
-REG: GRANT time=5.000000
+REG: GRANT time=4.000000
 REG: SEND interaction=Tick seq=5 time=5
+REG: GRANT time=5.000000
 REG: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
