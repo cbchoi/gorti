@@ -117,6 +117,37 @@ std::string parseLocalSettings(std::wstring const& settings) {
   if (what.rfind("FederateNotExecutionMember:", 0) == 0)
     throw FederateNotExecutionMember(msg);
   if (what.rfind("NameNotFound:", 0) == 0) throw NameNotFound(msg);
+
+  // ===== M37 Agent EC-3 — detail-string sniffs =====
+  //
+  // The M17 client folds most server rejections into RTIinternalError with
+  // the gRPC status message as detail. The DLC fixtures expect the precise
+  // spec exception, so we sniff gorti's error strings here at the DLC
+  // boundary (the M17 client's throwFromStatus is EA/DA-owned). STOPGAP:
+  // these substrings are pinned to rti/internal/core/errors.go — see
+  // cppsdk/src/dlc/README.md for the contract. Order matters: the most
+  // specific phrasings match first.
+  auto contains = [&what](char const* needle) {
+    return what.find(needle) != std::string::npos;
+  };
+  // §5/§6 publication gates (errors.go: "object class not published by
+  // federate" / "interaction class not published").
+  if (contains("interaction class not published"))
+    throw InteractionClassNotPublished(msg);
+  if (contains("not published")) throw ObjectClassNotPublished(msg);
+  // §8 time gates. errors.go: "lookahead must be non-negative and finite"
+  // (bad enableTimeRegulation/modifyLookahead argument) → InvalidLookahead;
+  // "requested time is not greater than current logical time" (advance to
+  // the past) → LogicalTimeAlreadyPassed; "invalid logical time: TSO
+  // timestamp precedes current time plus lookahead" (and any other
+  // lookahead-floor phrasing) → InvalidLogicalTime.
+  if (contains("lookahead must be non-negative"))
+    throw InvalidLookahead(msg);
+  if (contains("requested time is not greater than current logical time"))
+    throw LogicalTimeAlreadyPassed(msg);
+  if (contains("invalid logical time") || contains("lookahead"))
+    throw InvalidLogicalTime(msg);
+
   // Every other case (including bare RTIinternalError) folds to the
   // spec-legal RTIinternalError catch-all.
   throw RTIinternalError(msg);
