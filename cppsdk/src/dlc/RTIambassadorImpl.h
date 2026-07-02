@@ -14,7 +14,10 @@
 #include <RTI/RTIambassador.h>
 
 #include <cstdint>
+#include <deque>
+#include <functional>
 #include <memory>
+#include <mutex>
 
 // M35 Agent BD — forward-decl of the callback bridge (full defn lives in
 // dlc/FederateAmbassadorBridge.h, which pulls in the M17 shim). Keeping
@@ -379,7 +382,36 @@ class DLCRTIambassadorImpl : public RTIambassador {
   RegionHandle decodeRegionHandle(
       VariableLengthData const& encodedValue) const override;
 
+  // ===== M37 Agent EC-4 — deferred synthesized-callback queue =====
+  //
+  // DLC-synthesized callbacks (§8.3/§8.6 regulation/constrained acks,
+  // §7.17->§7.18 query-ownership answers, §4.8->§4.9 federation-execution
+  // reports) used to fire INSIDE the triggering ambassador call. Async
+  // RTIs (Pitch) deliver them after the call returns, on the next
+  // evoke — 4 strict-order fixture residuals stemmed from the difference.
+  // Synthesis sites now enqueue; the queue drains at the top of
+  // evokeCallback (one entry) / evokeMultipleCallbacks (all entries),
+  // BEFORE M17 wire events, under a CallbackScope so FR-DLC-14
+  // re-entrancy detection still applies. Bridge-delivered (real wire)
+  // callbacks are NOT queued here — they flow through M17's own event
+  // queue. gorti's DLC layer has no HLA_IMMEDIATE pump thread (callbacks
+  // only ever reach the federate via evoke*), so the evoke-top drain
+  // covers every delivery path.
+  //
+  // Test seam: public so the runtime gtest can pin deferred-delivery
+  // semantics without a live wire (the real synthesis sites all require
+  // a connected M17 first). Not part of the spec surface.
+  void testEnqueueSynthesizedCallback(std::function<void()> cb);
+
  private:
+  // EC-4 internals. dispatch runs outside the lock, inside CallbackScope.
+  void enqueueSynthesized_(std::function<void()> cb);
+  bool drainOneSynthesized_();
+  std::size_t drainAllSynthesized_();
+
+  std::mutex synth_mu_;
+  std::deque<std::function<void()>> synth_queue_;
+
   // ===== M34 pImpl for M17 delegation =====
   //
   // Owns the M17 concrete rti1516e::RTIambassador via an opaque bridge so

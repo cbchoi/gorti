@@ -225,6 +225,42 @@ DLCRTIambassadorImpl::DLCRTIambassadorImpl()
     : m17_(std::make_unique<M17Bridge>()) {}
 DLCRTIambassadorImpl::~DLCRTIambassadorImpl() = default;
 
+// ===== M37 Agent EC-4 — deferred synthesized-callback queue =====
+//
+// See the header block comment for the design. Enqueue is cheap (mutex +
+// deque push); dispatch pops under the lock, then runs the callback OUTSIDE
+// the lock inside a CallbackScope so FR-DLC-14 re-entrancy detection fires
+// if the federate re-enters the ambassador from the synthesized callback.
+
+void DLCRTIambassadorImpl::enqueueSynthesized_(std::function<void()> cb) {
+  std::lock_guard<std::mutex> lk(synth_mu_);
+  synth_queue_.push_back(std::move(cb));
+}
+
+void DLCRTIambassadorImpl::testEnqueueSynthesizedCallback(
+    std::function<void()> cb) {
+  enqueueSynthesized_(std::move(cb));
+}
+
+bool DLCRTIambassadorImpl::drainOneSynthesized_() {
+  std::function<void()> cb;
+  {
+    std::lock_guard<std::mutex> lk(synth_mu_);
+    if (synth_queue_.empty()) return false;
+    cb = std::move(synth_queue_.front());
+    synth_queue_.pop_front();
+  }
+  gorti::dlc::CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  cb();
+  return true;
+}
+
+std::size_t DLCRTIambassadorImpl::drainAllSynthesized_() {
+  std::size_t n = 0;
+  while (drainOneSynthesized_()) ++n;
+  return n;
+}
+
 // ===== §4 Federation Management =====
 //
 // M34 Agents AA + AD — wstring-adapter shim over the M17 concrete
@@ -272,6 +308,12 @@ void DLCRTIambassadorImpl::disconnect() {
   callback_bridge_.reset();
   fed_amb_ = nullptr;
   ddm_default_space_ = 0;  // M36 CA-3 — re-resolve after a reconnect
+  // M37 EC-4 — drop undelivered synthesized callbacks; they captured the
+  // (now unbound) federate ambassador pointer.
+  {
+    std::lock_guard<std::mutex> lk(synth_mu_);
+    synth_queue_.clear();
+  }
 }
 
 // §4.5 overload 1 — single FOM module. Widens to the vector-form for
@@ -343,7 +385,11 @@ void DLCRTIambassadorImpl::listFederationExecutions() {
   for (auto const& n : names) {
     infos.emplace_back(s2ws(n), L"HLAfloat64Time");
   }
-  fed_amb_->reportFederationExecutions(infos);
+  // M37 EC-4 — deferred §4.9 report; delivered on the next evoke.
+  auto* fed = fed_amb_;
+  enqueueSynthesized_([fed, infos = std::move(infos)] {
+    fed->reportFederationExecutions(infos);
+  });
 }
 
 // §4.9 overload 1 — join with `federateType` implying `federateName`
@@ -1090,11 +1136,19 @@ void DLCRTIambassadorImpl::queryAttributeOwnership(
                                          rawAttributeHandle(theAttribute));
   });
   if (fed_amb_ == nullptr) return;
+  // M37 EC-2/EC-4 — the synthesized §7.18 answer delivers on the next
+  // evoke so the callback follows the call's return (Pitch ordering).
+  auto* fed = fed_amb_;
   if (q.owned && q.owner != 0) {
-    fed_amb_->informAttributeOwnership(theObject, theAttribute,
-                                       makeFederateHandleFromUint64(q.owner));
+    auto const owner = q.owner;
+    enqueueSynthesized_([fed, theObject, theAttribute, owner] {
+      fed->informAttributeOwnership(theObject, theAttribute,
+                                    makeFederateHandleFromUint64(owner));
+    });
   } else {
-    fed_amb_->attributeIsNotOwned(theObject, theAttribute);
+    enqueueSynthesized_([fed, theObject, theAttribute] {
+      fed->attributeIsNotOwned(theObject, theAttribute);
+    });
   }
 }
 
@@ -1192,8 +1246,13 @@ void DLCRTIambassadorImpl::enableTimeRegulation(
     federate_time = m17_->queryLogicalTime();
   });
   if (fed_amb_ != nullptr) {
-    HLAfloat64Time const t(federate_time);
-    fed_amb_->timeRegulationEnabled(t);
+    // M37 EC-4 — deliver the synthesized ack on the next evoke (Pitch
+    // delivers §8.3 after the call returns, not inside it).
+    auto* fed = fed_amb_;
+    enqueueSynthesized_([fed, federate_time] {
+      HLAfloat64Time const t(federate_time);
+      fed->timeRegulationEnabled(t);
+    });
   }
 }
 
@@ -1210,8 +1269,12 @@ void DLCRTIambassadorImpl::enableTimeConstrained() {
     federate_time = m17_->queryLogicalTime();
   });
   if (fed_amb_ != nullptr) {
-    HLAfloat64Time const t(federate_time);
-    fed_amb_->timeConstrainedEnabled(t);
+    // M37 EC-4 — deferred §8.6 ack; see enableTimeRegulation note.
+    auto* fed = fed_amb_;
+    enqueueSynthesized_([fed, federate_time] {
+      HLAfloat64Time const t(federate_time);
+      fed->timeConstrainedEnabled(t);
+    });
   }
 }
 
@@ -1901,6 +1964,10 @@ void DLCRTIambassadorImpl::disableInteractionRelevanceAdvisorySwitch() {}
 // No event queue in DLC M33 yet; returns false to signal "no more callbacks
 // pending". Federate can loop on this call safely.
 bool DLCRTIambassadorImpl::evokeCallback(double approximateMinimumTimeInSeconds) {
+  // M37 EC-4 — synthesized callbacks (queued by the §7.17/§8.2/§8.5/§4.8
+  // synthesis sites) deliver FIRST, one per evoke, matching Pitch's
+  // deliver-after-return ordering.
+  if (drainOneSynthesized_()) return true;
   // Delegate to M17's at-most-one drain (M17.22 semantics). §10.4-exempt
   // from the FR-DLC-14 re-entrancy gate (spec allows evoking from within
   // a callback) — unguarded form.
@@ -1915,12 +1982,16 @@ bool DLCRTIambassadorImpl::evokeCallback(double approximateMinimumTimeInSeconds)
 bool DLCRTIambassadorImpl::evokeMultipleCallbacks(
     double approximateMinimumTimeInSeconds,
     double approximateMaximumTimeInSeconds) {
+  // M37 EC-4 — deliver every queued synthesized callback before the wire
+  // events (see evokeCallback note).
+  auto const drained = drainAllSynthesized_();
   // Delegate to M17's drain-in-window (tickCallback alias). §10.4-exempt
   // from the re-entrancy gate — unguarded form.
-  return bridgeRUnguarded([&] {
+  bool const wire_fired = bridgeRUnguarded([&] {
     return m17_->evokeMultipleCallbacks(approximateMinimumTimeInSeconds,
                                         approximateMaximumTimeInSeconds);
   });
+  return wire_fired || drained > 0;
 }
 
 // §10.43-10.44 enable/disableCallbacks — M35 Agent BH: delegate to M17

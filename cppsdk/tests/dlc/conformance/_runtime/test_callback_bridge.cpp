@@ -10,6 +10,10 @@
 // conformance fixtures verify events instead of just link.
 
 #include "src/dlc/FederateAmbassadorBridge.h"
+// M37 Agent EC-4 — DLC ambassador impl for the deferred synthesized-callback
+// queue tests. Safe alongside the shim'd bridge header: this header only
+// sees the DLC dialect (<RTI/RTIambassador.h> + opaque M17Bridge fwd-decl).
+#include "src/dlc/RTIambassadorImpl.h"
 
 #include <RTI/Enums.h>
 #include <RTI/Handle.h>
@@ -1090,6 +1094,60 @@ TEST(BridgeReentrancy, TlsFlagSetDuringDispatchClearedAfter) {
                                 rti1516e_m17::ObjectClassHandle{2}, "car-1");
   EXPECT_TRUE(probe.flag_inside_callback);
   // RAII CallbackScope must restore the flag after dispatch returns.
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+}
+
+// ===== M37 Agent EC-4 — deferred synthesized-callback queue =====
+//
+// DLC-synthesized callbacks (regulation/constrained acks, query-ownership
+// answers, federation-execution reports) must NOT fire inside the
+// triggering call — they deliver at the next evoke, matching Pitch's
+// async ordering. The real synthesis sites all require a live wire, so
+// these tests drive the queue through the public test seam; the enqueue
+// path is byte-identical to what the synthesis sites use.
+
+TEST(DeferredSynthesis, CallbackHeldUntilEvokeCallback) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  bool fired = false;
+  amb.testEnqueueSynthesizedCallback([&] { fired = true; });
+  // Not delivered inside the triggering call.
+  EXPECT_FALSE(fired);
+  // evokeCallback drains exactly one pending synthesized callback and
+  // reports that a callback fired.
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_TRUE(fired);
+}
+
+TEST(DeferredSynthesis, EvokeCallbackDrainsOnePerCall) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  int fired = 0;
+  amb.testEnqueueSynthesizedCallback([&] { ++fired; });
+  amb.testEnqueueSynthesizedCallback([&] { ++fired; });
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_EQ(fired, 1);
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_EQ(fired, 2);
+}
+
+TEST(DeferredSynthesis, EvokeMultipleDrainsAllPendingInOrder) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  std::vector<int> order;
+  amb.testEnqueueSynthesizedCallback([&] { order.push_back(1); });
+  amb.testEnqueueSynthesizedCallback([&] { order.push_back(2); });
+  EXPECT_TRUE(amb.evokeMultipleCallbacks(0.0, 0.0));
+  EXPECT_EQ(order, (std::vector<int>{1, 2}));
+}
+
+TEST(DeferredSynthesis, DispatchRunsUnderCallbackScope) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  bool in_scope = false;
+  amb.testEnqueueSynthesizedCallback(
+      [&] { in_scope = gorti::dlc::tls_in_callback; });
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  // FR-DLC-14 — the synthesized dispatch marks the callback context so
+  // re-entering the ambassador from inside it still throws.
+  EXPECT_TRUE(in_scope);
   EXPECT_FALSE(gorti::dlc::tls_in_callback);
 }
 
