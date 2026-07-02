@@ -123,6 +123,9 @@ add_library(rti1516e_dlc STATIC
   src/dlc/HLAvariantRecord.cpp
   src/dlc/HLAopaqueData.cpp
   src/dlc/LogicalTime.cpp
+  # M39 Agent HB — Annex C prefix table for the rti-spec-exception
+  # channel (extracted from RTIambassadorImpl.cpp for unit-testability).
+  src/dlc/BridgeErrorTranslation.cpp
   src/dlc/RTIambassadorImpl.cpp
   src/dlc/RTIambassadorFactory.cpp
   # M34 (Agent AD) — subscriber-side callback dispatch. Bridges M17-shaped
