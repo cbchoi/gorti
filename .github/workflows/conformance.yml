@@ -1,7 +1,7 @@
 # DLC conformance gate — the M31-M37 compliance program's CI lane.
 #
 # Runs the full gate sequence from scripts/ci-gates.sh:
-#   stubs → go → cpp → lockfile → static → sweep
+#   stubs → go → cpp → lockfile → static → sweep → ivct
 #
 # The sweep re-runs every conformance fixture against a fresh rtid and
 # compares verdicts to cppsdk/tests/dlc/conformance/EXPECTED_VERDICTS.txt
@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   gates:
-    name: DLC gates (stubs → go → cpp → lockfile → static → sweep)
+    name: DLC gates (stubs → go → cpp → lockfile → static → sweep → ivct)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -66,10 +66,19 @@ jobs:
             -s build_type=Release \
             -s compiler.cppstd=17
 
+      # ivct stage deps — pysdk drives a live rtid over gRPC; the stubs
+      # stage already generated pysdk/rti1516e/_generated from proto/.
+      # Pins are loose on purpose: the generated stubs track whatever
+      # protobuf/grpcio the runner resolves.
+      - name: python deps for ivct subset (grpcio protobuf pytest)
+        run: |
+          pip install "grpcio>=1.60" "protobuf>=4.25" \
+                      "pytest>=8" "pytest-asyncio>=0.23"
+
       - name: gates
         run: |
           chmod +x scripts/ci-gates.sh
-          scripts/ci-gates.sh stubs go cpp lockfile static sweep
+          scripts/ci-gates.sh stubs go cpp lockfile static sweep ivct
 
       - name: upload sweep logs on failure
         if: failure()
