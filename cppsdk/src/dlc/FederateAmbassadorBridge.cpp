@@ -118,6 +118,11 @@ rti1516e::FederateHandle
 to_dlc_handle<rti1516e::FederateHandle>(std::uint64_t raw) {
   return rti1516e::FederateHandleFriend::build(raw);
 }
+template <>
+rti1516e::MessageRetractionHandle
+to_dlc_handle<rti1516e::MessageRetractionHandle>(std::uint64_t raw) {
+  return rti1516e::MessageRetractionHandleFriend::build(raw);
+}
 
 rti1516e::VariableLengthData to_dlc_vld(
     const std::vector<std::uint8_t>& bytes) {
@@ -154,6 +159,31 @@ rti1516e::AttributeHandleSet to_dlc_attr_set(
     out.insert(to_dlc_handle<rti1516e::AttributeHandle>(h.raw()));
   }
   return out;
+}
+
+// M37 Agent EC-1 — §4.15 failedToSyncSet conversion.
+rti1516e::FederateHandleSet to_dlc_fed_set(
+    const std::vector<rti1516e_m17::FederateHandle>& v) {
+  rti1516e::FederateHandleSet out;
+  for (const auto& h : v) {
+    out.insert(to_dlc_handle<rti1516e::FederateHandle>(h.raw()));
+  }
+  return out;
+}
+
+// M37 Agent EC-1 — §4.12 failure-reason enum mapping. See header comment
+// for the kUnspecified fold.
+rti1516e::SynchronizationPointFailureReason to_dlc_sync_fail(
+    rti1516e_m17::FederateAmbassador::SyncPointFailureReason r) {
+  using M17Reason = rti1516e_m17::FederateAmbassador::SyncPointFailureReason;
+  switch (r) {
+    case M17Reason::kSynchronizationSetMemberNotJoined:
+      return rti1516e::SYNCHRONIZATION_SET_MEMBER_NOT_JOINED;
+    case M17Reason::kSynchronizationPointLabelNotUnique:
+    case M17Reason::kUnspecified:
+      break;
+  }
+  return rti1516e::SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE;
 }
 
 }  // namespace conv
@@ -324,10 +354,106 @@ void DLCFederateAmbassadorBridge::federationSynchronized(
     const std::string& label) {
   if (!dlc_fed_) return;
   CallbackScope scope;  // FR-DLC-14 — mark the callback context
-  // §4.15 DLC callback: (label, failedToSyncSet). M17 carries no such set;
-  // pass empty.
+  // §4.15 DLC callback: (label, failedToSyncSet). The legacy 1-arg M17
+  // slot carries no such set; pass empty.
   rti1516e::FederateHandleSet empty;
   dlc_fed_->federationSynchronized(conv::s2ws(label), empty);
+}
+
+// ===== M37 Agent EC-1 — new M17 slot converters =====
+
+void DLCFederateAmbassadorBridge::federationSynchronized(
+    const std::string& label,
+    const std::vector<rti1516e_m17::FederateHandle>& failed_to_sync) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  // §4.15 with the REAL failed-to-sync set (divergence catalogue §4.15
+  // failedToSyncSet parameter; M37 Agent EA wire).
+  dlc_fed_->federationSynchronized(conv::s2ws(label),
+                                   conv::to_dlc_fed_set(failed_to_sync));
+}
+
+void DLCFederateAmbassadorBridge::synchronizationPointRegistrationSucceeded(
+    const std::string& label) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->synchronizationPointRegistrationSucceeded(conv::s2ws(label));
+}
+
+void DLCFederateAmbassadorBridge::synchronizationPointRegistrationFailed(
+    const std::string& label, SyncPointFailureReason reason) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->synchronizationPointRegistrationFailed(
+      conv::s2ws(label), conv::to_dlc_sync_fail(reason));
+}
+
+void DLCFederateAmbassadorBridge::startRegistrationForObjectClass(
+    rti1516e_m17::ObjectClassHandle object_class) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->startRegistrationForObjectClass(
+      conv::to_dlc_handle<rti1516e::ObjectClassHandle>(object_class.raw()));
+}
+
+void DLCFederateAmbassadorBridge::stopRegistrationForObjectClass(
+    rti1516e_m17::ObjectClassHandle object_class) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->stopRegistrationForObjectClass(
+      conv::to_dlc_handle<rti1516e::ObjectClassHandle>(object_class.raw()));
+}
+
+void DLCFederateAmbassadorBridge::turnInteractionsOn(
+    rti1516e_m17::InteractionClassHandle interaction_class) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->turnInteractionsOn(
+      conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
+          interaction_class.raw()));
+}
+
+void DLCFederateAmbassadorBridge::turnInteractionsOff(
+    rti1516e_m17::InteractionClassHandle interaction_class) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->turnInteractionsOff(
+      conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
+          interaction_class.raw()));
+}
+
+void DLCFederateAmbassadorBridge::attributesInScope(
+    rti1516e_m17::ObjectInstanceHandle object,
+    const rti1516e_m17::AttributeHandleSet& attributes) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->attributesInScope(
+      conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
+      conv::to_dlc_attr_set(attributes));
+}
+
+void DLCFederateAmbassadorBridge::attributesOutOfScope(
+    rti1516e_m17::ObjectInstanceHandle object,
+    const rti1516e_m17::AttributeHandleSet& attributes) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->attributesOutOfScope(
+      conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
+      conv::to_dlc_attr_set(attributes));
+}
+
+void DLCFederateAmbassadorBridge::requestRetraction(
+    rti1516e_m17::FederateHandle /*sender*/,
+    rti1516e_m17::MessageRetractionHandle retraction_handle) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  // §8.22 DLC callback carries only the retraction handle; the M17 sender
+  // FederateHandle is dropped (DLC signature divergence). M17's
+  // MessageRetractionHandle is a bare uint64 — widen to the DLC typed
+  // handle.
+  dlc_fed_->requestRetraction(
+      conv::to_dlc_handle<rti1516e::MessageRetractionHandle>(
+          retraction_handle));
 }
 
 void DLCFederateAmbassadorBridge::requestAttributeOwnershipAssumption(
@@ -366,6 +492,30 @@ void DLCFederateAmbassadorBridge::requestDivestitureConfirmation(
       conv::to_dlc_attr_set(attributes));
 }
 
+void DLCFederateAmbassadorBridge::attributeOwnershipUnavailable(
+    rti1516e_m17::ObjectInstanceHandle object,
+    const rti1516e_m17::AttributeHandleSet& attributes) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  // §7.10 — real wire delivery (M37 Agent EA emits on the if_available
+  // path); replaces CA's client-side synthesis.
+  dlc_fed_->attributeOwnershipUnavailable(
+      conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
+      conv::to_dlc_attr_set(attributes));
+}
+
+void DLCFederateAmbassadorBridge::requestAttributeOwnershipRelease(
+    rti1516e_m17::ObjectInstanceHandle object,
+    const rti1516e_m17::AttributeHandleSet& attributes,
+    const rti1516e_m17::VariableLengthData& tag) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->requestAttributeOwnershipRelease(
+      conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
+      conv::to_dlc_attr_set(attributes),
+      conv::to_dlc_vld(tag));
+}
+
 void DLCFederateAmbassadorBridge::initiateFederateSave(
     const std::string& label,
     std::optional<double> save_time) {
@@ -400,12 +550,47 @@ void DLCFederateAmbassadorBridge::initiateFederateRestore(
     rti1516e_m17::FederateHandle federate_handle) {
   if (!dlc_fed_) return;
   CallbackScope scope;  // FR-DLC-14 — mark the callback context
-  // §4.27 DLC callback: (label, federateName, handle). M17 does not carry a
-  // name; forward empty.
+  // §4.27 DLC callback: (label, federateName, handle). The legacy 2-arg
+  // M17 slot does not carry a name; forward empty.
   std::wstring empty_name;
   dlc_fed_->initiateFederateRestore(
       conv::s2ws(label), empty_name,
       conv::to_dlc_handle<rti1516e::FederateHandle>(federate_handle.raw()));
+}
+
+void DLCFederateAmbassadorBridge::initiateFederateRestore(
+    const std::string& label,
+    const std::string& federate_name,
+    rti1516e_m17::FederateHandle federate_handle) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  // §4.26 — 3-arg M17 slot (M37 Agent EA wire): the save-time federate
+  // name forwards for real. M37 Agent EC-1.
+  dlc_fed_->initiateFederateRestore(
+      conv::s2ws(label), conv::s2ws(federate_name),
+      conv::to_dlc_handle<rti1516e::FederateHandle>(federate_handle.raw()));
+}
+
+void DLCFederateAmbassadorBridge::requestFederationRestoreSucceeded(
+    const std::string& label) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->requestFederationRestoreSucceeded(conv::s2ws(label));
+}
+
+void DLCFederateAmbassadorBridge::requestFederationRestoreFailed(
+    const std::string& label, const std::string& /*reason*/) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  // §4.25 — the DLC signature carries no reason string; M17's
+  // human-readable rejection cause is dropped (documented divergence).
+  dlc_fed_->requestFederationRestoreFailed(conv::s2ws(label));
+}
+
+void DLCFederateAmbassadorBridge::federationRestoreBegun() {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->federationRestoreBegun();
 }
 
 void DLCFederateAmbassadorBridge::federationRestored(
