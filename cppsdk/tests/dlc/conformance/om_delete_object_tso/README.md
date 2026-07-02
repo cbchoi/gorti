@@ -79,3 +79,19 @@ Fixture side is ready: all callback-wait loops use the §10.42
 evoke-drain pattern, the subscriber gates its TAR on DISCOVER (so the
 grant cannot race the TSO delete) and drains until both REMOVE_TSO and
 the grant land.
+
+### Update — after merging parity-CA §7/§8/§9 wire-through
+
+Re-verdict: PARTIAL 15/16 (publisher 8/8 byte-identical, subscriber
+7/8). The §8 time surface now works end-to-end through DLC
+(TIME_REGULATION_ENABLED / TIME_CONSTRAINED_ENABLED / both grants all
+captured). Sole missing event:
+
+- `SUB: REMOVE_TSO handle=<H> sentOrder=TIMESTAMP time=10.000000 receivedOrder=TIMESTAMP`
+
+because DLC `deleteObjectInstance` (TSO overload) is still a silent
+client-side no-op — the delete never reaches the wire (the publisher's
+DELETE_TSO line matches the golden because the no-op raises nothing).
+Remaining impl: DLC deleteObjectInstance wire-through + M17
+FederateAmbassador removeObjectInstance declaration + bridge converter
+(server already emits remove=12, rti/internal/object/delete.go).

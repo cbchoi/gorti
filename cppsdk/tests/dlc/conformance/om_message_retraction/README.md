@@ -91,3 +91,18 @@ Even once §8 is wired, retraction remains partial in gorti (M23
 
 Fixture side is ready: callback-wait loops and the spurious-RECEIVE
 window use the §10.42 evoke-drain pattern.
+
+### Update — after merging parity-CA §7/§8/§9 wire-through
+
+Re-verdict: PARTIAL 14/15 (publisher 8/8 byte-identical, subscriber
+6/7). §8 time + §8.21 retract now flow through DLC; the retraction
+suppressed the buffered TSO Honk (no spurious RECEIVE — the golden's
+suppress semantics hold). Sole missing event:
+
+- `SUB: REQUEST_RETRACTION handle=<H>`
+
+because §8.22 requestRetraction is never emitted by the server (no
+FederateEvent proto slot, no Go emitter) and is absent from the M17
+FederateAmbassador — gorti retraction remains M23 "record-only":
+buffered-message drop works, delivered-message retraction notification
+does not exist.
