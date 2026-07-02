@@ -59,6 +59,12 @@ func (r *Registry) sendInteraction(
 		return core.ErrInteractionClassNotPublished
 	}
 
+	// M37 EB-3 — §8.1.2 outgoing-TSO timestamp validation, BEFORE the
+	// eventlog write-ahead so rejected sends never enter the replay log.
+	if err := r.validateOutgoingTSO(fed, producer, ts); err != nil {
+		return err
+	}
+
 	st := r.stateFor(fed)
 
 	if r.opts.EventLog != nil {

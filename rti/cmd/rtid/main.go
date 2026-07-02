@@ -1016,6 +1016,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// IEEE 1516.1 §8.16-8.17 default (async OFF) observable
 		// cross-process.
 		TSOGate: timeMgr,
+		// M37 EB-3 — outgoing-TSO timestamp validation (§8.1.2):
+		// regulating senders may not stamp TSO messages below
+		// currentTime + lookahead. The time manager satisfies
+		// object.OutgoingTSOValidator directly.
+		TSOValidator: timeMgr,
 	})
 	if err != nil {
 		return nil, err

@@ -57,6 +57,15 @@ func (r *Registry) Delete(
 		return core.ErrObjectNotOwned
 	}
 
+	// M37 EB-3 — §8.1.2 outgoing-TSO timestamp validation (a TSO
+	// delete is a timestamped message like any other), BEFORE the
+	// eventlog write-ahead so rejected deletes never enter the replay
+	// log and the instance survives.
+	if err := r.validateOutgoingTSO(fed, deleter, ts); err != nil {
+		st.mu.Unlock()
+		return err
+	}
+
 	// (a) Eventlog write-ahead.
 	if r.opts.EventLog != nil {
 		ev := newObjectDeletedEvent(obj, ts, r.opts.Clock.Now().UnixNano())

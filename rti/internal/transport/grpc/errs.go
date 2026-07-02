@@ -97,6 +97,8 @@ func errToStatus(err error) error {
 		errors.Is(err, core.ErrObjectHandleInvalid),
 		errors.Is(err, core.ErrTimeInvalidLookahead),
 		errors.Is(err, core.ErrTimeRequestInPast),
+		errors.Is(err, core.ErrTimeInvalidLogicalTime), // M37 EB-3: same rationale as ErrTimeRequestInPast — the sender controls the timestamp
+
 		errors.Is(err, core.ErrTransportTypeUnspecified), // M23
 		errors.Is(err, core.ErrResignActionUnsupported),  // M24
 		errors.Is(err, core.ErrEncInsufficientBytes),
