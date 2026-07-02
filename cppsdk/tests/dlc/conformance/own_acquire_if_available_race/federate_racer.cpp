@@ -93,9 +93,10 @@ int main(int argc, char** argv) {
     amb->publishObjectClassAttributes(vehicle, attrs);
     amb->subscribeObjectClassAttributes(vehicle, attrs, true, L"");
 
-    // Wait to discover the carrier's object.
+    // Wait to discover the carrier's object (evoke-drain: gorti M17
+    // delivers callbacks on the evoking thread).
     for (int i = 0; i < 200 && !fed.has_object_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(25));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     // §7.9 — race: both bob and carol fire this simultaneously. Per
@@ -108,9 +109,10 @@ int main(int argc, char** argv) {
     std::cout << upper << ": ACQUIRE_IF_AVAILABLE attrs=[Position]"
               << std::endl;
 
-    // Wait for either §7.7 or §7.10.
-    for (int i = 0; i < 200 && !(fed.won_.load() || fed.lost_.load()); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    // Wait for either §7.7 or §7.10 (evoke-drain; the win arrives as
+    // an OwnershipAcquired stream event, the loss is synthesized).
+    for (int i = 0; i < 100 && !(fed.won_.load() || fed.lost_.load()); ++i) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

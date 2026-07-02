@@ -50,6 +50,17 @@ int main() {
     const auto obj = amb->registerObjectInstance(vehicle, L"car-race");
     std::cout << "CARRIER: REGISTER name=car-race handle=<H>" << std::endl;
 
+    // §7.2 unconditionalAttributeOwnershipDivestiture — Position must
+    // be UNOWNED for §7.9 acquireIfAvailable to have a winner at all:
+    // acquisitionIfAvailable only ever acquires unowned attributes and
+    // never solicits release from a current owner. The M31 fixture had
+    // the carrier hold Position, under which NO compliant RTI could
+    // deliver the golden's §7.7 win to either racer (parity-CD fix;
+    // goldens updated, see README).
+    amb->unconditionalAttributeOwnershipDivestiture(obj, attrs);
+    std::cout << "CARRIER: UNCONDITIONAL_DIVEST attrs=[Position]"
+              << std::endl;
+
     // Hold long enough for bob + carol to race.
     std::this_thread::sleep_for(std::chrono::seconds(3));
 
