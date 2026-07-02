@@ -66,9 +66,14 @@ int main() {
     std::cout << "PUB: JOIN" << std::endl;
 
     rti1516e::HLAfloat64Interval lookahead(1.0);
+    // Callback-wait loops drain via §10.42 evokeMultipleCallbacks —
+    // legal under HLA_IMMEDIATE on both RTIs (Pitch delivers on
+    // background threads and the evoke is a harmless yield; gorti M17
+    // buffers events and drains them on the evoking thread). No
+    // canonical lines emitted.
     amb->enableTimeRegulation(lookahead);
     for (int i = 0; i < 100 && !fed.regulation_enabled_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     const auto honk = amb->getInteractionClassHandle(L"HLAinteractionRoot.Honk");
@@ -99,7 +104,7 @@ int main() {
     rti1516e::HLAfloat64Time t15(15.0);
     amb->timeAdvanceRequest(t15);
     for (int i = 0; i < 100 && !fed.granted_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

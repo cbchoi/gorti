@@ -1,2 +1,5 @@
 PUB: CONNECT
 PUB: JOIN federate=publisher
+PUB: PUBLISH class=Vehicle attributes=[Position]
+PUB: ADVISORY_SWITCH=ObjectClassRelevance
+PUB: RESIGN

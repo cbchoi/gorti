@@ -40,3 +40,29 @@ Per TASK-362 traceability lint:
 ## M31 status
 
 RED. Goldens are `TBD-pitch-capture` until Agent E TASK-363 clears.
+
+## gorti parity status (M35, parity-CC)
+
+Publisher PARTIAL 5/6, subscriber FULL 5/5. Captured run:
+`gorti-captured.{publisher,subscriber}.log`.
+
+Missing event (exactly one): `PUB: START_REGISTRATION class=Vehicle`.
+
+gorti never fires §5.10 startRegistrationForObjectClass: there is no
+FederateEvent oneof slot for it (proto/rti/v1/stream.proto) and no Go
+emitter, and the callback is not declared on the M17 Cut-1
+FederateAmbassador, so the DLC bridge has nothing to convert
+(catalogue row 4.16). Consequently the fixture's core assertion —
+START_REGISTRATION fires EXACTLY ONCE, only on the active=true
+subscribe and not on the passive one — is unobservable: the `active`
+flag itself is accepted-but-ignored in the DLC layer
+(RTIambassadorImpl.cpp, documented M34-AC divergence, catalogue row
+11.9), so gorti cannot express passive-subscribe semantics either.
+
+Missing impl: (1) server-side ObjectClassRelevance advisory emission
+(StartRegistrationForObjectClass/StopRegistrationForObjectClass proto
+events + registry publication/subscription cross-check), (2) passive
+flag plumbing, (3) bridge conversion.
+
+Publisher wait loop uses the §10.42 evoke-drain pattern so the event
+will be captured as soon as the impl lands.

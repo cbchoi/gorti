@@ -81,20 +81,32 @@ int main() {
     std::cout << "PUB: REGISTER name=car-cls handle=<H>" << std::endl;
 
     // Wait for the provideAttributeValueUpdate callback.
+    // Drain via §10.42 evokeMultipleCallbacks — legal under HLA_IMMEDIATE
+    // on both RTIs (Pitch delivers on background threads and the evoke is
+    // a harmless yield; gorti M17 buffers events and drains them on the
+    // evoking thread). Emits no canonical lines, so goldens are unaffected.
     for (int i = 0; i < 300 && !fed.provide_requested_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
-    // Respond with current attribute values.
-    rti1516e::HLAfloat64BE p(11.0);
-    rti1516e::HLAfloat64BE v(22.0);
-    rti1516e::AttributeHandleValueMap vals;
-    vals[pos] = p.encode();
-    vals[vel] = v.encode();
-    amb->updateAttributeValues(fed.object_, vals,
-                               rti1516e::VariableLengthData());
-    std::cout << "PUB: UPDATE name=car-cls Position=11.000000 Velocity=22.000000"
-              << std::endl;
+    // Respond with current attribute values — but only if the provide
+    // callback actually arrived (the UPDATE is the §6.20 *response*; a
+    // conforming RTI always delivers the provide, so this branch always
+    // runs under Pitch. Under gorti M17 the provide never arrives —
+    // catalogue row 4.24 — and fed.object_ would be an invalid handle,
+    // so skip the update and resign cleanly to keep the capture exact.)
+    if (fed.provide_requested_.load()) {
+      rti1516e::HLAfloat64BE p(11.0);
+      rti1516e::HLAfloat64BE v(22.0);
+      rti1516e::AttributeHandleValueMap vals;
+      vals[pos] = p.encode();
+      vals[vel] = v.encode();
+      amb->updateAttributeValues(fed.object_, vals,
+                                 rti1516e::VariableLengthData());
+      std::cout
+          << "PUB: UPDATE name=car-cls Position=11.000000 Velocity=22.000000"
+          << std::endl;
+    }
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 

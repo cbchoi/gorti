@@ -34,3 +34,24 @@ Per TASK-362 traceability lint:
 ## M31 status
 
 RED. Goldens are `TBD-pitch-capture` until Agent E TASK-363 clears.
+
+## gorti parity status (M35, parity-CC)
+
+PARTIAL 8/9 vs spec-derived golden. Captured run: `gorti-captured.federate.log`.
+
+Divergent event (exactly one):
+
+- golden: `FED: REGISTER_FAILED reason=ObjectClassNotPublished`
+- gorti:  `FED: REGISTER class=Vehicle name=car-phase2 handle=<H>`
+
+The DLC side is correct — `DLCRTIambassadorImpl::unpublishObjectClass`
+delegates whole-class unpublish as
+`m17_->unpublishObjectClassAttributes(class, {})` (empty set = whole
+class). The gap is server-side: gorti's `registerObjectInstance` does
+not enforce publication state, so it never raises
+`ObjectClassNotPublished` (§6.8 exception set) after the whole-class
+unpublish. Phase 1 (subset unpublish; register still legal because
+Velocity remains published) matches the golden.
+
+Missing impl: publication-state check in the gorti register path
+(rti/internal/object registry) raising ObjectClassNotPublished.

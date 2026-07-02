@@ -90,9 +90,13 @@ int main() {
     std::cout << "RESERVER: MULTI_RESERVE_REQUEST names=[car-X,car-Y,car-Z]"
               << std::endl;
 
-    // Wait for the failed callback.
+    // Wait for the failed callback. Drain via §10.42
+    // evokeMultipleCallbacks — legal under HLA_IMMEDIATE on both RTIs
+    // (Pitch delivers on background threads and the evoke is a harmless
+    // yield; gorti M17 buffers events and drains them on the evoking
+    // thread). Emits no canonical lines, so goldens are unaffected.
     for (int i = 0; i < 200 && !fed.failed_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

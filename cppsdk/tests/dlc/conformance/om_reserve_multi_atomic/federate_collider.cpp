@@ -62,12 +62,23 @@ int main() {
     amb->reserveObjectInstanceName(L"car-X");
     std::cout << "COLLIDER: RESERVE_REQUEST name=car-X" << std::endl;
 
+    // Drain via §10.42 evokeMultipleCallbacks — legal under HLA_IMMEDIATE
+    // on both RTIs (gorti M17 buffers events for caller-thread drain;
+    // under Pitch the evoke is a harmless yield). No canonical lines.
     for (int i = 0; i < 100 && !fed.reserved_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
-    // Hold so the multi-reserver hits the collision.
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    // Hold so the multi-reserver hits the collision. 6s covers the
+    // reserver's start stagger + its own post-join delay — resigning
+    // earlier would release car-X and let the batch wrongly succeed.
+    {
+      const auto deadline =
+          std::chrono::steady_clock::now() + std::chrono::seconds(6);
+      while (std::chrono::steady_clock::now() < deadline) {
+        amb->evokeMultipleCallbacks(0.05, 0.1);
+      }
+    }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
     std::cout << "COLLIDER: RESIGN" << std::endl;

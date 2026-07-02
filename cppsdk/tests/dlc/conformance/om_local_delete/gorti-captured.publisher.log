@@ -1,0 +1,5 @@
+PUB: CONNECT
+PUB: JOIN
+PUB: REGISTER name=car-local handle=<H>
+PUB: UPDATE name=car-local Position=99.000000
+PUB: RESIGN

@@ -72,20 +72,31 @@ int main() {
     const auto obj = amb->registerObjectInstance(vehicle, L"car-inst");
     std::cout << "PUB: REGISTER name=car-inst handle=<H>" << std::endl;
 
+    // Drain via §10.42 evokeMultipleCallbacks — legal under HLA_IMMEDIATE
+    // on both RTIs (Pitch delivers on background threads and the evoke is
+    // a harmless yield; gorti M17 buffers events and drains them on the
+    // evoking thread). Emits no canonical lines, so goldens are unaffected.
     for (int i = 0; i < 300 && !fed.provide_requested_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
-    rti1516e::HLAfloat64BE p(33.0);
-    rti1516e::HLAfloat64BE v(44.0);
-    rti1516e::AttributeHandleValueMap vals;
-    vals[pos] = p.encode();
-    vals[vel] = v.encode();
-    amb->updateAttributeValues(fed.object_, vals,
-                               rti1516e::VariableLengthData());
-    std::cout
-        << "PUB: UPDATE name=car-inst Position=33.000000 Velocity=44.000000"
-        << std::endl;
+    // Respond only if the provide callback actually arrived (the UPDATE
+    // is the §6.20 *response*; a conforming RTI always delivers the
+    // provide, so this branch always runs under Pitch. Under gorti M17
+    // the provide never arrives — catalogue row 4.24 — and fed.object_
+    // would be an invalid handle, so skip and resign cleanly.)
+    if (fed.provide_requested_.load()) {
+      rti1516e::HLAfloat64BE p(33.0);
+      rti1516e::HLAfloat64BE v(44.0);
+      rti1516e::AttributeHandleValueMap vals;
+      vals[pos] = p.encode();
+      vals[vel] = v.encode();
+      amb->updateAttributeValues(fed.object_, vals,
+                                 rti1516e::VariableLengthData());
+      std::cout
+          << "PUB: UPDATE name=car-inst Position=33.000000 Velocity=44.000000"
+          << std::endl;
+    }
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 

@@ -63,3 +63,46 @@ This is the single hardest behavioral test in §6/§8 surfaces:
 ## M31 status
 
 RED. Goldens are `TBD-pitch-capture` until Agent E's TASK-363 clears.
+
+## gorti parity status (M35, parity-CC)
+
+BLOCKED(DLC §8 time surface unwired) — capture stops at 2/8 (pub) and
+2/7 (sub): CONNECT, JOIN. Captured run:
+`gorti-captured.{publisher,subscriber}.log`.
+
+The very first §8 call aborts both federates:
+`enableTimeRegulation` / `enableTimeConstrained` throw from
+`DLCRTIambassadorImpl` ("M17 time surface not yet wired into
+DLCRTIambassadorImpl — M34 follow-up, 'M34 header pImpl'").
+
+Even once §8 is wired, retraction remains partial in gorti (M23
+"record-only"):
+- the DLC TSO `sendInteraction` overload returns a default-constructed
+  invalid MessageRetractionHandle (RTIambassadorImpl.cpp:811), so
+  `retract(handle)` from the DLC path is inert;
+- server-side Retract only drops matching buffered TSO events from
+  recipients' buffers (rti/internal/time/asyncdelivery.go:142-153) —
+  the golden's suppress-the-Honk behavior WOULD work once the DLC
+  returns real handles;
+- §8.22 requestRetraction is never emitted (no proto slot, no Go
+  emitter, no M17 FederateAmbassador declaration — catalogue MAJOR),
+  so `SUB: REQUEST_RETRACTION handle=<H>` is unreachable until that
+  lands end-to-end.
+
+Fixture side is ready: callback-wait loops and the spurious-RECEIVE
+window use the §10.42 evoke-drain pattern.
+
+### Update — after merging parity-CA §7/§8/§9 wire-through
+
+Re-verdict: PARTIAL 14/15 (publisher 8/8 byte-identical, subscriber
+6/7). §8 time + §8.21 retract now flow through DLC; the retraction
+suppressed the buffered TSO Honk (no spurious RECEIVE — the golden's
+suppress semantics hold). Sole missing event:
+
+- `SUB: REQUEST_RETRACTION handle=<H>`
+
+because §8.22 requestRetraction is never emitted by the server (no
+FederateEvent proto slot, no Go emitter) and is absent from the M17
+FederateAmbassador — gorti retraction remains M23 "record-only":
+buffered-message drop works, delivered-message retraction notification
+does not exist.

@@ -1,0 +1,4 @@
+PUB: CONNECT
+PUB: JOIN
+PUB: REGISTER name=car-inst handle=<H>
+PUB: RESIGN

@@ -35,6 +35,7 @@ class SubFed : public rti1516e::NullFederateAmbassador {
       std::wstring const& theObjectInstanceName) override {
     std::cout << "SUB: DISCOVER name=" << ws2s(theObjectInstanceName)
               << " handle=<H>" << std::endl;
+    discovered_.store(true);
   }
 
   // §8.6 timeConstrainedEnabled — async ack.
@@ -66,6 +67,7 @@ class SubFed : public rti1516e::NullFederateAmbassador {
     removed_.store(true);
   }
 
+  std::atomic<bool> discovered_{false};
   std::atomic<bool> constrained_enabled_{false};
   std::atomic<bool> granted_{false};
   std::atomic<bool> removed_{false};
@@ -95,7 +97,7 @@ int main() {
     // §8.5 enableTimeConstrained — async; wait for callback.
     amb->enableTimeConstrained();
     for (int i = 0; i < 100 && !fed.constrained_enabled_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     const auto vehicle = amb->getObjectClassHandle(L"HLAobjectRoot.Vehicle");
@@ -105,11 +107,23 @@ int main() {
     amb->subscribeObjectClassAttributes(vehicle, attrs, true, L"");
     std::cout << "SUB: SUBSCRIBE Vehicle Position" << std::endl;
 
-    // Drain — advance to t=15 to receive the TSO delete at t=10.
+    // Wait for DISCOVER before requesting the advance — the publisher
+    // must already be regulating when our TAR is queued, otherwise the
+    // grant can race ahead of the TSO delete. Drain via §10.42
+    // evokeMultipleCallbacks (legal + silent under both RTIs; gorti M17
+    // buffers events for caller-thread drain).
+    for (int i = 0; i < 200 && !fed.discovered_.load(); ++i) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
+    }
+
+    // Advance to t=15 to receive the TSO delete at t=10, then keep
+    // draining until the grant lands too — the golden captures both,
+    // REMOVE_TSO before TIME_ADVANCE_GRANT.
     rti1516e::HLAfloat64Time t15(15.0);
     amb->timeAdvanceRequest(t15);
-    for (int i = 0; i < 200 && !fed.removed_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    for (int i = 0;
+         i < 200 && !(fed.removed_.load() && fed.granted_.load()); ++i) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
