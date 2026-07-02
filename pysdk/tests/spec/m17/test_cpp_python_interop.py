@@ -90,7 +90,11 @@ class _RecordingAmbassador(Rti1516eAmbassador):
         self.interactions: list[tuple[str, dict[str, Any]]] = []
 
     def discoverObjectInstance(  # noqa: N802
-        self, object_handle: int, class_name: str, instance_name: str
+        self,
+        object_handle: int,
+        class_name: str,
+        instance_name: str,
+        object_class: int | None = None,  # M39 typed-handle parity (§6.9)
     ) -> None:
         self.discovered.append((object_handle, class_name, instance_name))
 
@@ -99,6 +103,7 @@ class _RecordingAmbassador(Rti1516eAmbassador):
         object_handle: int,
         values: dict[str, Any],
         timestamp: float | None,
+        attribute_values: dict[Any, bytes] | None = None,  # M39 (§6.11)
     ) -> None:
         self.reflections.append((object_handle, dict(values)))
 
