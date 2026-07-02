@@ -66,13 +66,16 @@ func (r *Registry) Delete(
 		}
 	}
 
-	// (b) Resolve subscribers BEFORE removing the instance — the
-	// existing path uses inst.cls + the subscribed-attribute set; for
-	// delete we send to every subscriber of the class regardless of
-	// attribute. We use a single fanoutAttrProbe value (handle 1) to
-	// match the Register-side discover semantics.
-	probe := []core.AttributeHandle{1}
-	subs := r.subscribersForReflect(ctx, fed, inst, probe)
+	// (b) Resolve subscribers BEFORE removing the instance. §6.16:
+	// removeObjectInstance goes to every federate that knows the
+	// instance — the same recipient set as the register-side §6.9
+	// discover fan-out. M37 EB-1: the previous hardcoded {1} probe
+	// missed subscribers of higher attribute handles (e.g. a Position
+	// subscriber on attrs {2,3} discovered the instance but never got
+	// the REMOVE). subscribersForDiscover probes the full
+	// fanoutAttrProbe range and is DDM-aware (region-scoped
+	// subscribers included), mirroring the register/update fan-out.
+	subs := r.subscribersForDiscover(ctx, fed, inst)
 
 	// (c) Take the snapshot we need for the wire frame, then drop the
 	// lock before fanout (matches fanoutReflect's pattern).
