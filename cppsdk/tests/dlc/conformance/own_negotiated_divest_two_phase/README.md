@@ -50,3 +50,44 @@ Per TASK-362 traceability lint:
 RED. Links fail with undefined reference to `rti1516e::*`. Goldens are
 `TBD-pitch-capture` placeholders until Agent E's TASK-363 (Pitch EULA
 review) clears.
+
+## gorti parity status (M35, parity-CD)
+
+Verdict: **SPEC-FULL 14/14** (alice 7/7, bob 7/7; goldens are
+spec-derived, Pitch capture still pending). Captured run:
+`gorti-captured.{alice,bob}.log`. Both federate wait loops use the
+evoke-drain pattern (gorti M17 delivers callbacks on the evoking
+thread).
+
+Every golden line matches, including both §7 callbacks: Bob receives
+§7.4 `requestAttributeOwnershipAssumption` (server `fanoutAssumption`
+to attribute subscribers on §7.3 divest) and Alice receives §7.5
+`requestDivestitureConfirmation`.
+
+### Semantic divergence: two-phase collapses to one-phase server-side
+
+Under IEEE 1516.1-2010, ownership must not transfer until the
+divester's §7.6 `confirmDivestiture`; only then does the RTI fire
+§7.7 on the acquirer. In gorti the transfer completes **eagerly
+inside the acquirer's Acquire RPC**
+(`rti/internal/ownership/manager.go` `completeTransfer`): it flips
+the owner record, then emits `ownership_divest_confirmed` (§7.5) to
+the old owner and `ownership_acquired` (§7.7) to the acquirer,
+back-to-back. There is no ConfirmDivestiture RPC at all
+(proto/rti/v1/ownership.proto has 8 RPCs; none is confirm), so the
+DLC `confirmDivestiture` is a documented no-op (parity-CA) — §7.5
+arrives as a fire-and-forget notification, not a request awaiting
+confirmation.
+
+Consequences invisible to this fixture's line set but real:
+- Bob's §7.7 can arrive **before** Alice calls (no-op)
+  `confirmDivestiture`; if Alice instead decided to cancel
+  (§7.9 cancelNegotiatedAttributeOwnershipDivestiture) after §7.5,
+  she could not — ownership is already gone.
+- A denial path (never confirming) cannot keep ownership with Alice
+  once Bob has called §7.8.
+
+Missing impl for spec-faithful two-phase: a ConfirmDivestiture RPC,
+server-side pending state that holds the transfer between the
+acquirer's §7.8 and the divester's §7.6, and completion emission only
+on confirm.

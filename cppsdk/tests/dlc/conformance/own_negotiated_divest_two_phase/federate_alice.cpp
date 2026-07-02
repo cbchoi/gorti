@@ -79,22 +79,27 @@ int main() {
     const auto obj = amb->registerObjectInstance(vehicle, L"car-divest");
     std::cout << "ALICE: REGISTER name=car-divest handle=<H>" << std::endl;
 
-    // Wait for Bob to join + subscribe.
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // Wait for Bob to join + subscribe (evoke-drain: gorti M17
+    // delivers callbacks on the evoking thread).
+    for (int i = 0; i < 20; ++i) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
+    }
 
     rti1516e::VariableLengthData tag;  // empty tag is fine here.
     amb->negotiatedAttributeOwnershipDivestiture(obj, attrs, tag);
     std::cout << "ALICE: NEGOTIATED_DIVEST attrs=[Position]" << std::endl;
 
-    // Wait for §7.5 divestiture notification.
+    // Wait for §7.5 divestiture notification (evoke-drain).
     for (int i = 0; i < 100 && !fed.divestiture_notified_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     amb->confirmDivestiture(obj, attrs, tag);
     std::cout << "ALICE: CONFIRM_DIVESTITURE" << std::endl;
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    for (int i = 0; i < 10; ++i) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
+    }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
     std::cout << "ALICE: RESIGN" << std::endl;
