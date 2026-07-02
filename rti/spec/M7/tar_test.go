@@ -62,15 +62,17 @@ func TestSpec_M7_TAR_SoleRegulator_GrantsImmediately(t *testing.T) {
 	}
 }
 
-// TestSpec_M7_TAR_TwoRegulators_GrantBoundedByLBTS: with two
-// regulators, TAR from federate 1 to t=5 is granted at LBTS = min(5+1,
-// 0+2) = 2, not at 5. Same shape as M3 NER spec test for two
-// regulators, but exercising TAR.
-//
-// SCAFFOLD.
+// TestSpec_M7_TAR_TwoRegulators_HeldUntilLBTSCoversRequest: M37 EB-5
+// re-pin. IEEE 1516.1-2010 §8.10: a timeAdvanceRequest(t) is granted
+// at EXACTLY t once LBTS covers it; while LBTS < t the request HOLDS
+// (the pre-M37 behavior granted incrementally at LBTS = min(5+1,
+// 0+2) = 2, silently parking the federate below its requested time —
+// early grants are §8.12 FQR's contract). Here federate 1's TAR(5)
+// holds against the idle peer's LBTS contribution 0+2=2, then fires
+// at 5 when the peer's own TAR(5) promotes its floor to 5+2=7.
 //
 // Implements: FR-TM-2, FR-TM-3.
-func TestSpec_M7_TAR_TwoRegulators_GrantBoundedByLBTS(t *testing.T) {
+func TestSpec_M7_TAR_TwoRegulators_HeldUntilLBTSCoversRequest(t *testing.T) {
 	mgr, outbox, _ := newTestTimeManager(t)
 	if mgr == nil {
 		t.Skip("time.Manager not yet wired")
@@ -86,8 +88,17 @@ func TestSpec_M7_TAR_TwoRegulators_GrantBoundedByLBTS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TAR: %v", err)
 	}
+	if sent := outbox.SentTo("fed", 1); len(sent) != 0 {
+		t.Fatalf("TAR with LBTS(2) below requested(5): got %d grants, want the request HELD (§8.10)", len(sent))
+	}
+
+	// Peer advances: its pending floor becomes 5+2=7 → LBTS covers 5 →
+	// federate 1's grant fires at exactly the requested time.
+	if err := mgr.TimeAdvanceRequest(ctx, "fed", 2, core.LogicalTime(5.0)); err != nil {
+		t.Fatalf("peer TAR: %v", err)
+	}
 	sent := outbox.SentTo("fed", 1)
 	if len(sent) == 0 {
-		t.Fatal("TAR with peer regulator: expected at least one grant (at LBTS); got 0")
+		t.Fatal("TAR after peer advance: expected the held grant to fire at the requested time; got 0")
 	}
 }

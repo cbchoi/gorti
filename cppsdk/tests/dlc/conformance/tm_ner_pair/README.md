@@ -87,3 +87,32 @@ lookahead-floor item already on the M36 Go backlog covers this.
   (= a regulating federate exists); without it the constrained side is
   granted instantly before the regulator enables regulation.
 - All wait loops use the §10.42 evoke-drain pattern.
+
+## gorti parity status (M37, agent-EB)
+
+Re-verdict: **SPEC-FULL 30/30** (regulator 15/15, constrained 15/15,
+both byte-identical to the goldens after canonicalization) with the
+strict per-step order — every `CON: RECV time=N` precedes its
+`CON: GRANT time=N`. Three changes landed:
+
+1. **Go, EB-2 (§8.14)** — `rti/internal/time/ner.go` `emitGrant`
+   drains buffered TSO BEFORE sending the grant, so the released
+   Tick@N always precedes the grant to N on the constrained stream.
+2. **Go, EB-3 (§8.1.2)** — server-side outgoing-TSO validation:
+   regulating senders must stamp ts >= logicalTime + lookahead
+   (boundary inclusive). This is the lookahead-floor item from the
+   M36 backlog; Pitch enforces the same rule.
+3. **Fixture amendment (spec-justified)** — the regulator now sends
+   Tick(t) BEFORE its NER(t), at the exact §8.1.2 boundary
+   (logicalTime t-1 + lookahead 1.0 = t). The pre-M37 order
+   (grant(t) → send at t) stamped every Tick BELOW the floor
+   (t < t+1.0): illegal per §8.1.2 and rejected by gorti since EB-3
+   (and by Pitch always — see the M35 note above). The send-first
+   order is the canonical HLA pattern and makes the lockstep
+   deterministic: Tick(t) is ingested and buffered server-side before
+   the regulator's NER(t) can raise LBTS past t, so the constrained
+   grant to t always releases Tick(t) first. `expected.regulator.log`
+   updated accordingly (SEND before GRANT per step); the constrained
+   golden is unchanged.
+
+Captured run: `gorti-captured.{regulator,constrained}.log`.

@@ -90,19 +90,32 @@ int main(int argc, char** argv) {
 
   auto seqParam = amb->getParameterHandle(ick, L"seq");
   for (int t = 1; t <= 5; ++t) {
-    // §8.8 NER to t.
+    // §6.12 send Tick(seq=t) with theTime=t (TSO) BEFORE the §8.8 NER.
+    //
+    // M37 EB fixture amendment (spec justification): §8.1.2 forbids a
+    // time-regulating federate from sending TSO with timestamp below
+    // logicalTime + lookahead. The pre-M37 order (NER(t) → grant(t) →
+    // send at t) stamped every Tick BELOW the floor (t < t + 1.0) — a
+    // strict RTI rejects it with InvalidLogicalTime, and gorti does so
+    // since the M37 outgoing-TSO validation landed. The canonical HLA
+    // pattern sends at the exact boundary first (logicalTime = t-1,
+    // lookahead = 1.0 → floor = t, timestamp = t is legal), THEN
+    // advances. This also makes the constrained peer's lockstep
+    // deterministic: Tick(t) is ingested (and buffered server-side)
+    // before this federate's NER(t) can raise LBTS past t, so the
+    // peer's grant to t always releases Tick(t) first (§8.14).
     rti1516e::HLAfloat64Time target(static_cast<double>(t));
-    double priorGrant = fed.lastGrant;
-    amb->nextMessageRequest(target);
-    while (fed.lastGrant == priorGrant) amb->evokeMultipleCallbacks(0.05, 0.1);
-
-    // §6.12 send Tick(seq=t) with theTime=t (TSO).
     rti1516e::HLAinteger32BE seq(t);
     rti1516e::ParameterHandleValueMap params;
     params[seqParam] = seq.encode();
     rti1516e::VariableLengthData tag;  // empty tag
     amb->sendInteraction(ick, params, tag, target);
     std::printf("REG: SEND interaction=Tick seq=%d time=%d\n", t, t);
+
+    // §8.8 NER to t.
+    double priorGrant = fed.lastGrant;
+    amb->nextMessageRequest(target);
+    while (fed.lastGrant == priorGrant) amb->evokeMultipleCallbacks(0.05, 0.1);
   }
 
   // §4.10 resign + destroy.

@@ -39,6 +39,11 @@ var (
 	// M22 — async-delivery toggle errors. Per IEEE 1516.1 §8.16-8.17.
 	ErrTimeAlreadyAsynchronous = errors.New("federate has already enabled asynchronous delivery")
 	ErrTimeNotAsynchronous     = errors.New("federate has not enabled asynchronous delivery")
+	// M37 EB-3 — outgoing-TSO timestamp validation (IEEE 1516.1-2010
+	// §8.1.2): a time-regulating sender may not stamp a TSO message
+	// with a timestamp below currentTime + lookahead. Maps to the HLA
+	// InvalidLogicalTime exception at the SDK surface.
+	ErrTimeInvalidLogicalTime = errors.New("invalid logical time: TSO timestamp precedes current time plus lookahead")
 
 	// M23 — object-management additions per IEEE 1516.1 §6.
 	ErrObjectNotOwned                    = errors.New("object not owned by federate (cannot delete or change transport)")

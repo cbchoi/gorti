@@ -49,6 +49,28 @@ type AttributeOrderLookup interface {
 	InteractionOrder(fed core.FederationName, cls core.InteractionClassHandle) (Order, bool)
 }
 
+// OutgoingTSOValidator validates a TSO send's timestamp against the
+// sender's time-regulation state (M37 EB-3 / IEEE 1516.1-2010 §8.1.2:
+// ts >= currentTime + lookahead for regulating senders; non-regulating
+// senders are exempt). time.Manager satisfies this contract directly;
+// tests supply a stub.
+//
+// Optional in object.Options: when nil, no validation runs (pre-M37
+// behavior preserved for fixtures without a time manager).
+type OutgoingTSOValidator interface {
+	ValidateOutgoingTSO(fed core.FederationName, sender core.FederateHandle, ts core.LogicalTime) error
+}
+
+// validateOutgoingTSO consults the optional TSOValidator for a TSO
+// send (non-nil ts). RO sends bypass. Shared by the update /
+// interaction / delete ingestion points.
+func (r *Registry) validateOutgoingTSO(fed core.FederationName, sender core.FederateHandle, ts *core.LogicalTime) error {
+	if ts == nil || r.opts.TSOValidator == nil {
+		return nil
+	}
+	return r.opts.TSOValidator.ValidateOutgoingTSO(fed, sender, *ts)
+}
+
 // updateAttributes implements core.ObjectRegistry.UpdateAttributes.
 //
 // Flow:
@@ -90,6 +112,12 @@ func (r *Registry) updateAttributes(
 
 	if !r.producerOwnsAllAttrs(ctx, fed, producer, inst.cls, attrs) {
 		return core.ErrAttributeNotOwned
+	}
+
+	// M37 EB-3 — §8.1.2 outgoing-TSO timestamp validation, BEFORE the
+	// eventlog write-ahead so rejected sends never enter the replay log.
+	if err := r.validateOutgoingTSO(fed, producer, ts); err != nil {
+		return err
 	}
 
 	updateAttrs := sortedAttrHandles(attrs)

@@ -57,6 +57,15 @@ func (r *Registry) Delete(
 		return core.ErrObjectNotOwned
 	}
 
+	// M37 EB-3 — §8.1.2 outgoing-TSO timestamp validation (a TSO
+	// delete is a timestamped message like any other), BEFORE the
+	// eventlog write-ahead so rejected deletes never enter the replay
+	// log and the instance survives.
+	if err := r.validateOutgoingTSO(fed, deleter, ts); err != nil {
+		st.mu.Unlock()
+		return err
+	}
+
 	// (a) Eventlog write-ahead.
 	if r.opts.EventLog != nil {
 		ev := newObjectDeletedEvent(obj, ts, r.opts.Clock.Now().UnixNano())
@@ -66,19 +75,29 @@ func (r *Registry) Delete(
 		}
 	}
 
-	// (b) Resolve subscribers BEFORE removing the instance — the
-	// existing path uses inst.cls + the subscribed-attribute set; for
-	// delete we send to every subscriber of the class regardless of
-	// attribute. We use a single fanoutAttrProbe value (handle 1) to
-	// match the Register-side discover semantics.
-	probe := []core.AttributeHandle{1}
-	subs := r.subscribersForReflect(ctx, fed, inst, probe)
+	// (b) Resolve subscribers BEFORE removing the instance. §6.16:
+	// removeObjectInstance goes to every federate that knows the
+	// instance — the same recipient set as the register-side §6.9
+	// discover fan-out. M37 EB-1: the previous hardcoded {1} probe
+	// missed subscribers of higher attribute handles (e.g. a Position
+	// subscriber on attrs {2,3} discovered the instance but never got
+	// the REMOVE). subscribersForDiscover probes the full
+	// fanoutAttrProbe range and is DDM-aware (region-scoped
+	// subscribers included), mirroring the register/update fan-out.
+	subs := r.subscribersForDiscover(ctx, fed, inst)
 
 	// (c) Take the snapshot we need for the wire frame, then drop the
 	// lock before fanout (matches fanoutReflect's pattern).
 	cls := inst.cls
 	delete(st.instances, obj)
 	delete(st.nameToHandle, inst.name)
+	// M37 EB-4 — drop the (subscriber, object) discover records for
+	// the deleted instance so the idempotency table doesn't leak.
+	for k := range st.discovered {
+		if k.obj == obj {
+			delete(st.discovered, k)
+		}
+	}
 	st.mu.Unlock()
 
 	// (d) Build the envelope. ts is *core.LogicalTime; map to

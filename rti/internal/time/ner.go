@@ -336,11 +336,22 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 }
 
 // emitGrant writes the TimeAdvanceGranted record to the event log
-// (write-ahead), sends TimeAdvanceGrant through the outbox, then
-// advances the federate's currentTime. When clearPending is true the
-// pendingNER flag is also cleared (full grant). When false the flag
-// stays — used for forced grants where the requested time was not
-// reached and the federate is still waiting on peers.
+// (write-ahead), releases buffered TSO events at-or-before t, sends
+// TimeAdvanceGrant through the outbox, then advances the federate's
+// currentTime. When clearPending is true the pendingNER flag is also
+// cleared (full grant). When false the flag stays — used for forced
+// grants where the requested time was not reached and the federate is
+// still waiting on peers.
+//
+// M37 EB-2 — §8.14 delivery order: the grant is the RTI's guarantee
+// that the federate ALREADY holds every TSO message with timestamp
+// <= t; buffered TSO must therefore drain BEFORE the grant reaches the
+// federate's stream. Every advance primitive (NER/NMRA/TAR/TARA/FQR),
+// forced grants, and the M36 membership-event grants funnel through
+// this single emission point (tryGrantPending → emitGrant), so the
+// ordering is corrected here once. Pre-M37 the grant was sent first —
+// a federate acting on the grant immediately could miss buffered TSO
+// at-or-before the grant time.
 //
 // Determinism: EventLog.Append happens-before Outbox.Send happens-
 // before state mutation. Replay reads from the log; see SRS NFR-DET-1.
@@ -353,13 +364,20 @@ func (m *Manager) emitGrant(ctx context.Context, fed core.FederationName, h core
 		}
 	}
 
-	// (b) Send the grant on the federate's outbound stream.
+	// (b) §8.14 — release any buffered TSO events with timestamp <= t
+	// BEFORE the grant. Federates with async delivery off accumulate
+	// events in the per-federate buffer; the advance grant is the
+	// release point, and the released events must precede it on the
+	// wire. Drain in FIFO order outside the lock.
+	m.releaseBufferedTSO(ctx, fed, h, t)
+
+	// (c) Send the grant on the federate's outbound stream.
 	grant := &TimeAdvanceGrant{Time: t}
 	if err := m.opts.Outbox.Send(ctx, fed, h, grant); err != nil {
 		return err
 	}
 
-	// (c) State mutation: advance currentTime; optionally clear pending.
+	// (d) State mutation: advance currentTime; optionally clear pending.
 	ext := extOf(m)
 	ext.mu.Lock()
 	ns := ext.getOrCreateLocked(fed, h)
@@ -371,12 +389,6 @@ func (m *Manager) emitGrant(ctx context.Context, fed core.FederationName, h core
 		ns.pendingSince = stdtime.Time{}
 	}
 	ext.mu.Unlock()
-
-	// (d) M22 — release any buffered TSO events with timestamp <= t.
-	// Federates with async delivery off accumulate events in the
-	// per-federate buffer; advance grants are the natural release
-	// point. Drain in FIFO order outside the lock.
-	m.releaseBufferedTSO(ctx, fed, h, t)
 	return nil
 }
 

@@ -122,3 +122,26 @@ violating the golden's REMOVE-before-GRANT (§8.14). Both fixes are
 one-liners on the Go side: widen the probe to `fanoutAttrProbe` (or the
 class's real attribute set) and move `releaseBufferedTSO` above the
 grant send.
+
+### Update — M37 agent-EB (FULL 16/16)
+
+Re-verdict: **SPEC-FULL 16/16** (publisher 8/8, subscriber 8/8, both
+byte-identical to the goldens after canonicalization). Three Go-side
+fixes landed:
+
+1. **EB-1** — `rti/internal/object/delete.go` resolves REMOVE
+   recipients via `subscribersForDiscover` (the §6.9 recipient set:
+   full `fanoutAttrProbe` range + DDM region subscribers) instead of
+   the hardcoded `{1}` probe, so the Vehicle.Position subscriber is in
+   the delete fan-out.
+2. **EB-2** — `rti/internal/time/ner.go` `emitGrant` releases buffered
+   TSO BEFORE sending the grant (§8.14), so `REMOVE_TSO` precedes
+   `TIME_ADVANCE_GRANT` in the subscriber stream.
+3. **EB-5** — `rti/internal/time/advance.go`: TAR grants at EXACTLY
+   the requested time (§8.10; incremental-grant-at-LBTS is now
+   FQR-only). Pre-M37 the subscriber's early TAR(15) — issued while
+   the publisher was still at t=0 (LBTS=1) — was burned with a full
+   grant at t=1, so the REMOVE buffered at 10 never released even
+   with fixes 1+2 in place.
+
+Captured run: `gorti-captured.{publisher,subscriber}.log`.

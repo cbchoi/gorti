@@ -1016,6 +1016,11 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// IEEE 1516.1 §8.16-8.17 default (async OFF) observable
 		// cross-process.
 		TSOGate: timeMgr,
+		// M37 EB-3 — outgoing-TSO timestamp validation (§8.1.2):
+		// regulating senders may not stamp TSO messages below
+		// currentTime + lookahead. The time manager satisfies
+		// object.OutgoingTSOValidator directly.
+		TSOValidator: timeMgr,
 	})
 	if err != nil {
 		return nil, err
@@ -1029,7 +1034,22 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	// object classes. Wired here, AFTER objReg exists (the MOM
 	// manager itself is constructed before the registry).
 	momMgr.EnableInstanceFanout(objReg, declMgr, foms)
-	declMgr.SetOnSubscribeObjectClass(momMgr.ObjectClassSubscribed)
+	// M37 EB-4 — chain the post-subscribe hook: the MOM manager sends
+	// retroactive Discover+Reflect for its own (internal-producer)
+	// instances; the object registry sends retroactive §6.9 Discover
+	// for federate-registered instances (subscribe-after-register).
+	// The registry path skips internal-producer instances so late MOM
+	// subscribers never see double discovers.
+	declMgr.SetOnSubscribeObjectClass(func(
+		ctx context.Context,
+		fed core.FederationName,
+		sub core.FederateHandle,
+		cls core.ObjectClassHandle,
+		attrs []core.AttributeHandle,
+	) {
+		momMgr.ObjectClassSubscribed(ctx, fed, sub, cls, attrs)
+		objReg.ObjectClassSubscribed(ctx, fed, sub, cls, attrs)
+	})
 
 	// M26 Phase F — bind the reservation-resign indirection now that
 	// objReg exists.

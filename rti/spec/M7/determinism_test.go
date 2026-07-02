@@ -157,25 +157,35 @@ func runM7DetScenario(sc m7DetScenario) ([]byte, error) {
 	// monotonically-increasing requested times.
 	target := make(map[core.FederateHandle]float64, sc.NumFeds)
 
+	// M37 EB-5: record every op call + its accept/reject outcome in the
+	// trace. Two reasons: (1) op outcomes (duplicate-request rejections
+	// etc.) are observable behavior and belong under the determinism
+	// hash; (2) with the §8.10 TAR/TARA hold-until-covered semantics a
+	// scenario's ops can legitimately end with every request held and
+	// zero emissions — the ops record keeps the trace non-empty so the
+	// broken-harness guard (empty body) stays meaningful.
+	var opsTrace []byte
 	for op := 0; op < sc.NumOps; op++ {
 		h := core.FederateHandle(1 + rng.Intn(sc.NumFeds))
-		fn := modes[rng.Intn(len(modes))]
+		mi := rng.Intn(len(modes))
+		fn := modes[mi]
 		la := float64(lookaheads[h])
 		bump := la + float64(1+rng.Intn(3)) // 1..3 above lookahead floor
 		target[h] += bump
 		t := core.LogicalTime(target[h])
-		// Best-effort: ignore ErrDuplicateNER (federate still pending
-		// from a prior op) and ErrTimeRequestInPast (defensive — the
-		// monotonic target tracker should already prevent this). These
-		// errors are part of scenario noise; the trace records only
-		// successful emissions.
-		_ = fn(ctx, fed, h, t)
+		// Best-effort: ErrDuplicateNER (federate still pending from a
+		// prior op) and ErrTimeRequestInPast (defensive — the monotonic
+		// target tracker should already prevent this) are scenario
+		// noise; their accept/reject disposition is recorded below.
+		err := fn(ctx, fed, h, t)
+		opsTrace = append(opsTrace, []byte(fmt.Sprintf("OP   h=%d mode=%d t=%s rejected=%t\n",
+			h, mi, formatFloat(float64(t)), err != nil))...)
 	}
 
-	// Materialise the outbox + event-log into a canonical, ordered
-	// byte trace. Each fixture preserves insertion order under its own
-	// mutex; we concatenate the two streams.
-	return canonicalTrace(out, log), nil
+	// Materialise the ops record + outbox + event-log into a canonical,
+	// ordered byte trace. Each fixture preserves insertion order under
+	// its own mutex; we concatenate the streams.
+	return append(opsTrace, canonicalTrace(out, log)...), nil
 }
 
 // canonicalTrace renders the outbox + event-log appends as a single

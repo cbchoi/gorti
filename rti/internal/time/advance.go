@@ -82,21 +82,45 @@ func (m AdvanceMode) allowsForcedGrant() bool {
 }
 
 // allowsIncrementalGrant reports whether the mode emits an immediate
-// grant at LBTS even when more than one federate is pending — the TAR
-// family's defining behaviour.
+// grant at LBTS even when LBTS has not reached the requested time.
 //
-// NER / NMRA do not: with multiple pending peers they wait for LBTS to
-// satisfy the strict-or-inclusive comparison against requestedTime.
+// M37 EB-5: FQR only. IEEE 1516.1-2010 §8.12 defines flushQueueRequest
+// as the early-grant primitive (grant may land below the requested
+// time after flushing the queue). TAR (§8.10) and TARA (§8.11) grants
+// are to EXACTLY the requested time — the RTI holds the request until
+// LBTS covers it, delivering intervening TSO messages meanwhile. The
+// pre-M37 "TAR family incremental grant at LBTS" burned a TAR(t) with
+// a full grant at LBTS < t (clearPending=true), so a constrained
+// federate waiting on a far-future TAR was silently parked below its
+// requested time and buffered TSO at higher timestamps never released
+// (om_delete_object_tso 15/16).
+//
+// NER / NMRA never do: with multiple pending peers they wait for LBTS
+// to satisfy the strict-or-inclusive comparison against requestedTime
+// (their sole-pending forced grant keeps pending — see
+// allowsForcedGrant).
 func (m AdvanceMode) allowsIncrementalGrant() bool {
-	return m == ModeTAR || m == ModeTARA || m == ModeFQR
+	return m == ModeFQR
 }
 
 // inclusiveLBTS reports whether the mode's full-grant predicate is
 // `LBTS >= requestedTime` (true) versus `LBTS > requestedTime` (false).
 // The "Available" variants and FQR (cut-1 simplification) use inclusive;
-// the strict variants use exclusive.
+// NER uses exclusive.
+//
+// M37 EB-5 — TAR moved from exclusive to inclusive when its
+// incremental-grant-at-LBTS path was removed (see
+// allowsIncrementalGrant): §8.10 grants must land at EXACTLY the
+// requested time, and the inclusive boundary preserves the
+// zero-lookahead peer lockstep (two la=0 federates both TAR(t) →
+// LBTS == t → both grant) that the incremental path used to service.
+// Cut-3 simplification: this collapses the TAR/TARA grant-boundary
+// distinction; distinguishing them properly needs open/closed LBTS
+// bounds (a message at exactly LBTS from a nonzero-lookahead pending
+// peer remains possible), tracked as a follow-up alongside the
+// zero-lookahead strictly-greater send rule.
 func (m AdvanceMode) inclusiveLBTS() bool {
-	return m == ModeNMRA || m == ModeTARA || m == ModeFQR
+	return m == ModeNMRA || m == ModeTAR || m == ModeTARA || m == ModeFQR
 }
 
 // grantDecision is the outcome of evaluating one pending request against
