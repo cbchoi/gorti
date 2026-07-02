@@ -367,6 +367,47 @@ class InvalidMessageRetractionHandle(RtiError):
     """Annex C — §8.21 unknown retraction handle."""
 
 
+# Names below complete coverage of the rtid's specExceptionTable
+# (rti/internal/transport/grpc/spec_exception.go, M39 agent HB) so the
+# metadata channel resolves every name the server can send.
+
+
+class IllegalName(FederationInvalidName):
+    """Annex C — a supplied name violates the naming rules."""
+
+
+class InvalidResignAction(RtiError):
+    """Annex C — §4.10 unknown resign-action designator."""
+
+
+class InvalidTransportationType(RtiError):
+    """Annex C — transportation type is not a defined designator."""
+
+
+class RegionInUseForUpdateOrSubscription(RtiError):
+    """Annex C — §9 region is bound to an active use."""
+
+
+class RegionDoesNotContainSpecifiedDimension(RtiError):
+    """Annex C — §9 dimension is not part of the region."""
+
+
+class SaveNotInProgress(RtiError):
+    """Annex C — no federation save is in progress."""
+
+
+class RestoreNotInProgress(RtiError):
+    """Annex C — no federation restore is in progress."""
+
+
+class FederateHasNotBegunSave(RtiError):
+    """Annex C — §4.13 save-complete before initiateFederateSave."""
+
+
+class CouldNotDecode(RtiError):
+    """Annex C — server-side decode of caller-supplied bytes failed."""
+
+
 # Lookup table from numeric error code -> exception class. Agent C uses this
 # in TASK-067 to map gRPC trailers to typed exceptions.
 ERROR_CODE_TO_EXCEPTION: dict[int, type[RtiError]] = {

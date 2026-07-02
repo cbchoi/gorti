@@ -170,6 +170,33 @@ def test_table_covers_every_rtierror_subclass_by_name() -> None:
         assert table[name].__name__ == name
 
 
+def test_table_covers_every_server_sent_name() -> None:
+    """Drift guard against agent HB's server half: every Annex C name the
+    rtid's specExceptionTable can attach (quoted strings in
+    rti/internal/transport/grpc/spec_exception.go) must resolve to a
+    pysdk class of the same name. Skipped when the Go tree is absent
+    (pysdk packaged standalone)."""
+    import re
+    from pathlib import Path
+
+    server_table = (
+        Path(__file__).resolve().parents[4]
+        / "rti" / "internal" / "transport" / "grpc" / "spec_exception.go"
+    )
+    if not server_table.is_file():
+        pytest.skip("Go server tree not present; cross-check n/a")
+    source = server_table.read_text(encoding="utf-8")
+    block = source[source.index("specExceptionTable = []") :]
+    block = block[: block.index("\n}\n")]
+    names = set(re.findall(r'"([A-Z][A-Za-z]+)"', block))
+    assert names, "failed to parse any names from specExceptionTable"
+    table = spec_exception_table()
+    missing = sorted(n for n in names if n not in table)
+    assert not missing, (
+        f"server can send rti-spec-exception values with no pysdk class: {missing}"
+    )
+
+
 def test_annex_c_names_subclass_legacy_gorti_names() -> None:
     """except-clauses against the pre-M39 gorti names keep catching."""
     assert issubclass(FederationExecutionAlreadyExists, FederationAlreadyExists)

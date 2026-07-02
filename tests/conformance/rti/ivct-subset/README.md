@@ -44,18 +44,30 @@ frozen at the time the M35+ implementer commits real bodies, from a
 fresh read of the current IVCT `TestSuites/` catalog. Renumbering is
 fine; the theme coverage is what matters.
 
-## Current status — IMPLEMENTED (M35 scaffold → real bodies)
+## Current status — ALL GREEN (M39)
 
-All 35 test bodies are implemented (no `pytest.skip` remains). Score:
-**30 pass + 5 xfail**, every xfail naming its exact gap:
+All 35 test bodies are implemented and pass as HARD assertions:
+**35 pass + 0 xfail**. The M35-era xfails closed in three waves:
 
-| File | Pass | xfail | xfail causes |
-|---|---|---|---|
-| `tc_create_join_resign.py` | 6 | 0 | — |
-| `tc_sync_point.py` | 5 | 1 | §4.12 registration ack: wire event `sync_registration_succeeded` (M37) dropped by pysdk `_transport._translate_event` |
-| `tc_object_pub_sub.py` | 9 | 0 | — |
-| `tc_time_regulation.py` | 5 | 1 | §8.10 NER grants at LBTS, not next-TSO-message time (`time/advance.go decideGrant` has no TSO-queue input) |
-| `tc_ownership_divest.py` | 5 | 3 | §7.10 `ownership_unavailable` + §7.11 `ownership_release_requested` wire events dropped by pysdk; §7.2 old-owner update accepted (gorti gates updates on class publication, not per-instance ownership) |
+- M38 GA: §8.10 NER grants at next-TSO-message time (was: at LBTS).
+- M38 GB: §7.2 old-owner update rejected AttributeNotOwned (per-instance
+  ownership gate).
+- M39 HA: pysdk translates the M37 wire events (§4.12 registration
+  acks, §7.10 `ownership_unavailable`, §7.11
+  `ownership_release_requested`) and exposes the M37 request surface
+  (`two_phase`, `if_available`, `confirmDivestiture`,
+  `synchronizationPointAchieved(successfully=)`,
+  create/destroyFederationExecution with typed Annex-C exceptions) —
+  the ownership flows now drive pysdk Layer 2 end-to-end instead of
+  raw stubs.
+
+| File | Pass | xfail |
+|---|---|---|
+| `tc_create_join_resign.py` | 6 | 0 |
+| `tc_sync_point.py` | 6 | 0 |
+| `tc_object_pub_sub.py` | 9 | 0 |
+| `tc_time_regulation.py` | 6 | 0 |
+| `tc_ownership_divest.py` | 8 | 0 |
 
 Infrastructure:
 
@@ -64,9 +76,10 @@ Infrastructure:
   relocated + admin disabled; per-test unique `federation_name`
   (≤32 bytes — gorti's eventlog rejects longer names).
 - `_driver.py` — `Recorder` ambassador (thread-safe callback capture +
-  deadline waits) and raw `rti.v1` stub helpers for wire semantics the
-  pysdk cannot express (create/destroy negative paths; the M37
-  `two_phase` / `if_available` ownership flags + `ConfirmDivestiture`).
+  deadline waits) and raw `rti.v1` FederationService stub helpers for
+  the wire-level negative-path assertions in tc_create_join_resign.py
+  (kept intentionally SDK-independent; the pysdk-level halves live in
+  `pysdk/tests/spec/m39/test_m39_layer2_api.py`).
 - `federation.fom.xml` — suite FOM. NB: pysdk's strict FOM parser
   rejects the four `*Advisory` switch elements that the cppsdk DLC
   fixtures carry; they are omitted here.
@@ -92,9 +105,6 @@ suite in `.github/workflows/conformance.yml`.
 
 ## Follow-on work
 
-- Close the pysdk `_translate_event` gaps (sync registration acks,
-  ownership unavailable / release-request) and flip the corresponding
-  xfails to hard assertions.
 - Expand toward the 30-test subset themes not yet covered (DDM, MOM,
   save/restore) per `RTI_CONFORMANCE_AUDIT.md` §6.
 - Track long-term Java-based IVCT integration as a separate, deferrable

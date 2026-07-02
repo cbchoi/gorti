@@ -15,15 +15,18 @@ Spec-anchored assertions (IEEE 1516.1-2010):
 
 pysdk surface notes (why some tests drive the raw wire):
 
-- Layer 1 (``connection._FederateContextManager``) rolls create+join into
-  one idempotent sequence and deliberately swallows ALREADY_EXISTS, and
-  Layer 2 has no ``destroyFederationExecution`` at all — so the §4.5
-  duplicate-create, §4.9 join-nonexistent, and §4.6 destroy assertions
-  are driven through the raw ``rti.v1.FederationService`` stubs
-  (sanctioned Layer-1/transport access, see _driver.py).
+- Since M39, Layer 2 exposes ``createFederationExecution`` (eager,
+  typed ``FederationExecutionAlreadyExists``) and
+  ``destroyFederationExecution`` (typed ``FederatesCurrentlyJoined`` /
+  ``FederationExecutionDoesNotExist``) — the pysdk-level halves of
+  §4.5/§4.6 are covered in pysdk/tests/spec/m39/test_m39_layer2_api.py.
+  The tests below intentionally stay on the raw
+  ``rti.v1.FederationService`` stubs to pin the WIRE-level contract
+  (gRPC status codes per rti/internal/transport/grpc/errs.go),
+  independent of any SDK translation layer. §4.9 join-nonexistent is
+  raw-only by necessity: pysdk Layer 1 always creates before joining.
 - gorti reports these failures as gRPC status codes (ALREADY_EXISTS /
-  NOT_FOUND / FAILED_PRECONDITION per rti/internal/transport/grpc/errs.go)
-  rather than 1516-named exceptions; each assertion notes the mapping.
+  NOT_FOUND / FAILED_PRECONDITION); each assertion notes the 1516 name.
 """
 
 from __future__ import annotations
