@@ -20,6 +20,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace rti1516e {
 
@@ -115,30 +116,56 @@ std::string parseLocalSettings(std::wstring const& settings) {
     throw FederateAlreadyExecutionMember(msg);
   if (what.rfind("FederateNotExecutionMember:", 0) == 0)
     throw FederateNotExecutionMember(msg);
+  if (what.rfind("NameNotFound:", 0) == 0) throw NameNotFound(msg);
   // Every other case (including bare RTIinternalError) folds to the
   // spec-legal RTIinternalError catch-all.
   throw RTIinternalError(msg);
 }
 
+// FR-DLC-14 (M36 Agent DA) — §10.4 re-entrancy gate. A federate must not
+// re-enter the ambassador from inside a callback; the RTI throws the
+// spec-mandated CallNotAllowedFromWithinCallback (catalogue 17.2). The
+// witness flag is set by gorti::dlc::CallbackScope around every
+// DLCFederateAmbassadorBridge dispatch. §10.4-exempt services
+// (evokeCallback / evokeMultipleCallbacks / enableCallbacks /
+// disableCallbacks) call the *Unguarded forms below.
+void requireNotInCallback() {
+  if (gorti::dlc::tls_in_callback) {
+    throw CallNotAllowedFromWithinCallback(
+        L"gorti DLC §10.4: RTI service invoked from within a federate "
+        L"callback (FR-DLC-14, catalogue 17.2).");
+  }
+}
+
 // Bridge-call wrapper: runs `fn`, catches std::runtime_error from the M17
 // bridge, translates to spec exception. Void-returning form.
 template <typename Fn>
-void bridge(Fn&& fn) {
+void bridgeUnguarded(Fn&& fn) {
   try {
     fn();
   } catch (std::runtime_error const& e) {
     translateBridgeError(e);
   }
 }
+template <typename Fn>
+void bridge(Fn&& fn) {
+  requireNotInCallback();
+  bridgeUnguarded(std::forward<Fn>(fn));
+}
 // Bridge-call wrapper with a return value. Uses decltype-auto to preserve
 // the caller-side value type (e.g. FederateHandle).
 template <typename Fn>
-auto bridgeR(Fn&& fn) -> decltype(fn()) {
+auto bridgeRUnguarded(Fn&& fn) -> decltype(fn()) {
   try {
     return fn();
   } catch (std::runtime_error const& e) {
     translateBridgeError(e);
   }
+}
+template <typename Fn>
+auto bridgeR(Fn&& fn) -> decltype(fn()) {
+  requireNotInCallback();
+  return bridgeRUnguarded(std::forward<Fn>(fn));
 }
 
 }  // namespace
@@ -670,6 +697,11 @@ std::vector<uint8_t> tag2bytes_(VariableLengthData const& tag) {
   return std::vector<uint8_t>(p, p + tag.size());
 }
 
+// Forward decl — defined in the §8 anon-namespace block below (same
+// unnamed namespace TU-wide). The §6 TSO overloads narrow the abstract
+// LogicalTime to the HLAfloat64Time double the M17 wire speaks.
+double narrowTime_(LogicalTime const& t, char const* method);
+
 }  // namespace
 
 void DLCRTIambassadorImpl::reserveObjectInstanceName(
@@ -769,12 +801,13 @@ MessageRetractionHandle DLCRTIambassadorImpl::updateAttributeValues(
     AttributeHandleValueMap const& theAttributeValues,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.10 overload 2 (TSO). M17 Cut-1 has no TSO wire path; forward to
-  // the RO variant (silent LogicalTime drop — documented divergence,
-  // DLC catalogue §11 "§6 TSO overloads"). Return placeholder
-  // MessageRetractionHandle (default-constructed → invalid); retract()
-  // will no-op on it once §8 lands.
-  (void)theTime;
+  // §6.10 overload 2 (TSO) — M36 Agent DA: real timed wire. The
+  // LogicalTime narrows to the HLAfloat64Time double the proto's
+  // `optional double logical_time` carries; the server TSO gate buffers
+  // and releases per §8. MessageRetractionHandle remains an invalid
+  // placeholder (the client does not allocate §8.21 retraction handles
+  // yet — documented divergence, DLC catalogue §11).
+  double const t = narrowTime_(theTime, "updateAttributeValues");
   std::map<std::uint64_t, std::vector<std::uint8_t>> values;
   for (auto const& kv : theAttributeValues) {
     auto const* p = static_cast<uint8_t const*>(kv.second.data());
@@ -783,8 +816,8 @@ MessageRetractionHandle DLCRTIambassadorImpl::updateAttributeValues(
   }
   auto const tag = tag2bytes_(theUserSuppliedTag);
   bridge([&] {
-    m17_->updateAttributeValues(
-        rawObjectInstanceHandle(theObject), values, tag);
+    m17_->updateAttributeValuesTimed(
+        rawObjectInstanceHandle(theObject), values, tag, t);
   });
   return MessageRetractionHandle();  // spec-legal invalid placeholder
 }
@@ -813,9 +846,9 @@ MessageRetractionHandle DLCRTIambassadorImpl::sendInteraction(
     ParameterHandleValueMap const& theParameterValues,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.12 overload 2 (TSO). Same drop-to-RO pattern as
-  // updateAttributeValues overload 2.
-  (void)theTime;
+  // §6.12 overload 2 (TSO) — M36 Agent DA: real timed wire. Same
+  // narrow-and-send pattern as updateAttributeValues overload 2.
+  double const t = narrowTime_(theTime, "sendInteraction");
   std::map<std::uint64_t, std::vector<std::uint8_t>> params;
   for (auto const& kv : theParameterValues) {
     auto const* p = static_cast<uint8_t const*>(kv.second.data());
@@ -824,8 +857,8 @@ MessageRetractionHandle DLCRTIambassadorImpl::sendInteraction(
   }
   auto const tag = tag2bytes_(theUserSuppliedTag);
   bridge([&] {
-    m17_->sendInteraction(
-        rawInteractionClassHandle(theInteraction), params, tag);
+    m17_->sendInteractionTimed(
+        rawInteractionClassHandle(theInteraction), params, tag, t);
   });
   return MessageRetractionHandle();  // spec-legal invalid placeholder
 }
@@ -833,23 +866,28 @@ MessageRetractionHandle DLCRTIambassadorImpl::sendInteraction(
 void DLCRTIambassadorImpl::deleteObjectInstance(
     ObjectInstanceHandle theObject,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.14 overload 1 (RO). M17 Cut-1 has no deleteObjectInstance wire;
-  // silent no-op (documented divergence, DLC catalogue §11 row
-  // "deleteObjectInstance"). Federate that owns privilegeToDelete
-  // sees the object stay registered on the RTI. TODO(M17 Cut-2):
-  // wire DeleteObject through M17Bridge.
-  (void)theObject;
-  (void)theUserSuppliedTag;
+  // §6.14 overload 1 (RO) — M36 Agent DA: real M23 DeleteObjectInstance
+  // wire (owner-only; server fans out RemoveObjectInstance to
+  // subscribers with the tag).
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->deleteObjectInstance(rawObjectInstanceHandle(theObject), tag);
+  });
 }
 
 MessageRetractionHandle DLCRTIambassadorImpl::deleteObjectInstance(
     ObjectInstanceHandle theObject,
     VariableLengthData const& theUserSuppliedTag,
     LogicalTime const& theTime) {
-  // §6.14 overload 2 (TSO). Same M17 gap. Return invalid placeholder.
-  (void)theObject;
-  (void)theUserSuppliedTag;
-  (void)theTime;
+  // §6.14 overload 2 (TSO) — M36 Agent DA: timed wire; subscribers see
+  // the §6.15 TSO removeObjectInstance overload. Retraction handle
+  // stays an invalid placeholder (see updateAttributeValues note).
+  double const t = narrowTime_(theTime, "deleteObjectInstance");
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->deleteObjectInstanceTimed(rawObjectInstanceHandle(theObject),
+                                    tag, t);
+  });
   return MessageRetractionHandle();
 }
 
@@ -865,22 +903,34 @@ void DLCRTIambassadorImpl::requestAttributeValueUpdate(
     ObjectInstanceHandle theObject,
     AttributeHandleSet const& theAttributes,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.19 overload 1 — by object instance. M17 Cut-1 has no
-  // RequestAttributeValueUpdate wire (only the DDM-flavored variant);
-  // silent no-op (documented divergence). TODO(M17 Cut-2): wire it.
-  (void)theObject;
-  (void)theAttributes;
-  (void)theUserSuppliedTag;
+  // §6.19 overload 1 — by object instance. M36 Agent DA: real M23
+  // RequestAttributeValueUpdate wire; the owner receives the §6.20
+  // provideAttributeValueUpdate callback with the tag.
+  std::vector<std::uint64_t> attrs;
+  attrs.reserve(theAttributes.size());
+  for (auto const& a : theAttributes) attrs.push_back(rawAttributeHandle(a));
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->requestAttributeValueUpdate(rawObjectInstanceHandle(theObject),
+                                      attrs, tag);
+  });
 }
 
 void DLCRTIambassadorImpl::requestAttributeValueUpdate(
     ObjectClassHandle theClass,
     AttributeHandleSet const& theAttributes,
     VariableLengthData const& theUserSuppliedTag) {
-  // §6.19 overload 2 — by object class. Same M17 wire gap.
-  (void)theClass;
-  (void)theAttributes;
-  (void)theUserSuppliedTag;
+  // §6.19 overload 2 — by object class. M36 Agent DA: real M23
+  // RequestClassAttributeValueUpdate wire; every owner of any instance
+  // of the class receives the callback.
+  std::vector<std::uint64_t> attrs;
+  attrs.reserve(theAttributes.size());
+  for (auto const& a : theAttributes) attrs.push_back(rawAttributeHandle(a));
+  auto const tag = tag2bytes_(theUserSuppliedTag);
+  bridge([&] {
+    m17_->requestClassAttributeValueUpdate(rawObjectClassHandle(theClass),
+                                           attrs, tag);
+  });
 }
 
 // ===== §7 Ownership Management =====
@@ -1549,16 +1599,23 @@ void DLCRTIambassadorImpl::setAutomaticResignDirective(ResignAction) {
   // §10.3 — no federation binding; silently accept. Spec-legal (returns
   // void, no throw required in the not-connected case for this setter).
 }
-FederateHandle DLCRTIambassadorImpl::getFederateHandle(std::wstring const&) {
-  // §10.4 — need federation state to resolve name → handle.
-  throw NotConnected(L"DLC RTIambassador: getFederateHandle requires "
-                     L"federation connection (M35+).");
+FederateHandle DLCRTIambassadorImpl::getFederateHandle(
+    std::wstring const& theName) {
+  // §10.4 — M36 Agent DA: real resolution via the M24
+  // ListFederationMembers wire (M17Bridge::getFederateHandle). Unknown
+  // names surface as NameNotFound through translateBridgeError.
+  return bridgeR([&] {
+    auto raw = m17_->getFederateHandle(ws2s(theName));
+    return makeFederateHandleFromUint64(raw);
+  });
 }
 std::wstring DLCRTIambassadorImpl::getFederateName(FederateHandle theHandle) {
-  // §10.5 — need federation state.
+  // §10.5 — M36 Agent DA: reverse lookup over the same member list.
   if (!theHandle.isValid()) throw InvalidFederateHandle(L"getFederateName");
-  throw NotConnected(L"DLC RTIambassador: getFederateName requires "
-                     L"federation connection (M35+).");
+  return bridgeR([&] {
+    auto name = m17_->getFederateName(rawFederateHandle(theHandle));
+    return s2ws(name);
+  });
 }
 // M35 Agent BH — §10 support services now delegate to M17 for real
 // FOM name↔handle resolution. The M17 ambassador caches results, so
@@ -1844,8 +1901,10 @@ void DLCRTIambassadorImpl::disableInteractionRelevanceAdvisorySwitch() {}
 // No event queue in DLC M33 yet; returns false to signal "no more callbacks
 // pending". Federate can loop on this call safely.
 bool DLCRTIambassadorImpl::evokeCallback(double approximateMinimumTimeInSeconds) {
-  // Delegate to M17's at-most-one drain (M17.22 semantics).
-  return bridgeR([&] {
+  // Delegate to M17's at-most-one drain (M17.22 semantics). §10.4-exempt
+  // from the FR-DLC-14 re-entrancy gate (spec allows evoking from within
+  // a callback) — unguarded form.
+  return bridgeRUnguarded([&] {
     return m17_->evokeCallback(approximateMinimumTimeInSeconds,
                                approximateMinimumTimeInSeconds);
   });
@@ -1856,20 +1915,22 @@ bool DLCRTIambassadorImpl::evokeCallback(double approximateMinimumTimeInSeconds)
 bool DLCRTIambassadorImpl::evokeMultipleCallbacks(
     double approximateMinimumTimeInSeconds,
     double approximateMaximumTimeInSeconds) {
-  // Delegate to M17's drain-in-window (tickCallback alias).
-  return bridgeR([&] {
+  // Delegate to M17's drain-in-window (tickCallback alias). §10.4-exempt
+  // from the re-entrancy gate — unguarded form.
+  return bridgeRUnguarded([&] {
     return m17_->evokeMultipleCallbacks(approximateMinimumTimeInSeconds,
                                         approximateMaximumTimeInSeconds);
   });
 }
 
 // §10.43-10.44 enable/disableCallbacks — M35 Agent BH: delegate to M17
-// which supports these natively (gates its own dispatch loop).
+// which supports these natively (gates its own dispatch loop). §10.4
+// exempts both from the FR-DLC-14 re-entrancy gate.
 void DLCRTIambassadorImpl::enableCallbacks() {
-  bridge([&] { m17_->enableCallbacks(); });
+  bridgeUnguarded([&] { m17_->enableCallbacks(); });
 }
 void DLCRTIambassadorImpl::disableCallbacks() {
-  bridge([&] { m17_->disableCallbacks(); });
+  bridgeUnguarded([&] { m17_->disableCallbacks(); });
 }
 
 // §10 (catalogue 13.14) getTimeFactory — returns the federation's logical-time

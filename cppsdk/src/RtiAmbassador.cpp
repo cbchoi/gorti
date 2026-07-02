@@ -2016,6 +2016,142 @@ void M17RTIambassador::sendInteraction(
   if (!s.ok()) throwFromStatus(s, "sendInteraction");
 }
 
+// --- M36 Agent DA — §6 TSO variants + delete / request-update wire ---------
+
+void M17RTIambassador::updateAttributeValues(
+    ObjectInstanceHandle obj, const AttributeHandleValueMap& values,
+    double logical_time) {
+  requireJoined(*impl_, "updateAttributeValues");
+  rti::v1::UpdateAttributeValuesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(obj.raw());
+  auto* m = req.mutable_attributes();
+  for (const auto& kv : values) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  // Presence of logical_time flips the server's RO/TSO branch — see
+  // UpdateAttributeValuesRequest.logical_time in proto/rti/v1/object.proto.
+  req.set_logical_time(logical_time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->UpdateAttributeValues(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
+}
+
+void M17RTIambassador::sendInteraction(
+    InteractionClassHandle cls, const ParameterHandleValueMap& parameters,
+    double logical_time) {
+  requireJoined(*impl_, "sendInteraction");
+  rti::v1::SendInteractionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  auto* m = req.mutable_parameters();
+  for (const auto& kv : parameters) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  req.set_logical_time(logical_time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "sendInteraction");
+}
+
+void M17RTIambassador::deleteObjectInstance(
+    ObjectInstanceHandle obj, const VariableLengthData& tag,
+    std::optional<double> logical_time) {
+  requireJoined(*impl_, "deleteObjectInstance");
+  rti::v1::DeleteObjectInstanceRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(obj.raw());
+  req.set_user_supplied_tag(std::string(tag.begin(), tag.end()));
+  if (logical_time.has_value()) req.set_logical_time(*logical_time);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->DeleteObjectInstance(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "deleteObjectInstance");
+}
+
+void M17RTIambassador::requestAttributeValueUpdate(
+    ObjectInstanceHandle obj, const AttributeHandleSet& attributes,
+    const VariableLengthData& tag) {
+  requireJoined(*impl_, "requestAttributeValueUpdate");
+  rti::v1::RequestAttributeValueUpdateRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(obj.raw());
+  for (const auto& a : attributes) req.add_attribute_handles(a.raw());
+  req.set_user_supplied_tag(std::string(tag.begin(), tag.end()));
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->object_stub->RequestAttributeValueUpdate(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "requestAttributeValueUpdate");
+}
+
+void M17RTIambassador::requestAttributeValueUpdate(
+    ObjectClassHandle cls, const AttributeHandleSet& attributes,
+    const VariableLengthData& tag) {
+  requireJoined(*impl_, "requestAttributeValueUpdate");
+  rti::v1::RequestClassAttributeValueUpdateRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_class_handle(cls.raw());
+  for (const auto& a : attributes) req.add_attribute_handles(a.raw());
+  req.set_user_supplied_tag(std::string(tag.begin(), tag.end()));
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->object_stub->RequestClassAttributeValueUpdate(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "requestAttributeValueUpdate(class)");
+}
+
+// --- M36 Agent DA — §10.24/§10.25 federate name<->handle -------------------
+
+FederateHandle M17RTIambassador::getFederateHandle(
+    const std::string& federate_name) {
+  requireJoined(*impl_, "getFederateHandle");
+  rti::v1::ListFederationMembersRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  grpc::ClientContext ctx;
+  rti::v1::ListFederationMembersResponse resp;
+  const auto s =
+      impl_->federation_stub->ListFederationMembers(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "getFederateHandle");
+  for (const auto& m : resp.members()) {
+    if (m.federate_name() == federate_name) {
+      return FederateHandle(m.federate_handle());
+    }
+  }
+  throw NameNotFound("getFederateHandle: no joined federate named '" +
+                     federate_name + "'");
+}
+
+std::string M17RTIambassador::getFederateName(FederateHandle handle) {
+  requireJoined(*impl_, "getFederateName");
+  rti::v1::ListFederationMembersRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  grpc::ClientContext ctx;
+  rti::v1::ListFederationMembersResponse resp;
+  const auto s =
+      impl_->federation_stub->ListFederationMembers(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "getFederateName");
+  for (const auto& m : resp.members()) {
+    if (m.federate_handle() == handle.raw()) return m.federate_name();
+  }
+  throw NameNotFound("getFederateName: no joined federate with handle " +
+                     std::to_string(handle.raw()));
+}
+
 // --- M20.2 §8.21 retract ---------------------------------------------------
 
 void M17RTIambassador::retract(MessageRetractionHandle handle) {
@@ -2275,9 +2411,33 @@ bool RTIambassadorImpl::dispatchOneEvent() {
     case rti::v1::FederateEvent::kRestoreFailed:
       fed_ambassador->federationNotRestored(evt.restore_failed().label());
       return true;
+    case rti::v1::FederateEvent::kRemove: {
+      // §6.15 — M36 Agent DA. Timestamp presence selects RO vs TSO at
+      // the DLC bridge layer.
+      const auto& r = evt.remove();
+      std::optional<double> ts =
+          r.has_logical_time() ? std::optional<double>(r.logical_time())
+                               : std::nullopt;
+      VariableLengthData tag(r.user_supplied_tag().begin(),
+                             r.user_supplied_tag().end());
+      fed_ambassador->removeObjectInstance(
+          ObjectInstanceHandle(r.object_handle()), ts, tag);
+      return true;
+    }
+    case rti::v1::FederateEvent::kProvideUpdate: {
+      // §6.20 — M36 Agent DA.
+      const auto& p = evt.provide_update();
+      AttributeHandleSet attrs;
+      for (auto h : p.attribute_handles()) attrs.emplace(h);
+      VariableLengthData tag(p.user_supplied_tag().begin(),
+                             p.user_supplied_tag().end());
+      fed_ambassador->provideAttributeValueUpdate(
+          ObjectInstanceHandle(p.object_handle()), attrs, tag);
+      return true;
+    }
     default:
       // Unsupported events drop silently. Cut-4+ adds remaining
-      // slots (remove, provide-update, halted, etc.).
+      // slots (halted, etc.).
       return true;
   }
 }
