@@ -710,6 +710,9 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	foms := newFOMRepository()
 	declMgr := declaration.New()
 	outbox := newMultiOutbox(1024)
+	// M37 Agent EA — §5.10-§5.13 registration / interaction advisories
+	// flow through the shared outbox.
+	declMgr.SetAdvisoryOutbox(outbox)
 
 	// M11: MOM manager constructed BEFORE federation manager so the
 	// federation manager's OnFederateJoined / OnFederateResigned hooks

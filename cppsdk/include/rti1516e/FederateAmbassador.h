@@ -146,6 +146,26 @@ class FederateAmbassador {
     federationSynchronized(label);
   }
 
+  // §5.10 — the object class gained its first subscriber; this
+  // federate (a publisher of the class) should start registering
+  // instances. M37 Agent EA.
+  virtual void startRegistrationForObjectClass(
+      ObjectClassHandle /*object_class*/) {}
+
+  // §5.11 — the object class lost its last subscriber; registrations
+  // are no longer relevant. M37 Agent EA.
+  virtual void stopRegistrationForObjectClass(
+      ObjectClassHandle /*object_class*/) {}
+
+  // §5.12 — the interaction class gained its first subscriber; this
+  // federate (a publisher) should start sending. M37 Agent EA.
+  virtual void turnInteractionsOn(
+      InteractionClassHandle /*interaction_class*/) {}
+
+  // §5.13 — the interaction class lost its last subscriber. M37 Agent EA.
+  virtual void turnInteractionsOff(
+      InteractionClassHandle /*interaction_class*/) {}
+
   // §7.3 — an owner has called negotiatedAttributeOwnershipDivestiture
   // and the federation is asking this federate (a subscriber of the
   // attribute) whether it wants to assume ownership. To accept, call

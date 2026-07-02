@@ -2505,6 +2505,26 @@ bool RTIambassadorImpl::dispatchOneEvent() {
           ObjectInstanceHandle(p.object_handle()), attrs, tag);
       return true;
     }
+    case rti::v1::FederateEvent::kStartRegistration:
+      // §5.10 — M37 Agent EA.
+      fed_ambassador->startRegistrationForObjectClass(
+          ObjectClassHandle(evt.start_registration().object_class_handle()));
+      return true;
+    case rti::v1::FederateEvent::kStopRegistration:
+      // §5.11 — M37 Agent EA.
+      fed_ambassador->stopRegistrationForObjectClass(
+          ObjectClassHandle(evt.stop_registration().object_class_handle()));
+      return true;
+    case rti::v1::FederateEvent::kTurnInteractionsOn:
+      // §5.12 — M37 Agent EA.
+      fed_ambassador->turnInteractionsOn(InteractionClassHandle(
+          evt.turn_interactions_on().interaction_class_handle()));
+      return true;
+    case rti::v1::FederateEvent::kTurnInteractionsOff:
+      // §5.13 — M37 Agent EA.
+      fed_ambassador->turnInteractionsOff(InteractionClassHandle(
+          evt.turn_interactions_off().interaction_class_handle()));
+      return true;
     default:
       // Unsupported events drop silently. Cut-4+ adds remaining
       // slots (halted, etc.).

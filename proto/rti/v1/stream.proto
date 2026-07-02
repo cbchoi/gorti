@@ -64,6 +64,11 @@ message FederateEvent {
     ObjectInstanceNameReservationFailed reservation_failed = 51;
     MultipleObjectInstanceNameReservationSucceeded reservation_multi_succeeded = 52;
     MultipleObjectInstanceNameReservationFailed reservation_multi_failed = 53;
+    // Registration / interaction advisories (§5.10-§5.13) — M37 Agent EA.
+    StartRegistrationForObjectClass start_registration = 60;
+    StopRegistrationForObjectClass stop_registration = 61;
+    TurnInteractionsOn turn_interactions_on = 62;
+    TurnInteractionsOff turn_interactions_off = 63;
     FederationHalted halted = 99;
   }
 }
@@ -281,6 +286,32 @@ message FederationRestored {
 // not-complete or the bundle couldn't be loaded). M17.25 (Cut-4).
 message FederationNotRestored {
   string label = 1;
+}
+
+// StartRegistrationForObjectClass — IEEE 1516.1-2010 §5.10. Fires on
+// each PUBLISHER of an object class when the class gains its first
+// subscriber (registrations become relevant). M37 Agent EA.
+message StartRegistrationForObjectClass {
+  uint64 object_class_handle = 1;
+}
+
+// StopRegistrationForObjectClass — IEEE 1516.1-2010 §5.11. Fires on
+// each publisher when the class loses its last subscriber. M37 Agent EA.
+message StopRegistrationForObjectClass {
+  uint64 object_class_handle = 1;
+}
+
+// TurnInteractionsOn — IEEE 1516.1-2010 §5.12. Fires on each PUBLISHER
+// of an interaction class when the class gains its first subscriber.
+// M37 Agent EA.
+message TurnInteractionsOn {
+  uint64 interaction_class_handle = 1;
+}
+
+// TurnInteractionsOff — IEEE 1516.1-2010 §5.13. Fires on each publisher
+// when the interaction class loses its last subscriber. M37 Agent EA.
+message TurnInteractionsOff {
+  uint64 interaction_class_handle = 1;
 }
 
 // ObjectInstanceNameReservationSucceeded — IEEE 1516.1-2010 §6.1 (M26
