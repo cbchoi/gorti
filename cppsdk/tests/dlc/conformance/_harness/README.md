@@ -20,6 +20,7 @@ complete `_harness/`:
 | `normalize.py` | E | Python re-implementation of the same canonicalization rules — used by parity-mode for cross-RTI comparison. **Must stay in sync with `log_diff.h`.** |
 | `pitch_build.sh` | E | Compiles a fixture's federate source against Pitch headers (`$PRTI_HOME/api/cpp/HLA_1516-2010/`) when `PRTI_HOME` is set. |
 | `pitch_run.sh` | E | Starts the Pitch CRC + runs the Pitch-built fixture binary; captures the canonical log for diff against the gorti round. |
+| `run_fixture.sh` | ED (M37) | Deterministic multi-federate driver: reads `<fixture>/driver.conf` (roles, launch order, wait-for gates, args/env), serializes on `/tmp/gorti-rtid-8989.lock`, runs a fresh rtid, and prints per-role FULL/PARTIAL verdicts (canonical capture vs comment-stripped golden via `normalize.py`). `--capture` refreshes `gorti-captured.<role>.log`. |
 
 ## Why header-only on the C++ side
 
