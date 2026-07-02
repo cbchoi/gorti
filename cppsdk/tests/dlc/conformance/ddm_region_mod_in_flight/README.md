@@ -41,10 +41,11 @@ Real Pitch capture (TASK-350) will record the actual witnessed sequence; `script
 - `expected.subscriber.log`
 - `test_ddm_region_mod_in_flight.cpp`
 
-## gorti parity status (M35, parity-CE)
+## gorti parity status (M36, agent-DC)
 
-Publisher **FULL 14/14**; subscriber **PARTIAL 11/14**. Captured run:
-`gorti-captured.{publisher,subscriber}.log` (canonicalized).
+Publisher **FULL 14/14**; subscriber **PARTIAL 12/14** (was 11/14).
+Captured run: `gorti-captured.{publisher,subscriber}.log`
+(canonicalized), against the M36-DC rtid.
 
 The fixture's core assertion — an IN-FLIGHT setRangeBounds +
 commitRegionModifications changes routing mid-stream — WORKS: reflects
@@ -53,14 +54,16 @@ reflects 4..6 are correctly filtered out (`update.go`
 subscribersForUpdate re-evaluates the DDM overlap per update, so the
 recommit takes effect immediately).
 
-Missing events (exactly three):
+M36 DC-1 closed gap (1): `SUB: DISCOVER name=sensor-1` now arrives —
+`rti/internal/object/discover.go` subscribersForDiscover unions the
+declaration subscribers with the region-scoped subscribers (see
+ddm_region_overlap README for the mechanism).
 
-1. `SUB: DISCOVER name=sensor-1` — same gap as ddm_region_overlap:
-   `rti/internal/object/discover.go` fanoutDiscover consults only
-   `Declarations.SubscribersFor`; region-only subscribers (ddm.Manager
-   tables) are invisible to it.
-2. `SUB: IN_SCOPE attributes=[Value]` (§6.17 attributesInScope) and
-3. `SUB: OUT_OF_SCOPE attributes=[Value]` (§6.18 attributesOutOfScope) —
+Missing events (exactly two — the expected M36 residual, out of DC
+scope):
+
+1. `SUB: IN_SCOPE attributes=[Value]` (§6.17 attributesInScope) and
+2. `SUB: OUT_OF_SCOPE attributes=[Value]` (§6.18 attributesOutOfScope) —
    structurally absent end-to-end (catalogue row 4.23 'absent'
    confirmed): no FederateEvent oneof slot in proto/rti/v1/stream.proto
    (only discover/reflect/receive/grant family), no Go emitter — the
@@ -71,9 +74,9 @@ Missing events (exactly three):
    enableAttributeScopeAdvisorySwitch the fixture calls is a documented
    DLC no-op (RTIambassadorImpl.cpp:1838).
 
-Missing impl: (a) DDM-aware discover fanout; (b) AttributesInScope /
-AttributesOutOfScope proto events + server-side scope-transition
-detection on subscribe/commit/associate changes + bridge conversion +
+Missing impl (residual): AttributesInScope / AttributesOutOfScope proto
+events + server-side scope-transition detection on
+subscribe/commit/associate changes + bridge conversion +
 advisory-switch plumbing.
 
 Fixture-side changes (no golden edits; per the golden header the

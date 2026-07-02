@@ -4,6 +4,7 @@ SUB: ENABLE_ADVISORY attribute_scope=true
 SUB: CREATE_REGION dim=Channel lower=0 upper=50
 SUB: COMMIT_REGION region=<R>
 SUB: SUBSCRIBE_WITH_REGIONS class=Sensor attributes=[Value] active=true
+SUB: DISCOVER name=sensor-1
 SUB: REFLECT Value=1.000000
 SUB: REFLECT Value=2.000000
 SUB: REFLECT Value=3.000000
