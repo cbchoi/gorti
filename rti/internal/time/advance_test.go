@@ -57,24 +57,27 @@ func TestDecideGrant_NMRA_FullGrant_InclusiveGE(t *testing.T) {
 	}
 }
 
-// TestDecideGrant_TAR_IncrementalAtLBTS_ClearsPending: TAR grants
-// incrementally when LBTS < req but > currentTime, advancing the
-// federate to LBTS and clearing pending. Distinguishes from NER which
-// would only do this for the sole-pending case AND keep pending.
-func TestDecideGrant_TAR_IncrementalAtLBTS_ClearsPending(t *testing.T) {
-	// LBTS < req, multiple peers — TAR still grants at LBTS.
+// TestDecideGrant_TAR_HoldsBelowRequested_GrantsAtRequested: M37 EB-5
+// — IEEE 1516.1-2010 §8.10: a timeAdvanceRequest(t) is granted at
+// EXACTLY t, once LBTS covers it; the RTI HOLDS the request while
+// LBTS < t (delivering intervening TSO meanwhile). The pre-M37
+// "incremental grant at LBTS" fired a full grant at LBTS < t
+// (clearPending=true), silently parking the federate below its
+// requested time — early/partial grants are FQR's contract (§8.12),
+// not TAR's.
+func TestDecideGrant_TAR_HoldsBelowRequested_GrantsAtRequested(t *testing.T) {
+	// LBTS < req — TAR holds (pre-M37: fired @2).
 	d := decideGrant(ModeTAR, 0, 5, 2, false)
-	if !d.fire || d.time != core.LogicalTime(2) || !d.clearPending {
-		t.Errorf("TAR LBTS<req: %+v, want fire@2 clear", d)
+	if d.fire {
+		t.Errorf("TAR LBTS<req: fired %+v, want hold (§8.10 grant only at requested time)", d)
 	}
-	// LBTS == req: TAR is strict (>), so the full-grant predicate fails;
-	// the incremental path requires LBTS > currentTime which is true (5>0)
-	// but at that point the grant time would be LBTS = 5, satisfying the
-	// federate's request. We honour this — TAR's overall promise is
-	// "advance to min(t, LBTS) = 5".
+	// LBTS == req: inclusive full grant at the requested time. The
+	// inclusive boundary preserves the zero-lookahead peer lockstep
+	// (two la=0 federates both TAR(t) → LBTS == t → both grant); see
+	// AdvanceMode.inclusiveLBTS.
 	d = decideGrant(ModeTAR, 0, 5, 5, false)
-	if !d.fire || d.time != core.LogicalTime(5) {
-		t.Errorf("TAR LBTS==req: %+v, want fire@5 (incremental path)", d)
+	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
+		t.Errorf("TAR LBTS==req: %+v, want fire@5 clear (inclusive full grant)", d)
 	}
 }
 
@@ -121,14 +124,14 @@ func TestDecideGrant_NMRA_SolePending_ForcedGrant_KeepsPending(t *testing.T) {
 	}
 }
 
-// TestDecideGrant_TAR_NoForcedGrant_PathClearsPending: when TAR is
-// sole-pending with LBTS<req, the grant fires (incremental path) but
-// CLEARS pending — diverges from NER. This pins the documented
-// per-mode divergence.
-func TestDecideGrant_TAR_NoForcedGrant_PathClearsPending(t *testing.T) {
+// TestDecideGrant_TAR_NoForcedGrant_HoldsWhenSole: M37 EB-5 — TAR has
+// neither the NER/NMRA forced-grant escape hatch nor the removed
+// incremental path: sole-pending with LBTS < req simply HOLDS until
+// LBTS reaches the requested time (§8.10).
+func TestDecideGrant_TAR_NoForcedGrant_HoldsWhenSole(t *testing.T) {
 	d := decideGrant(ModeTAR, 0, 5, 2, true)
-	if !d.fire || d.time != core.LogicalTime(2) || !d.clearPending {
-		t.Errorf("TAR solo LBTS<req: %+v, want fire@2 CLEAR (no escape hatch)", d)
+	if d.fire {
+		t.Errorf("TAR solo LBTS<req: fired %+v, want hold (§8.10; no escape hatch, no incremental)", d)
 	}
 }
 
@@ -264,10 +267,12 @@ func TestNMRA_GrantAtLBTSEqualsT_BothLookaheadZero(t *testing.T) {
 	}
 }
 
-// TestTAR_TwoRegulators_GrantsAtLBTS: with peer regulator at 0+2=2,
-// fed1 TAR(5) gets the LBTS=2 incremental grant (clear pending). The
-// federate then re-requests if it wants to reach 5.
-func TestTAR_TwoRegulators_GrantsAtLBTS(t *testing.T) {
+// TestTAR_TwoRegulators_HoldsUntilPeerAdvances: M37 EB-5 — with a peer
+// regulator idle at 0+2=2, fed1's TAR(5) HOLDS (pre-M37: incremental
+// grant at LBTS=2). §8.10: the grant fires at EXACTLY the requested
+// time once the peer's LBTS contribution covers it — here when fed2
+// issues its own TAR(5), promoting its floor to 5+2=7.
+func TestTAR_TwoRegulators_HoldsUntilPeerAdvances(t *testing.T) {
 	out := &recordingOutbox{}
 	mgr, err := New(Options{Clock: core.NewFakeClock(zeroTime()), Outbox: out})
 	if err != nil {
@@ -279,13 +284,30 @@ func TestTAR_TwoRegulators_GrantsAtLBTS(t *testing.T) {
 	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
 		t.Fatalf("TAR: %v", e)
 	}
-	got := out.snapshot()
-	if len(got) != 1 || got[0].t != core.LogicalTime(2) {
-		t.Errorf("TAR LBTS-bounded: grants = %+v, want one @2", got)
+	if got := out.snapshot(); len(got) != 0 {
+		t.Errorf("TAR below LBTS: grants = %+v, want none (hold until peer advances)", got)
 	}
-	// The federate should have cleared pending — a subsequent TAR call
-	// must succeed (no ErrDuplicateNER).
-	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(5)); e != nil {
+	// While held, the request stays pending — a duplicate TAR is
+	// rejected.
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(6)); !errors.Is(e, core.ErrTimeAdvancingState) {
+		t.Errorf("TAR while pending: err = %v, want ErrTimeAdvancingState", e)
+	}
+	// Peer TARs to 5 → its floor rises to 5+2=7 → both grants fire at
+	// exactly the requested time 5.
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 2, core.LogicalTime(5)); e != nil {
+		t.Fatalf("peer TAR: %v", e)
+	}
+	got := out.snapshot()
+	if len(got) != 2 {
+		t.Fatalf("after peer TAR: grants = %+v, want two (both federates @5)", got)
+	}
+	for _, g := range got {
+		if g.t != core.LogicalTime(5) {
+			t.Errorf("grant = %+v, want time 5 (§8.10 exact requested time)", g)
+		}
+	}
+	// Pending cleared — a fresh TAR succeeds.
+	if e := mgr.TimeAdvanceRequest(ctx, "fed", 1, core.LogicalTime(6)); e != nil {
 		t.Errorf("TAR after grant: err = %v, want nil (TAR clears pending)", e)
 	}
 }
