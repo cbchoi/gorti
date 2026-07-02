@@ -114,8 +114,18 @@ std::string parseLocalSettings(std::wstring const& settings) {
     throw FederationExecutionDoesNotExist(msg);
   if (what.rfind("FederateAlreadyExecutionMember:", 0) == 0)
     throw FederateAlreadyExecutionMember(msg);
-  if (what.rfind("FederateNotExecutionMember:", 0) == 0)
+  if (what.rfind("FederateNotExecutionMember:", 0) == 0) {
+    // M37 EE: the M17 client folds generic FAILED_PRECONDITION rejections
+    // under this prefix, so the EC-3 detail sniffs below would never run
+    // for them — sniff the §5 publication-gate details here first
+    // (errors.go: "object class not published by federate" /
+    // "interaction class not published").
+    if (what.find("interaction class not published") != std::string::npos)
+      throw InteractionClassNotPublished(msg);
+    if (what.find("not published") != std::string::npos)
+      throw ObjectClassNotPublished(msg);
     throw FederateNotExecutionMember(msg);
+  }
   if (what.rfind("NameNotFound:", 0) == 0) throw NameNotFound(msg);
 
   // ===== M37 Agent EC-3 — detail-string sniffs =====
