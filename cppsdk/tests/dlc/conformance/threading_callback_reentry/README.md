@@ -36,3 +36,42 @@ A run producing `CAUGHT exception=UNEXPECTED(...)` is a bug. A run with no `CAUG
 - `expected.publisher.log`
 - `expected.subscriber.log`
 - `test_threading_callback_reentry.cpp`
+
+## parity-CF verdict (M35 wave 2)
+
+**BLOCKED(no re-entrancy guard — FR-DLC-14 / catalogue 17.2 unimplemented).**
+
+Run: gorti rtid @ 127.0.0.1:8989, fresh instance, both federates from this
+directory, canonicalized via `_harness/normalize.py`.
+
+- Publisher: **7/7** lines byte-identical to the spec-derived golden.
+- Subscriber: **6/7** — the only divergent line is the fixture's raison
+  d'être, `SUB: CAUGHT exception=CallNotAllowedFromWithinCallback`.
+
+Observed behavior of the re-entry probe (precise, reproducible across runs):
+
+1. The re-entered `updateAttributeValues` does **not** deadlock and does
+   **not** throw `CallNotAllowedFromWithinCallback`. No client-side
+   callback-context check exists anywhere in `cppsdk/src/dlc/**` — the
+   exception class is declared (`cppsdk/src/dlc/Exception.cpp:48`) but
+   never raised at runtime.
+2. The call is transmitted to rtid **from inside the callback context**
+   and completes a full gRPC round-trip (the update path is a unary RPC,
+   so the M17 header's stream-mutex deadlock warning does not bite here).
+3. rtid rejects it server-side for an unrelated reason — the subscriber
+   does not own `Position` — and the DLC surfaces that as
+   `RTIinternalError: updateAttributeValues: attribute not owned by
+   federate [op=updateAttributeValues]` (captured as
+   `CAUGHT exception=UNEXPECTED(...)` + `ERROR no_exception_raised`).
+4. The ambassador is not corrupted: the subsequent non-re-entered
+   `resignFederationExecution` succeeds (`SUB: RESIGN` matches golden).
+
+Implication: had the subscriber owned the attribute, the re-entered call
+would have **silently succeeded** — the "worse bug" case named above.
+The missing piece is a DLC-side in-callback flag set around callback
+dispatch in the evoke path, checked at every ambassador entry point.
+Implementing it is out of parity scope; this verdict documents the gap.
+
+Fixture-code delta for capture: publisher reservation wait loop switched
+from `evokeCallback(0.1)` to the suite-standard evoke-drain
+`evokeMultipleCallbacks(0.05, 0.1)` (no behavioral change to the golden).
