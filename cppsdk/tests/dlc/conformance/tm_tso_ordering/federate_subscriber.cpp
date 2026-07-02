@@ -97,14 +97,25 @@ int main(int argc, char** argv) {
   std::printf("SUB: SUBSCRIBE interaction=Tick active=true\n");
 
   amb->enableTimeConstrained();
-  while (!fed.constrained) amb->evokeCallback(0.1);
+  while (!fed.constrained) amb->evokeMultipleCallbacks(0.05, 0.1);
 
-  // NER walk to t=2 so that t=1 messages are delivered.
+  // NER walk to t=2 so that t=1 messages are delivered. §8.8 allows the
+  // grant to land EARLY at a message time (or, under gorti's interim NER
+  // semantics — advance.go "sole-pending forced grant at LBTS keeps
+  // pending" — at LBTS) below the target, so keep pumping until the walk
+  // actually reaches t=2; intermediate grants print and are visible in
+  // the capture.
+  // gorti M17 gap: OnFederateResign (rti/internal/time/manager.go) drops the
+  // resigned regulator's state but never re-runs tryGrantPending, so a
+  // pending NER that becomes grantable only when the last regulator resigns
+  // is never re-granted — waiting strictly for t=2 hangs forever. Bound the
+  // drain (~6 s) so the capture records every grant that does fire.
   {
-    double prior = fed.lastGrant;
     rti1516e::HLAfloat64Time target(2.0);
     amb->nextMessageRequest(target);
-    while (fed.lastGrant <= prior) amb->evokeCallback(0.1);
+    int rounds = 0;
+    while (fed.lastGrant < 2.0 - 1e-9 && rounds++ < 60)
+      amb->evokeMultipleCallbacks(0.05, 0.1);
   }
 
   amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

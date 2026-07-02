@@ -1,0 +1,5 @@
+alice: CONNECT
+alice: JOIN federate=alice
+alice: PUBLISH interaction=Tick
+alice: SEND interaction=Tick seq=1 source=alice time=1
+alice: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
