@@ -1369,14 +1369,22 @@ void DLCRTIambassadorImpl::deleteRegion(RegionHandle const& theRegion) {
   bridge([&] { m17_->deleteRegion(rawRegionHandle(theRegion)); });
 }
 
+// §9.5 registerObjectInstanceWithRegions — fused emulation. gorti's
+// RegisterObjectInstanceWithRegions RPC is a Cut-3 stub: it returns
+// ObjectHandle 0 and records nothing (see rti/internal/transport/grpc/
+// ddm.go "Cut-3 simplification" comment — the caller must pair it with a
+// plain RegisterObject). The DLC shim therefore registers the object
+// through the real §6.8 path first, then binds the per-attribute regions
+// via AssociateRegionsForUpdates — the exact fused-call pattern the
+// Python SDK's federation.RegisterObjectInstanceWithRegions uses.
 ObjectInstanceHandle DLCRTIambassadorImpl::registerObjectInstanceWithRegions(
     ObjectClassHandle theClass,
     AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions) {
-  // §9.5 overload 1 — RTI-generated name.
+  // Overload 1 — RTI-generated name.
   return bridgeR([&] {
-    auto raw = m17_->registerObjectInstanceWithRegions(
-        rawObjectClassHandle(theClass), pairs2attrRegions_(attributesAndRegions),
-        "");
+    auto raw = m17_->registerObjectInstance(rawObjectClassHandle(theClass), "");
+    m17_->associateRegionsForUpdates(raw,
+                                     pairs2attrRegions_(attributesAndRegions));
     return makeObjectInstanceHandleFromUint64(raw);
   });
 }
@@ -1384,11 +1392,12 @@ ObjectInstanceHandle DLCRTIambassadorImpl::registerObjectInstanceWithRegions(
     ObjectClassHandle theClass,
     AttributeHandleSetRegionHandleSetPairVector const& attributesAndRegions,
     std::wstring const& theObjectInstanceName) {
-  // §9.5 overload 2 — federate-supplied (pre-reserved) name.
+  // Overload 2 — federate-supplied (pre-reserved) name.
   return bridgeR([&] {
-    auto raw = m17_->registerObjectInstanceWithRegions(
-        rawObjectClassHandle(theClass), pairs2attrRegions_(attributesAndRegions),
-        ws2s(theObjectInstanceName));
+    auto raw = m17_->registerObjectInstance(rawObjectClassHandle(theClass),
+                                            ws2s(theObjectInstanceName));
+    m17_->associateRegionsForUpdates(raw,
+                                     pairs2attrRegions_(attributesAndRegions));
     return makeObjectInstanceHandleFromUint64(raw);
   });
 }
