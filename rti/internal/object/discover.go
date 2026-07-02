@@ -33,7 +33,99 @@ func (r *Registry) fanoutDiscover(ctx context.Context, fed core.FederationName, 
 		// (the durable eventlog already has the registration). Per
 		// SRS NFR-CRASH-1.
 		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		// M37 EB-4 — record delivery so the retroactive subscribe-time
+		// path stays idempotent per (subscriber, object).
+		r.markDiscovered(st, sub, inst.handle)
 	}
+}
+
+// internalProducer mirrors mom.momProducer (max-uint64): the RTI-owned
+// producer handle for MOM object instances. The generic retroactive
+// discover path skips instances it owns — the MOM manager delivers its
+// own retroactive Discover+Reflect pair for its classes (M36 DD-2),
+// and double discovers would confuse late MOM subscribers. Real
+// federate handles are small monotonic values and can never collide.
+const internalProducer = ^core.FederateHandle(0)
+
+// ObjectClassSubscribed is the declaration-manager post-subscribe hook
+// (declaration.Manager.SetOnSubscribeObjectClass) for the object
+// registry — M37 EB-4, generalizing the M36 DD-2 MOM pattern.
+//
+// IEEE 1516.1-2010 §6.9: discoverObjectInstance fires when an instance
+// of a subscribed class becomes relevant, regardless of the
+// subscribe/register ordering. The register-time fanoutDiscover only
+// covers subscribe-first federates; this hook covers
+// subscribe-after-register by retroactively sending Discover for every
+// existing matching instance to the new subscriber.
+//
+// Recipient resolution reuses subscribersForDiscover — the exact set
+// the register-time fan-out would target — so declaration-based and
+// DDM region-scoped (RegionSubscribersFor, M36 DC-1) subscriptions
+// behave identically in both orderings. Idempotency per (subscriber,
+// object) is enforced through federationState.discovered, which the
+// register-time path also records.
+//
+// The cls/attrs hook arguments are advisory only: membership in
+// subscribersForDiscover is the authoritative filter, so a hook
+// invocation never discovers an instance the register-time path would
+// not have.
+func (r *Registry) ObjectClassSubscribed(
+	ctx context.Context,
+	fed core.FederationName,
+	sub core.FederateHandle,
+	_ core.ObjectClassHandle,
+	_ []core.AttributeHandle,
+) {
+	st := r.stateFor(fed)
+
+	// Snapshot instances in sorted handle order for deterministic
+	// retroactive delivery (NFR-DET-1).
+	st.mu.Lock()
+	insts := make([]*objectInstance, 0, len(st.instances))
+	for _, inst := range st.instances {
+		insts = append(insts, inst)
+	}
+	st.mu.Unlock()
+	slices.SortFunc(insts, func(a, b *objectInstance) int {
+		switch {
+		case a.handle < b.handle:
+			return -1
+		case a.handle > b.handle:
+			return 1
+		default:
+			return 0
+		}
+	})
+
+	for _, inst := range insts {
+		if inst.owner == sub || inst.owner == internalProducer {
+			continue
+		}
+		if r.alreadyDiscovered(st, sub, inst.handle) {
+			continue
+		}
+		if !slices.Contains(r.subscribersForDiscover(ctx, fed, inst), sub) {
+			continue
+		}
+		evt := r.buildDiscoverEvent(st, inst)
+		_ = r.opts.Outbox.Send(ctx, fed, sub, evt)
+		r.markDiscovered(st, sub, inst.handle)
+	}
+}
+
+// markDiscovered records that sub has been sent Discover for obj.
+func (r *Registry) markDiscovered(st *federationState, sub core.FederateHandle, obj core.ObjectHandle) {
+	st.mu.Lock()
+	st.discovered[discoverKey{sub: sub, obj: obj}] = struct{}{}
+	st.mu.Unlock()
+}
+
+// alreadyDiscovered reports whether sub has been sent Discover for obj.
+func (r *Registry) alreadyDiscovered(st *federationState, sub core.FederateHandle, obj core.ObjectHandle) bool {
+	st.mu.Lock()
+	_, ok := st.discovered[discoverKey{sub: sub, obj: obj}]
+	st.mu.Unlock()
+	return ok
 }
 
 // subscribersForDiscover resolves the Discover recipient set: the

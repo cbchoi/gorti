@@ -69,12 +69,27 @@ type federationState struct {
 
 	instances    map[core.ObjectHandle]*objectInstance
 	nameToHandle map[string]core.ObjectHandle
+
+	// discovered records which (subscriber, object) pairs have been
+	// sent a DiscoverObjectInstance — by the register-time fan-out OR
+	// the M37 EB-4 retroactive subscribe-time path — so the §6.9
+	// discover is idempotent per (subscriber, object) regardless of
+	// subscribe/register ordering. Entries for an object are dropped
+	// when the instance is deleted.
+	discovered map[discoverKey]struct{}
+}
+
+// discoverKey identifies one delivered DiscoverObjectInstance.
+type discoverKey struct {
+	sub core.FederateHandle
+	obj core.ObjectHandle
 }
 
 func newFederationState() *federationState {
 	return &federationState{
 		instances:    map[core.ObjectHandle]*objectInstance{},
 		nameToHandle: map[string]core.ObjectHandle{},
+		discovered:   map[discoverKey]struct{}{},
 	}
 }
 
@@ -139,6 +154,17 @@ type Options struct {
 	// keeps test fixtures + in-process drivers that do not wire a
 	// time manager working unchanged.
 	TSOGate core.TSODeliveryGate
+
+	// TSOValidator validates outgoing TSO timestamps at the
+	// send/update/delete ingestion points (M37 EB-3 / IEEE 1516.1-2010
+	// §8.1.2): a time-regulating sender may not stamp a TSO message
+	// below currentTime + lookahead. The time.Manager satisfies this
+	// interface directly (wired through cmd/rtid alongside TSOGate).
+	//
+	// OPTIONAL: when nil, no server-side timestamp validation runs
+	// (pre-M37 behavior; in-process fixtures without a time manager
+	// keep working). RO sends (nil timestamp) never consult it.
+	TSOValidator OutgoingTSOValidator
 
 	// OnRegister is an OPTIONAL post-Register hook invoked after
 	// a successful object registration AND after the Discover
