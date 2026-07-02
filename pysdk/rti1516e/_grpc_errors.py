@@ -201,6 +201,115 @@ class TransportTypeUnspecified(RtiError):
     error_code = 713
 
 
+# --- IEEE 1516.1-2010 Annex C names for the time path (M39 HA-3) --------------
+#
+# Same policy as rti1516e.errors: the Annex-C name subclasses the
+# home-grown class so ``except``-clauses against either keep catching.
+# The metadata-first translator resolves ``rti-spec-exception`` values
+# against class __name__, so these must match Annex C verbatim.
+
+
+class TimeRegulationIsNotEnabled(TimeRegulationNotEnabled):
+    """Annex C — operation requires time-regulating state."""
+
+
+class TimeConstrainedIsNotEnabled(TimeConstrainedNotEnabled):
+    """Annex C — operation requires time-constrained state."""
+
+
+class InTimeAdvancingState(TimeAdvancingState):
+    """Annex C — an advance request is already outstanding."""
+
+
+class RequestForTimeRegulationPending(RtiError):
+    """Annex C — enableTimeRegulation is still in flight."""
+
+    error_code = 714
+
+
+class RequestForTimeConstrainedPending(RtiError):
+    """Annex C — enableTimeConstrained is still in flight."""
+
+    error_code = 715
+
+
+class AsynchronousDeliveryAlreadyEnabled(TimeAlreadyAsynchronous):
+    """Annex C — §8.14 enableAsynchronousDelivery when already on."""
+
+
+class AsynchronousDeliveryAlreadyDisabled(TimeNotAsynchronous):
+    """Annex C — §8.15 disableAsynchronousDelivery when already off."""
+
+
+# --- Metadata-first spec-exception mapping (M39 HA-3, CONTRACT with HB) --------
+#
+# The rtid attaches trailing gRPC metadata under ``rti-spec-exception``
+# whose value is the IEEE 1516.1 exception class name in UpperCamelCase
+# exactly as in Annex C (e.g. ``ObjectClassNotPublished``,
+# ``AttributeNotOwned``, ``InvalidLogicalTime``,
+# ``FederationExecutionAlreadyExists``). The shared translator reads
+# that key FIRST and raises the pysdk class of the same name; the
+# code/detail heuristics below remain as the fallback for servers that
+# predate the metadata.
+
+_SPEC_EXCEPTION_METADATA_KEY = "rti-spec-exception"
+
+_SPEC_EXCEPTION_TABLE: dict[str, type[RtiError]] | None = None
+
+
+def spec_exception_table() -> dict[str, type[RtiError]]:
+    """Annex-C exception name -> pysdk exception class.
+
+    Built programmatically (once) from every ``RtiError`` subclass
+    defined in :mod:`rti1516e.errors` and this module, keyed by class
+    ``__name__`` — adding a new exception class automatically makes the
+    matching metadata value resolvable.
+    """
+    global _SPEC_EXCEPTION_TABLE  # noqa: PLW0603 — build-once module cache
+    if _SPEC_EXCEPTION_TABLE is None:
+        import sys
+
+        from rti1516e import errors as _errors_module
+
+        table: dict[str, type[RtiError]] = {}
+        for module in (_errors_module, sys.modules[__name__]):
+            for obj in vars(module).values():
+                if isinstance(obj, type) and issubclass(obj, RtiError):
+                    table[obj.__name__] = obj
+        _SPEC_EXCEPTION_TABLE = table
+    return _SPEC_EXCEPTION_TABLE
+
+
+def _spec_exception_name(exc: BaseException) -> str:
+    """Return the ``rti-spec-exception`` trailing-metadata value, or ``""``.
+
+    Duck-typed over ``AioRpcError.trailing_metadata()`` (an ``aio.Metadata``
+    of (key, value) pairs) and the sync API's Metadatum sequence; bytes
+    values are decoded. Any shape surprise degrades to ``""`` (fallback
+    heuristics take over) rather than raising.
+    """
+    metadata_fn = getattr(exc, "trailing_metadata", None)
+    if not callable(metadata_fn):
+        return ""
+    try:
+        metadata = metadata_fn()
+    except Exception:  # noqa: BLE001 - defensive
+        return ""
+    if metadata is None:
+        return ""
+    try:
+        for item in metadata:
+            key, value = item[0], item[1]
+            if str(key).lower() != _SPEC_EXCEPTION_METADATA_KEY:
+                continue
+            if isinstance(value, bytes | bytearray):
+                return bytes(value).decode("utf-8", errors="replace")
+            return str(value)
+    except Exception:  # noqa: BLE001 - defensive
+        return ""
+    return ""
+
+
 # --- Translation entry point --------------------------------------------------
 
 
@@ -224,12 +333,27 @@ def translate_rpc_error(exc: BaseException) -> NoReturn:
     code_name = _grpc_code_name(exc)
     detail = _grpc_detail(exc) or str(exc)
 
+    # M39 HA-3 — metadata FIRST: an M39+ rtid names the IEEE Annex C
+    # exception class explicitly in trailing metadata; that beats any
+    # heuristic. Unknown names (a future exception this pysdk predates)
+    # fall through to the heuristics below.
+    if spec_name := _spec_exception_name(exc):
+        spec_cls = spec_exception_table().get(spec_name)
+        if spec_cls is not None:
+            raise spec_cls(detail or spec_name) from exc
+
     # M21 TASK-208: time-management errors share gRPC codes
     # (FailedPrecondition for most state errors, InvalidArgument for
     # bad inputs). The detail string is the manager's sentinel.Error()
     # text — sniff that to disambiguate.
     if time_cls := _time_class_for(detail):
         raise time_cls(detail) from exc
+
+    # M39 HA-3 — federation/declaration/object sentinel texts (pre-
+    # metadata servers). Same policy as _time_class_for: substring on
+    # the distinguishing fragment of core/errors.go.
+    if detail_cls := _detail_class_for(detail):
+        raise detail_cls(detail) from exc
 
     cls = _CODE_TO_EXCEPTION.get(code_name)
     if cls is not None:
@@ -276,6 +400,48 @@ def _time_class_for(detail: str) -> type[RtiError] | None:
         return ObjectAlreadyDeleted
     if "transport type must be" in detail:
         return TransportTypeUnspecified
+    return None
+
+
+def _detail_class_for(detail: str) -> type[RtiError] | None:
+    """Return the Annex-C typed exception for a federation / object /
+    declaration sentinel text, or None.
+
+    Fallback for pre-M39 servers (no ``rti-spec-exception`` metadata).
+    Detail strings come from rti/internal/core/errors.go sentinel
+    ``Error()`` texts; substring match on the distinguishing fragment,
+    most-specific first.
+    """
+    from rti1516e import errors as e
+
+    if "federation already exists" in detail:
+        return e.FederationExecutionAlreadyExists
+    if "federation has federates joined" in detail:
+        return e.FederatesCurrentlyJoined
+    if "federation not found" in detail:
+        return e.FederationExecutionDoesNotExist
+    if "federate not joined" in detail:
+        return e.FederateNotExecutionMember
+    if "federate already joined" in detail:
+        return e.FederateAlreadyExecutionMember
+    if "object class not published" in detail:
+        return e.ObjectClassNotPublished
+    if "interaction class not published" in detail:
+        return e.InteractionClassNotPublished
+    if "attribute not owned" in detail:
+        return e.AttributeNotOwned
+    if "object class not found" in detail:
+        return e.ObjectClassNotDefined
+    if "attribute not found" in detail:
+        return e.AttributeNotDefined
+    if "object not found" in detail:
+        return e.ObjectInstanceNotKnown
+    if "invalid logical time" in detail:
+        return e.InvalidLogicalTime
+    if "object instance name already reserved or in use" in detail:
+        return e.ObjectInstanceNameInUse
+    if "object instance name has not been reserved" in detail:
+        return e.ObjectInstanceNameNotReserved
     return None
 
 

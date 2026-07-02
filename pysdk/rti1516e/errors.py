@@ -214,6 +214,159 @@ class WireMalformedMessage(RtiError):
     error_code = 501
 
 
+# --- IEEE 1516.1-2010 Annex C exception names (M39 HA-3) ---------------------
+#
+# The rtid (M39, agent HB) attaches trailing gRPC metadata under the key
+# ``rti-spec-exception`` whose value is the IEEE 1516.1 exception class
+# name in UpperCamelCase exactly as printed in Annex C (e.g.
+# ``ObjectClassNotPublished``, ``AttributeNotOwned``). pysdk's shared
+# translator (rti1516e._grpc_errors.translate_rpc_error) raises the
+# class of the SAME NAME, resolved programmatically over this module —
+# so the classes below are named verbatim after Annex C.
+#
+# Where gorti already had a home-grown class for the condition, the
+# Annex-C name SUBCLASSES it: ``except``-clauses written against either
+# name keep catching. Standalone Annex-C conditions subclass RtiError
+# directly.
+
+
+class FederationExecutionAlreadyExists(FederationAlreadyExists):
+    """Annex C — §4.5 createFederationExecution duplicate name."""
+
+
+class FederationExecutionDoesNotExist(FederationNotFound):
+    """Annex C — §4.6/§4.9 named federation execution does not exist."""
+
+
+class FederatesCurrentlyJoined(FederationHasFederatesJoined):
+    """Annex C — §4.6 destroyFederationExecution with members joined."""
+
+
+class FederateNotExecutionMember(FederationNotJoined):
+    """Annex C — caller is not a joined member of the federation."""
+
+
+class FederateAlreadyExecutionMember(FederationAlreadyJoined):
+    """Annex C — §4.9 joinFederationExecution while already joined."""
+
+
+class FederateNameAlreadyInUse(RtiError):
+    """Annex C — §4.9 the requested federate name is taken."""
+
+
+class ObjectClassNotDefined(ObjectClassNotFound):
+    """Annex C — object class handle/name is not in the FOM."""
+
+
+class ObjectInstanceNotKnown(ObjectNotFound):
+    """Annex C — object instance handle is unknown to this federate."""
+
+
+class AttributeNotDefined(ObjectAttributeNotFound):
+    """Annex C — attribute handle/name is not in the FOM class."""
+
+
+class AttributeNotOwned(ObjectAttributeNotOwned):
+    """Annex C — §6.10/§7 caller does not own the attribute instance."""
+
+
+class AttributeNotPublished(RtiError):
+    """Annex C — attribute is not in the caller's publication set."""
+
+
+class AttributeAlreadyOwned(RtiError):
+    """Annex C — §7 acquisition target is already owned by the caller."""
+
+
+class InteractionClassNotDefined(RtiError):
+    """Annex C — interaction class handle/name is not in the FOM."""
+
+
+class InteractionClassNotPublished(InteractionNotPublished):
+    """Annex C — §6.12 sendInteraction without publication."""
+
+
+class InteractionParameterNotDefined(RtiError):
+    """Annex C — parameter handle/name is not in the FOM class."""
+
+
+class DeletePrivilegeNotHeld(RtiError):
+    """Annex C — §6.14 deleteObjectInstance without HLAprivilegeToDelete."""
+
+
+class ObjectInstanceNameInUse(RtiError):
+    """Annex C — §6.2 reserveObjectInstanceName collision."""
+
+
+class ObjectInstanceNameNotReserved(RtiError):
+    """Annex C — §6.8 explicit-name register without a reservation."""
+
+
+class SynchronizationPointLabelNotAnnounced(RtiError):
+    """Annex C — §4.14 achieve on a label never announced here."""
+
+
+class InvalidLogicalTime(RtiError):
+    """Annex C — §8 a supplied logical time is invalid (e.g. a TSO
+    timestamp below currentTime + lookahead, M37 EB-3)."""
+
+
+class SaveInProgress(RtiError):
+    """Annex C — operation illegal while a federation save is active."""
+
+
+class RestoreInProgress(RtiError):
+    """Annex C — operation illegal while a federation restore is active."""
+
+
+class SaveNotInitiated(RtiError):
+    """Annex C — §4.13 save-complete without an initiated save."""
+
+
+class RestoreNotRequested(RtiError):
+    """Annex C — §4.28 restore-complete without a requested restore."""
+
+
+class FederateOwnsAttributes(RtiError):
+    """Annex C — §4.10 resign forbidden while owning attributes."""
+
+
+class AttributeAlreadyBeingAcquired(RtiError):
+    """Annex C — §7.8 acquisition already pending for the attribute."""
+
+
+class AttributeAlreadyBeingDivested(RtiError):
+    """Annex C — §7.3 negotiated divest already pending."""
+
+
+class AttributeDivestitureWasNotRequested(RtiError):
+    """Annex C — §7.6 confirmDivestiture without a pending divest."""
+
+
+class AttributeAcquisitionWasNotRequested(RtiError):
+    """Annex C — §7.13 cancel on an acquisition never requested."""
+
+
+class InvalidRegion(RtiError):
+    """Annex C — §9 region handle is invalid."""
+
+
+class RegionNotCreatedByThisFederate(RtiError):
+    """Annex C — §9 region belongs to a different federate."""
+
+
+class InvalidRegionContext(RtiError):
+    """Annex C — §9 region used with a mismatched class/attribute."""
+
+
+class MessageCanNoLongerBeRetracted(RtiError):
+    """Annex C — §8.21 retraction past the LBTS horizon."""
+
+
+class InvalidMessageRetractionHandle(RtiError):
+    """Annex C — §8.21 unknown retraction handle."""
+
+
 # Lookup table from numeric error code -> exception class. Agent C uses this
 # in TASK-067 to map gRPC trailers to typed exceptions.
 ERROR_CODE_TO_EXCEPTION: dict[int, type[RtiError]] = {
