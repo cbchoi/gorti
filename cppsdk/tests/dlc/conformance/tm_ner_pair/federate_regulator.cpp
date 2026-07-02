@@ -68,8 +68,13 @@ int main(int argc, char** argv) {
   std::printf("REG: CONNECT\n");
 
   std::wstring fedName = L"tm_ner_pair";
-  std::vector<std::wstring> modules{std::wstring(fom.begin(), fom.end())};
-  amb->createFederationExecution(fedName, modules);
+  // §4.5 create idempotent — either side may create; the launcher starts the
+  // constrained federate first so its §5.6 subscription exists before this
+  // (regulating-only, hence freely-granted) federate advances.
+  try {
+    std::vector<std::wstring> modules{std::wstring(fom.begin(), fom.end())};
+    amb->createFederationExecution(fedName, modules);
+  } catch (rti1516e::FederationExecutionAlreadyExists const&) {}
   amb->joinFederationExecution(L"regulator", fedName);
   std::printf("REG: JOIN federate=regulator\n");
 
@@ -81,7 +86,7 @@ int main(int argc, char** argv) {
   // §8.2 enable regulation with lookahead 1.0. Async — wait for §8.3 callback.
   rti1516e::HLAfloat64Interval lookahead(1.0);
   amb->enableTimeRegulation(lookahead);
-  while (!fed.regulating) amb->evokeCallback(0.1);
+  while (!fed.regulating) amb->evokeMultipleCallbacks(0.05, 0.1);
 
   auto seqParam = amb->getParameterHandle(ick, L"seq");
   for (int t = 1; t <= 5; ++t) {
@@ -89,7 +94,7 @@ int main(int argc, char** argv) {
     rti1516e::HLAfloat64Time target(static_cast<double>(t));
     double priorGrant = fed.lastGrant;
     amb->nextMessageRequest(target);
-    while (fed.lastGrant == priorGrant) amb->evokeCallback(0.1);
+    while (fed.lastGrant == priorGrant) amb->evokeMultipleCallbacks(0.05, 0.1);
 
     // §6.12 send Tick(seq=t) with theTime=t (TSO).
     rti1516e::HLAinteger32BE seq(t);

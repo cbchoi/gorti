@@ -43,3 +43,55 @@ In M31 the test fails to link with `undefined reference to rti1516e::*` — by d
 - `expected.regulator.log` — golden skeleton (`TBD-pitch-capture`)
 - `expected.constrained.log` — golden skeleton (`TBD-pitch-capture`)
 - `test_tm_ner_pair.cpp` — gtest driver (uses Agent C's `_harness/`)
+
+## gorti parity status (M35, parity-CE)
+
+Regulator **FULL 15/15**; constrained **PARTIAL 10/15**. Captured run:
+`gorti-captured.{regulator,constrained}.log` (canonicalized).
+
+Missing events (exactly five): the §6.13 TSO deliveries
+`CON: RECV interaction=Tick time=N.000000 order=TIMESTAMP`, N=1..5.
+Everything else — §8.5/§8.6 constrained enable, all five §8.8 NER
+grants at exact targets, resign — matches.
+
+### TSO-delivery analysis (why the RECVs are missing)
+
+NOT an evoke-drain problem (all wait loops use
+`evokeMultipleCallbacks(0.05, 0.1)`) and NOT a server gap. The break is
+in the C++ SDK send path — the interactions ARE delivered, invisibly:
+
+1. **Primary break** — `cppsdk/src/dlc/RTIambassadorImpl.cpp:811-831`:
+   the timed §6.12 `sendInteraction(..., LogicalTime const&)` overload
+   does `(void)theTime;` (line 818) and calls the untimed 3-arg
+   `M17Bridge::sendInteraction` — every TSO send is degraded to RO.
+2. **Structural** — `cppsdk/src/RtiAmbassador.cpp:2001-2017`: the M17
+   client's only `sendInteraction` never sets
+   `SendInteractionRequest.logical_time`; no timed variant exists
+   (`include/rti1516e/RtiAmbassador.h:257`). `M17Bridge.cpp:346-360`
+   likewise has no time parameter (and also drops the tag).
+3. **Server is ready** — `rti/internal/object/interaction.go:113-172`:
+   `fanoutReceive` has a working TSO gate
+   (`ShouldDeliverNow`/`BufferTSO`, released by NextMessageRequest) but
+   sees `ts == nil` and takes the immediate-RO branch (line 167),
+   omitting `ReceiveInteraction.LogicalTime` on the wire (126-129).
+4. **Visible symptom** — `cppsdk/src/dlc/FederateAmbassadorBridge.cpp:204-223`:
+   with no wire timestamp it invokes the plain 6-arg
+   `receiveInteraction` (line 220), not the 9-arg TSO overload the
+   golden mandates — so the constrained federate receives the Ticks as
+   RO through an overload this fixture (correctly) does not override.
+
+Also implied: the constrained side's NER grants go to the full target
+(no message-time truncation), consistent with an empty TSO queue.
+
+Missing impl (out of parity-CE scope, `src/dlc` frozen): thread
+LogicalTime through M17 client → M17Bridge → DLC `sendInteraction`;
+the Go TSO gate and the 9-arg delivery path then engage as-is.
+
+### Fixture-side changes (no golden edits)
+
+- Regulator tolerates `FederationExecutionAlreadyExists` (§4.5 create is
+  launcher-order idempotent, same as the constrained side).
+- Constrained gates its NER loop on §8.16 `queryGALT` becoming defined
+  (= a regulating federate exists); without it the constrained side is
+  granted instantly before the regulator enables regulation.
+- All wait loops use the §10.42 evoke-drain pattern.
