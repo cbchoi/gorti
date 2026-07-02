@@ -62,3 +62,13 @@ spec-derived golden), not Pitch-FULL.
 
 Wait loops drain via `evokeMultipleCallbacks` (gorti M17 buffers
 callbacks for caller-thread drain; harmless yield under Pitch).
+
+## M37 ED re-verdict (2026-07-02) — scripted driver
+
+`_harness/run_fixture.sh fm_sync_full` (protocol in `driver.conf`:
+registrar first, peers gated on JOIN markers inside the registrar's
+700 ms window, `FED_NAME=BOB/CAROL` env). Reproduces the M35 baseline
+deterministically: **bob SPEC-FULL 6/6, carol SPEC-FULL 6/6, registrar
+SPEC-PARTIAL 7/8 (19/20)** — sole miss remains
+`REG: SYNC_REGISTRATION_SUCCEEDED` (§4.12 no wire ack; M37 EA proto
+vertical). Captured logs byte-identical with the committed M35 capture.
