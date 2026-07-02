@@ -1,0 +1,3 @@
+bob: CONNECT
+bob: JOIN federate=bob
+bob: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

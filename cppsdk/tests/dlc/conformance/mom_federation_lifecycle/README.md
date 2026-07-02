@@ -36,3 +36,50 @@ The fixture **does not** call any non-standard MOM helper. After M32+ lands MOM,
 - `expected.alice.log`
 - `expected.bob.log`
 - `test_mom_federation_lifecycle.cpp`
+
+## parity-CF verdict (M35 wave 2)
+
+**BLOCKED(MOM object-instance fan-out to standard pub/sub unimplemented
+server-side)** — line-level PARTIAL 10/17 (observer **4/11**, alice
+**3/3**, bob **3/3**).
+
+What works (traced end-to-end against a fresh rtid):
+- The standard MIM is auto-merged into every federation FOM at load
+  (`rti/cmd/rtid/foms.go:61-65` → `rti/pkg/fom/mim/`), so
+  `getObjectClassHandle("HLAobjectRoot.HLAmanager.HLAfederate")` and both
+  attribute handle lookups **resolve**, and
+  `subscribeObjectClassAttributes(..., active=true)` **succeeds** — the
+  §11 "MOM via ordinary pub/sub" front door is open.
+- Member goldens match exactly (join/resign wire path clean).
+
+Exact missing events (all 7 §11 observer lines):
+`DISCOVER name=HLAfederate` ×3, `REFLECT HLAfederateName=observer`,
+`REFLECT HLAfederateName=alice`, `REFLECT HLAfederateName=bob`,
+`REMOVE` (alice's resign). The observer receives nothing between
+SUBSCRIBE and RESIGN.
+
+Root cause (server-side, named): `rti/internal/mom` is a
+snapshot-recorder + interaction responder, not an object publisher.
+- `Manager.FederateJoined` (manager.go:151) / `FederateResigned`
+  (manager.go:189) only mutate the in-memory `federateSnapshot` map —
+  they emit no discover/reflect/remove through the Outbox.
+- The MOM's Outbox use is limited to HLArequest→HLAreport
+  *interactions* (emitter.go / handlers_request.go) and bespoke Query
+  accessors; manager.go:66-71 documents this as the M11 cut-1
+  simplification: "real federate-side subscription via the standard
+  pub/sub APIs requires the object.Registry to be aware of MOM classes
+  as subscribable ... the subscriber fan-out is a follow-up".
+- `rti/internal/object/registry.go` is MOM-aware only for interaction
+  dispatch (registry.go:109), never registers HLAfederate object
+  instances.
+
+Catalogue row 16.1's *negative* half (no bespoke federate API needed)
+holds; the *positive* half (MOM data arrives via 4.19/4.20/4.22
+callbacks) is blocked until the M11-deferred fan-out lands: register an
+HLAfederate instance per join in the object registry, reflect
+HLAfederateHandle/HLAfederateName to subscribers, delete on resign.
+
+Fixture code untouched (observer already used the suite-standard
+evoke-drain `evokeMultipleCallbacks(0.05, 0.1)`). Run sequencing:
+observer joins/subscribes first; alice joins; bob joins while alice is
+still a member; alice resigns before bob (golden step order preserved).
