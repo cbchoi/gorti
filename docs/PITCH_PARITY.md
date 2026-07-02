@@ -512,3 +512,44 @@ golden (Pitch capture blocked by the Free-edition 2-federate cap or N/A);
 - **DLC/C++ layer**: thread LogicalTime through timed send overloads → M17Bridge → wire; getFederateHandle real impl; FR-DLC-14 re-entrancy guard; deleteObjectInstance/requestAttributeValueUpdate no-ops.
 - **Go server**: restore-by-name not handle; publication-state enforcement on register; §7.6 ConfirmDivestiture gate (two-phase currently one-phase); §7.9 atomic acquire-if-available; ownership seeding (`fanoutAttrProbe`); implicit HLAprivilegeToDelete; late-joiner discovery; DDM-aware discover fanout; lookahead floor; NER resign liveness (`tryGrantPending` on resign); MOM instance fan-out.
 - **pysdk**: `standard.py` Layer-2 resign-action discard.
+
+## M36 scoreboard update (2026-07-02, post DA/DB/DC/DD)
+
+Aggregate: **≈432/460 events (≈94%)**, up from ≈87%. **14 of 27 fixtures at
+FULL/SPEC-FULL** (was 7), **0 BLOCKED** (was 2 — both un-blocked this
+milestone). Zero proto changes were needed.
+
+Newly FULL/SPEC-FULL (7): tm_lookahead_change 16/16 (DB), ddm_region_overlap
+24/24 (DC), om_request_attribute_update_class + _instance (DA),
+threading_callback_reentry 7/7 (DA — FR-DLC-14 guard now fires),
+xlang_python_cpp_pubsub 17/17 (DD + DA), mom_federation_lifecycle 18/18
+(DD — MOM instance fan-out implemented through the standard registry path).
+
+Materially improved: fm_save_restore 12→15/18 (restore-by-name),
+tm_ner_pair — all 15 constrained events now delivered (TSO send+delivery
+fixed; §8.14 RECV/GRANT order residual), tm_tso_ordering 5→8/9 with §8.15
+tie-break witnessed (final GRANT liveness fixed by DB on integrated main;
+driver-sequenced re-verification pending), ddm_region_mod_in_flight 26/28,
+own_query 13/14 content, own_race 17/17 content, om_delete 15/16,
+dm_unpublish server gap CLOSED (strict 7/9 pending DLC error-mapping sniff).
+
+### M37 backlog (all pinned)
+
+- `rti/internal/object/delete.go:74` — delete fanout probe hardcoded `{1}`;
+  use published/subscribed set (om_delete 16/16)
+- `rti/internal/time/ner.go:347-381` — emitGrant before releaseBufferedTSO
+  inverts §8.14 RECV-before-GRANT (tm_ner, tm_tso strict order)
+- `cppsdk` throwFromStatus — "not published" sniff → ObjectClassNotPublished
+  (dm_unpublish 9/9)
+- Bridge `initiateFederateRestore` federate_name fill from own join name
+  (fm_save_restore 16/18)
+- Proto slots (additive): §4.12 sync-registration ack, §4.14
+  successfully=false, §4.15 failedToSyncSet, §4.25/§4.26 restore events,
+  §5.10-13 startRegistration, §6.17-18 scope advisories, §7.11
+  release-request, §8.22 retraction, §7.9 if_available flag, §7.6
+  ConfirmDivestiture RPC
+- Server: outgoing-TSO timestamp validation (ts ≥ current+lookahead) absent;
+  late-join retroactive DISCOVER; MOM attrs beyond the maintained five;
+  MOM state in savepoint replay
+- Golden-review: own_query `ATTRIBUTE_IS_OWNED_BY_RTI` vs §6.8 (registrant
+  owns privilege attribute)
