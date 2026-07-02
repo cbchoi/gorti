@@ -375,6 +375,25 @@ func (m *Manager) fanoutAssumption(
 // current owner has already called NegotiatedDivest, the transfer
 // completes and both parties get callbacks. Otherwise the acquire is
 // queued; when the owner eventually divests, the transfer fires.
+//
+// M36 DC-5 atomicity: classification of the requested attribute set is
+// a read-only first pass; state mutates only after the whole set
+// validates. A duplicate pending acquire therefore rejects the call
+// with NO side effects (previously the inline check could reject after
+// earlier attributes had already transitioned from-unowned, leaving
+// granted-but-unnotified ownership behind).
+//
+// §7.9 residual (documented, M36 DC-5): the wire has no
+// "if-available" flag, so acquisitionIfAvailable is EMULATED by the
+// DLC as query-then-acquire. When two federates race an unowned
+// attribute, the loser's Acquire lands here AFTER the winner's grant
+// and — this being plain §7.4 semantics — is deterministically queued
+// as a pending acquire rather than rejected. The loser thus receives
+// neither §7.7 nor §7.10, and the queued acquire could later transfer
+// ownership the federate only requested "if available". Closing this
+// needs an if-available semantic flag on the AcquireRequest proto
+// (out of scope for M36; rejecting here instead would break legitimate
+// §7.4 callers and throw through the DLC's emulation path).
 func (m *Manager) Acquire(
 	ctx context.Context,
 	fed core.FederationName,
@@ -399,6 +418,10 @@ func (m *Manager) Acquire(
 	// readyAttrs which models the divest-then-acquire path with a
 	// concrete oldOwner.
 	var fromUnownedAttrs []core.AttributeHandle
+	// Attributes that stay pending (owned, no completed divest).
+	var queueAttrs []core.AttributeHandle
+	// Pass 1 — classify. READ-ONLY: no state mutation until the whole
+	// attribute set has validated (M36 DC-5).
 	for _, a := range attrs {
 		k := ownershipKey{obj: obj, attr: a}
 		ak := acquireKey{obj: obj, attr: a, acquirer: acquirer}
@@ -431,7 +454,6 @@ func (m *Manager) Acquire(
 			// IMMEDIATELY: the acquirer becomes the owner, and
 			// only the acquired notification fires (no prior owner
 			// to receive divest-confirmation).
-			st.owners[k] = ownershipRecord{owner: acquirer}
 			fromUnownedAttrs = append(fromUnownedAttrs, a)
 			continue
 		}
@@ -439,7 +461,14 @@ func (m *Manager) Acquire(
 			m.mu.Unlock()
 			return core.ErrOwnershipAcquirePending
 		}
-		st.pendingAcquires[ak] = pendingAcquire{tag: tagCopy}
+		queueAttrs = append(queueAttrs, a)
+	}
+	// Pass 2 — mutate, now that the whole set validated.
+	for _, a := range fromUnownedAttrs {
+		st.owners[ownershipKey{obj: obj, attr: a}] = ownershipRecord{owner: acquirer}
+	}
+	for _, a := range queueAttrs {
+		st.pendingAcquires[acquireKey{obj: obj, attr: a, acquirer: acquirer}] = pendingAcquire{tag: tagCopy}
 	}
 	m.mu.Unlock()
 

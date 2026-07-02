@@ -35,23 +35,40 @@ Per TASK-362 traceability lint:
 
 RED. Goldens are `TBD-pitch-capture` until Agent E TASK-363 clears.
 
-## gorti parity status (M35, parity-CC)
+## gorti parity status (M36, agent-DC)
 
-PARTIAL 8/9 vs spec-derived golden. Captured run: `gorti-captured.federate.log`.
+PARTIAL 7/9 strict vs spec-derived golden. Captured run:
+`gorti-captured.federate.log`, against the M36-DC rtid.
 
-Divergent event (exactly one):
+**The M35 server-side gap is CLOSED.** Root cause was NOT a missing
+register check (rti/internal/object registry.go already rejected
+per §6.8) but that the whole-class unpublish never took effect:
+the DLC delegates `unpublishObjectClass` as
+`unpublishObjectClassAttributes(class, {})` and
+`rti/internal/declaration/manager.go` treated the empty attribute set
+as a no-op. M36 DC-2: an empty set now drops ALL of the federate's
+attribute publications for the class (§5.3 semantics), after which the
+phase-2 `registerObjectInstance` is correctly rejected — the wire
+carries `FAILED_PRECONDITION` with the documented sentinel
+`object class not published by federate`
+(core.ErrObjectClassNotPublished, idd.md §1.1.4). Phase 1 (subset
+unpublish; register still legal because Velocity remains published)
+matches the golden as before.
 
-- golden: `FED: REGISTER_FAILED reason=ObjectClassNotPublished`
-- gorti:  `FED: REGISTER class=Vehicle name=car-phase2 handle=<H>`
+Remaining divergence is CLIENT-side exception mapping (cppsdk —
+outside DC ownership, flagged for agent DA):
+`cppsdk/src/RtiAmbassador.cpp` throwFromStatus has no "not published"
+detail-sniff, so the generic `FAILED_PRECONDITION` arm throws
+`FederateNotExecutionMember`; the fixture's
+`catch (ObjectClassNotPublished)` misses, the outer handler prints
+`FED: ERROR FederateNotExecutionMember: registerObjectInstance: object
+class not published by federate` on stderr and exits before RESIGN.
+Hence the strict score temporarily drops 8/9 → 7/9 (REGISTER_FAILED
+and RESIGN lines missing) even though the RTI behavior is now
+spec-correct — the old 8/9 counted the WRONG `FED: REGISTER ...
+car-phase2` success line as a near-miss.
 
-The DLC side is correct — `DLCRTIambassadorImpl::unpublishObjectClass`
-delegates whole-class unpublish as
-`m17_->unpublishObjectClassAttributes(class, {})` (empty set = whole
-class). The gap is server-side: gorti's `registerObjectInstance` does
-not enforce publication state, so it never raises
-`ObjectClassNotPublished` (§6.8 exception set) after the whole-class
-unpublish. Phase 1 (subset unpublish; register still legal because
-Velocity remains published) matches the golden.
-
-Missing impl: publication-state check in the gorti register path
-(rti/internal/object registry) raising ObjectClassNotPublished.
+Missing impl (residual, DA): one detail-sniff line in throwFromStatus
+(`"not published"` → ObjectClassNotPublished) plus the equivalent
+propagation through M17Bridge guard()/translateBridgeError so the DLC
+surfaces the §6.8 exception type.

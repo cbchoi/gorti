@@ -42,33 +42,29 @@ The fixture exercises only the DLC shapes, locking source-compat with Pitch-port
 - `expected.subscriber.log`
 - `test_ddm_region_overlap.cpp`
 
-## gorti parity status (M35, parity-CE)
+## gorti parity status (M36, agent-DC)
 
-Publisher **FULL 13/13**; subscriber **PARTIAL 10/11**. Captured run:
-`gorti-captured.{publisher,subscriber}.log` (canonicalized).
+Publisher **FULL 13/13**; subscriber **FULL 11/11**. Captured run:
+`gorti-captured.{publisher,subscriber}.log` (canonicalized), against
+the M36-DC rtid.
 
-The fixture's core assertion — §9 region-filtered delivery through the
-R_pub∩R_sub overlap — WORKS end-to-end: createRegion, setRangeBounds,
-commitRegionModifications, registerObjectInstanceWithRegions (parity-CA
-fused as §6.8 register + §9.6 associateRegionsForUpdates),
-subscribeObjectClassAttributesWithRegions, and all three region-routed
-REFLECTs arrive with exact values.
+M36 DC-1 closed the one M35 gap (`SUB: DISCOVER name=car-1`): discover
+fan-out is now DDM-aware. `rti/internal/object/discover.go`
+subscribersForDiscover unions the cut-1 `Declarations.SubscribersFor`
+recipients with the region-scoped subscribers, mirroring the reflect
+path (`update.go` subscribersForReflect):
 
-Missing event (exactly one): `SUB: DISCOVER name=car-1`.
+- publisher regions associated with the instance → overlap-tested
+  recipients via `DDM.SubscribersForUpdate`;
+- no publisher regions yet (the register-time case — gorti's
+  register/associate split lands `associateRegionsForUpdates` AFTER
+  §6.8 register) → default-region semantics via the new
+  `DDM.RegionSubscribersFor` (the default region overlaps every
+  subscriber region).
 
-Root cause — discover fanout is not DDM-aware:
-`rti/internal/object/discover.go` fanoutDiscover selects recipients from
-`Declarations.SubscribersFor` only, while the reflect path
-(`rti/internal/object/update.go` subscribersForUpdate, M10 FR-DDM-3..6)
-replaces that set with `DDM.SubscribersForUpdate` when the producer has
-region associations. A federate subscribed ONLY via
-SubscribeObjectClassAttributesWithRegions (ddm.Manager tables; no
-declaration.Manager entry) therefore gets every region-filtered REFLECT
-but never the §6.9 discoverObjectInstance that HLA requires to precede
-them. Missing impl: make fanoutDiscover consult the DDM subscription
-tables (or have the DDM subscribe also record a declaration
-subscription) — one-line recipient-set union plus determinism-order
-merge.
+A federate subscribed ONLY via
+subscribeObjectClassAttributesWithRegions therefore now receives the
+§6.9 discoverObjectInstance that precedes its region-filtered REFLECTs.
 
-Fixture-side change: publisher name-reservation wait moved to the
+Fixture-side change (M35): publisher name-reservation wait moved to the
 §10.42 evoke-drain pattern. No golden edits.

@@ -139,6 +139,17 @@ func (h *fomHandle) LookupInteractionClass(name string) (core.InteractionClassHa
 	return core.InvalidInteractionClassHandle, false
 }
 
+// LookupAttribute resolves an attribute name on cls, walking the
+// inheritance chain (M36 DC-4). Handle numbering stays backwards
+// compatible: attributes declared directly on cls keep their 1-based
+// positional handles; inherited attributes continue the numbering past
+// the class's own attributes, nearest ancestor first. This is what
+// makes the spec's implicit HLAprivilegeToDeleteObject (declared on
+// the MIM's HLAobjectRoot) resolvable on every subclass.
+//
+// Name aliasing: "HLAprivilegeToDelete" (the HLA 1.3-lineage short
+// form used by some federates/fixtures) resolves to the 1516-2010
+// "HLAprivilegeToDeleteObject".
 func (h *fomHandle) LookupAttribute(cls core.ObjectClassHandle, name string) (core.AttributeHandle, bool) {
 	if !h.IsValid() {
 		return core.InvalidAttributeHandle, false
@@ -148,12 +159,47 @@ func (h *fomHandle) LookupAttribute(cls core.ObjectClassHandle, name string) (co
 	if idx < 0 || idx >= len(classes) {
 		return core.InvalidAttributeHandle, false
 	}
-	for i, a := range classes[idx].Attributes {
-		if a.Name == name {
-			return core.AttributeHandle(i + 1), true
+	target := canonicalAttributeName(name)
+	offset := 0
+	visited := map[int]bool{}
+	for cur := idx; cur >= 0 && cur < len(classes) && !visited[cur]; {
+		visited[cur] = true
+		for i, a := range classes[cur].Attributes {
+			if a.Name == target {
+				return core.AttributeHandle(offset + i + 1), true
+			}
 		}
+		offset += len(classes[cur].Attributes)
+		cur = objectClassIndexByName(classes, classes[cur].ParentName)
 	}
 	return core.InvalidAttributeHandle, false
+}
+
+// canonicalAttributeName maps legacy attribute-name spellings onto the
+// IEEE 1516-2010 canonical form. Currently only the privilege
+// attribute needs this (M36 DC-4).
+func canonicalAttributeName(name string) string {
+	if name == "HLAprivilegeToDelete" {
+		return "HLAprivilegeToDeleteObject"
+	}
+	return name
+}
+
+// objectClassIndexByName returns the slice index of the object class
+// whose Name equals leafName(name), or -1 when name is empty or
+// unknown. Used by the inheritance walk in LookupAttribute /
+// AttributeName.
+func objectClassIndexByName(classes []model.ObjectClass, name string) int {
+	if name == "" {
+		return -1
+	}
+	target := leafName(name)
+	for i, oc := range classes {
+		if oc.Name == target {
+			return i
+		}
+	}
+	return -1
 }
 
 func (h *fomHandle) LookupParameter(cls core.InteractionClassHandle, name string) (core.ParameterHandle, bool) {
@@ -200,7 +246,10 @@ func (h *fomHandle) InteractionClassName(cls core.InteractionClassHandle) (strin
 	return classes[idx].Name, true
 }
 
-// AttributeName implements core.FOMHandleNameLookup.
+// AttributeName implements core.FOMHandleNameLookup. Mirrors
+// LookupAttribute's inheritance walk (M36 DC-4): handles past the
+// class's own attribute count fall through to the ancestor chain,
+// nearest ancestor first.
 func (h *fomHandle) AttributeName(cls core.ObjectClassHandle, attr core.AttributeHandle) (string, bool) {
 	if !h.IsValid() {
 		return "", false
@@ -211,11 +260,20 @@ func (h *fomHandle) AttributeName(cls core.ObjectClassHandle, attr core.Attribut
 		return "", false
 	}
 	aidx := int(attr) - 1
-	attrs := classes[cidx].Attributes
-	if aidx < 0 || aidx >= len(attrs) {
+	if aidx < 0 {
 		return "", false
 	}
-	return attrs[aidx].Name, true
+	visited := map[int]bool{}
+	for cur := cidx; cur >= 0 && cur < len(classes) && !visited[cur]; {
+		visited[cur] = true
+		attrs := classes[cur].Attributes
+		if aidx < len(attrs) {
+			return attrs[aidx].Name, true
+		}
+		aidx -= len(attrs)
+		cur = objectClassIndexByName(classes, classes[cur].ParentName)
+	}
+	return "", false
 }
 
 // ParameterName implements core.FOMHandleNameLookup.

@@ -100,6 +100,16 @@ func (m *Manager) PublishObjectClassAttributes(
 
 // UnpublishObjectClassAttributes removes federate `pub`'s publication of
 // the listed attributes. Removing a non-existent publication is a no-op.
+//
+// M36 DC-2 — whole-class form: an EMPTY attribute list means
+// unpublishObjectClass (IEEE 1516.1-2010 §5.3). The wire exposes only
+// the attribute-scoped RPC; the C++ DLC maps the §5.3 whole-class call
+// to this RPC with an empty set (cppsdk RTIambassadorImpl
+// unpublishObjectClass → unpublishObjectClassAttributes(cls, {})).
+// Before this fix the empty list was a silent no-op, so publications
+// survived a whole-class unpublish and a subsequent
+// registerObjectInstance was NOT rejected with ObjectClassNotPublished
+// as §6.8 requires (dm_unpublish_whole_vs_attrs fixture).
 func (m *Manager) UnpublishObjectClassAttributes(
 	_ context.Context,
 	fed core.FederationName,
@@ -111,6 +121,20 @@ func (m *Manager) UnpublishObjectClassAttributes(
 	defer m.mu.Unlock()
 	st, ok := m.fed[fed]
 	if !ok {
+		return nil
+	}
+	if len(attrs) == 0 {
+		// §5.3 whole-class unpublish: drop pub from EVERY attribute
+		// publication of cls.
+		for k, set := range st.objPubs {
+			if k.cls != cls {
+				continue
+			}
+			delete(set, pub)
+			if len(set) == 0 {
+				delete(st.objPubs, k)
+			}
+		}
 		return nil
 	}
 	for _, a := range attrs {

@@ -205,6 +205,19 @@ type DataDistributionManagement interface {
 		publisherRegions []DDMRegionHandleCore,
 	) []FederateHandle
 
+	// RegionSubscribersFor returns every federate holding a
+	// region-scoped subscription to (cls, attr), in sorted handle
+	// order, WITHOUT an overlap test. M36 DC-1: consumed by the
+	// object.Registry Discover fan-out for the register-time
+	// default-region case (no publisher associations yet → the
+	// default region overlaps every subscriber region). Returns nil
+	// when no region subscriptions exist for the pair.
+	RegionSubscribersFor(
+		fed FederationName,
+		cls ObjectClassHandle,
+		attr AttributeHandle,
+	) []FederateHandle
+
 	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
 
 	// Snapshot returns aggregate DDM counters for the AdminService
