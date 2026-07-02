@@ -198,7 +198,14 @@ func sortedAttrHandles(attrs map[core.AttributeHandle][]byte) []core.AttributeHa
 // associations exist for inst the registry takes the cut-1 path
 // unchanged — the FR-DDM-6 zero-cost contract.
 func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, st *federationState, producer core.FederateHandle, inst *objectInstance, attrs map[core.AttributeHandle][]byte, updateAttrs []core.AttributeHandle, ts *core.LogicalTime, retractionHandle uint64) {
-	subs := r.subscribersForReflect(ctx, fed, inst, updateAttrs)
+	subs, perAttr := r.subscribersForReflect(ctx, fed, inst, updateAttrs)
+	// §6.17/§6.18 (M37 Agent EA) — scope advisories fire BEFORE the
+	// reflect fanout so a newly-in-scope subscriber sees InScope →
+	// Reflect in stream order. perAttr is non-nil only on the DDM-
+	// aware path (FR-DDM-6 zero-cost contract preserved).
+	if perAttr != nil {
+		r.emitScopeAdvisories(ctx, fed, st, producer, inst, updateAttrs, perAttr)
+	}
 	// Hoist: see fanoutReceive for the rationale (single defensive
 	// copy + shared inner proto + batched seq allocation).
 	pb := &rtiv1.ReflectAttributeValues{
@@ -260,15 +267,20 @@ func (r *Registry) fanoutReflect(ctx context.Context, fed core.FederationName, s
 // a given (object, attribute set) update. Splits the cut-1 path from
 // the M10 DDM-aware path so the hot path stays one direct call when
 // no DDM filter is wired or no associations exist.
-func (r *Registry) subscribersForReflect(ctx context.Context, fed core.FederationName, inst *objectInstance, updateAttrs []core.AttributeHandle) []core.FederateHandle {
+//
+// The second return value is the per-attribute recipient breakdown,
+// populated ONLY on the DDM-aware path (nil otherwise). The §6.17/§6.18
+// scope-advisory emitter consumes it (M37 Agent EA).
+func (r *Registry) subscribersForReflect(ctx context.Context, fed core.FederationName, inst *objectInstance, updateAttrs []core.AttributeHandle) ([]core.FederateHandle, map[core.AttributeHandle][]core.FederateHandle) {
 	if r.opts.DDM == nil || !r.opts.DDM.HasObjectAssociations(fed, inst.handle) {
-		return r.opts.Declarations.SubscribersFor(ctx, fed, inst.cls, updateAttrs)
+		return r.opts.Declarations.SubscribersFor(ctx, fed, inst.cls, updateAttrs), nil
 	}
 	// DDM-aware union across the updated attribute set. For each
 	// attribute, fall back to the cut-1 subscribers when the
 	// publisher did not associate any region for that attr (the
 	// per-attr nil branch).
 	union := map[core.FederateHandle]struct{}{}
+	perAttr := make(map[core.AttributeHandle][]core.FederateHandle, len(updateAttrs))
 	for _, attr := range updateAttrs {
 		pubRegions := r.opts.DDM.PublisherRegionsFor(fed, inst.handle, attr)
 		var subs []core.FederateHandle
@@ -277,6 +289,7 @@ func (r *Registry) subscribersForReflect(ctx context.Context, fed core.Federatio
 		} else {
 			subs = r.opts.DDM.SubscribersForUpdate(fed, inst.cls, attr, pubRegions)
 		}
+		perAttr[attr] = subs
 		for _, h := range subs {
 			union[h] = struct{}{}
 		}
@@ -286,6 +299,124 @@ func (r *Registry) subscribersForReflect(ctx context.Context, fed core.Federatio
 		out = append(out, h)
 	}
 	slices.Sort(out)
+	return out, perAttr
+}
+
+// emitScopeAdvisories diffs the per-attribute recipient sets of THIS
+// update against the per-(object, subscriber) in-scope cache and emits
+// AttributesInScope / AttributesOutOfScope (§6.17/§6.18) to subscribers
+// whose region-overlap membership changed. Only attributes carried by
+// the current update are (re)evaluated — the update path is where the
+// overlap is computed (M37 Agent EA).
+func (r *Registry) emitScopeAdvisories(
+	ctx context.Context,
+	fed core.FederationName,
+	st *federationState,
+	producer core.FederateHandle,
+	inst *objectInstance,
+	updateAttrs []core.AttributeHandle,
+	perAttr map[core.AttributeHandle][]core.FederateHandle,
+) {
+	newlyIn := map[core.FederateHandle][]core.AttributeHandle{}
+	newlyOut := map[core.FederateHandle][]core.AttributeHandle{}
+
+	st.mu.Lock()
+	if st.scope == nil {
+		st.scope = map[core.ObjectHandle]map[core.FederateHandle]map[core.AttributeHandle]struct{}{}
+	}
+	objScope := st.scope[inst.handle]
+	if objScope == nil {
+		objScope = map[core.FederateHandle]map[core.AttributeHandle]struct{}{}
+		st.scope[inst.handle] = objScope
+	}
+	for _, attr := range updateAttrs { // sorted → deterministic
+		cur := map[core.FederateHandle]struct{}{}
+		for _, h := range perAttr[attr] {
+			if h == producer {
+				continue
+			}
+			cur[h] = struct{}{}
+			set := objScope[h]
+			if _, was := set[attr]; !was {
+				if set == nil {
+					set = map[core.AttributeHandle]struct{}{}
+					objScope[h] = set
+				}
+				set[attr] = struct{}{}
+				newlyIn[h] = append(newlyIn[h], attr)
+			}
+		}
+		for h, set := range objScope {
+			if _, was := set[attr]; !was {
+				continue
+			}
+			if _, still := cur[h]; still {
+				continue
+			}
+			delete(set, attr)
+			if len(set) == 0 {
+				delete(objScope, h)
+			}
+			newlyOut[h] = append(newlyOut[h], attr)
+		}
+	}
+	nSeq := len(newlyIn) + len(newlyOut)
+	var seq uint64
+	if nSeq > 0 {
+		seq = st.nextOutboundSeqRangeLocked(nSeq)
+	}
+	st.mu.Unlock()
+
+	if nSeq == 0 {
+		return
+	}
+	send := func(h core.FederateHandle, evt *rtiv1.FederateEvent) {
+		evt.Seq = seq
+		seq++
+		_ = r.opts.Outbox.Send(ctx, fed, h, &outboundEvent{pb: evt})
+	}
+	// Out-of-scope first (the attrs left scope BEFORE this update's
+	// reflect), then in-scope, each in sorted-recipient order.
+	for _, h := range sortedAdvisoryRecipients(newlyOut) {
+		send(h, &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_AttributesOutOfScope{
+				AttributesOutOfScope: &rtiv1.AttributesOutOfScope{
+					ObjectHandle:     uint64(inst.handle),
+					AttributeHandles: attrHandlesToWire(newlyOut[h]),
+				},
+			},
+		})
+	}
+	for _, h := range sortedAdvisoryRecipients(newlyIn) {
+		send(h, &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_AttributesInScope{
+				AttributesInScope: &rtiv1.AttributesInScope{
+					ObjectHandle:     uint64(inst.handle),
+					AttributeHandles: attrHandlesToWire(newlyIn[h]),
+				},
+			},
+		})
+	}
+}
+
+// sortedAdvisoryRecipients returns the map's keys in ascending order.
+func sortedAdvisoryRecipients(m map[core.FederateHandle][]core.AttributeHandle) []core.FederateHandle {
+	out := make([]core.FederateHandle, 0, len(m))
+	for h := range m {
+		out = append(out, h)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// attrHandlesToWire converts (already-sorted-by-iteration) attribute
+// handles to their wire form, sorting defensively.
+func attrHandlesToWire(attrs []core.AttributeHandle) []uint64 {
+	slices.Sort(attrs)
+	out := make([]uint64, 0, len(attrs))
+	for _, a := range attrs {
+		out = append(out, uint64(a))
+	}
 	return out
 }
 

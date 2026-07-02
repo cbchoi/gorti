@@ -2525,6 +2525,24 @@ bool RTIambassadorImpl::dispatchOneEvent() {
       fed_ambassador->turnInteractionsOff(InteractionClassHandle(
           evt.turn_interactions_off().interaction_class_handle()));
       return true;
+    case rti::v1::FederateEvent::kAttributesInScope: {
+      // §6.17 — M37 Agent EA.
+      const auto& a = evt.attributes_in_scope();
+      AttributeHandleSet attrs;
+      for (auto h : a.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->attributesInScope(
+          ObjectInstanceHandle(a.object_handle()), attrs);
+      return true;
+    }
+    case rti::v1::FederateEvent::kAttributesOutOfScope: {
+      // §6.18 — M37 Agent EA.
+      const auto& a = evt.attributes_out_of_scope();
+      AttributeHandleSet attrs;
+      for (auto h : a.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->attributesOutOfScope(
+          ObjectInstanceHandle(a.object_handle()), attrs);
+      return true;
+    }
     default:
       // Unsupported events drop silently. Cut-4+ adds remaining
       // slots (halted, etc.).

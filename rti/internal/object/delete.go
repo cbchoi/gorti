@@ -72,13 +72,16 @@ func (r *Registry) Delete(
 	// attribute. We use a single fanoutAttrProbe value (handle 1) to
 	// match the Register-side discover semantics.
 	probe := []core.AttributeHandle{1}
-	subs := r.subscribersForReflect(ctx, fed, inst, probe)
+	subs, _ := r.subscribersForReflect(ctx, fed, inst, probe)
 
 	// (c) Take the snapshot we need for the wire frame, then drop the
 	// lock before fanout (matches fanoutReflect's pattern).
 	cls := inst.cls
 	delete(st.instances, obj)
 	delete(st.nameToHandle, inst.name)
+	// M37 Agent EA — drop the §6.17/§6.18 in-scope cache with the
+	// instance.
+	delete(st.scope, obj)
 	st.mu.Unlock()
 
 	// (d) Build the envelope. ts is *core.LogicalTime; map to

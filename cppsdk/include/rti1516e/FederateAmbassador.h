@@ -166,6 +166,19 @@ class FederateAmbassador {
   virtual void turnInteractionsOff(
       InteractionClassHandle /*interaction_class*/) {}
 
+  // §6.17 — DDM region overlap brought the listed attributes of a
+  // subscribed instance into scope; reflects for them will follow.
+  // M37 Agent EA.
+  virtual void attributesInScope(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/) {}
+
+  // §6.18 — the listed attributes dropped out of region-overlap scope;
+  // no further reflects until they re-enter. M37 Agent EA.
+  virtual void attributesOutOfScope(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/) {}
+
   // §7.3 — an owner has called negotiatedAttributeOwnershipDivestiture
   // and the federation is asking this federate (a subscriber of the
   // attribute) whether it wants to assume ownership. To accept, call

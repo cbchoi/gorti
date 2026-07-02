@@ -69,6 +69,12 @@ type federationState struct {
 
 	instances    map[core.ObjectHandle]*objectInstance
 	nameToHandle map[string]core.ObjectHandle
+
+	// scope is the §6.17/§6.18 per-(object, subscriber) in-scope
+	// attribute cache backing the DDM scope advisories (M37 Agent EA).
+	// Lazily allocated on the first DDM-aware update; nil for non-DDM
+	// federations (FR-DDM-6 zero-cost contract).
+	scope map[core.ObjectHandle]map[core.FederateHandle]map[core.AttributeHandle]struct{}
 }
 
 func newFederationState() *federationState {

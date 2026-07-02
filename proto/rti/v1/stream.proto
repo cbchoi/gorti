@@ -69,6 +69,9 @@ message FederateEvent {
     StopRegistrationForObjectClass stop_registration = 61;
     TurnInteractionsOn turn_interactions_on = 62;
     TurnInteractionsOff turn_interactions_off = 63;
+    // DDM scope advisories (§6.17 / §6.18) — M37 Agent EA.
+    AttributesInScope attributes_in_scope = 64;
+    AttributesOutOfScope attributes_out_of_scope = 65;
     FederationHalted halted = 99;
   }
 }
@@ -312,6 +315,25 @@ message TurnInteractionsOn {
 // when the interaction class loses its last subscriber. M37 Agent EA.
 message TurnInteractionsOff {
   uint64 interaction_class_handle = 1;
+}
+
+// AttributesInScope — IEEE 1516.1-2010 §6.17. Fires on a SUBSCRIBER
+// when DDM region-overlap membership brings the listed attributes of
+// `object` into scope (evaluated on the update path where the overlap
+// is computed — a subscriber newly present in the per-attribute
+// recipient set). Precedes the corresponding Reflect. M37 Agent EA.
+message AttributesInScope {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// AttributesOutOfScope — IEEE 1516.1-2010 §6.18. Fires on a SUBSCRIBER
+// when the listed attributes drop out of region-overlap scope (the
+// subscriber left the per-attribute recipient set it was in on the
+// previous update). M37 Agent EA.
+message AttributesOutOfScope {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
 }
 
 // ObjectInstanceNameReservationSucceeded — IEEE 1516.1-2010 §6.1 (M26
