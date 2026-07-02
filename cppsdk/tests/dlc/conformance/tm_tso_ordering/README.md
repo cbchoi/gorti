@@ -129,3 +129,34 @@ Fixture fixes that made this deterministic (M37 ED):
 2. `federate_publisher.cpp` argv loop rewritten from pair-stepping
    (`i += 2`, alignment-sensitive: any positional/`--k=v` token made
    `--url` silently fall back to 8080) to token-scanning (`++i`).
+
+## M38 GA re-verdict (2026-07-02) — subscriber FULL 10/10; divergence RESOLVED
+
+The residual "extra `GRANT time=1.000000`" is fixed server-side:
+`rti/internal/time/advance.go decideGrant` retired the interim
+"sole-pending forced grant at LBTS keeps pending" semantics. Per §8.8 a
+`nextMessageRequest(t)` now (a) HOLDS with no grant while LBTS < t and
+no TSO message is queued, and (b) COMPLETES at
+min(t, next-TSO-message-time), delivering the messages at the grant
+time first (§8.14). New TSO arrivals for a pending requester re-run the
+grant loop (`BufferTSO` poke). Acceptance: `rti/spec/M38/`.
+
+Two fixture-side corrections landed with it (spec re-derivation, not
+capture-chasing):
+
+1. **Golden**: the pre-M38 `expected.subscriber.log` modelled the
+   "no pending message" timeline — a single `GRANT 2.000000`. That
+   timeline is unreachable under this fixture's own launch protocol:
+   the GALT-gated NMR(2.0) is always issued before the dwell-delayed
+   T=1.0 sends, so per §8.8 the first request completes EARLY at 1.0.
+   The golden now shows `GRANT 1.000000` (after the three §8.15-ordered
+   RECVs) followed by `GRANT 2.000000` from the re-issued request.
+2. **Walk**: `federate_subscriber.cpp` re-issues `nextMessageRequest(2.0)`
+   after each early grant — the pre-M38 single-request loop only
+   terminated because the retired keep-pending semantics re-granted the
+   SAME request at 2.0 later; under §8.8 one request yields one grant.
+
+Deterministic across 3 consecutive scripted-driver runs: **subscriber
+FULL 10/10, alice/bob/carol FULL 5/5 each**. `EXPECTED_VERDICTS.txt`
+row: PARTIAL → FULL (same commit). Captures refreshed
+(`gorti-captured.*.log`).

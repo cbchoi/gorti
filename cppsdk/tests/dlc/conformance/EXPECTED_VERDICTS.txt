@@ -14,6 +14,10 @@
 #
 # Snapshot basis: M37-EE final sweep 2026-07-02 (26/27 FULL/SPEC-FULL,
 # 459/459 golden events; sole divergence tm_tso interim GRANT).
+# M38 GA 2026-07-02: tm_tso_ordering PARTIAL -> FULL — §8.8 NMR now
+# grants at the next-TSO-message time with no interim grant at LBTS;
+# subscriber golden re-derived (GRANT 1.0 + GRANT 2.0 walk) and the
+# fixture walk re-issues its NMR per §8.8 one-request-one-grant.
 fm_create_join_resign FULL
 fm_list_executions FULL
 fm_save_restore_roundtrip FULL
@@ -35,7 +39,7 @@ own_release_request_denied FULL
 tm_lookahead_change FULL
 tm_ner_pair FULL
 tm_tar_tara_fqr_nmra FULL
-tm_tso_ordering PARTIAL
+tm_tso_ordering FULL
 ddm_region_overlap FULL
 ddm_region_mod_in_flight FULL
 mom_federation_lifecycle FULL

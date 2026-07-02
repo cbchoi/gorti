@@ -2,9 +2,9 @@ SUB: CONNECT
 SUB: JOIN federate=sub
 SUB: SUBSCRIBE interaction=Tick active=true
 SUB: TIME_CONSTRAINED_ENABLED time=0.000000
-SUB: GRANT time=1.000000
 SUB: RECV interaction=Tick time=1.000000 seq=1 source=alice order=TIMESTAMP
 SUB: RECV interaction=Tick time=1.000000 seq=1 source=bob order=TIMESTAMP
 SUB: RECV interaction=Tick time=1.000000 seq=1 source=carol order=TIMESTAMP
+SUB: GRANT time=1.000000
 SUB: GRANT time=2.000000
 SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
