@@ -1162,6 +1162,29 @@ void M17RTIambassador::synchronizationPointAchieved(const std::string& label) {
   if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
 }
 
+// §4.14 (M37 Agent EA) — achieve with the explicit `successfully` flag.
+// The proto field is optional; absent (the 1-arg overload above) means
+// true server-side, so old wire behavior is untouched.
+void M17RTIambassador::synchronizationPointAchieved(const std::string& label,
+                                                    bool successfully) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "synchronizationPointAchieved: federate not joined");
+  }
+  rti::v1::AchieveSyncPointRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_label(label);
+  req.set_successfully(successfully);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->sync_stub->SynchronizationPointAchieved(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
+}
+
 // --- M17.15 §7 Ownership Management ---------------------------------------
 //
 // Eight RPCs over the OwnershipService. All require join; all
@@ -2351,10 +2374,16 @@ bool RTIambassadorImpl::dispatchOneEvent() {
       fed_ambassador->announceSynchronizationPoint(a.label(), tag);
       return true;
     }
-    case rti::v1::FederateEvent::kSyncSynchronized:
-      fed_ambassador->federationSynchronized(
-          evt.sync_synchronized().label());
+    case rti::v1::FederateEvent::kSyncSynchronized: {
+      // §4.15 — M37 Agent EA: dispatch the failed-set-carrying slot;
+      // its default body forwards to the legacy 1-arg slot.
+      const auto& sy = evt.sync_synchronized();
+      std::vector<FederateHandle> failed;
+      failed.reserve(sy.failed_to_sync_size());
+      for (auto h : sy.failed_to_sync()) failed.emplace_back(h);
+      fed_ambassador->federationSynchronized(sy.label(), failed);
       return true;
+    }
     case rti::v1::FederateEvent::kSyncRegistrationSucceeded:
       // §4.12 — M37 Agent EA.
       fed_ambassador->synchronizationPointRegistrationSucceeded(

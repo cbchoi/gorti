@@ -100,6 +100,20 @@ func (s *syncService) RegisterFederationSynchronizationPoint(
 	return &rtiv1.Empty{}, nil
 }
 
+// syncSuccessAware is the optional richer achieve entrypoint the
+// production *sync.Manager exposes (M37 Agent EA): it carries the §4.14
+// `successfully` flag. Duck-typed so core.SyncCoordinator keeps its
+// frozen shape.
+type syncSuccessAware interface {
+	AchieveWith(
+		ctx context.Context,
+		fed core.FederationName,
+		h core.FederateHandle,
+		label string,
+		successfully bool,
+	) error
+}
+
 // SynchronizationPointAchieved implements §4.7.
 func (s *syncService) SynchronizationPointAchieved(
 	ctx context.Context,
@@ -111,12 +125,29 @@ func (s *syncService) SynchronizationPointAchieved(
 	if err := validateWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
-	if err := s.mgr.Achieve(
-		ctx,
-		core.FederationName(req.GetFederationName()),
-		core.FederateHandle(req.GetFederateHandle()),
-		req.GetLabel(),
-	); err != nil {
+	// §4.14: absent `successfully` (old clients) means TRUE.
+	successfully := true
+	if req.Successfully != nil {
+		successfully = req.GetSuccessfully()
+	}
+	var err error
+	if sa, ok := s.mgr.(syncSuccessAware); ok {
+		err = sa.AchieveWith(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetLabel(),
+			successfully,
+		)
+	} else {
+		err = s.mgr.Achieve(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetLabel(),
+		)
+	}
+	if err != nil {
 		return nil, errToStatus(err)
 	}
 	return &rtiv1.Empty{}, nil

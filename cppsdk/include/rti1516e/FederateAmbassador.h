@@ -136,6 +136,16 @@ class FederateAmbassador {
   // federation is now synchronized at ``label``. M17.14 (Cut-3).
   virtual void federationSynchronized(const std::string& /*label*/) {}
 
+  // §4.15 — federationSynchronized carrying the set of federates that
+  // achieved with successfully=false (empty when everyone succeeded).
+  // The default body forwards to the legacy 1-arg slot so pre-M37
+  // subclasses keep firing. M37 Agent EA.
+  virtual void federationSynchronized(
+      const std::string& label,
+      const std::vector<FederateHandle>& /*failed_to_sync*/) {
+    federationSynchronized(label);
+  }
+
   // §7.3 — an owner has called negotiatedAttributeOwnershipDivestiture
   // and the federation is asking this federate (a subscriber of the
   // attribute) whether it wants to assume ownership. To accept, call

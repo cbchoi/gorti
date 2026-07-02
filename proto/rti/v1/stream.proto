@@ -130,6 +130,11 @@ message SynchronizationPointAnnounced {
 // last required achieve lands.
 message FederationSynchronized {
   string label = 1;
+  // IEEE 1516.1-2010 §4.15 federationSynchronized carries the set of
+  // federates that achieved the point with successfully=false. Empty
+  // when everyone succeeded (and for pre-M37 servers). M37 Agent EA
+  // (additive, tag 2).
+  repeated uint64 failed_to_sync = 2;
 }
 
 // SyncRegistrationSucceeded — IEEE 1516.1-2010 §4.12

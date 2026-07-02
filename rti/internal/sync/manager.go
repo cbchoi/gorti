@@ -98,6 +98,11 @@ type syncPoint struct {
 	state    SyncPointState
 	required map[core.FederateHandle]struct{} // nil set means "any" mode
 	achieved map[core.FederateHandle]struct{}
+	// failed records federates that achieved with successfully=false
+	// (IEEE 1516.1-2010 §4.14). They still count toward completion but
+	// are reported in FederationSynchronized.failed_to_sync (§4.15).
+	// M37 Agent EA.
+	failed map[core.FederateHandle]struct{}
 	// dynamic is true when required was nil at Register-time AND
 	// no MembersResolver was wired. In that case the required set is
 	// grown lazily by Achieve calls; the sync point completes as soon
@@ -237,6 +242,7 @@ func (m *Manager) register(
 		state:    StateAnnounced,
 		required: required,
 		achieved: map[core.FederateHandle]struct{}{},
+		failed:   map[core.FederateHandle]struct{}{},
 		dynamic:  dynamic,
 	}
 	st.points[label] = sp
@@ -287,6 +293,32 @@ func (m *Manager) Achieve(
 	h core.FederateHandle,
 	label string,
 ) error {
+	return m.achieve(ctx, fed, h, label, true)
+}
+
+// AchieveWith is Achieve carrying the §4.14 `successfully` flag. A
+// federate achieving with successfully=false still counts toward sync
+// completion but is reported in the §4.15
+// FederationSynchronized.failed_to_sync set. The gRPC handler
+// duck-types for this richer method (M37 Agent EA); the frozen
+// core.SyncCoordinator Achieve means successfully=true.
+func (m *Manager) AchieveWith(
+	ctx context.Context,
+	fed core.FederationName,
+	h core.FederateHandle,
+	label string,
+	successfully bool,
+) error {
+	return m.achieve(ctx, fed, h, label, successfully)
+}
+
+func (m *Manager) achieve(
+	ctx context.Context,
+	fed core.FederationName,
+	h core.FederateHandle,
+	label string,
+	successfully bool,
+) error {
 	m.mu.Lock()
 	st, ok := m.fed[fed]
 	if !ok {
@@ -308,6 +340,12 @@ func (m *Manager) Achieve(
 		sp.required[h] = struct{}{}
 	}
 	sp.achieved[h] = struct{}{}
+	if !successfully {
+		if sp.failed == nil {
+			sp.failed = map[core.FederateHandle]struct{}{}
+		}
+		sp.failed[h] = struct{}{}
+	}
 
 	allAchieved := len(sp.required) > 0 && len(sp.achieved) >= len(sp.required)
 	if allAchieved {
@@ -322,10 +360,11 @@ func (m *Manager) Achieve(
 			}
 		}
 	}
-	var recipients []core.FederateHandle
+	var recipients, failedToSync []core.FederateHandle
 	if allAchieved {
 		sp.state = StateAchieved
 		recipients = sortedHandles(sp.required)
+		failedToSync = sortedHandles(sp.failed)
 	}
 	m.mu.Unlock()
 
@@ -338,7 +377,7 @@ func (m *Manager) Achieve(
 			_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{kind: evtSynchronized, label: label})
 		}
 		for _, dst := range recipients {
-			evt := synchronizedEvent(label)
+			evt := synchronizedEvent(label, failedToSync)
 			_ = m.opts.Outbox.Send(ctx, fed, dst, evt)
 		}
 	}

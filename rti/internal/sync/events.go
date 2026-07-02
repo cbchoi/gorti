@@ -130,11 +130,18 @@ type synchronizedOutbound struct {
 	label string
 }
 
-func synchronizedEvent(label string) *synchronizedOutbound {
+func synchronizedEvent(label string, failedToSync []core.FederateHandle) *synchronizedOutbound {
+	var failed []uint64
+	for _, h := range failedToSync {
+		failed = append(failed, uint64(h))
+	}
 	return &synchronizedOutbound{
 		pb: &rtiv1.FederateEvent{
 			Event: &rtiv1.FederateEvent_SyncSynchronized{
-				SyncSynchronized: &rtiv1.FederationSynchronized{Label: label},
+				SyncSynchronized: &rtiv1.FederationSynchronized{
+					Label:        label,
+					FailedToSync: failed,
+				},
 			},
 		},
 		label: label,

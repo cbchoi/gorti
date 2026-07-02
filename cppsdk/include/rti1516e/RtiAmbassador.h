@@ -602,6 +602,12 @@ class M17RTIambassador {
   // server-side; double-achieve doesn't error.
   void synchronizationPointAchieved(const std::string& label);
 
+  // §4.14 — achieve carrying the ``successfully`` flag. When false the
+  // federate still counts toward sync completion but is reported in
+  // the §4.15 federationSynchronized failed-to-sync set. M37 Agent EA.
+  void synchronizationPointAchieved(const std::string& label,
+                                    bool successfully);
+
   // §11 — Management Object Model (MOM) ambassador delegates.
   //
   // M17.13 (Cut-3). Read-only introspection of the
