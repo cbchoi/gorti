@@ -72,3 +72,12 @@ deterministically: **bob SPEC-FULL 6/6, carol SPEC-FULL 6/6, registrar
 SPEC-PARTIAL 7/8 (19/20)** — sole miss remains
 `REG: SYNC_REGISTRATION_SUCCEEDED` (§4.12 no wire ack; M37 EA proto
 vertical). Captured logs byte-identical with the committed M35 capture.
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+`_harness/run_fixture.sh fm_sync_full` vs integrated main (post
+M37-EA/EB/EC merges): **SPEC-FULL 20/20** (registrar 8/8, bob 6/6,
+carol 6/6). The sole M35/ED residual —
+`REG: SYNC_REGISTRATION_SUCCEEDED` — is closed: §4.12
+synchronizationPointRegistrationSucceeded is now on the wire (M37 EA)
+and bridged to the DLC ambassador (M37 EC). No residual.
