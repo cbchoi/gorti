@@ -75,3 +75,26 @@ Three distinct M17 gaps, in causal order:
 Fixture-side changes (no golden edits): 2 s pre-send dwell in the
 publishers so the launcher can start the subscriber before the T=1.0
 sends; evoke-drain everywhere; bounded NER drain per gap 3.
+
+## M36 agent-DA re-verdict — subscriber 5/9 -> 8/9; §8.15 tie-break WITNESSED
+
+Gap 1 above is CLOSED (DA-1: LogicalTime threads DLC -> M17Bridge ->
+wire; delivery invokes the 9-arg retraction-handle TSO overload). The
+capture now shows all three
+
+    SUB: RECV interaction=Tick time=1.000000 seq=1 source={alice,bob,carol} order=TIMESTAMP
+
+in exact ascending-FederateHandle order — the §8.15 within-bucket
+tie-break, THE point of this fixture, is witnessed for the first time.
+Publishers stay FULL 5/5 each (their SENDs are now real TSO wire sends).
+
+Residual (Go server, Agent DB):
+
+- `SUB: GRANT time=1.000000` precedes the three RECVs — same
+  `emitGrant` ordering defect as tm_ner_pair
+  (rti/internal/time/ner.go:347-381 sends the TimeAdvanceGrant at :358
+  BEFORE `releaseBufferedTSO` at :379; §8.14 requires delivery first).
+- `SUB: GRANT time=2.000000` still missing — gap 3 above
+  (OnFederateResign never re-runs tryGrantPending; LBTS -> +Inf after
+  the last publisher resigns but the kept pending NER(2.0) is never
+  re-granted). Both single-site fixes in rti/internal/time.
