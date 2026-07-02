@@ -72,8 +72,10 @@ int main() {
     amb->publishObjectClassAttributes(vehicle, attrs);
     amb->subscribeObjectClassAttributes(vehicle, attrs, true, L"");
 
+    // gorti M17 drains callbacks on the evoking thread; evoke to
+    // receive §6.9 discoverObjectInstance.
     for (int i = 0; i < 200 && !fed.has_object_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(25));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     // §7.8 attributeOwnershipAcquisition — with mandatory tag arg
@@ -83,8 +85,11 @@ int main() {
     std::cout << "BOB: OWNERSHIP_ACQUISITION" << std::endl;
 
     // Wait for Alice to deny — no callback fires on Bob's side for
-    // the denial; he just times out the wait.
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    // the denial; he just times out the wait (evoking so an
+    // unexpected §7.7 notification would still surface).
+    for (int i = 0; i < 40; ++i) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
+    }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
     std::cout << "BOB: RESIGN" << std::endl;
