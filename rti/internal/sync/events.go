@@ -149,3 +149,60 @@ func (o *synchronizedOutbound) Seq() uint64 {
 }
 func (o *synchronizedOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
 func (o *synchronizedOutbound) Label() string               { return o.label }
+
+// registrationSucceededOutbound — synchronizationPointRegistrationSucceeded
+// (§4.12 success half). Targets the REGISTERING federate only. M37 Agent EA.
+type registrationSucceededOutbound struct {
+	pb    *rtiv1.FederateEvent
+	label string
+}
+
+func registrationSucceededEvent(label string) *registrationSucceededOutbound {
+	return &registrationSucceededOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_SyncRegistrationSucceeded{
+				SyncRegistrationSucceeded: &rtiv1.SyncRegistrationSucceeded{Label: label},
+			},
+		},
+		label: label,
+	}
+}
+
+func (o *registrationSucceededOutbound) Seq() uint64 {
+	if o == nil || o.pb == nil {
+		return 0
+	}
+	return o.pb.Seq
+}
+func (o *registrationSucceededOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *registrationSucceededOutbound) Label() string               { return o.label }
+
+// registrationFailedOutbound — synchronizationPointRegistrationFailed
+// (§4.12 failure half). Targets the REGISTERING federate only. M37 Agent EA.
+type registrationFailedOutbound struct {
+	pb    *rtiv1.FederateEvent
+	label string
+}
+
+func registrationFailedEvent(label string, reason rtiv1.SyncPointFailureReason) *registrationFailedOutbound {
+	return &registrationFailedOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_SyncRegistrationFailed{
+				SyncRegistrationFailed: &rtiv1.SyncRegistrationFailed{
+					Label:  label,
+					Reason: reason,
+				},
+			},
+		},
+		label: label,
+	}
+}
+
+func (o *registrationFailedOutbound) Seq() uint64 {
+	if o == nil || o.pb == nil {
+		return 0
+	}
+	return o.pb.Seq
+}
+func (o *registrationFailedOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *registrationFailedOutbound) Label() string               { return o.label }

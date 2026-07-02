@@ -102,6 +102,27 @@ class FederateAmbassador {
   // M17.11 (Cut-2). Fires once per outstanding advance request.
   virtual void timeAdvanceGrant(double /*time*/) {}
 
+  // §4.12 — SynchronizationPointFailureReason for
+  // synchronizationPointRegistrationFailed. Values mirror
+  // rti.v1.SyncPointFailureReason. M37 Agent EA.
+  enum class SyncPointFailureReason {
+    kUnspecified = 0,
+    kSynchronizationPointLabelNotUnique = 1,
+    kSynchronizationSetMemberNotJoined = 2,
+  };
+
+  // §4.12 — the sync-point registration THIS federate issued was
+  // accepted; expect the §4.13 announce next. M37 Agent EA.
+  virtual void synchronizationPointRegistrationSucceeded(
+      const std::string& /*label*/) {}
+
+  // §4.12 — the sync-point registration THIS federate issued was
+  // rejected (label not unique / required-set member not joined).
+  // M37 Agent EA.
+  virtual void synchronizationPointRegistrationFailed(
+      const std::string& /*label*/,
+      SyncPointFailureReason /*reason*/) {}
+
   // §4.7 — a synchronization point was registered by some federate.
   // ``tag`` is opaque user data echoed verbatim from the register
   // call. M17.14 (Cut-3). After receiving this the federate MUST

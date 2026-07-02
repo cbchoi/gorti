@@ -2355,6 +2355,20 @@ bool RTIambassadorImpl::dispatchOneEvent() {
       fed_ambassador->federationSynchronized(
           evt.sync_synchronized().label());
       return true;
+    case rti::v1::FederateEvent::kSyncRegistrationSucceeded:
+      // §4.12 — M37 Agent EA.
+      fed_ambassador->synchronizationPointRegistrationSucceeded(
+          evt.sync_registration_succeeded().label());
+      return true;
+    case rti::v1::FederateEvent::kSyncRegistrationFailed: {
+      // §4.12 — M37 Agent EA. Proto enum values mirror the M17 enum.
+      const auto& f = evt.sync_registration_failed();
+      fed_ambassador->synchronizationPointRegistrationFailed(
+          f.label(),
+          static_cast<FederateAmbassador::SyncPointFailureReason>(
+              static_cast<int>(f.reason())));
+      return true;
+    }
     case rti::v1::FederateEvent::kOwnershipAssumption: {
       const auto& a = evt.ownership_assumption();
       AttributeHandleSet attrs;

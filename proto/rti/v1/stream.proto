@@ -38,6 +38,9 @@ message FederateEvent {
     // Sync (§4.6 / §4.7).
     SynchronizationPointAnnounced sync_announced = 20;
     FederationSynchronized sync_synchronized = 21;
+    // Sync registration ack (§4.12) — M37 Agent EA.
+    SyncRegistrationSucceeded sync_registration_succeeded = 22;
+    SyncRegistrationFailed sync_registration_failed = 23;
     // Ownership (§7.3 / §7.4).
     RequestAttributeOwnershipAssumption ownership_assumption = 30;
     AttributeOwnershipAcquisitionNotification ownership_acquired = 31;
@@ -127,6 +130,29 @@ message SynchronizationPointAnnounced {
 // last required achieve lands.
 message FederationSynchronized {
   string label = 1;
+}
+
+// SyncRegistrationSucceeded — IEEE 1516.1-2010 §4.12
+// synchronizationPointRegistrationSucceeded. Fires on the REGISTERING
+// federate only, when the label was accepted (unique in the
+// federation). M37 Agent EA.
+message SyncRegistrationSucceeded {
+  string label = 1;
+}
+
+// SyncPointFailureReason — IEEE 1516.1-2010 SynchronizationPointFailureReason.
+enum SyncPointFailureReason {
+  SYNC_POINT_FAILURE_REASON_UNSPECIFIED = 0;
+  SYNC_POINT_FAILURE_REASON_LABEL_NOT_UNIQUE = 1;
+  SYNC_POINT_FAILURE_REASON_SET_MEMBER_NOT_JOINED = 2;
+}
+
+// SyncRegistrationFailed — IEEE 1516.1-2010 §4.12
+// synchronizationPointRegistrationFailed. Fires on the REGISTERING
+// federate only, when the register call was rejected. M37 Agent EA.
+message SyncRegistrationFailed {
+  string label = 1;
+  SyncPointFailureReason reason = 2;
 }
 
 // RequestAttributeOwnershipAssumption — IEEE 1516.1-2010 §7.3.
