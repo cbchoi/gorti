@@ -77,8 +77,13 @@ int main() {
       }
     }
 
-    amb->listFederationExecutions();
+    // Emit the call marker BEFORE invoking §4.7: the golden orders the
+    // LIST line ahead of the §4.8 report callback. Under Pitch the report
+    // arrives asynchronously (order preserved either way); gorti's DLC
+    // layer synthesizes the report synchronously from its ListFederations
+    // RPC, which would otherwise print the callback first.
     std::cout << "FED: LIST_FEDERATION_EXECUTIONS" << std::endl;
+    amb->listFederationExecutions();
 
     // Drain via §10.42 evokeMultipleCallbacks. Legal under HLA_IMMEDIATE
     // on both RTIs (Pitch delivers on background threads and the evoke is

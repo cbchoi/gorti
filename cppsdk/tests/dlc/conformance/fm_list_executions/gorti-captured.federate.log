@@ -3,6 +3,7 @@ FED: CREATE federation=alpha
 FED: CREATE federation=beta
 FED: CREATE federation=gamma
 FED: LIST_FEDERATION_EXECUTIONS
+FED: REPORT_FEDERATION_EXECUTIONS count=3 alpha beta gamma
 FED: DESTROY federation=alpha
 FED: DESTROY federation=beta
 FED: DESTROY federation=gamma
