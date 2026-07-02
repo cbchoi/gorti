@@ -66,3 +66,12 @@ flag plumbing, (3) bridge conversion.
 
 Publisher wait loop uses the §10.42 evoke-drain pattern so the event
 will be captured as soon as the impl lands.
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 11/11** (publisher 6/6, subscriber 5/5;
+`_harness/run_fixture.sh dm_pub_sub_active_passive`). The M35 residual
+is closed: §5.10 startRegistrationForObjectClass is on the wire and
+bridged (M37 EA/EC), and `PUB: START_REGISTRATION class=Vehicle` fires
+exactly once after the subscriber's active=true re-subscribe. No
+residual.

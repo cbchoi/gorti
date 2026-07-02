@@ -106,3 +106,12 @@ FederateEvent proto slot, no Go emitter) and is absent from the M17
 FederateAmbassador — gorti retraction remains M23 "record-only":
 buffered-message drop works, delivered-message retraction notification
 does not exist.
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 15/15** (publisher 8/8, subscriber 7/7;
+`_harness/run_fixture.sh om_message_retraction`). The residual is
+closed: §8.22 requestRetraction is on the wire with real retraction
+handles (M37 EA/EC), `SUB: REQUEST_RETRACTION handle=<H>` is delivered
+and the retracted Honk stays suppressed (no RECEIVE_SPURIOUS). No
+residual.

@@ -136,7 +136,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$RTID_BIN" --listen "127.0.0.1:$PORT" --admin-listen "" \
+# rtid cwd = RUN_DIR: rtid writes savepoint bundles (gorti-saves/) to its
+# cwd; inheriting the caller's cwd leaks bundles across runs and a stale
+# bundle makes the next requestFederationSave abort (M37 EE:
+# fm_save_restore_roundtrip lost FEDERATION_SAVED on every second run).
+# A fresh rtid must mean fresh persistent state too.
+( cd "$RUN_DIR" && exec "$RTID_BIN" --listen "127.0.0.1:$PORT" --admin-listen "" ) \
   >"$RUN_DIR/rtid.log" 2>&1 &
 RTID_PID=$!
 

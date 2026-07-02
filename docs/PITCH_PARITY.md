@@ -513,43 +513,87 @@ golden (Pitch capture blocked by the Free-edition 2-federate cap or N/A);
 - **Go server**: restore-by-name not handle; publication-state enforcement on register; §7.6 ConfirmDivestiture gate (two-phase currently one-phase); §7.9 atomic acquire-if-available; ownership seeding (`fanoutAttrProbe`); implicit HLAprivilegeToDelete; late-joiner discovery; DDM-aware discover fanout; lookahead floor; NER resign liveness (`tryGrantPending` on resign); MOM instance fan-out.
 - **pysdk**: `standard.py` Layer-2 resign-action discard.
 
-## M36 scoreboard update (2026-07-02, post DA/DB/DC/DD)
+## M37 final scoreboard — all 27 DLC conformance fixtures (2026-07-02, Agent EE, integrated main post EA/EB/EC/ED/EF)
 
-Aggregate: **≈432/460 events (≈94%)**, up from ≈87%. **14 of 27 fixtures at
-FULL/SPEC-FULL** (was 7), **0 BLOCKED** (was 2 — both un-blocked this
-milestone). Zero proto changes were needed.
+Aggregate: **459/459 golden events matched (100%), 1 extra emission**
+(tm_tso_ordering's interim GRANT — strict-parity accounting 459/460 ≈
+**99.8%**, up from ≈94% at M36 and ≈87% at M35). **26 of 27 fixtures at
+FULL/SPEC-FULL**, 1 SPEC-PARTIAL with a single named residual. Every
+verdict below was produced on one integrated build (rtid + cppsdk at the
+M37-EC merge + the two EE one-liners noted in the table), each fixture
+run via `_harness/run_fixture.sh <fixture>` (driver.conf committed for
+all 25 driver-able fixtures) except the two documented manual protocols
+(own_acquire_if_available_race SIGSTOP choreography, xlang python leg).
 
-Newly FULL/SPEC-FULL (7): tm_lookahead_change 16/16 (DB), ddm_region_overlap
-24/24 (DC), om_request_attribute_update_class + _instance (DA),
-threading_callback_reentry 7/7 (DA — FR-DLC-14 guard now fires),
-xlang_python_cpp_pubsub 17/17 (DD + DA), mom_federation_lifecycle 18/18
-(DD — MOM instance fan-out implemented through the standard registry path).
+Verdict semantics: **FULL** = byte-identical after §5.2.1
+canonicalization to a **Pitch-captured** golden (Pitch pRTI Free 5.5.10
+build 9905); **SPEC-FULL** = byte-identical to a **spec-derived** golden
+(IEEE 1516.1-2010 cite-annotated; Pitch capture blocked by the Free
+2-federate cap or N/A); **SPEC-PARTIAL x/y** = x of y strict-parity
+events match, every miss traced to a named cause.
 
-Materially improved: fm_save_restore 12→15/18 (restore-by-name),
-tm_ner_pair — all 15 constrained events now delivered (TSO send+delivery
-fixed; §8.14 RECV/GRANT order residual), tm_tso_ordering 5→8/9 with §8.15
-tie-break witnessed (final GRANT liveness fixed by DB on integrated main;
-driver-sequenced re-verification pending), ddm_region_mod_in_flight 26/28,
-own_query 13/14 content, own_race 17/17 content, om_delete 15/16,
-dm_unpublish server gap CLOSED (strict 7/9 pending DLC error-mapping sniff).
+| Fixture | Verdict | Events | Residual |
+|---|---|---|---|
+| om_helloworld_pubsub | **FULL** | 16/16 | — (flagship; Pitch-captured golden) |
+| fm_list_executions | **FULL** | 10/10 | — (Pitch-captured golden) |
+| fm_create_join_resign | **FULL** | 36/36 | — (scenarios 1-2 Pitch-confirmed; 3-6 spec-derived) |
+| fm_save_restore_roundtrip | **SPEC-FULL** | 18/18 | — (was 15/18; §4.25/§4.26 + federate_name landed) |
+| fm_sync_full | **SPEC-FULL** | 20/20 | — (was 19/20; §4.12 ack landed) |
+| fm_sync_subset_with_failure | **SPEC-FULL** | 17/17 | — (was 14/17; §4.12 + §4.14 + §4.15 landed) |
+| dm_pub_sub_active_passive | **SPEC-FULL** | 11/11 | — (was 10/11; §5.10 startRegistration landed) |
+| dm_unpublish_whole_vs_attrs | **SPEC-FULL** | 9/9 | — (was 7/9; EE sniff-order one-liner in translateBridgeError) |
+| om_delete_object_tso | **SPEC-FULL** | 16/16 | — |
+| om_local_delete | **SPEC-FULL** | 12/12 | — |
+| om_message_retraction | **SPEC-FULL** | 15/15 | — (was 14/15; §8.22 landed) |
+| om_request_attribute_update_class | **SPEC-FULL** | 13/13 | — (sub-first AND pub-first launch orders both FULL — EB-4 late-join discover) |
+| om_request_attribute_update_instance | **SPEC-FULL** | 13/13 | — |
+| om_reserve_multi_atomic | **SPEC-FULL** | 10/10 | — |
+| own_acquire_if_available_race | **SPEC-FULL** | 17/17 strict | — (was 16/17; real §7.9 deny-fast + deferred §7.10; golden branch needs SIGSTOP choreography — see fixture README) |
+| own_negotiated_divest_two_phase | **SPEC-FULL** | 14/14 | — (re-confirmed against the REAL §7.6 two-phase) |
+| own_query_via_callbacks | **SPEC-FULL** | 14/14 strict | — (was 11/14; deferred synthesized callbacks) |
+| own_release_request_denied | **SPEC-FULL** | 11/11 | — (was 10/11; §7.11 landed) |
+| tm_lookahead_change | **SPEC-FULL** | 16/16 | — |
+| tm_ner_pair | **SPEC-FULL** | 30/30 | — (was 25/30; §8.14 drain-before-grant + §8.1.2 fixture fix) |
+| tm_tar_tara_fqr_nmra | **SPEC-FULL** | 15/15 | — |
+| tm_tso_ordering | SPEC-PARTIAL | 24/25 | all 24 golden events match in order (incl. the three §8.15 tie-break RECVs); ONE extra interim `GRANT time=1.0` before the T=1 RECVs — gorti's forced-grant-at-LBTS-keeps-pending NER semantics (`rti/internal/time/ner.go`); under strict §8.8/§8.13 no intermediate grant callback is emitted for a still-pending NER |
+| ddm_region_overlap | **SPEC-FULL** | 25/25 | — |
+| ddm_region_mod_in_flight | **SPEC-FULL** | 28/28 | — (was 26/28; §6.17/§6.18 scope advisories landed) |
+| mom_federation_lifecycle | **SPEC-FULL** | 18/18 | — |
+| threading_callback_reentry | **SPEC-FULL** | 14/14 | — (FR-DLC-14 guard) |
+| xlang_python_cpp_pubsub | **SPEC-FULL** | 17/17 | — (gorti-only by design: python pysdk pub + C++ DLC sub; no Pitch leg possible) |
 
-### M37 backlog (all pinned)
+### What FULL/SPEC-FULL does and does not prove
 
-- `rti/internal/object/delete.go:74` — delete fanout probe hardcoded `{1}`;
-  use published/subscribed set (om_delete 16/16)
-- `rti/internal/time/ner.go:347-381` — emitGrant before releaseBufferedTSO
-  inverts §8.14 RECV-before-GRANT (tm_ner, tm_tso strict order)
-- `cppsdk` throwFromStatus — "not published" sniff → ObjectClassNotPublished
-  (dm_unpublish 9/9)
-- Bridge `initiateFederateRestore` federate_name fill from own join name
-  (fm_save_restore 16/18)
-- Proto slots (additive): §4.12 sync-registration ack, §4.14
-  successfully=false, §4.15 failedToSyncSet, §4.25/§4.26 restore events,
-  §5.10-13 startRegistration, §6.17-18 scope advisories, §7.11
-  release-request, §8.22 retraction, §7.9 if_available flag, §7.6
-  ConfirmDivestiture RPC
-- Server: outgoing-TSO timestamp validation (ts ≥ current+lookahead) absent;
-  late-join retroactive DISCOVER; MOM attrs beyond the maintained five;
-  MOM state in savepoint replay
-- Golden-review: own_query `ATTRIBUTE_IS_OWNED_BY_RTI` vs §6.8 (registrant
-  owns privilege attribute)
+Does prove: on the event surface these 27 fixtures exercise — federation
+lifecycle incl. save/restore and all 6 resign actions, sync points incl.
+subset + failure, declaration incl. passive subscription + registration
+advisories, object exchange incl. TSO delete/retraction/late-join
+discovery/name reservation, all five §7 ownership patterns, all five §8
+advance primitives + lookahead + TSO ordering + tie-breaks, DDM incl.
+in-flight region modification + scope advisories, MOM lifecycle, §10.4
+callback re-entrancy, and Python↔C++ cross-language encoding — gorti
+emits the same canonicalized event sequences as the golden reference,
+deterministically, on one integrated build.
+
+Does NOT prove:
+
+- **Pitch byte-equivalence beyond 3 fixtures.** Only om_helloworld_pubsub,
+  fm_list_executions, and fm_create_join_resign (scenarios 1-2) have
+  Pitch-captured goldens; the Free-edition 2-federate cap blocks live
+  capture for most of the rest. The other 24 verdicts are equivalence to
+  spec-derived, cite-annotated goldens — i.e. IEEE 1516.1-2010
+  conformance, with Pitch parity inferred, not observed.
+- **Uncanonicalized identity.** §5.2.1 canonicalization abstracts handle
+  values, strips wall-clock, and bucket-sorts RO delivery within a
+  logical-time bucket (spec §6 mandates only causal order there). TSO
+  order is compared strictly.
+- **Full-API coverage.** The suite covers the catalogue's fixture surface,
+  not every service/overload (e.g. MOM attributes beyond the five
+  maintained ones are snapshot-only, MOM state is not in savepoint
+  replay, DDM beyond the exercised dimension shapes).
+
+Fixture-level residuals remaining: exactly one — tm_tso_ordering's extra
+interim GRANT (row above). It is a benign-liveness divergence (every
+mandated callback is delivered, in order), documented in the fixture
+README and pinned to `rti/internal/time/ner.go`.
+

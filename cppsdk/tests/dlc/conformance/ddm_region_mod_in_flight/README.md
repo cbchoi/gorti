@@ -84,3 +84,13 @@ scenario "documents the contract, not the exact interleave"):
 subscriber counts reflects and modifies its region after the 3rd
 (instead of racing a fixed 180 ms pump), publisher spaces updates
 150 ms apart, reservation wait uses evoke-drain.
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 28/28** (publisher 14/14, subscriber 14/14;
+`_harness/run_fixture.sh ddm_region_mod_in_flight`). The two M36
+residuals are closed: §6.17/§6.18 attribute scope advisories are on
+the wire and bridged (M37 EA/EC) — `SUB: IN_SCOPE attributes=[Value]`
+fires on first overlap and `SUB: OUT_OF_SCOPE attributes=[Value]`
+fires after the in-flight shrink to [0,30], with no reflects after.
+No residual.

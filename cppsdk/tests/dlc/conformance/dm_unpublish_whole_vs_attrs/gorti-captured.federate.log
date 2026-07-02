@@ -5,3 +5,5 @@ FED: UNPUBLISH_ATTRS class=Vehicle attributes=[Position]
 FED: REGISTER class=Vehicle name=car-phase1 handle=<H>
 FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
 FED: UNPUBLISH_CLASS class=Vehicle
+FED: REGISTER_FAILED reason=ObjectClassNotPublished
+FED: RESIGN

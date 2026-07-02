@@ -5,8 +5,10 @@ SUB: CREATE_REGION dim=Channel lower=0 upper=50
 SUB: COMMIT_REGION region=<R>
 SUB: SUBSCRIBE_WITH_REGIONS class=Sensor attributes=[Value] active=true
 SUB: DISCOVER name=sensor-1
+SUB: IN_SCOPE attributes=[Value]
 SUB: REFLECT Value=1.000000
 SUB: REFLECT Value=2.000000
 SUB: REFLECT Value=3.000000
 SUB: MODIFY_REGION dim=Channel new_lower=0 new_upper=30
+SUB: OUT_OF_SCOPE attributes=[Value]
 SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

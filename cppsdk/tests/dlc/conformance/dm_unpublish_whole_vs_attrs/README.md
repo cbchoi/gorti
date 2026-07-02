@@ -72,3 +72,15 @@ Missing impl (residual, DA): one detail-sniff line in throwFromStatus
 (`"not published"` → ObjectClassNotPublished) plus the equivalent
 propagation through M17Bridge guard()/translateBridgeError so the DLC
 surfaces the §6.8 exception type.
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 9/9** (`_harness/run_fixture.sh dm_unpublish_whole_vs_attrs`).
+The M36 residual (generic FAILED_PRECONDITION surfacing as
+FederateNotExecutionMember so the fixture's typed catch missed) is
+closed by an EE one-liner in `translateBridgeError`
+(cppsdk/src/dlc/RTIambassadorImpl.cpp): the EC-3 "not published"
+detail sniff now also runs under the `FederateNotExecutionMember:`
+prefix the M17 client folds FAILED_PRECONDITION into. Phase-2 register
+now throws ObjectClassNotPublished; REGISTER_FAILED + RESIGN captured.
+No residual.

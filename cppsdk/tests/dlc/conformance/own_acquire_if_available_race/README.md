@@ -101,3 +101,21 @@ What M36 DC-5 DID land: Acquire is now atomic
 leave partially granted, unnotified ownership behind). The §7.6
 ConfirmDivestiture gate (needs a new RPC) is likewise out of scope —
 noted as residual.
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 17/17 strict** (carrier 5/5, bob 6/6, carol 6/6). Both
+M36 residuals are closed: §7.9 acquireIfAvailable is a real wire flag
+(server answers deny-fast atomically — no more queued §7.4 pending
+acquire, and the stale late ACQUISITION_NOTIFICATION no longer
+reproduces), and carol's §7.10 ownershipUnavailable is deferred to the
+evoke queue so it prints after her own ACQUIRE_IF_AVAILABLE line.
+Golden-branch choreography (manual; racer takes its name as argv[1] so
+the scripted driver cannot drive it): carrier → wait
+UNCONDITIONAL_DIVEST → bob → SIGSTOP bob right after his
+ACQUIRE_IF_AVAILABLE line (the grant is already committed server-side
+inside the RPC) → carol runs to completion (denied while bob holds) →
+SIGCONT bob (drains §7.7, resigns). Unskewed timing note: if carol's
+acquire lands after bob's CANCEL_THEN_DELETE_THEN_DIVEST resign,
+Position is unowned again and her if-available legitimately succeeds —
+that is the spec-correct other branch, not a defect.

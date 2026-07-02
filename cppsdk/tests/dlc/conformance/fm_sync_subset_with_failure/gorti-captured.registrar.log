@@ -1,4 +1,5 @@
 REG: CONNECT
 REG: JOIN federate=alice
 REG: REGISTER_SYNC_POINT_SUBSET label=checkpoint size=2
+REG: SYNC_REGISTRATION_SUCCEEDED label=checkpoint
 REG: RESIGN
