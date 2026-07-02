@@ -16,6 +16,11 @@ service OwnershipService {
   rpc CancelNegotiatedAttributeOwnershipDivestiture(CancelDivestRequest) returns (Empty);
   rpc CancelAttributeOwnershipAcquisition(CancelAcquireRequest) returns (Empty);
   rpc AttributeOwnershipDivestitureIfWanted(DivestIfWantedRequest) returns (Empty);
+  // IEEE 1516.1-2010 §7.6 confirmDivestiture — completes a TWO-PHASE
+  // negotiated divestiture (NegotiatedDivestRequest.two_phase=true)
+  // after the divester received requestDivestitureConfirmation.
+  // M37 Agent EA.
+  rpc ConfirmDivestiture(ConfirmDivestitureRequest) returns (Empty);
   rpc QueryAttributeOwnership(QueryOwnershipRequest) returns (QueryOwnershipResponse);
   rpc IsAttributeOwnedByFederate(IsOwnedRequest) returns (IsOwnedResponse);
 }
@@ -35,6 +40,24 @@ message NegotiatedDivestRequest {
   uint64 object_handle = 4;
   repeated uint64 attribute_handles = 5;
   bytes tag = 6;
+  // IEEE 1516.1-2010 §7.3/§7.6 REAL two-phase protocol (M37 Agent EA,
+  // additive tag 7). When true: an acquirer's arrival emits
+  // requestDivestitureConfirmation to the divester and the transfer
+  // completes ONLY on a subsequent ConfirmDivestiture RPC. When
+  // absent/false: the pre-M37 one-phase flow (transfer completes as
+  // soon as an acquirer engages) is preserved for old clients.
+  bool two_phase = 7;
+}
+
+// ConfirmDivestiture — IEEE 1516.1-2010 §7.6 (M37 Agent EA). The
+// divesting federate (federate_handle) confirms; the RTI transfers the
+// listed attributes to the strategy-selected queued acquirer.
+message ConfirmDivestitureRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // divesting owner
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
 }
 
 message AcquireRequest {

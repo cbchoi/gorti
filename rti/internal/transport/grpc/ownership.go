@@ -11,6 +11,9 @@ package grpc
 import (
 	"context"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/cbchoi/gorti/rti/internal/core"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
@@ -53,6 +56,27 @@ func (s *ownershipService) UnconditionalAttributeOwnershipDivestiture(
 	return &rtiv1.Empty{}, nil
 }
 
+// twoPhaseDivester is the optional §7.6-aware entrypoint pair the
+// production *ownership.Manager exposes (M37 Agent EA). Duck-typed so
+// core.OwnershipCoordinator keeps its frozen shape.
+type twoPhaseDivester interface {
+	NegotiatedDivestTwoPhase(
+		ctx context.Context,
+		fed core.FederationName,
+		owner core.FederateHandle,
+		obj core.ObjectHandle,
+		attrs []core.AttributeHandle,
+		tag []byte,
+	) error
+	ConfirmDivestiture(
+		ctx context.Context,
+		fed core.FederationName,
+		owner core.FederateHandle,
+		obj core.ObjectHandle,
+		attrs []core.AttributeHandle,
+	) error
+}
+
 // NegotiatedAttributeOwnershipDivestiture implements §7.3.
 func (s *ownershipService) NegotiatedAttributeOwnershipDivestiture(
 	ctx context.Context,
@@ -64,13 +88,54 @@ func (s *ownershipService) NegotiatedAttributeOwnershipDivestiture(
 	if err := validateWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
-	if err := s.mgr.NegotiatedDivest(
+	var err error
+	if tp, ok := s.mgr.(twoPhaseDivester); ok && req.GetTwoPhase() {
+		err = tp.NegotiatedDivestTwoPhase(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			core.ObjectHandle(req.GetObjectHandle()),
+			attrHandles(req.GetAttributeHandles()),
+			req.GetTag(),
+		)
+	} else {
+		err = s.mgr.NegotiatedDivest(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			core.ObjectHandle(req.GetObjectHandle()),
+			attrHandles(req.GetAttributeHandles()),
+			req.GetTag(),
+		)
+	}
+	if err != nil {
+		return nil, errToStatus(err)
+	}
+	return &rtiv1.Empty{}, nil
+}
+
+// ConfirmDivestiture implements §7.6 (M37 Agent EA).
+func (s *ownershipService) ConfirmDivestiture(
+	ctx context.Context,
+	req *rtiv1.ConfirmDivestitureRequest,
+) (*rtiv1.Empty, error) {
+	if req == nil {
+		return nil, nilRequest("ConfirmDivestiture")
+	}
+	if err := validateWireVersion(req.GetWireVersion()); err != nil {
+		return nil, err
+	}
+	tp, ok := s.mgr.(twoPhaseDivester)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented,
+			"ownership coordinator does not support ConfirmDivestiture")
+	}
+	if err := tp.ConfirmDivestiture(
 		ctx,
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrHandles(req.GetAttributeHandles()),
-		req.GetTag(),
 	); err != nil {
 		return nil, errToStatus(err)
 	}

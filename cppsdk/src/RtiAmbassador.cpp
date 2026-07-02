@@ -1242,7 +1242,8 @@ void M17RTIambassador::unconditionalAttributeOwnershipDivestiture(
 void M17RTIambassador::negotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes,
-    const VariableLengthData& tag) {
+    const VariableLengthData& tag,
+    bool two_phase) {
   impl_->requireConnected();
   requireJoinedForOwnership(impl_->joined,
                             "negotiatedAttributeOwnershipDivestiture");
@@ -1250,11 +1251,28 @@ void M17RTIambassador::negotiatedAttributeOwnershipDivestiture(
   fillObjectAttrsReq(req, impl_->joined_federation,
                      impl_->federate_handle.raw(), object.raw(), attributes);
   req.set_tag(tag.data(), tag.size());
+  // M37 Agent EA — additive §7.6 flag; old servers ignore it (one-phase).
+  if (two_phase) req.set_two_phase(true);
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ownership_stub->NegotiatedAttributeOwnershipDivestiture(
       &ctx, req, &resp);
   if (!s.ok()) throwFromStatus(s, "negotiatedAttributeOwnershipDivestiture");
+}
+
+// §7.6 (M37 Agent EA) — complete a two-phase negotiated divestiture.
+void M17RTIambassador::confirmDivestiture(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined, "confirmDivestiture");
+  rti::v1::ConfirmDivestitureRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ownership_stub->ConfirmDivestiture(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "confirmDivestiture");
 }
 
 void M17RTIambassador::attributeOwnershipAcquisition(

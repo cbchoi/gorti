@@ -105,9 +105,12 @@ type ownershipRecord struct {
 // pendingDivest captures the in-flight NegotiatedDivest state for one
 // (obj, attr). The tag is preserved so the eventual acquirer's
 // ownership-assumption notification echoes the original divest tag.
+// twoPhase marks a §7.6 REAL two-phase divest (M37 Agent EA): the
+// transfer completes only on ConfirmDivestiture, never opportunistically.
 type pendingDivest struct {
-	owner core.FederateHandle
-	tag   []byte
+	owner    core.FederateHandle
+	tag      []byte
+	twoPhase bool
 }
 
 // acquireKey identifies a pending acquire request.
@@ -247,9 +250,39 @@ func (m *Manager) NegotiatedDivest(
 	attrs []core.AttributeHandle,
 	tag []byte,
 ) error {
+	return m.negotiatedDivest(ctx, fed, owner, obj, attrs, tag, false)
+}
+
+// NegotiatedDivestTwoPhase is NegotiatedDivest under the REAL §7.3/§7.6
+// two-phase protocol (M37 Agent EA): when an acquirer is (or becomes)
+// engaged, the divester receives requestDivestitureConfirmation and the
+// transfer completes ONLY on ConfirmDivestiture. The gRPC handler
+// duck-types for this method when NegotiatedDivestRequest.two_phase is
+// set; the frozen core.OwnershipCoordinator NegotiatedDivest keeps the
+// pre-M37 one-phase flow.
+func (m *Manager) NegotiatedDivestTwoPhase(
+	ctx context.Context,
+	fed core.FederationName,
+	owner core.FederateHandle,
+	obj core.ObjectHandle,
+	attrs []core.AttributeHandle,
+	tag []byte,
+) error {
+	return m.negotiatedDivest(ctx, fed, owner, obj, attrs, tag, true)
+}
+
+func (m *Manager) negotiatedDivest(
+	ctx context.Context,
+	fed core.FederationName,
+	owner core.FederateHandle,
+	obj core.ObjectHandle,
+	attrs []core.AttributeHandle,
+	tag []byte,
+	twoPhase bool,
+) error {
 	tagCopy := cloneTag(tag)
 
-	completions, err := m.recordPendingDivest(fed, owner, obj, attrs, tagCopy)
+	completions, err := m.recordPendingDivest(fed, owner, obj, attrs, tagCopy, twoPhase)
 	if err != nil {
 		return err
 	}
@@ -260,7 +293,22 @@ func (m *Manager) NegotiatedDivest(
 
 	m.fanoutAssumption(ctx, fed, owner, obj, attrs, tagCopy)
 
-	// Complete any opportunistic transfers.
+	if twoPhase {
+		// §7.5 (M37 Agent EA) — an acquirer is already queued: ask the
+		// divester to confirm instead of transferring. One event covers
+		// the batch of confirmable attrs.
+		if len(completions) > 0 {
+			confirmable := make([]core.AttributeHandle, 0, len(completions))
+			for _, c := range completions {
+				confirmable = append(confirmable, c.attr)
+			}
+			slices.Sort(confirmable)
+			_ = m.opts.Outbox.Send(ctx, fed, owner, divestNotificationEvent(obj, confirmable))
+		}
+		return nil
+	}
+
+	// Complete any opportunistic transfers (pre-M37 one-phase flow).
 	for _, c := range completions {
 		if err := m.completeTransfer(ctx, fed, obj, []core.AttributeHandle{c.attr}, owner, c.acquirer); err != nil {
 			// Should not happen — completeTransfer only fails on
@@ -270,6 +318,88 @@ func (m *Manager) NegotiatedDivest(
 		}
 	}
 	return nil
+}
+
+// ConfirmDivestiture implements §7.6 — confirmDivestiture (M37 Agent
+// EA). Completes a two-phase negotiated divestiture: each listed
+// attribute must have a pending divest owned by `owner` AND at least
+// one queued acquirer; the strategy-selected acquirer receives
+// ownership + the §7.7 acquisition notification. The divester receives
+// nothing further (the §7.5 confirmation request already fired).
+//
+// Errors (no state mutation on failure):
+//   - core.ErrOwnershipNotInTransfer when any listed attribute has no
+//     pending divest by `owner` or no queued acquirer.
+func (m *Manager) ConfirmDivestiture(
+	ctx context.Context,
+	fed core.FederationName,
+	owner core.FederateHandle,
+	obj core.ObjectHandle,
+	attrs []core.AttributeHandle,
+) error {
+	m.mu.Lock()
+	st := m.stateForLocked(fed)
+	winners := map[core.AttributeHandle]core.FederateHandle{}
+	for _, a := range attrs {
+		k := ownershipKey{obj: obj, attr: a}
+		pd, pending := st.pendingDivests[k]
+		if !pending || pd.owner != owner {
+			m.mu.Unlock()
+			return core.ErrOwnershipNotInTransfer
+		}
+		winner := m.opts.Strategy.SelectAcquirer(SelectAcquirerContext{
+			Phase:      PhaseNegotiatedDivest,
+			Federation: fed,
+			Object:     obj,
+			Attribute:  a,
+			Owner:      owner,
+			Candidates: st.queuedAcquirersLocked(obj, a),
+		})
+		if winner == core.InvalidFederateHandle {
+			m.mu.Unlock()
+			return core.ErrOwnershipNotInTransfer
+		}
+		winners[a] = winner
+	}
+	// Mutate only after the whole set validated (M36 DC-5 pattern).
+	for a, winner := range winners {
+		k := ownershipKey{obj: obj, attr: a}
+		st.owners[k] = ownershipRecord{owner: winner}
+		delete(st.pendingDivests, k)
+		delete(st.pendingAcquires, acquireKey{obj: obj, attr: a, acquirer: winner})
+	}
+	m.mu.Unlock()
+
+	// Group the acquisition notifications by winner (usually one).
+	byWinner := map[core.FederateHandle][]core.AttributeHandle{}
+	for a, w := range winners {
+		byWinner[w] = append(byWinner[w], a)
+	}
+	for _, w := range sortedWinnerHandles(byWinner) {
+		wAttrs := byWinner[w]
+		slices.Sort(wAttrs)
+		if m.opts.EventLog != nil {
+			_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{
+				kind:  evtTransferred,
+				obj:   obj,
+				attrs: cloneAttrs(wAttrs),
+				from:  owner,
+				to:    w,
+			})
+		}
+		_ = m.opts.Outbox.Send(ctx, fed, w, acquireNotificationEvent(obj, wAttrs, w))
+	}
+	return nil
+}
+
+// sortedWinnerHandles materializes the byWinner keys in ascending order.
+func sortedWinnerHandles(m map[core.FederateHandle][]core.AttributeHandle) []core.FederateHandle {
+	out := make([]core.FederateHandle, 0, len(m))
+	for h := range m {
+		out = append(out, h)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // pendingCompletion captures an attribute that already had a queued
@@ -291,6 +421,7 @@ func (m *Manager) recordPendingDivest(
 	obj core.ObjectHandle,
 	attrs []core.AttributeHandle,
 	tagCopy []byte,
+	twoPhase bool,
 ) ([]pendingCompletion, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -307,7 +438,7 @@ func (m *Manager) recordPendingDivest(
 	}
 	var completions []pendingCompletion
 	for _, a := range attrs {
-		st.pendingDivests[ownershipKey{obj: obj, attr: a}] = pendingDivest{owner: owner, tag: tagCopy}
+		st.pendingDivests[ownershipKey{obj: obj, attr: a}] = pendingDivest{owner: owner, tag: tagCopy, twoPhase: twoPhase}
 		// Strategy hook: ask the policy which queued acquirer (if any)
 		// wins the opportunistic transfer. Default picks the
 		// lowest-handle candidate — equivalent to the prior
@@ -457,12 +588,35 @@ func (m *Manager) acquire(
 	// owner, so RequestAttributeOwnershipRelease can target each owner
 	// after the lock drops.
 	queuedByOwner := map[core.FederateHandle][]core.AttributeHandle{}
+	// §7.5/§7.6 (M37 Agent EA) — attrs whose pending divest is
+	// TWO-PHASE: the acquire queues and the DIVESTER gets a
+	// requestDivestitureConfirmation; transfer waits for
+	// ConfirmDivestiture.
+	confirmByOwner := map[core.FederateHandle][]core.AttributeHandle{}
 	// Pass 1 — classify. READ-ONLY: no state mutation until the whole
 	// attribute set has validated (M36 DC-5).
 	for _, a := range attrs {
 		k := ownershipKey{obj: obj, attr: a}
 		ak := acquireKey{obj: obj, attr: a, acquirer: acquirer}
 		if pd, ok := st.pendingDivests[k]; ok {
+			if pd.twoPhase {
+				// §7.6 (M37 Agent EA) — REAL two-phase divest: never
+				// transfer here. ifAvailable callers see the attr as
+				// unavailable (still owned until confirm); plain
+				// acquirers queue and the divester is asked to
+				// confirm.
+				if ifAvailable {
+					unavailableAttrs = append(unavailableAttrs, a)
+					continue
+				}
+				if _, dup := st.pendingAcquires[ak]; dup {
+					m.mu.Unlock()
+					return core.ErrOwnershipAcquirePending
+				}
+				queueAttrs = append(queueAttrs, a)
+				confirmByOwner[pd.owner] = append(confirmByOwner[pd.owner], a)
+				continue
+			}
 			// Strategy hook: owner has already divested — does the
 			// just-arrived acquirer win the transfer right now? The
 			// candidate set is the singleton {acquirer}; the default
@@ -560,6 +714,14 @@ func (m *Manager) acquire(
 		slices.Sort(ownedAttrs)
 		_ = m.opts.Outbox.Send(ctx, fed, owner,
 			releaseRequestEvent(obj, ownedAttrs, tagCopy))
+	}
+	// §7.5/§7.6 (M37 Agent EA) — ask each two-phase divester to
+	// confirm; the queued acquire above waits for ConfirmDivestiture.
+	for _, owner := range sortedWinnerHandles(confirmByOwner) {
+		ownerAttrs := confirmByOwner[owner]
+		slices.Sort(ownerAttrs)
+		_ = m.opts.Outbox.Send(ctx, fed, owner,
+			divestNotificationEvent(obj, ownerAttrs))
 	}
 	// §7.10 (M37 Agent EA) — report the unavailable remainder of an
 	// ifAvailable acquire back to the acquirer.

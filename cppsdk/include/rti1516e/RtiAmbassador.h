@@ -554,10 +554,21 @@ class M17RTIambassador {
 
   // §7.3 — offer ownership to subscribers. ``tag`` is opaque user
   // data echoed in the announce callback on each subscriber.
+  // ``two_phase`` (M37 Agent EA, default false = pre-M37 one-phase):
+  // when true the server runs the REAL §7.3/§7.6 protocol — an
+  // engaging acquirer produces requestDivestitureConfirmation and the
+  // transfer completes only on confirmDivestiture().
   void negotiatedAttributeOwnershipDivestiture(
       ObjectInstanceHandle object,
       const AttributeHandleSet& attributes,
-      const VariableLengthData& tag);
+      const VariableLengthData& tag,
+      bool two_phase = false);
+
+  // §7.6 — complete a two-phase negotiated divestiture after the
+  // requestDivestitureConfirmation callback. M37 Agent EA.
+  void confirmDivestiture(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
 
   // §7.4 — request to acquire attributes from the current owner.
   void attributeOwnershipAcquisition(
