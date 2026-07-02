@@ -2,6 +2,6 @@ OBS: CONNECT
 OBS: JOIN federate=observer
 OBS: TIME_CONSTRAINED_ENABLED time=0.000000
 OBS: GALT phase=after-enable defined=1 value=2.000000
-OBS: GALT phase=after-first-advance defined=1 value=2.000000
+OBS: GALT phase=after-first-advance defined=1 value=3.000000
 OBS: GALT phase=after-modify defined=1 value=2.500000
 OBS: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

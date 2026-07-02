@@ -2,6 +2,7 @@ REG: CONNECT
 REG: JOIN federate=regulator
 REG: TIME_REGULATION_ENABLED time=0.000000
 REG: STATE phase=after-enable lookahead=2.000000 galt_defined=0 galt=0.000000
+REG: GRANT time=1.000000
 REG: MODIFY_LOOKAHEAD new=0.500000
 REG: STATE phase=after-modify lookahead=0.500000 galt_defined=0 galt=0.000000
 REG: GRANT time=2.000000
