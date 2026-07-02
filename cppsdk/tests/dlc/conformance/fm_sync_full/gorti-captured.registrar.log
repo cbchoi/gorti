@@ -1,0 +1,7 @@
+REG: CONNECT
+REG: JOIN federate=registrar
+REG: REGISTER_SYNC_POINT label=checkpoint
+REG: ANNOUNCE_SYNC label=checkpoint
+REG: ACHIEVED label=checkpoint successfully=true
+REG: FEDERATION_SYNCHRONIZED label=checkpoint failedToSyncSet.size=0
+REG: RESIGN

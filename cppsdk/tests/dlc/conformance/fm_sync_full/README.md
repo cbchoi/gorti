@@ -43,6 +43,22 @@ Per TASK-362 traceability lint:
 - `CAROL: FEDERATION_SYNCHRONIZED` — §4.15 federationSynchronized
 - `CAROL: RESIGN` — §4.10 resignFederationExecution
 
-## M31 status
+## Status (M35 parity pass)
 
-RED. Goldens are `TBD-pitch-capture` until Agent E TASK-363 clears.
+Goldens are spec-derived: Pitch Free's 2-federate EULA cap blocks a
+3-federate capture, so a clean diff is **SPEC-FULL** (diff vs the
+spec-derived golden), not Pitch-FULL.
+
+- **bob: SPEC-FULL 6/6** — byte-identical after canonicalization.
+- **carol: SPEC-FULL 6/6** — byte-identical after canonicalization.
+- **registrar: SPEC-PARTIAL 7/8** — sole miss is
+  `REG: SYNC_REGISTRATION_SUCCEEDED` (§4.12
+  synchronizationPointRegistrationSucceeded). The M17 wire has no
+  sync-registration ack event (cppsdk/include/rti1516e/
+  FederateAmbassador.h surfaces only announceSynchronizationPoint +
+  federationSynchronized) and
+  cppsdk/src/dlc/FederateAmbassadorBridge.cpp has no dispatch path for
+  it — server + bridge work, not fixture-fixable.
+
+Wait loops drain via `evokeMultipleCallbacks` (gorti M17 buffers
+callbacks for caller-thread drain; harmless yield under Pitch).
