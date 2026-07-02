@@ -464,3 +464,51 @@ Remaining fixtures: 26 of 27 not yet at FULL (17 tractable with the same
 evoke-drain + emission-precision pattern applied here; 5 blocked by the
 Pitch Free 2-federate cap for golden capture; 2 gorti-only by design +
 2 own_* / tm_* fixture-level API fixes already landed in M35-K/N).
+
+## Parity scoreboard — all 27 DLC conformance fixtures (2026-07-02, post CA-CF waves)
+
+Aggregate: **≈398/457 canonical events matching (≈87%)** across all fixtures.
+7 fixtures at FULL/SPEC-FULL, 18 PARTIAL (9 of them exactly one event short),
+2 BLOCKED on documented deferred features.
+
+Verdict semantics: **FULL** = byte-identical to a Pitch-captured golden after
+§5.2.1 canonicalization; **SPEC-FULL** = byte-identical to a spec-derived
+golden (Pitch capture blocked by the Free-edition 2-federate cap or N/A);
+**PARTIAL x/y** = x of y events match, every miss traced to a named gap.
+
+| Fixture | Verdict | Gap (if any) |
+|---|---|---|
+| om_helloworld_pubsub | **FULL 16/16** | — (flagship; Pitch-captured golden) |
+| fm_create_join_resign | **FULL 36/36** | — (all 6 ResignActions) |
+| fm_list_executions | **FULL 10/10** | — (§4.8 report synthesized) |
+| om_local_delete | **FULL 12/12** | — |
+| om_reserve_multi_atomic | **FULL 10/10** | — |
+| own_negotiated_divest_two_phase | **SPEC-FULL 14/14** | — |
+| tm_tar_tara_fqr_nmra | **SPEC-FULL 15/15** | — (all 5 advance primitives) |
+| own_acquire_if_available_race | SPEC-PARTIAL 16/17 | synthesized §7.10 transposed (17/17 by content) |
+| fm_sync_full | SPEC-PARTIAL 19/20 | §4.12 registration ack not on wire |
+| ddm_region_overlap | PARTIAL 23/24 | DISCOVER fanout not DDM-aware (`discover.go`) |
+| om_delete_object_tso | PARTIAL 15/16 | `removeObjectInstance` absent from M17 FederateAmbassador (server emits; proto slot 12) |
+| xlang_python_cpp_pubsub | PARTIAL 16/17 | pysdk `standard.py` discards resign action (Layer-2 bug) |
+| om_message_retraction | PARTIAL 14/15 | §8.22 requestRetraction: no proto slot |
+| ddm_region_mod_in_flight | PARTIAL 25/28 | scope advisories structurally absent (catalogue 4.23) |
+| tm_ner_pair | PARTIAL 25/30 | TSO sends degrade to RO — DLC timed overload drops LogicalTime (`RTIambassadorImpl.cpp:818`), M17 client never sets `logical_time`; server TSO gate ready but never engaged |
+| tm_tso_ordering | PARTIAL 20/24 | same TSO LogicalTime drop + NER resign-liveness hang |
+| tm_lookahead_change | PARTIAL 14/16 | lookahead floor too strict (`time/lookahead.go` — spec requires only target ≥ current) |
+| dm_pub_sub_active_passive | PARTIAL 10/11 | §5.10/§5.11 startRegistration entirely absent |
+| own_release_request_denied | PARTIAL 10/11 | no RequestAttributeOwnershipRelease slot in FederateEvent oneof |
+| own_query_via_callbacks | PARTIAL 11/14 | ownership seeding + HLAprivilegeToDelete absent |
+| dm_unpublish_whole_vs_attrs | PARTIAL 8/9 | server doesn't enforce publication state on register |
+| om_request_attribute_update_class | PARTIAL 9/13 | provideAttributeValueUpdate not on M17 ambassador; no late-join discovery |
+| om_request_attribute_update_instance | PARTIAL 9/13 | same |
+| fm_save_restore_roundtrip | PARTIAL 12/18 | restore routed by saved FederateHandle — spec matches by NAME (`savepoint/manager.go`) |
+| fm_sync_subset_with_failure | SPEC-PARTIAL 6/17 | getFederateHandle DLC stub cascade + §4.14/§4.15 wire gaps |
+| threading_callback_reentry | BLOCKED | FR-DLC-14 re-entrancy guard unimplemented — re-entered call silently round-trips |
+| mom_federation_lifecycle | BLOCKED | MOM object fan-out deferred since M11 (`mom/manager.go:66-71`) |
+
+### M36 backlog (every gap above, grouped by layer)
+
+- **proto/wire slots**: removeObjectInstance + provideAttributeValueUpdate delivery to M17 client, requestRetraction (§8.22), startRegistrationForObjectClass (§5.10-13), RequestAttributeOwnershipRelease (§7.11), sync registration ack (§4.12), failedToSyncSet (§4.15), successfully=false (§4.14), scope advisories (§6.17-18), TSO logical_time on SendInteraction.
+- **DLC/C++ layer**: thread LogicalTime through timed send overloads → M17Bridge → wire; getFederateHandle real impl; FR-DLC-14 re-entrancy guard; deleteObjectInstance/requestAttributeValueUpdate no-ops.
+- **Go server**: restore-by-name not handle; publication-state enforcement on register; §7.6 ConfirmDivestiture gate (two-phase currently one-phase); §7.9 atomic acquire-if-available; ownership seeding (`fanoutAttrProbe`); implicit HLAprivilegeToDelete; late-joiner discovery; DDM-aware discover fanout; lookahead floor; NER resign liveness (`tryGrantPending` on resign); MOM instance fan-out.
+- **pysdk**: `standard.py` Layer-2 resign-action discard.
