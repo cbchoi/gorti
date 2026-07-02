@@ -60,53 +60,44 @@ Per TASK-362 traceability lint:
 RED. Links fail with undefined reference to `rti1516e::*`. Goldens are
 `TBD-pitch-capture` placeholders until Agent E's TASK-363 clears.
 
-## gorti parity status (M35, parity-CD)
+## gorti parity status (M36, agent-DC)
 
-Verdict: **SPEC-PARTIAL 16/17** strict (17/17 by content; carrier
-FULL 5/5, winner FULL 6/6, loser 5/6). Goldens are spec-derived —
-Pitch capture BLOCKED (>2 federates exceeds Pitch Free EULA cap).
-Captured run: `gorti-captured.{carrier,bob,carol}.log` (a bob-wins
-run; the winner is non-deterministic per the golden's own NOTE).
+Carrier **FULL 5/5**; bob **FULL 6/6**; carol **PARTIAL 5/6 strict,
+6/6 by content** (one adjacent line swap). Captured run:
+`gorti-captured.{carrier,bob,carol}.log` (canonicalized), against the
+M36-DC rtid — the golden's bob-wins / carol-§7.10 branch.
 
-The single strict mismatch: the loser's
-`OWNERSHIP_UNAVAILABLE attrs=1` appears BEFORE her
-`ACQUIRE_IF_AVAILABLE` line. gorti has no §7.9 wire method; the DLC
-(parity-CA) emulates it as per-attribute query → owned subset gets
-§7.10 `attributeOwnershipUnavailable` synthesized synchronously
-*inside* the §7.9 call, so the callback precedes the fixture's own
-post-call print. The winner's §7.7 arrives as a real OwnershipAcquired
-stream event through the evoke loop, in golden order.
+Carol's single strict miss: `OWNERSHIP_UNAVAILABLE` prints BEFORE her
+`ACQUIRE_IF_AVAILABLE` line. The DLC emulates §7.9 by query-then-
+acquire and synthesizes the §7.10 callback synchronously INSIDE
+`attributeOwnershipAcquisitionIfAvailable`
+(cppsdk/src/dlc/RTIambassadorImpl.cpp:960-985), so the callback
+precedes the fixture's own post-call print. Client-side artifact
+(DA-owned if the synthesized callback is to be deferred to the next
+evoke).
 
-### Atomicity divergence (observed 1/5 runs)
+### The §7.9 race hole — M36 DC-5 findings
 
-The emulation is query-then-acquire, NOT atomic. In 5 recorded runs:
-4 produced the spec outcome (one §7.7 winner, one §7.10 loser); in
-run 4 the loser received **neither §7.7 nor §7.10** — his query
-observed Position unowned, he delegated to real §7.8 acquisition, the
-other racer's acquire landed first, and the server silently queued
-his acquire as a PendingAcquireEntry (rti/internal/ownership/
-manager.go: acquire on an owned attribute emits no event). Two
-consequences: (a) the loser times out with no §7.10, and (b) a stale
-pending FULL acquisition remains queued server-side — if the winner
-later divests, the loser would be GRANTED ownership he only requested
-"if available", which §7.9 forbids (it must never wait on a future
-divestiture).
+Re-verified: the emulation's 1-in-5 hole is REAL and, with both racers
+woken by the same DISCOVER stream push, near-deterministic — the
+loser's query lands before the winner's grant, its acquire is queued
+as a plain §7.4 pending acquire, and it receives NEITHER §7.7 NOR
+§7.10 (observed 6/6 unskewed runs; this capture used OS-level
+scheduling skew — SIGSTOP the losing racer across the winner's grant —
+to record the golden branch). Worse, the stale pending acquire can
+fire LATER: when bob resigns CANCEL_THEN_DELETE_THEN_DIVEST, Position
+goes unowned and a queued carol gets an ACQUISITION_NOTIFICATION she
+only ever requested "if available" (observed live during M36 capture
+runs).
 
-### Fixture/scenario fixes in this pass (spec-wins golden edit)
-
-1. Carrier now §7.2-divests Position after registering (+ golden line
-   `CARRIER: UNCONDITIONAL_DIVEST attrs=[Position]`): with the M31
-   carrier holding Position, no compliant RTI could deliver the
-   golden's §7.7 win — both racers must get §7.10. Justification in
-   expected.carrier.log header.
-2. Racers must subscribe BEFORE the carrier registers (launch racers
-   first): gorti has no late-joiner discovery — subscribing after
-   registration never yields §6.9 discoverObjectInstance, and the
-   racers then race against an invalid object handle (observed:
-   acquire on the phantom handle still "succeeds" server-side since
-   the ownership manager does not validate object existence).
-3. Racer wait loops converted to the evoke-drain pattern.
-
-Missing impl: real §7.9/§7.10 wire (atomic acquire-if-available in
-ownership.Manager + AttributeOwnershipUnavailable stream event),
-late-joiner discovery, object-handle validation in ownership RPCs.
+Server-side residual (documented in
+rti/internal/ownership/manager.go Acquire): a clean closure needs an
+if-available semantic flag on the AcquireRequest proto so the server
+can answer deny-fast instead of queueing — proto changes are out of
+M36-DC scope. Rejecting already-owned acquires without the flag would
+break legitimate §7.4 callers and throw through the DLC emulation.
+What M36 DC-5 DID land: Acquire is now atomic
+(classify-then-mutate — a duplicate-pending rejection can no longer
+leave partially granted, unnotified ownership behind). The §7.6
+ConfirmDivestiture gate (needs a new RPC) is likewise out of scope —
+noted as residual.
