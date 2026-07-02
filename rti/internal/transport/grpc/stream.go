@@ -55,7 +55,7 @@ func (s *streamService) Events(req *rtiv1.EventsRequest, stream rtiv1.StreamServ
 
 	ch, cancel, err := sub.Subscribe(stream.Context(), fed, h)
 	if err != nil {
-		return errToStatus(err)
+		return errToStatus(stream.Context(), err)
 	}
 	defer func() { _ = cancel() }()
 

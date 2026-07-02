@@ -60,6 +60,15 @@ template <typename Fn>
 auto guard(char const* op, Fn&& f) -> decltype(f()) {
   try {
     return f();
+  } catch (::rti1516e::m17::SpecException const& e) {
+    // M39 Agent HB — structured spec-exception carrier. The M17 client
+    // (throwFromStatus) parked the server-declared Annex C class name
+    // (rti-spec-exception trailer) here; re-emit it as the message
+    // prefix so the DLC's translateBridgeError prefix table throws the
+    // precise <RTI/Exception.h> type. MUST be the first catch — the
+    // carrier derives from m17::RTIinternalError.
+    throw std::runtime_error(e.specName() + ": " + e.what() +
+                             " [op=" + op + "]");
   } catch (::rti1516e::m17::AlreadyConnected const& e) {
     throw std::runtime_error(std::string("AlreadyConnected: ") + e.what() +
                              " [op=" + op + "]");

@@ -95,6 +95,28 @@ class InteractionClassNotPublished : public RTIinternalError {
   using RTIinternalError::RTIinternalError;
 };
 
+// M39 Agent HB — structured spec-exception carrier.
+//
+// The RTI attaches the IEEE 1516.1-2010 Annex C exception class name as
+// trailing gRPC metadata (`rti-spec-exception`; see
+// cppsdk/src/dlc/README.md for the contract). When the name has no
+// dedicated m17 class above, throwFromStatus throws THIS carrier so the
+// name survives the trip through the M17 layer: M17Bridge's guard()
+// re-emits it as the `<SpecName>: ...` prefix that the DLC's
+// translateBridgeError keys on to throw the precise <RTI/Exception.h>
+// type. Derives from m17::RTIinternalError so existing catch-all M17
+// consumers keep working.
+class SpecException : public RTIinternalError {
+ public:
+  SpecException(std::string spec_name, const std::string& what_arg)
+      : RTIinternalError(what_arg), spec_name_(std::move(spec_name)) {}
+  // Annex C exception class name, UpperCamelCase (e.g. "InvalidLogicalTime").
+  const std::string& specName() const noexcept { return spec_name_; }
+
+ private:
+  std::string spec_name_;
+};
+
 }  // namespace m17
 
 // M34 Agent AA — Pitch-parity compat aliases. Every existing M17 user
@@ -122,5 +144,6 @@ using InvalidParameterHandle = m17::InvalidParameterHandle;
 using ObjectClassNotPublished = m17::ObjectClassNotPublished;
 using ObjectInstanceNotKnown = m17::ObjectInstanceNotKnown;
 using InteractionClassNotPublished = m17::InteractionClassNotPublished;
+using SpecException = m17::SpecException;  // M39 Agent HB
 
 }  // namespace rti1516e

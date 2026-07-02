@@ -6,6 +6,7 @@
 
 #include "RTIambassadorImpl.h"
 
+#include "BridgeErrorTranslation.h"
 #include "FederateAmbassadorBridge.h"
 #include "M17Bridge.h"
 
@@ -97,71 +98,14 @@ std::string parseLocalSettings(std::wstring const& settings) {
 }
 
 // Convert a runtime_error carrying an M17 exception prefix into the
-// matching <RTI/Exception.h> type. See M17Bridge.cpp guard() for the
-// prefix vocabulary. The DLC caller wraps every m17_->* call with this
-// so exceptions surface as spec types the fixture catch blocks expect.
-[[noreturn]] void translateBridgeError(std::runtime_error const& e) {
-  std::string what = e.what();
-  std::wstring msg = s2ws(what);
-  // Prefix-matched translation. Order matters — some prefixes are
-  // sub-strings of others' contexts.
-  if (what.rfind("AlreadyConnected:", 0) == 0) throw AlreadyConnected(msg);
-  if (what.rfind("ConnectionFailed:", 0) == 0) throw ConnectionFailed(msg);
-  if (what.rfind("NotConnected:", 0) == 0) throw NotConnected(msg);
-  if (what.rfind("FederationExecutionAlreadyExists:", 0) == 0)
-    throw FederationExecutionAlreadyExists(msg);
-  if (what.rfind("FederationExecutionDoesNotExist:", 0) == 0)
-    throw FederationExecutionDoesNotExist(msg);
-  if (what.rfind("FederateAlreadyExecutionMember:", 0) == 0)
-    throw FederateAlreadyExecutionMember(msg);
-  if (what.rfind("FederateNotExecutionMember:", 0) == 0) {
-    // M37 EE: the M17 client folds generic FAILED_PRECONDITION rejections
-    // under this prefix, so the EC-3 detail sniffs below would never run
-    // for them — sniff the §5 publication-gate details here first
-    // (errors.go: "object class not published by federate" /
-    // "interaction class not published").
-    if (what.find("interaction class not published") != std::string::npos)
-      throw InteractionClassNotPublished(msg);
-    if (what.find("not published") != std::string::npos)
-      throw ObjectClassNotPublished(msg);
-    throw FederateNotExecutionMember(msg);
-  }
-  if (what.rfind("NameNotFound:", 0) == 0) throw NameNotFound(msg);
-
-  // ===== M37 Agent EC-3 — detail-string sniffs =====
-  //
-  // The M17 client folds most server rejections into RTIinternalError with
-  // the gRPC status message as detail. The DLC fixtures expect the precise
-  // spec exception, so we sniff gorti's error strings here at the DLC
-  // boundary (the M17 client's throwFromStatus is EA/DA-owned). STOPGAP:
-  // these substrings are pinned to rti/internal/core/errors.go — see
-  // cppsdk/src/dlc/README.md for the contract. Order matters: the most
-  // specific phrasings match first.
-  auto contains = [&what](char const* needle) {
-    return what.find(needle) != std::string::npos;
-  };
-  // §5/§6 publication gates (errors.go: "object class not published by
-  // federate" / "interaction class not published").
-  if (contains("interaction class not published"))
-    throw InteractionClassNotPublished(msg);
-  if (contains("not published")) throw ObjectClassNotPublished(msg);
-  // §8 time gates. errors.go: "lookahead must be non-negative and finite"
-  // (bad enableTimeRegulation/modifyLookahead argument) → InvalidLookahead;
-  // "requested time is not greater than current logical time" (advance to
-  // the past) → LogicalTimeAlreadyPassed; "invalid logical time: TSO
-  // timestamp precedes current time plus lookahead" (and any other
-  // lookahead-floor phrasing) → InvalidLogicalTime.
-  if (contains("lookahead must be non-negative"))
-    throw InvalidLookahead(msg);
-  if (contains("requested time is not greater than current logical time"))
-    throw LogicalTimeAlreadyPassed(msg);
-  if (contains("invalid logical time") || contains("lookahead"))
-    throw InvalidLogicalTime(msg);
-
-  // Every other case (including bare RTIinternalError) folds to the
-  // spec-legal RTIinternalError catch-all.
-  throw RTIinternalError(msg);
-}
+// matching <RTI/Exception.h> type. M39 Agent HB: extracted to
+// BridgeErrorTranslation.{h,cpp} (unit-tested from the conformance
+// _runtime gtests) and upgraded to the FULL Annex C prefix table —
+// the server now declares the spec exception via the
+// `rti-spec-exception` gRPC trailer, which the M17 client re-emits as
+// the message prefix. The M37 EC-3/EE detail sniffs live on there as a
+// DEPRECATED fallback for pre-M39 servers.
+using gorti::dlc::translateBridgeError;
 
 // FR-DLC-14 (M36 Agent DA) — §10.4 re-entrancy gate. A federate must not
 // re-enter the ambassador from inside a callback; the RTI throws the

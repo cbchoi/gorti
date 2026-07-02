@@ -131,14 +131,14 @@ func (s *ddmService) CreateRegion(
 		dimHandlesFromUint64s(req.GetDimensionHandles()),
 	)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.CreateRegionResponse{RegionHandle: uint64(rh)}, nil
 }
 
 // SetRangeBounds implements §6.5 (pending bounds).
 func (s *ddmService) SetRangeBounds(
-	_ context.Context,
+	ctx context.Context,
 	req *rtiv1.SetRangeBoundsRequest,
 ) (*rtiv1.Empty, error) {
 	if req == nil {
@@ -159,7 +159,7 @@ func (s *ddmService) SetRangeBounds(
 		ddm.DimensionHandle(req.GetDimensionHandle()),
 		bounds,
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -182,7 +182,7 @@ func (s *ddmService) CommitRegionModifications(
 		core.FederateHandle(req.GetFederateHandle()),
 		regionHandlesFromUint64s(req.GetRegionHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -204,7 +204,7 @@ func (s *ddmService) DeleteRegion(
 		core.FederateHandle(req.GetFederateHandle()),
 		ddm.RegionHandle(req.GetRegionHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -251,7 +251,7 @@ func (s *ddmService) SubscribeObjectClassAttributesWithRegions(
 		attrHandles(req.GetAttributeHandles()),
 		regionHandlesFromUint64s(req.GetRegionHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -274,7 +274,7 @@ func (s *ddmService) SubscribeInteractionClassWithRegions(
 		core.InteractionClassHandle(req.GetInteractionClassHandle()),
 		regionHandlesFromUint64s(req.GetRegionHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -360,7 +360,7 @@ func (s *ddmService) AssociateRegionsForUpdates(
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrToRegionsFromPb(req.GetAttributeRegions()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -383,7 +383,7 @@ func (s *ddmService) UnassociateRegionsForUpdates(
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrToRegionsFromPb(req.GetAttributeRegions()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -407,7 +407,7 @@ func (s *ddmService) UnsubscribeObjectClassAttributesWithRegions(
 		attrHandles(req.GetAttributeHandles()),
 		regionHandlesFromUint64s(req.GetRegionHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -430,7 +430,7 @@ func (s *ddmService) UnsubscribeInteractionClassWithRegions(
 		core.InteractionClassHandle(req.GetInteractionClassHandle()),
 		regionHandlesFromUint64s(req.GetRegionHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -469,7 +469,7 @@ func (s *ddmService) SendInteractionWithRegions(
 		params,
 		ts,
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	_ = req.GetRegionHandles() // recorded for future strict per-call filtering
 	return &rtiv1.Empty{}, nil
@@ -503,7 +503,7 @@ func (s *ddmService) RequestAttributeValueUpdateWithRegions(
 		attrs,
 		req.GetUserSuppliedTag(),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	_ = req.GetRegionHandles() // recorded for future filtering
 	return &rtiv1.Empty{}, nil

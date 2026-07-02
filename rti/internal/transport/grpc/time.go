@@ -54,7 +54,7 @@ func (s *timeService) EnableTimeRegulation(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.LogicalTime(req.GetLookahead()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -73,7 +73,7 @@ func (s *timeService) DisableTimeRegulation(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -92,7 +92,7 @@ func (s *timeService) EnableTimeConstrained(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -111,7 +111,7 @@ func (s *timeService) DisableTimeConstrained(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -133,7 +133,7 @@ func (s *timeService) NextMessageRequest(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.LogicalTime(req.GetLogicalTime()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -153,7 +153,7 @@ func (s *timeService) NextMessageRequestAvailable(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.LogicalTime(req.GetLogicalTime()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -173,7 +173,7 @@ func (s *timeService) TimeAdvanceRequest(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.LogicalTime(req.GetLogicalTime()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -193,7 +193,7 @@ func (s *timeService) TimeAdvanceRequestAvailable(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.LogicalTime(req.GetLogicalTime()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -213,7 +213,7 @@ func (s *timeService) FlushQueueRequest(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.LogicalTime(req.GetLogicalTime()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -235,7 +235,7 @@ func (s *timeService) ModifyLookahead(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.LogicalTime(req.GetLookahead()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -281,7 +281,7 @@ func (s *timeService) QueryLogicalTime(
 }
 
 func (s *timeService) QueryLookahead(
-	_ context.Context, req *rtiv1.QueryFederateTimeRequest,
+	ctx context.Context, req *rtiv1.QueryFederateTimeRequest,
 ) (*rtiv1.QueryLookaheadResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "nil request")
@@ -298,7 +298,7 @@ func (s *timeService) QueryLookahead(
 	// rather than a silent 0.0 — lookahead is meaningful only while
 	// regulating.
 	if !ok || !st.Regulating {
-		return nil, errToStatus(core.ErrTimeNotRegulating)
+		return nil, errToStatus(ctx, core.ErrTimeNotRegulating)
 	}
 	return &rtiv1.QueryLookaheadResponse{
 		Lookahead: float64(st.Lookahead),
@@ -403,7 +403,7 @@ func (s *timeService) EnableAsynchronousDelivery(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -422,7 +422,7 @@ func (s *timeService) DisableAsynchronousDelivery(
 		core.FederationName(req.GetFederationName()),
 		core.FederateHandle(req.GetFederateHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }

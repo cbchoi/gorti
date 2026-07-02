@@ -419,7 +419,7 @@ func (s *adminService) TailEvents(req *rtiv1.TailEventsRequest, stream rtiv1.Adm
 	ctx := stream.Context()
 	rdr, err := s.opts.EventLog.OpenReader(ctx, fed)
 	if err != nil {
-		return errToStatus(err)
+		return errToStatus(ctx, err)
 	}
 	defer func() { _ = rdr.Close() }()
 
@@ -463,7 +463,7 @@ func (s *adminService) TailEvents(req *rtiv1.TailEventsRequest, stream rtiv1.Adm
 	for {
 		if err := ctx.Err(); err != nil {
 			_ = flush()
-			return errToStatus(err)
+			return errToStatus(ctx, err)
 		}
 
 		// If a batch is pending, race the reader against the latency
@@ -494,7 +494,7 @@ func (s *adminService) TailEvents(req *rtiv1.TailEventsRequest, stream rtiv1.Adm
 			return nil
 		}
 		if readErr != nil {
-			return errToStatus(readErr)
+			return errToStatus(ctx, readErr)
 		}
 
 		te := buildTailedEvent(evt)

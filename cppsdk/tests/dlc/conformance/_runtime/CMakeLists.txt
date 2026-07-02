@@ -133,3 +133,37 @@ set_tests_properties(conformance__runtime_mom_surface PROPERTIES
 if(TARGET dlc_conformance)
   add_dependencies(dlc_conformance test_conf__runtime_mom_surface)
 endif()
+
+# --- M39 (Agent HB) — translateBridgeError prefix-table tests --------------
+#
+# Unit tests for the metadata-first exception pipeline: full Annex C
+# prefix table (fed by the server's rti-spec-exception trailer via
+# M17Bridge guard()), the M37 EE FederateNotExecutionMember special
+# case, the DEPRECATED detail sniffs, and the RTIinternalError
+# fallback. No RTI subprocess, no gRPC. Must PASS.
+# See cppsdk/src/dlc/BridgeErrorTranslation.{h,cpp}.
+
+add_executable(test_conf__runtime_bridge_error
+  test_bridge_error_translation.cpp
+)
+target_include_directories(test_conf__runtime_bridge_error PRIVATE
+  "${CMAKE_SOURCE_DIR}/include"
+  "${CMAKE_SOURCE_DIR}"   # so `#include "src/dlc/BridgeErrorTranslation.h"` resolves
+)
+target_link_libraries(test_conf__runtime_bridge_error PRIVATE
+  rti1516e_dlc
+  GTest::gtest
+  GTest::gtest_main
+)
+target_compile_features(test_conf__runtime_bridge_error PRIVATE cxx_std_17)
+
+add_test(NAME conformance__runtime_bridge_error
+  COMMAND test_conf__runtime_bridge_error)
+set_tests_properties(conformance__runtime_bridge_error PROPERTIES
+  LABELS "conformance"
+  TIMEOUT 60
+)
+
+if(TARGET dlc_conformance)
+  add_dependencies(dlc_conformance test_conf__runtime_bridge_error)
+endif()

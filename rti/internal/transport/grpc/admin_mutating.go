@@ -151,7 +151,7 @@ func (s *mutatingService) ForceResign(ctx context.Context, req *rtiv1.ForceResig
 		return &rtiv1.ForceResignResponse{AlreadyResigned: true}, nil
 	}
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.ForceResignResponse{}, nil
 }
@@ -201,7 +201,7 @@ func (s *mutatingService) DestroyFederation(ctx context.Context, req *rtiv1.Admi
 					core.ResignActionUnconditionallyDivestAttributes,
 				)
 				if rerr != nil && !errors.Is(rerr, core.ErrFederateNotJoined) {
-					return nil, errToStatus(rerr)
+					return nil, errToStatus(ctx, rerr)
 				}
 				resp.EvictedHandles = append(resp.EvictedHandles, uint64(info.Handle))
 			}
@@ -210,7 +210,7 @@ func (s *mutatingService) DestroyFederation(ctx context.Context, req *rtiv1.Admi
 	}
 
 	if err := s.opts.Federations.DestroyFederation(ctx, core.FederationName(fed)); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return resp, nil
 }
