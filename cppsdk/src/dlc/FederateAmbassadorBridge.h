@@ -41,6 +41,29 @@
 namespace gorti {
 namespace dlc {
 
+// ===== FR-DLC-14 — callback re-entrancy witness (M36 Agent DA) =====
+//
+// True while a DLC callback dispatch is on THIS thread's stack. Set by
+// the RAII CallbackScope around every bridge dispatch below; checked by
+// DLCRTIambassadorImpl's bridge()/bridgeR() helpers, which throw the
+// spec-mandated CallNotAllowedFromWithinCallback (catalogue 17.2) when a
+// federate re-enters the ambassador from inside a callback. §10.4-exempt
+// services (evoke*/enable/disableCallbacks) bypass the check.
+extern thread_local bool tls_in_callback;
+
+// RAII guard: saves/restores so nested dispatch (spec-illegal but
+// defensive) unwinds correctly.
+class CallbackScope {
+ public:
+  CallbackScope() : prev_(tls_in_callback) { tls_in_callback = true; }
+  ~CallbackScope() { tls_in_callback = prev_; }
+  CallbackScope(const CallbackScope&) = delete;
+  CallbackScope& operator=(const CallbackScope&) = delete;
+
+ private:
+  bool prev_;
+};
+
 // Bridge from M17-shaped callbacks to DLC-shaped callbacks.
 //
 // Subclasses M17's FederateAmbassador (rti1516e_m17::FederateAmbassador after
@@ -83,6 +106,19 @@ class DLCFederateAmbassadorBridge : public rti1516e_m17::FederateAmbassador {
       rti1516e_m17::InteractionClassHandle interaction_class,
       const rti1516e_m17::ParameterHandleValueMap& parameters,
       std::optional<double> timestamp) override;
+
+  // §6.15 — a subscribed instance was deleted by its owner. Timestamp
+  // presence selects the DLC overload (RO 4-arg vs TSO 6-arg). M36 DA.
+  void removeObjectInstance(
+      rti1516e_m17::ObjectInstanceHandle object,
+      std::optional<double> timestamp,
+      const rti1516e_m17::VariableLengthData& tag) override;
+
+  // §6.20 — the RTI asks this federate (an owner) for fresh values. M36 DA.
+  void provideAttributeValueUpdate(
+      rti1516e_m17::ObjectInstanceHandle object,
+      const rti1516e_m17::AttributeHandleSet& attributes,
+      const rti1516e_m17::VariableLengthData& tag) override;
 
   // §6.3 — a previously-requested name reservation succeeded.
   void objectInstanceNameReservationSucceeded(

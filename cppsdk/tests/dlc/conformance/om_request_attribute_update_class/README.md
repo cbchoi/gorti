@@ -49,28 +49,23 @@ instance-handle (non-DDM) overloads per §6.19. Catalogue row 4.24
 
 RED. Goldens are `TBD-pitch-capture` until Agent E's TASK-363 clears.
 
-## gorti parity status (M35, parity-CC)
+## gorti parity status (M36, agent-DA)
 
-Publisher PARTIAL 4/6, subscriber PARTIAL 5/7. Captured run:
-`gorti-captured.{publisher,subscriber}.log`.
+**SPEC-FULL** — publisher 6/6, subscriber 7/7 (exact, zero extra).
+Captured run: `gorti-captured.{publisher,subscriber}.log`.
 
-Missing events:
+M36 DA-2/DA-5 closed the M35 parity-CC gaps: the DLC §6.19
+requestAttributeValueUpdate class-handle overload now delegates through
+`M17Bridge::requestClassAttributeValueUpdate` to the M23
+RequestClassAttributeValueUpdate RPC, the M17 stream loop dispatches
+the `provide_update` event (was default-drop), the M17
+FederateAmbassador grew the §6.20 provideAttributeValueUpdate slot, and
+the DLC bridge converts it — so the full request → provide → update →
+reflect chain runs.
 
-- `SUB: DISCOVER name=car-cls handle=<H>` — gorti M17 has no late-join
-  discovery: subscribing after the instance was registered does not
-  retroactively fire §6.9 discoverObjectInstance (om_helloworld_pubsub
-  passes because there the subscribe precedes the register).
-- `PUB: PROVIDE_UPDATE handle=<H> attrs=2` — the DLC
-  §6.19 requestAttributeValueUpdate class-handle overload (RTIambassadorImpl.cpp:857)
-  is a silent no-op, so the request never reaches the server, even
-  though the server CAN emit provide_update (request_update.go); and
-  §6.20 provideAttributeValueUpdate is not declared on the M17 Cut-1
-  FederateAmbassador, so the bridge has nothing to convert (catalogue
-  row 4.24).
-- `PUB: UPDATE name=car-cls Position=11.000000 Velocity=22.000000`
-  and `SUB: REFLECT name=car-cls Position=11 Velocity=22` — causal
-  downstream of the missing provide (fixture only responds when asked).
-
-Fixture side is ready: evoke-drain loops everywhere, and the response
-update is guarded on provide arrival, so the capture will pick up the
-full chain as soon as the DLC request wiring + bridge converter land.
+Launch-order caveat: this capture launches the SUBSCRIBER first, so the
+§5.6 subscribe precedes the publisher's register and §6.9 DISCOVER fans
+out normally. True late-join discovery (subscribe AFTER register firing
+a retroactive discover — the scenario's original intent) remains a Go
+server gap, Agent DC territory; the §6.19/§6.20 rows this fixture owns
+(catalogue 11.7 + 4.24) are fully witnessed either way.

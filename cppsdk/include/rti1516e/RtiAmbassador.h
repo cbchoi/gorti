@@ -257,6 +257,49 @@ class M17RTIambassador {
   void sendInteraction(InteractionClassHandle cls,
                        const ParameterHandleValueMap& parameters);
 
+  // ===== M36 Agent DA — timed (TSO) §6 variants + §6.14/§6.19 wire =====
+  //
+  // The proto requests carried `optional double logical_time` since
+  // M20 but the Cut-1 client never set it. These overloads populate it
+  // so the server-side TSO gate (rti/internal/object) buffers and
+  // releases the message per §8 time management. `logical_time` is the
+  // HLAfloat64Time value of the send.
+
+  // §6.10 (TSO) — timed updateAttributeValues.
+  void updateAttributeValues(ObjectInstanceHandle obj,
+                             const AttributeHandleValueMap& values,
+                             double logical_time);
+
+  // §6.12 (TSO) — timed sendInteraction.
+  void sendInteraction(InteractionClassHandle cls,
+                       const ParameterHandleValueMap& parameters,
+                       double logical_time);
+
+  // §6.14 — delete an object instance (owner-only). `tag` rides the
+  // wire to subscribers' removeObjectInstance callbacks. Present
+  // `logical_time` makes the delete TSO; absent → RO.
+  void deleteObjectInstance(ObjectInstanceHandle obj,
+                            const VariableLengthData& tag = {},
+                            std::optional<double> logical_time = std::nullopt);
+
+  // §6.19 — ask the owner(s) for fresh attribute values. The owner
+  // receives a provideAttributeValueUpdate callback. Instance-scoped.
+  void requestAttributeValueUpdate(ObjectInstanceHandle obj,
+                                   const AttributeHandleSet& attributes,
+                                   const VariableLengthData& tag = {});
+  // §6.19 — class-scoped variant: every owner of any instance of the
+  // class receives the callback.
+  void requestAttributeValueUpdate(ObjectClassHandle cls,
+                                   const AttributeHandleSet& attributes,
+                                   const VariableLengthData& tag = {});
+
+  // §10.24/§10.25 — federate name <-> handle resolution via the M24
+  // ListFederationMembers RPC. Not cached (membership changes as
+  // federates join/resign). Throws NameNotFound when no joined
+  // federate matches.
+  FederateHandle getFederateHandle(const std::string& federate_name);
+  std::string getFederateName(FederateHandle handle);
+
   // §8.21 (M20.2) — retract a previously-sent TSO message that has
   // not yet been delivered. ``handle`` is the federate-allocated
   // MessageRetractionHandle passed in the original send. Returns OK

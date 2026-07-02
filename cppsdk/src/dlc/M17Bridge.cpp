@@ -85,6 +85,9 @@ auto guard(char const* op, Fn&& f) -> decltype(f()) {
     throw std::runtime_error(
         std::string("FederateNotExecutionMember: ") + e.what() +
         " [op=" + op + "]");
+  } catch (::rti1516e::m17::NameNotFound const& e) {
+    throw std::runtime_error(std::string("NameNotFound: ") + e.what() +
+                             " [op=" + op + "]");
   } catch (::rti1516e::m17::RTIinternalError const& e) {
     throw std::runtime_error(std::string("RTIinternalError: ") + e.what() +
                              " [op=" + op + "]");
@@ -359,6 +362,98 @@ void M17Bridge::sendInteraction(
   });
 }
 
+// ---------- §6 delete / request-update + TSO variants (M36 Agent DA) -------
+
+namespace {
+::rti1516e::AttributeHandleValueMap toM17ValueMap(
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& values) {
+  ::rti1516e::AttributeHandleValueMap out;
+  for (auto const& kv : values) {
+    out.emplace(::rti1516e::AttributeHandle{kv.first},
+                ::rti1516e::VariableLengthData{kv.second});
+  }
+  return out;
+}
+::rti1516e::ParameterHandleValueMap toM17ParamMap(
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& params) {
+  ::rti1516e::ParameterHandleValueMap out;
+  for (auto const& kv : params) {
+    out.emplace(::rti1516e::ParameterHandle{kv.first},
+                ::rti1516e::VariableLengthData{kv.second});
+  }
+  return out;
+}
+}  // namespace
+
+// §6.14 deleteObjectInstance (RO) — tag rides the wire to subscribers'
+// removeObjectInstance callbacks.
+void M17Bridge::deleteObjectInstance(std::uint64_t object,
+                                     const std::vector<std::uint8_t>& tag) {
+  guard("deleteObjectInstance", [&] {
+    impl_->amb->deleteObjectInstance(::rti1516e::ObjectInstanceHandle{object},
+                                     tag, std::nullopt);
+  });
+}
+
+// §6.14 deleteObjectInstance (TSO).
+void M17Bridge::deleteObjectInstanceTimed(std::uint64_t object,
+                                          const std::vector<std::uint8_t>& tag,
+                                          double logical_time) {
+  guard("deleteObjectInstance", [&] {
+    impl_->amb->deleteObjectInstance(::rti1516e::ObjectInstanceHandle{object},
+                                     tag,
+                                     std::optional<double>(logical_time));
+  });
+}
+
+// §6.19 requestAttributeValueUpdate — instance-scoped.
+void M17Bridge::requestAttributeValueUpdate(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs,
+    const std::vector<std::uint8_t>& tag) {
+  guard("requestAttributeValueUpdate", [&] {
+    impl_->amb->requestAttributeValueUpdate(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs), tag);
+  });
+}
+
+// §6.19 requestAttributeValueUpdate — class-scoped.
+void M17Bridge::requestClassAttributeValueUpdate(
+    std::uint64_t object_class, const std::vector<std::uint64_t>& attrs,
+    const std::vector<std::uint8_t>& tag) {
+  guard("requestClassAttributeValueUpdate", [&] {
+    impl_->amb->requestAttributeValueUpdate(
+        ::rti1516e::ObjectClassHandle{object_class}, toM17AttrSet(attrs),
+        tag);
+  });
+}
+
+// §6.10 updateAttributeValues (TSO) — logical_time engages the server
+// TSO gate. Tag divergence identical to the RO path.
+void M17Bridge::updateAttributeValuesTimed(
+    std::uint64_t object,
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& values,
+    const std::vector<std::uint8_t>& tag, double logical_time) {
+  (void)tag;  // Divergence: M17 update wire has no tag field yet.
+  guard("updateAttributeValues", [&] {
+    impl_->amb->updateAttributeValues(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17ValueMap(values),
+        logical_time);
+  });
+}
+
+// §6.12 sendInteraction (TSO).
+void M17Bridge::sendInteractionTimed(
+    std::uint64_t interaction_class,
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& params,
+    const std::vector<std::uint8_t>& tag, double logical_time) {
+  (void)tag;  // Divergence: M17 send wire has no tag field yet.
+  guard("sendInteraction", [&] {
+    impl_->amb->sendInteraction(
+        ::rti1516e::InteractionClassHandle{interaction_class},
+        toM17ParamMap(params), logical_time);
+  });
+}
+
 
 // shim name `rti1516e_m17::FederateAmbassador*` in the header (see
 // M17Bridge.h), but this TU sees the M17 header without the shim, so the
@@ -436,6 +531,18 @@ std::string M17Bridge::getParameterName(std::uint64_t cls,
     return impl_->amb->getParameterName(
         ::rti1516e::InteractionClassHandle{cls},
         ::rti1516e::ParameterHandle{param});
+  });
+}
+
+std::uint64_t M17Bridge::getFederateHandle(const std::string& federate_name) {
+  return guard("getFederateHandle", [&] {
+    auto h = impl_->amb->getFederateHandle(federate_name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::string M17Bridge::getFederateName(std::uint64_t handle) {
+  return guard("getFederateName", [&] {
+    return impl_->amb->getFederateName(::rti1516e::FederateHandle{handle});
   });
 }
 

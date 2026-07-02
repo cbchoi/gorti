@@ -3,6 +3,5 @@ SUB: JOIN federate=sub
 SUB: SUBSCRIBE class=Vehicle attributes=[Position] active=true
 SUB: REFLECT Position=...
 SUB: ATTEMPT_REENTRY service=updateAttributeValues
-SUB: CAUGHT exception=UNEXPECTED(RTIinternalError: updateAttributeValues: attribute not owned by federate [op=updateAttributeValues])
-SUB: ERROR no_exception_raised
+SUB: CAUGHT exception=CallNotAllowedFromWithinCallback
 SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

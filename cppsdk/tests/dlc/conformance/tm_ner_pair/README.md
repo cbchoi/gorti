@@ -44,48 +44,40 @@ In M31 the test fails to link with `undefined reference to rti1516e::*` — by d
 - `expected.constrained.log` — golden skeleton (`TBD-pitch-capture`)
 - `test_tm_ner_pair.cpp` — gtest driver (uses Agent C's `_harness/`)
 
-## gorti parity status (M35, parity-CE)
+## gorti parity status (M36, agent-DA)
 
-Regulator **FULL 15/15**; constrained **PARTIAL 10/15**. Captured run:
+Regulator **FULL 15/15**; constrained **NEAR 15 events / 10/15 in
+golden order**. Captured run:
 `gorti-captured.{regulator,constrained}.log` (canonicalized).
 
-Missing events (exactly five): the §6.13 TSO deliveries
-`CON: RECV interaction=Tick time=N.000000 order=TIMESTAMP`, N=1..5.
-Everything else — §8.5/§8.6 constrained enable, all five §8.8 NER
-grants at exact targets, resign — matches.
+M36 DA-1 closed the M35 parity-CE gap: the timed §6.12
+`sendInteraction(..., LogicalTime const&)` now threads the
+HLAfloat64Time double through `M17Bridge::sendInteractionTimed` onto
+the wire's `SendInteractionRequest.logical_time`, and the delivery
+bridge invokes the 9-arg retraction-handle TSO `receiveInteraction`
+overload the golden mandates. All five §6.13 TSO deliveries
+`CON: RECV interaction=Tick time=N.000000 order=TIMESTAMP` (N=1..5)
+now appear.
 
-### TSO-delivery analysis (why the RECVs are missing)
+### Residual (Go server — Agent DB territory)
 
-NOT an evoke-drain problem (all wait loops use
-`evokeMultipleCallbacks(0.05, 0.1)`) and NOT a server gap. The break is
-in the C++ SDK send path — the interactions ARE delivered, invisibly:
+The only remaining diff is intra-step ORDER: the golden mandates
+`RECV time=N` BEFORE `GRANT time=N` (§8.14 — TSO messages at T are
+delivered at T, before the grant); gorti emits the grant first:
 
-1. **Primary break** — `cppsdk/src/dlc/RTIambassadorImpl.cpp:811-831`:
-   the timed §6.12 `sendInteraction(..., LogicalTime const&)` overload
-   does `(void)theTime;` (line 818) and calls the untimed 3-arg
-   `M17Bridge::sendInteraction` — every TSO send is degraded to RO.
-2. **Structural** — `cppsdk/src/RtiAmbassador.cpp:2001-2017`: the M17
-   client's only `sendInteraction` never sets
-   `SendInteractionRequest.logical_time`; no timed variant exists
-   (`include/rti1516e/RtiAmbassador.h:257`). `M17Bridge.cpp:346-360`
-   likewise has no time parameter (and also drops the tag).
-3. **Server is ready** — `rti/internal/object/interaction.go:113-172`:
-   `fanoutReceive` has a working TSO gate
-   (`ShouldDeliverNow`/`BufferTSO`, released by NextMessageRequest) but
-   sees `ts == nil` and takes the immediate-RO branch (line 167),
-   omitting `ReceiveInteraction.LogicalTime` on the wire (126-129).
-4. **Visible symptom** — `cppsdk/src/dlc/FederateAmbassadorBridge.cpp:204-223`:
-   with no wire timestamp it invokes the plain 6-arg
-   `receiveInteraction` (line 220), not the 9-arg TSO overload the
-   golden mandates — so the constrained federate receives the Ticks as
-   RO through an overload this fixture (correctly) does not override.
+    CON: GRANT time=1.000000
+    CON: RECV interaction=Tick time=1.000000 order=TIMESTAMP
 
-Also implied: the constrained side's NER grants go to the full target
-(no message-time truncation), consistent with an empty TSO queue.
-
-Missing impl (out of parity-CE scope, `src/dlc` frozen): thread
-LogicalTime through M17 client → M17Bridge → DLC `sendInteraction`;
-the Go TSO gate and the 9-arg delivery path then engage as-is.
+Root cause is server-side grant sequencing, not the C++ SDK (the M17
+stream preserves server seq order): when the regulator's NER(N) grant
+lands, the time manager immediately recomputes LBTS and grants the
+constrained federate's NER(N) — but the regulator only SENDS Tick@N
+after seeing its own grant, so the Tick@N reaches the server after the
+constrained grant already went out; `ShouldDeliverNow` then releases it
+immediately (constrained is already AT time N). Related: gorti does not
+enforce the §8.1.2 lookahead floor on TSO sends (Tick@N sent from
+logical time N with lookahead 1.0 would be rejected by Pitch) — the
+lookahead-floor item already on the M36 Go backlog covers this.
 
 ### Fixture-side changes (no golden edits)
 
