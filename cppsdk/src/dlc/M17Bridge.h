@@ -169,6 +169,141 @@ class M17Bridge {
       const std::vector<std::uint64_t>& attrs,
       const std::vector<std::uint8_t>& tag);
 
+  // ---------- §7 Ownership Management (M36 Agent CA-1) ---------------------
+  //
+  // Straight uint64/std shims over M17's Cut-3 ownership surface (M17.15).
+  // AttributeHandleSet flattens to vector<uint64>; the DLC-mandatory tag on
+  // attributeOwnershipAcquisition is dropped at the DLC layer (documented
+  // divergence, catalogue §12 row 12.2) — M17's wire only carries a tag on
+  // the negotiated divestiture.
+  void unconditionalAttributeOwnershipDivestiture(
+      std::uint64_t object, const std::vector<std::uint64_t>& attrs);
+  void negotiatedAttributeOwnershipDivestiture(
+      std::uint64_t object, const std::vector<std::uint64_t>& attrs,
+      const std::vector<std::uint8_t>& tag);
+  void attributeOwnershipAcquisition(
+      std::uint64_t object, const std::vector<std::uint64_t>& attrs);
+  void cancelNegotiatedAttributeOwnershipDivestiture(
+      std::uint64_t object, const std::vector<std::uint64_t>& attrs);
+  void cancelAttributeOwnershipAcquisition(
+      std::uint64_t object, const std::vector<std::uint64_t>& attrs);
+  void attributeOwnershipDivestitureIfWanted(
+      std::uint64_t object, const std::vector<std::uint64_t>& attrs);
+  // §7.17 — synchronous on the M17 wire. `owner` is the raw FederateHandle
+  // (0 = unowned / mid-transfer); `owned` mirrors M17's result validity.
+  // The DLC layer converts this into the spec's §7.18 callback delivery.
+  struct OwnershipQuery {
+    std::uint64_t owner;
+    bool owned;
+  };
+  OwnershipQuery queryAttributeOwnership(std::uint64_t object,
+                                         std::uint64_t attribute);
+  bool isAttributeOwnedByFederate(std::uint64_t object,
+                                  std::uint64_t attribute);
+
+  // ---------- §8 Time Management (M36 Agent CA-2) --------------------------
+  //
+  // M17 speaks double for logical time (HLAfloat64Time wire shape). The DLC
+  // layer narrows LogicalTime/LogicalTimeInterval via dynamic_cast to the
+  // HLAfloat64 concretes before calling these.
+  void enableTimeRegulation(double lookahead);
+  void disableTimeRegulation();
+  void enableTimeConstrained();
+  void disableTimeConstrained();
+  void modifyLookahead(double lookahead);
+  void timeAdvanceRequest(double time);
+  void timeAdvanceRequestAvailable(double time);
+  void nextMessageRequest(double time);
+  void nextMessageRequestAvailable(double time);
+  void flushQueueRequest(double time);
+  double queryLogicalTime();
+  double queryLookahead();
+  // §8.19/§8.20 — {value, finite}. finite=false means the quantity is
+  // undefined (no other regulating federate / no buffered TSO message);
+  // the DLC layer returns false from queryGALT/queryLITS in that case.
+  struct TimeQuery {
+    double time;
+    bool finite;
+  };
+  TimeQuery queryGALT();
+  TimeQuery queryLITS();
+  void enableAsynchronousDelivery();
+  void disableAsynchronousDelivery();
+  // §8.21 — retract a not-yet-delivered TSO message by raw handle.
+  void retract(std::uint64_t retraction_handle);
+
+  // ---------- §9 Data Distribution Management (M36 Agent CA-3) -------------
+  //
+  // M17's DDM is HLA 1.3-shaped (routing spaces). gorti's FOM parser drops
+  // every 1516e <dimension> into the implicit routing space "default"
+  // (handle 1) — see rti/internal/ddm/state.go populateFromFOM. The DLC
+  // layer resolves that space once and threads its handle through
+  // createRegion/getDimensionHandle.
+  std::uint64_t getRoutingSpaceHandle(const std::string& name);
+  std::uint64_t getDimensionHandle(std::uint64_t routing_space,
+                                   const std::string& name);
+  std::uint64_t createRegion(std::uint64_t routing_space,
+                             const std::vector<std::uint64_t>& dimensions);
+  void setRangeBounds(std::uint64_t region, std::uint64_t dimension,
+                      std::uint64_t lower, std::uint64_t upper);
+  // §9.5 query — {lower, upper, found}. found=false when the region has no
+  // committed bounds for the dimension.
+  struct RegionBounds {
+    std::uint64_t lower;
+    std::uint64_t upper;
+    bool found;
+  };
+  RegionBounds queryRangeBounds(std::uint64_t region, std::uint64_t dimension);
+  void commitRegionModifications(const std::vector<std::uint64_t>& regions);
+  void deleteRegion(std::uint64_t region);
+
+  void subscribeObjectClassAttributesWithRegions(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs,
+      const std::vector<std::uint64_t>& regions);
+  void unsubscribeObjectClassAttributesWithRegions(
+      std::uint64_t cls, const std::vector<std::uint64_t>& attrs,
+      const std::vector<std::uint64_t>& regions);
+  void subscribeInteractionClassWithRegions(
+      std::uint64_t cls, const std::vector<std::uint64_t>& regions);
+  void unsubscribeInteractionClassWithRegions(
+      std::uint64_t cls, const std::vector<std::uint64_t>& regions);
+
+  // §9.6 — per-attribute region bindings as map<attr, regions>.
+  std::uint64_t registerObjectInstanceWithRegions(
+      std::uint64_t cls,
+      const std::map<std::uint64_t, std::vector<std::uint64_t>>&
+          attribute_regions,
+      const std::string& object_name);
+  void associateRegionsForUpdates(
+      std::uint64_t object,
+      const std::map<std::uint64_t, std::vector<std::uint64_t>>&
+          attribute_regions);
+  void unassociateRegionsForUpdates(
+      std::uint64_t object,
+      const std::map<std::uint64_t, std::vector<std::uint64_t>>&
+          attribute_regions);
+
+  void sendInteractionWithRegions(
+      std::uint64_t interaction_class,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& params,
+      const std::vector<std::uint64_t>& regions,
+      std::optional<double> logical_time);
+  void requestAttributeValueUpdateWithRegions(
+      std::uint64_t object_class, const std::vector<std::uint64_t>& attrs,
+      const std::vector<std::uint64_t>& regions,
+      const std::vector<std::uint8_t>& tag);
+
+  // ---------- §4.8 listFederationExecutions (M36 Agent CA-4) ---------------
+  //
+  // The rti.v1.FederationService wire has ListFederations but M17's Cut-4
+  // ambassador never surfaced a client method for it. Rather than touch the
+  // M17 impl (outside this wave's scope), the bridge dials its own throwaway
+  // channel to the URL recorded at connect() and calls the stub directly.
+  // Returns federation execution names; the DLC layer synthesizes the
+  // §4.9 reportFederationExecutions callback from them (spec-legal —
+  // callback delivery mechanics are RTI-defined).
+  std::vector<std::string> listFederationExecutions();
+
   // ---------- M35 Agent BH — §10 Support Services + callback bind ----------
   void bind_federate_ambassador(rti1516e_m17::FederateAmbassador* fed);
   std::uint64_t getObjectClassHandle(const std::string& name);

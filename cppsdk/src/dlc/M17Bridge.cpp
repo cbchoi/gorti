@@ -14,6 +14,12 @@
 #include "rti1516e/Exceptions.h"
 #include "rti1516e/RtiAmbassador.h"
 
+// M36 Agent CA-4 — listFederationExecutions dials its own channel (the M17
+// ambassador never surfaced the ListFederations RPC; see header comment).
+#include <grpcpp/grpcpp.h>
+#include "rti/v1/federation.grpc.pb.h"
+#include "rti/v1/federation.pb.h"
+
 #include <stdexcept>
 #include <string>
 
@@ -34,6 +40,10 @@ struct M17Bridge::Impl {
   // stable across DLC lifetime — the outer DLCRTIambassadorImpl's move
   // semantics don't attempt to move/copy the M17 amb.
   std::unique_ptr<::rti1516e::M17RTIambassador> amb;
+  // M36 Agent CA-4 — dial URL recorded at connect() so
+  // listFederationExecutions can open its own stub (the M17 pimpl's
+  // channel is not reachable from here). Empty before connect().
+  std::string connect_url;
   Impl() : amb(std::make_unique<::rti1516e::M17RTIambassador>()) {}
 };
 
@@ -92,6 +102,7 @@ auto guard(char const* op, Fn&& f) -> decltype(f()) {
 
 void M17Bridge::connect(const std::string& url) {
   guard("connect", [&] { impl_->amb->connect(url); });
+  impl_->connect_url = url;  // only on success — see guard() throw above
 }
 void M17Bridge::disconnect() {
   guard("disconnect", [&] { impl_->amb->disconnect(); });
@@ -447,6 +458,355 @@ bool M17Bridge::evokeMultipleCallbacks(double approx_min_time,
   return guard("evokeMultipleCallbacks", [&] {
     return impl_->amb->evokeMultipleCallbacks(approx_min_time,
                                               approx_max_time);
+  });
+}
+
+// ---------- §7 Ownership Management (M36 Agent CA-1) -----------------------
+//
+// Rewrap raw uint64s as M17 typed handles (same toM17AttrSet helper as §5).
+
+void M17Bridge::unconditionalAttributeOwnershipDivestiture(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs) {
+  guard("unconditionalAttributeOwnershipDivestiture", [&] {
+    impl_->amb->unconditionalAttributeOwnershipDivestiture(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::negotiatedAttributeOwnershipDivestiture(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs,
+    const std::vector<std::uint8_t>& tag) {
+  guard("negotiatedAttributeOwnershipDivestiture", [&] {
+    impl_->amb->negotiatedAttributeOwnershipDivestiture(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs),
+        ::rti1516e::VariableLengthData{tag});
+  });
+}
+void M17Bridge::attributeOwnershipAcquisition(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs) {
+  guard("attributeOwnershipAcquisition", [&] {
+    impl_->amb->attributeOwnershipAcquisition(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::cancelNegotiatedAttributeOwnershipDivestiture(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs) {
+  guard("cancelNegotiatedAttributeOwnershipDivestiture", [&] {
+    impl_->amb->cancelNegotiatedAttributeOwnershipDivestiture(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::cancelAttributeOwnershipAcquisition(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs) {
+  guard("cancelAttributeOwnershipAcquisition", [&] {
+    impl_->amb->cancelAttributeOwnershipAcquisition(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs));
+  });
+}
+void M17Bridge::attributeOwnershipDivestitureIfWanted(
+    std::uint64_t object, const std::vector<std::uint64_t>& attrs) {
+  guard("attributeOwnershipDivestitureIfWanted", [&] {
+    impl_->amb->attributeOwnershipDivestitureIfWanted(
+        ::rti1516e::ObjectInstanceHandle{object}, toM17AttrSet(attrs));
+  });
+}
+M17Bridge::OwnershipQuery M17Bridge::queryAttributeOwnership(
+    std::uint64_t object, std::uint64_t attribute) {
+  return guard("queryAttributeOwnership", [&] {
+    auto r = impl_->amb->queryAttributeOwnership(
+        ::rti1516e::ObjectInstanceHandle{object},
+        ::rti1516e::AttributeHandle{attribute});
+    return OwnershipQuery{static_cast<std::uint64_t>(r.owner.raw()), r.owned};
+  });
+}
+bool M17Bridge::isAttributeOwnedByFederate(std::uint64_t object,
+                                           std::uint64_t attribute) {
+  return guard("isAttributeOwnedByFederate", [&] {
+    return impl_->amb->isAttributeOwnedByFederate(
+        ::rti1516e::ObjectInstanceHandle{object},
+        ::rti1516e::AttributeHandle{attribute});
+  });
+}
+
+// ---------- §8 Time Management (M36 Agent CA-2) ----------------------------
+
+void M17Bridge::enableTimeRegulation(double lookahead) {
+  guard("enableTimeRegulation",
+        [&] { impl_->amb->enableTimeRegulation(lookahead); });
+}
+void M17Bridge::disableTimeRegulation() {
+  guard("disableTimeRegulation",
+        [&] { impl_->amb->disableTimeRegulation(); });
+}
+void M17Bridge::enableTimeConstrained() {
+  guard("enableTimeConstrained",
+        [&] { impl_->amb->enableTimeConstrained(); });
+}
+void M17Bridge::disableTimeConstrained() {
+  guard("disableTimeConstrained",
+        [&] { impl_->amb->disableTimeConstrained(); });
+}
+void M17Bridge::modifyLookahead(double lookahead) {
+  guard("modifyLookahead", [&] { impl_->amb->modifyLookahead(lookahead); });
+}
+void M17Bridge::timeAdvanceRequest(double time) {
+  guard("timeAdvanceRequest", [&] { impl_->amb->timeAdvanceRequest(time); });
+}
+void M17Bridge::timeAdvanceRequestAvailable(double time) {
+  guard("timeAdvanceRequestAvailable",
+        [&] { impl_->amb->timeAdvanceRequestAvailable(time); });
+}
+void M17Bridge::nextMessageRequest(double time) {
+  guard("nextMessageRequest", [&] { impl_->amb->nextMessageRequest(time); });
+}
+void M17Bridge::nextMessageRequestAvailable(double time) {
+  guard("nextMessageRequestAvailable",
+        [&] { impl_->amb->nextMessageRequestAvailable(time); });
+}
+void M17Bridge::flushQueueRequest(double time) {
+  guard("flushQueueRequest", [&] { impl_->amb->flushQueueRequest(time); });
+}
+double M17Bridge::queryLogicalTime() {
+  return guard("queryLogicalTime",
+               [&] { return impl_->amb->queryLogicalTime(); });
+}
+double M17Bridge::queryLookahead() {
+  return guard("queryLookahead",
+               [&] { return impl_->amb->queryLookahead(); });
+}
+M17Bridge::TimeQuery M17Bridge::queryGALT() {
+  return guard("queryGALT", [&] {
+    auto r = impl_->amb->queryGALT();
+    return TimeQuery{r.time, r.finite};
+  });
+}
+M17Bridge::TimeQuery M17Bridge::queryLITS() {
+  return guard("queryLITS", [&] {
+    auto r = impl_->amb->queryLITS();
+    return TimeQuery{r.time, r.finite};
+  });
+}
+void M17Bridge::enableAsynchronousDelivery() {
+  guard("enableAsynchronousDelivery",
+        [&] { impl_->amb->enableAsynchronousDelivery(); });
+}
+void M17Bridge::disableAsynchronousDelivery() {
+  guard("disableAsynchronousDelivery",
+        [&] { impl_->amb->disableAsynchronousDelivery(); });
+}
+void M17Bridge::retract(std::uint64_t retraction_handle) {
+  guard("retract", [&] {
+    impl_->amb->retract(
+        ::rti1516e::MessageRetractionHandle{retraction_handle});
+  });
+}
+
+// ---------- §9 Data Distribution Management (M36 Agent CA-3) ---------------
+
+namespace {
+std::vector<::rti1516e::RegionHandle> toM17Regions(
+    const std::vector<std::uint64_t>& regions) {
+  std::vector<::rti1516e::RegionHandle> out;
+  out.reserve(regions.size());
+  for (auto v : regions) out.push_back(::rti1516e::RegionHandle{v});
+  return out;
+}
+::rti1516e::RegionHandleSet toM17RegionSet(
+    const std::vector<std::uint64_t>& regions) {
+  ::rti1516e::RegionHandleSet out;
+  for (auto v : regions) out.insert(::rti1516e::RegionHandle{v});
+  return out;
+}
+::rti1516e::AttributeRegionMap toM17AttrRegionMap(
+    const std::map<std::uint64_t, std::vector<std::uint64_t>>& m) {
+  ::rti1516e::AttributeRegionMap out;
+  for (auto const& kv : m) {
+    out.emplace(::rti1516e::AttributeHandle{kv.first},
+                toM17RegionSet(kv.second));
+  }
+  return out;
+}
+}  // namespace
+
+std::uint64_t M17Bridge::getRoutingSpaceHandle(const std::string& name) {
+  return guard("getRoutingSpaceHandle", [&] {
+    auto h = impl_->amb->getRoutingSpaceHandle(name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::uint64_t M17Bridge::getDimensionHandle(std::uint64_t routing_space,
+                                            const std::string& name) {
+  return guard("getDimensionHandle", [&] {
+    auto h = impl_->amb->getDimensionHandle(
+        ::rti1516e::RoutingSpaceHandle{routing_space}, name);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+std::uint64_t M17Bridge::createRegion(
+    std::uint64_t routing_space, const std::vector<std::uint64_t>& dimensions) {
+  return guard("createRegion", [&] {
+    std::vector<::rti1516e::DimensionHandle> dims;
+    dims.reserve(dimensions.size());
+    for (auto v : dimensions) dims.push_back(::rti1516e::DimensionHandle{v});
+    auto h = impl_->amb->createRegion(
+        ::rti1516e::RoutingSpaceHandle{routing_space}, dims);
+    return static_cast<std::uint64_t>(h.raw());
+  });
+}
+void M17Bridge::setRangeBounds(std::uint64_t region, std::uint64_t dimension,
+                               std::uint64_t lower, std::uint64_t upper) {
+  guard("setRangeBounds", [&] {
+    impl_->amb->setRangeBounds(::rti1516e::RegionHandle{region},
+                               ::rti1516e::DimensionHandle{dimension},
+                               ::rti1516e::DimensionRange{lower, upper});
+  });
+}
+M17Bridge::RegionBounds M17Bridge::queryRangeBounds(std::uint64_t region,
+                                                    std::uint64_t dimension) {
+  return guard("queryRangeBounds", [&] {
+    auto r = impl_->amb->queryBounds(::rti1516e::RegionHandle{region},
+                                     ::rti1516e::DimensionHandle{dimension});
+    return RegionBounds{r.bounds.lower, r.bounds.upper, r.found};
+  });
+}
+void M17Bridge::commitRegionModifications(
+    const std::vector<std::uint64_t>& regions) {
+  guard("commitRegionModifications", [&] {
+    impl_->amb->commitRegionModifications(toM17Regions(regions));
+  });
+}
+void M17Bridge::deleteRegion(std::uint64_t region) {
+  guard("deleteRegion",
+        [&] { impl_->amb->deleteRegion(::rti1516e::RegionHandle{region}); });
+}
+
+void M17Bridge::subscribeObjectClassAttributesWithRegions(
+    std::uint64_t cls, const std::vector<std::uint64_t>& attrs,
+    const std::vector<std::uint64_t>& regions) {
+  guard("subscribeObjectClassAttributesWithRegions", [&] {
+    impl_->amb->subscribeObjectClassAttributesWithRegions(
+        ::rti1516e::ObjectClassHandle{cls}, toM17AttrSet(attrs),
+        toM17RegionSet(regions));
+  });
+}
+void M17Bridge::unsubscribeObjectClassAttributesWithRegions(
+    std::uint64_t cls, const std::vector<std::uint64_t>& attrs,
+    const std::vector<std::uint64_t>& regions) {
+  guard("unsubscribeObjectClassAttributesWithRegions", [&] {
+    impl_->amb->unsubscribeObjectClassAttributesWithRegions(
+        ::rti1516e::ObjectClassHandle{cls}, toM17AttrSet(attrs),
+        toM17RegionSet(regions));
+  });
+}
+void M17Bridge::subscribeInteractionClassWithRegions(
+    std::uint64_t cls, const std::vector<std::uint64_t>& regions) {
+  guard("subscribeInteractionClassWithRegions", [&] {
+    impl_->amb->subscribeInteractionClassWithRegions(
+        ::rti1516e::InteractionClassHandle{cls}, toM17RegionSet(regions));
+  });
+}
+void M17Bridge::unsubscribeInteractionClassWithRegions(
+    std::uint64_t cls, const std::vector<std::uint64_t>& regions) {
+  guard("unsubscribeInteractionClassWithRegions", [&] {
+    impl_->amb->unsubscribeInteractionClassWithRegions(
+        ::rti1516e::InteractionClassHandle{cls}, toM17RegionSet(regions));
+  });
+}
+
+std::uint64_t M17Bridge::registerObjectInstanceWithRegions(
+    std::uint64_t cls,
+    const std::map<std::uint64_t, std::vector<std::uint64_t>>&
+        attribute_regions,
+    const std::string& object_name) {
+  return guard("registerObjectInstanceWithRegions", [&] {
+    auto r = impl_->amb->registerObjectInstanceWithRegions(
+        ::rti1516e::ObjectClassHandle{cls},
+        toM17AttrRegionMap(attribute_regions), object_name);
+    return static_cast<std::uint64_t>(r.object.raw());
+  });
+}
+void M17Bridge::associateRegionsForUpdates(
+    std::uint64_t object,
+    const std::map<std::uint64_t, std::vector<std::uint64_t>>&
+        attribute_regions) {
+  guard("associateRegionsForUpdates", [&] {
+    impl_->amb->associateRegionsForUpdates(
+        ::rti1516e::ObjectInstanceHandle{object},
+        toM17AttrRegionMap(attribute_regions));
+  });
+}
+void M17Bridge::unassociateRegionsForUpdates(
+    std::uint64_t object,
+    const std::map<std::uint64_t, std::vector<std::uint64_t>>&
+        attribute_regions) {
+  guard("unassociateRegionsForUpdates", [&] {
+    impl_->amb->unassociateRegionsForUpdates(
+        ::rti1516e::ObjectInstanceHandle{object},
+        toM17AttrRegionMap(attribute_regions));
+  });
+}
+
+void M17Bridge::sendInteractionWithRegions(
+    std::uint64_t interaction_class,
+    const std::map<std::uint64_t, std::vector<std::uint8_t>>& params,
+    const std::vector<std::uint64_t>& regions,
+    std::optional<double> logical_time) {
+  guard("sendInteractionWithRegions", [&] {
+    ::rti1516e::ParameterHandleValueMap m17_params;
+    for (auto const& kv : params) {
+      m17_params.emplace(::rti1516e::ParameterHandle{kv.first},
+                         ::rti1516e::VariableLengthData{kv.second});
+    }
+    impl_->amb->sendInteractionWithRegions(
+        ::rti1516e::InteractionClassHandle{interaction_class}, m17_params,
+        toM17RegionSet(regions), logical_time);
+  });
+}
+void M17Bridge::requestAttributeValueUpdateWithRegions(
+    std::uint64_t object_class, const std::vector<std::uint64_t>& attrs,
+    const std::vector<std::uint64_t>& regions,
+    const std::vector<std::uint8_t>& tag) {
+  guard("requestAttributeValueUpdateWithRegions", [&] {
+    impl_->amb->requestAttributeValueUpdateWithRegions(
+        ::rti1516e::ObjectClassHandle{object_class}, toM17AttrSet(attrs),
+        toM17RegionSet(regions), ::rti1516e::VariableLengthData{tag});
+  });
+}
+
+// ---------- §4.8 listFederationExecutions (M36 Agent CA-4) -----------------
+//
+// Direct-stub path: the M17 ambassador has no listFederations client method,
+// and its gRPC channel lives behind its private pimpl. A short-lived channel
+// to the recorded connect URL is cheap (one unary RPC) and keeps the M17
+// surface untouched. Failure modes fold into the guard() vocabulary.
+
+std::vector<std::string> M17Bridge::listFederationExecutions() {
+  return guard("listFederationExecutions", [&]() -> std::vector<std::string> {
+    if (impl_->connect_url.empty()) {
+      throw ::rti1516e::m17::NotConnected(
+          "listFederationExecutions: connect() not called");
+    }
+    // Strip the grpc:// / grpcs:// scheme (same accepted forms as M17's
+    // connect; TLS falls back to plaintext exactly like M17 Cut-1).
+    std::string target = impl_->connect_url;
+    if (target.rfind("grpc://", 0) == 0) target = target.substr(7);
+    else if (target.rfind("grpcs://", 0) == 0) target = target.substr(8);
+    auto channel =
+        grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+    auto stub = ::rti::v1::FederationService::NewStub(channel);
+    ::rti::v1::ListFederationsRequest req;
+    req.set_wire_version(::rti::v1::WIRE_VERSION_V1);
+    ::rti::v1::ListFederationsResponse resp;
+    grpc::ClientContext ctx;
+    const auto s = stub->ListFederations(&ctx, req, &resp);
+    if (!s.ok()) {
+      throw std::runtime_error(
+          std::string("RTIinternalError: ListFederations RPC failed: ") +
+          s.error_message());
+    }
+    std::vector<std::string> names;
+    names.reserve(static_cast<std::size_t>(resp.federations_size()));
+    for (auto const& f : resp.federations()) names.push_back(f.name());
+    return names;
   });
 }
 

@@ -13,6 +13,7 @@
 
 #include <RTI/RTIambassador.h>
 
+#include <cstdint>
 #include <memory>
 
 // M35 Agent BD — forward-decl of the callback bridge (full defn lives in
@@ -398,6 +399,15 @@ class DLCRTIambassadorImpl : public RTIambassador {
   // thread) or HLA_EVOKED (dispatch only on evoke). Defaults to HLA_EVOKED
   // to match the Pitch pre-connect state (safe: no callbacks fire).
   CallbackModel callback_model_{HLA_EVOKED};
+
+  // M36 Agent CA-3 — cached handle of gorti's implicit DDM routing space
+  // ("default"; see rti/internal/ddm/state.go populateFromFOM — every 1516e
+  // <dimension> lands there). 0 = not yet resolved; resolved lazily on the
+  // first §9/§10 DDM call after join (the lookup RPC requires a joined
+  // federate). Reset by disconnect().
+  std::uint64_t ddm_default_space_{0};
+  // Resolves + caches the space handle. Defined in RTIambassadorImpl.cpp.
+  std::uint64_t ddmDefaultSpace_();
 
   // M35 Agent BD — DLC-side callback dispatch bridge. Owns an
   // rti1516e_m17::FederateAmbassador subclass (Agent AD's bridge) that
