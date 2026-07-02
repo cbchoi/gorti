@@ -68,16 +68,19 @@ int main(int argc, char** argv) {
   std::printf("OBS: JOIN federate=observer\n");
 
   amb->enableTimeConstrained();
-  while (!fed.constrained) amb->evokeCallback(0.1);
+  while (!fed.constrained) amb->evokeMultipleCallbacks(0.05, 0.1);
 
-  // Sample GALT three times — the test driver synchronizes timing via the
-  // regulator's logged steps, so this federate spaces probes with a brief
-  // wall-clock dwell to give the regulator time to advance + modifyLookahead.
+  // Sample GALT three times — the launcher starts this federate right after
+  // the regulator prints its after-enable STATE; probes are spaced with
+  // wall-clock dwells matched to the regulator's pacing sleeps
+  // (federate_regulator.cpp): probe1 inside the regulator's first 1500 ms
+  // hold (t=0, LA=2), probe2 inside its second hold (t=1, LA=2), probe3
+  // after modify+TAR(2) (t=2, LA=0.5).
   probe(amb.get(), "after-enable");
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  std::this_thread::sleep_for(std::chrono::milliseconds(1800));
   amb->evokeMultipleCallbacks(0.0, 0.1);  // §10.42 — 2-arg, no defaults (catalogue 13.12)
   probe(amb.get(), "after-first-advance");
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  std::this_thread::sleep_for(std::chrono::milliseconds(1800));
   amb->evokeMultipleCallbacks(0.0, 0.1);
   probe(amb.get(), "after-modify");
 

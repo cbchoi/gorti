@@ -25,9 +25,11 @@
 #include <RTI/time/HLAfloat64Time.h>
 #include <RTI/time/HLAfloat64Interval.h>
 
+#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -83,16 +85,35 @@ int main(int argc, char** argv) {
 
   rti1516e::HLAfloat64Interval startLookahead(2.0);
   amb->enableTimeRegulation(startLookahead);
-  while (!fed.regulating) amb->evokeCallback(0.1);
+  while (!fed.regulating) amb->evokeMultipleCallbacks(0.05, 0.1);
 
   report_state(amb.get(), "after-enable");
+
+  // Wall-clock pacing so the observer's GALT probes land between our steps
+  // (the observer spaces its probes with fixed dwells — see
+  // federate_observer.cpp). This regulator is unconstrained, so without
+  // pacing the whole script completes in milliseconds. Emits no events.
+  std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
   {
     double prior = fed.lastGrant;
     rti1516e::HLAfloat64Time target(1.0);
-    amb->timeAdvanceRequest(target);
-    while (fed.lastGrant <= prior) amb->evokeCallback(0.1);
+    // gorti M17 cut-1 divergence (rti/internal/time/lookahead.go
+    // checkLookahead, applied to TAR via advance.go dispatchAdvance step 3):
+    // any advance request below currentTime+lookahead is rejected with
+    // ErrTimeRequestInPast, so TAR(1.0) under lookahead=2.0 — legal per
+    // §8.10, which only requires target >= current time — throws
+    // (surfaces as RTIinternalError). Catch it so the rest of the run is
+    // captured; the golden's `GRANT time=1.000000` stays and is counted
+    // as the missing event.
+    try {
+      amb->timeAdvanceRequest(target);
+      while (fed.lastGrant <= prior) amb->evokeMultipleCallbacks(0.05, 0.1);
+    } catch (rti1516e::Exception const&) {}
   }
+
+  // Observer's "after-first-advance" probe window: we are at t=1, LA=2.0.
+  std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
   // §8.19 modifyLookahead with new interval.
   rti1516e::HLAfloat64Interval newLh(0.5);
@@ -105,8 +126,12 @@ int main(int argc, char** argv) {
     double prior = fed.lastGrant;
     rti1516e::HLAfloat64Time target(2.0);
     amb->timeAdvanceRequest(target);
-    while (fed.lastGrant <= prior) amb->evokeCallback(0.1);
+    while (fed.lastGrant <= prior) amb->evokeMultipleCallbacks(0.05, 0.1);
   }
+
+  // Observer's "after-modify" probe window: we are at t=2, LA=0.5 → GALT 2.5.
+  // Hold the regulating guarantee until the observer has probed + resigned.
+  std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 
   amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
   std::printf("REG: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST\n");

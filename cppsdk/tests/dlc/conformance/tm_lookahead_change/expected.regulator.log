@@ -7,9 +7,9 @@
 REG: CONNECT                                                              # §4.2
 REG: JOIN federate=regulator                                              # §4.9
 REG: TIME_REGULATION_ENABLED time=0.000000                                # §8.3 (catalogue 4.33)
-REG: STATE phase=after-enable lookahead=2.000000 galt_defined=1 galt=2.000000   # §8.16 + §8.20
+REG: STATE phase=after-enable lookahead=2.000000 galt_defined=0 galt=0.000000   # §8.16 + §8.20 — GALT excludes the querying federate's own regulation; sole regulator => GALT undefined (out-param untouched). Corrected 2026-07-02 (parity-CE), was galt_defined=1 galt=2.000000; see README.
 REG: GRANT time=1.000000                                                  # §8.13
 REG: MODIFY_LOOKAHEAD new=0.500000                                        # §8.19 (catalogue 9.12 — LogicalTimeInterval const&)
-REG: STATE phase=after-modify lookahead=0.500000 galt_defined=1 galt=1.500000   # §8.20 reflects new lookahead
+REG: STATE phase=after-modify lookahead=0.500000 galt_defined=0 galt=0.000000   # §8.20 reflects new lookahead; §8.16 self-exclusive GALT still undefined for the sole regulator. Corrected 2026-07-02 (parity-CE), was galt_defined=1 galt=1.500000; see README.
 REG: GRANT time=2.000000                                                  # §8.13
 REG: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                         # §4.10
