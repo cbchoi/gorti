@@ -157,9 +157,10 @@ func (m *Manager) RetractMessage(
 
 // releaseBufferedTSO drains any buffered TSO events with timestamp <= t
 // for the given federate, sending them through the manager's Outbox in
-// FIFO order. Called from emitGrant after state mutation. The lock is
-// held only for the slice copy + buffer truncation; Outbox.Send happens
-// outside the lock to avoid blocking the wire path.
+// FIFO order. Called from emitGrant BEFORE the grant is sent (M37 EB-2,
+// §8.14: the federate must hold all TSO <= grant-time before the grant
+// fires). The lock is held only for the slice copy + buffer truncation;
+// Outbox.Send happens outside the lock to avoid blocking the wire path.
 //
 // If a Send fails, the remaining buffered events are discarded — the
 // federate's stream is gone, so retrying would just block. The discard
