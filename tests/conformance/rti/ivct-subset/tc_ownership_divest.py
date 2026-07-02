@@ -339,16 +339,15 @@ def test_tc015_ownership_transfer_reflects_on_updates(
     rtid_url: str, federation_name: str
 ) -> None:
     """§7.2 post-condition — after a transfer, the NEW owner's updates
-    flow to subscribers; the OLD owner's update should be rejected
+    flow to subscribers; the OLD owner's update is rejected
     AttributeNotOwned.
 
-    Hard assertions: the new owner updates successfully and the update
-    is reflected. xfail: the old-owner rejection — gorti's update path
-    gates on class-attribute PUBLICATION, not per-instance §7 ownership
-    (rti/internal/object/update.go producerOwnsAllAttrs consults
-    Declarations.PublishersFor, never the ownership manager's owner
-    records), so a divested federate that still publishes the class
-    updates without error.
+    Hard assertions on both halves since M38: update ingestion consults
+    per-instance §7 ownership (rti/internal/object/update.go — the
+    Options.Ownership gate over ownership.Manager.IsOwnedBy) in
+    addition to the class-level §5 publication check, so the divested
+    old owner's update raises with "attribute not owned by federate"
+    (pysdk: OwnershipNotPermitted via PERMISSION_DENIED).
     """
     pub = join(rtid_url, federation_name, "old-owner")
     sub = join(rtid_url, federation_name, "new-owner")
@@ -369,17 +368,8 @@ def test_tc015_ownership_transfer_reflects_on_updates(
         pub.wait_for("reflectAttributeValues", object_handle=int(obj))
 
         # §7.2 — the old owner may no longer update the attribute.
-        try:
+        with pytest.raises(Exception, match="(?i)not owned"):
             pub.updateAttributeValues(obj, {int(pos): b"\x00" * 8})
-        except Exception as exc:  # noqa: BLE001 — any rejection satisfies §7.2
-            assert "not owned" in str(exc).lower()
-        else:
-            pytest.xfail(
-                "gorti gap: updateAttributeValues gates on class publication "
-                "(object/update.go producerOwnsAllAttrs → Declarations."
-                "PublishersFor), not per-instance §7 ownership — the "
-                "divested old owner's update is accepted"
-            )
     finally:
         leave(sub)
         leave(pub)
