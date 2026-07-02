@@ -193,13 +193,16 @@ void DLCFederateAmbassadorBridge::reflectAttributeValues(
   rti1516e::VariableLengthData tag;  // M17 does not carry user tag on reflect
   rti1516e::SupplementalReflectInfo supp;
   if (timestamp.has_value()) {
-    // With-time overload (§6.11 3rd arg = LogicalTime const&). Build an
-    // HLAfloat64Time on the stack — the DLC surface takes the ref only for
-    // the duration of the call and does not retain a pointer.
+    // With-time overload (§6.11). Build an HLAfloat64Time on the stack —
+    // the DLC surface takes the ref only for the duration of the call and
+    // does not retain a pointer. M36 Agent DA: Pitch delivers TSO through
+    // the RETRACTION-handle variant (the wire carries no retraction
+    // designator yet, so a default-invalid handle is passed) — the TSO
+    // conformance fixtures override that 9-arg form.
     rti1516e::HLAfloat64Time t(*timestamp);
     dlc_fed_->reflectAttributeValues(
         oh, vm, tag, rti1516e::TIMESTAMP, rti1516e::RELIABLE, t,
-        rti1516e::TIMESTAMP, supp);
+        rti1516e::TIMESTAMP, rti1516e::MessageRetractionHandle(), supp);
   } else {
     // No-time overload.
     dlc_fed_->reflectAttributeValues(
@@ -219,10 +222,12 @@ void DLCFederateAmbassadorBridge::receiveInteraction(
   rti1516e::VariableLengthData tag;
   rti1516e::SupplementalReceiveInfo supp;
   if (timestamp.has_value()) {
+    // M36 Agent DA: TSO delivery uses the 9-arg retraction-handle
+    // overload (Pitch shape) — see reflectAttributeValues note above.
     rti1516e::HLAfloat64Time t(*timestamp);
     dlc_fed_->receiveInteraction(
         ih, pm, tag, rti1516e::TIMESTAMP, rti1516e::RELIABLE, t,
-        rti1516e::TIMESTAMP, supp);
+        rti1516e::TIMESTAMP, rti1516e::MessageRetractionHandle(), supp);
   } else {
     dlc_fed_->receiveInteraction(
         ih, pm, tag, rti1516e::RECEIVE, rti1516e::RELIABLE, supp);
@@ -239,11 +244,12 @@ void DLCFederateAmbassadorBridge::removeObjectInstance(
   auto vtag = conv::to_dlc_vld(tag);
   rti1516e::SupplementalRemoveInfo supp;
   if (timestamp.has_value()) {
-    // §6.15 TSO 6-arg overload — no MessageRetractionHandle on the M17
-    // wire, so the 7-arg retraction overload is never selected.
+    // §6.15 TSO — retraction-handle overload (Pitch shape; the wire has
+    // no retraction designator yet, so a default-invalid handle rides).
     rti1516e::HLAfloat64Time t(*timestamp);
     dlc_fed_->removeObjectInstance(oh, vtag, rti1516e::TIMESTAMP, t,
-                                   rti1516e::TIMESTAMP, supp);
+                                   rti1516e::TIMESTAMP,
+                                   rti1516e::MessageRetractionHandle(), supp);
   } else {
     // §6.15 RO 4-arg overload.
     dlc_fed_->removeObjectInstance(oh, vtag, rti1516e::RECEIVE, supp);

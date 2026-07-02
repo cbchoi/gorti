@@ -76,6 +76,8 @@ class TrackingDLCFed : public rti1516e::NullFederateAmbassador {
   };
   std::vector<ReflectWithTimeCall> reflect_with_time_calls;
 
+  // M36 Agent DA — the bridge delivers TSO through the 9-arg
+  // retraction-handle overload (Pitch shape); the mock records that form.
   void reflectAttributeValues(rti1516e::ObjectInstanceHandle obj,
                               rti1516e::AttributeHandleValueMap const& v,
                               rti1516e::VariableLengthData const& /*tag*/,
@@ -83,6 +85,7 @@ class TrackingDLCFed : public rti1516e::NullFederateAmbassador {
                               rti1516e::TransportationType /*tt*/,
                               rti1516e::LogicalTime const& t,
                               rti1516e::OrderType /*recvOrder*/,
+                              rti1516e::MessageRetractionHandle /*retract*/,
                               rti1516e::SupplementalReflectInfo /*supp*/)
       RTI_THROW(rti1516e::FederateInternalError) override {
     // Downcast to HLAfloat64Time to read the double value.
@@ -299,6 +302,7 @@ class TrackingDLCFed : public rti1516e::NullFederateAmbassador {
                             rti1516e::OrderType sent,
                             rti1516e::LogicalTime const& t,
                             rti1516e::OrderType recv,
+                            rti1516e::MessageRetractionHandle /*retract*/,
                             rti1516e::SupplementalRemoveInfo /*supp*/)
       RTI_THROW(rti1516e::FederateInternalError) override {
     auto const& tf = static_cast<rti1516e::HLAfloat64Time const&>(t);
