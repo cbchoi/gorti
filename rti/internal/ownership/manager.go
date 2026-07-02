@@ -402,6 +402,36 @@ func (m *Manager) Acquire(
 	attrs []core.AttributeHandle,
 	tag []byte,
 ) error {
+	return m.acquire(ctx, fed, acquirer, obj, attrs, tag, false)
+}
+
+// AcquireIfAvailable implements §7.9 —
+// attributeOwnershipAcquisitionIfAvailable (M37 Agent EA). Atomically
+// grants ONLY the currently-available attributes (unowned, or
+// mid-divest with this acquirer selected); the unavailable remainder
+// produces one AttributeOwnershipUnavailable callback (§7.10) and NO
+// pending acquire entry. The gRPC handler duck-types for this method;
+// the frozen core.OwnershipCoordinator Acquire keeps §7.8 queueing.
+func (m *Manager) AcquireIfAvailable(
+	ctx context.Context,
+	fed core.FederationName,
+	acquirer core.FederateHandle,
+	obj core.ObjectHandle,
+	attrs []core.AttributeHandle,
+	tag []byte,
+) error {
+	return m.acquire(ctx, fed, acquirer, obj, attrs, tag, true)
+}
+
+func (m *Manager) acquire(
+	ctx context.Context,
+	fed core.FederationName,
+	acquirer core.FederateHandle,
+	obj core.ObjectHandle,
+	attrs []core.AttributeHandle,
+	tag []byte,
+	ifAvailable bool,
+) error {
 	tagCopy := cloneTag(tag)
 
 	m.mu.Lock()
@@ -420,6 +450,9 @@ func (m *Manager) Acquire(
 	var fromUnownedAttrs []core.AttributeHandle
 	// Attributes that stay pending (owned, no completed divest).
 	var queueAttrs []core.AttributeHandle
+	// §7.10 (M37 Agent EA) — in ifAvailable mode, owned-with-no-divest
+	// attrs are NOT queued; they are reported unavailable instead.
+	var unavailableAttrs []core.AttributeHandle
 	// §7.11 (M37 Agent EA) — queued attrs grouped by their CURRENT
 	// owner, so RequestAttributeOwnershipRelease can target each owner
 	// after the lock drops.
@@ -459,6 +492,12 @@ func (m *Manager) Acquire(
 			// only the acquired notification fires (no prior owner
 			// to receive divest-confirmation).
 			fromUnownedAttrs = append(fromUnownedAttrs, a)
+			continue
+		}
+		if ifAvailable {
+			// §7.9 — owned with no completed divest: unavailable, no
+			// pending entry.
+			unavailableAttrs = append(unavailableAttrs, a)
 			continue
 		}
 		if _, dup := st.pendingAcquires[ak]; dup {
@@ -521,6 +560,13 @@ func (m *Manager) Acquire(
 		slices.Sort(ownedAttrs)
 		_ = m.opts.Outbox.Send(ctx, fed, owner,
 			releaseRequestEvent(obj, ownedAttrs, tagCopy))
+	}
+	// §7.10 (M37 Agent EA) — report the unavailable remainder of an
+	// ifAvailable acquire back to the acquirer.
+	if len(unavailableAttrs) > 0 {
+		slices.Sort(unavailableAttrs)
+		_ = m.opts.Outbox.Send(ctx, fed, acquirer,
+			unavailableEvent(obj, unavailableAttrs))
 	}
 	return nil
 }

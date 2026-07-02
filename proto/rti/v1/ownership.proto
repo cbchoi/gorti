@@ -44,6 +44,14 @@ message AcquireRequest {
   uint64 object_handle = 4;
   repeated uint64 attribute_handles = 5;
   bytes tag = 6;
+  // IEEE 1516.1-2010 §7.9 attributeOwnershipAcquisitionIfAvailable —
+  // when true, the RTI atomically grants ONLY the attributes that are
+  // currently available (unowned, or mid-divest with this acquirer
+  // selected); the rest produce an AttributeOwnershipUnavailable
+  // callback (§7.10) and NO pending acquire is queued. Absent/false
+  // (old clients) keeps plain §7.8 queueing semantics. M37 Agent EA
+  // (additive, tag 7).
+  bool if_available = 7;
 }
 
 message CancelDivestRequest {

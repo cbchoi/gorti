@@ -47,6 +47,8 @@ message FederateEvent {
     RequestDivestitureConfirmation ownership_divest_confirmed = 32;
     // Ownership release request (§7.11) — M37 Agent EA.
     RequestAttributeOwnershipRelease ownership_release_requested = 33;
+    // Ownership unavailable (§7.10) — M37 Agent EA.
+    AttributeOwnershipUnavailable ownership_unavailable = 34;
     // Save (§4.8 / §4.9).
     InitiateFederateSave save_initiate = 40;
     FederationSaved save_completed = 41;
@@ -197,6 +199,16 @@ message AttributeOwnershipAcquisitionNotification {
 // RequestDivestitureConfirmation — IEEE 1516.1-2010 §7.3 (divestee
 // half). Fires on the divesting federate when an acquirer takes over.
 message RequestDivestitureConfirmation {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// AttributeOwnershipUnavailable — IEEE 1516.1-2010 §7.10. Fires on the
+// federate that called attributeOwnershipAcquisitionIfAvailable (§7.9)
+// for the subset of requested attributes that were NOT available
+// (owned by another federate with no completed divest). No pending
+// acquire is queued for these. M37 Agent EA.
+message AttributeOwnershipUnavailable {
   uint64 object_handle = 1;
   repeated uint64 attribute_handles = 2;
 }

@@ -1266,6 +1266,25 @@ void M17RTIambassador::attributeOwnershipAcquisition(
   if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisition");
 }
 
+// §7.9 (M37 Agent EA) — same RPC with the additive if_available flag;
+// old servers ignore the unknown field and fall back to §7.8 queueing.
+void M17RTIambassador::attributeOwnershipAcquisitionIfAvailable(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined,
+                            "attributeOwnershipAcquisitionIfAvailable");
+  rti::v1::AcquireRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  req.set_if_available(true);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ownership_stub->AttributeOwnershipAcquisition(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisitionIfAvailable");
+}
+
 void M17RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes) {
@@ -2418,6 +2437,15 @@ bool RTIambassadorImpl::dispatchOneEvent() {
           ObjectInstanceHandle(a.object_handle()),
           attrs,
           FederateHandle(a.owning_federate()));
+      return true;
+    }
+    case rti::v1::FederateEvent::kOwnershipUnavailable: {
+      // §7.10 — M37 Agent EA.
+      const auto& u = evt.ownership_unavailable();
+      AttributeHandleSet attrs;
+      for (auto h : u.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->attributeOwnershipUnavailable(
+          ObjectInstanceHandle(u.object_handle()), attrs);
       return true;
     }
     case rti::v1::FederateEvent::kOwnershipReleaseRequested: {

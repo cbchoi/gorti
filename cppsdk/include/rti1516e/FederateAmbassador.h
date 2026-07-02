@@ -204,6 +204,13 @@ class FederateAmbassador {
       ObjectInstanceHandle /*object*/,
       const AttributeHandleSet& /*attributes*/) {}
 
+  // §7.10 — the §7.9 acquireIfAvailable this federate issued could not
+  // grant the listed attributes (owned elsewhere, no divest pending);
+  // nothing was queued. M37 Agent EA.
+  virtual void attributeOwnershipUnavailable(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/) {}
+
   // §7.11 — another federate called attributeOwnershipAcquisition
   // against attributes THIS federate owns; the acquire is queued until
   // this federate releases (divestiture / divestitureIfWanted).

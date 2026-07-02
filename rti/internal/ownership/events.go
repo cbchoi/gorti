@@ -219,3 +219,36 @@ func (o *releaseRequestOutbound) Seq() uint64 {
 	return o.pb.Seq
 }
 func (o *releaseRequestOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+
+// unavailableOutbound — AttributeOwnershipUnavailable (§7.10). Fires on
+// the §7.9 acquireIfAvailable caller for the attrs that were NOT
+// available. M37 Agent EA.
+type unavailableOutbound struct {
+	pb    *rtiv1.FederateEvent
+	obj   core.ObjectHandle
+	attrs []core.AttributeHandle
+}
+
+func unavailableEvent(obj core.ObjectHandle, attrs []core.AttributeHandle) *unavailableOutbound {
+	attrsCopy := append([]core.AttributeHandle(nil), attrs...)
+	return &unavailableOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_OwnershipUnavailable{
+				OwnershipUnavailable: &rtiv1.AttributeOwnershipUnavailable{
+					ObjectHandle:     uint64(obj),
+					AttributeHandles: attrsToWire(attrsCopy),
+				},
+			},
+		},
+		obj:   obj,
+		attrs: attrsCopy,
+	}
+}
+
+func (o *unavailableOutbound) Seq() uint64 {
+	if o == nil || o.pb == nil {
+		return 0
+	}
+	return o.pb.Seq
+}
+func (o *unavailableOutbound) Inner() *rtiv1.FederateEvent { return o.pb }

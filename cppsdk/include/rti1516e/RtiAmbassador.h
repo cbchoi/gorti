@@ -550,6 +550,14 @@ class M17RTIambassador {
       ObjectInstanceHandle object,
       const AttributeHandleSet& attributes);
 
+  // §7.9 — acquire ONLY the currently-available attributes (unowned or
+  // mid-divest); the unavailable remainder arrives via the §7.10
+  // attributeOwnershipUnavailable callback, and nothing is queued.
+  // M37 Agent EA.
+  void attributeOwnershipAcquisitionIfAvailable(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
+
   // §7.5 — withdraw a previously-issued negotiated divest.
   void cancelNegotiatedAttributeOwnershipDivestiture(
       ObjectInstanceHandle object,
