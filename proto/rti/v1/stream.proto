@@ -50,6 +50,10 @@ message FederateEvent {
     InitiateFederateRestore restore_initiate = 43;
     FederationRestored restore_completed = 44;
     FederationNotRestored restore_failed = 45;
+    // Restore request ack + begun (§4.25 / §4.26) — M37 Agent EA.
+    RequestFederationRestoreSucceeded restore_request_succeeded = 46;
+    RequestFederationRestoreFailed restore_request_failed = 47;
+    FederationRestoreBegun restore_begun = 48;
     // Object instance name reservation (§6.1 / §6.5 — M26 Phase F).
     ObjectInstanceNameReservationSucceeded reservation_succeeded = 50;
     ObjectInstanceNameReservationFailed reservation_failed = 51;
@@ -189,6 +193,35 @@ message InitiateFederateRestore {
   // that compute identity from their own handle use this to map
   // back to the pre-save value; absent / zero indicates no remap.
   uint64 federate_handle = 2;
+  // The federate's name (IEEE 1516.1-2010 §4.26 initiateFederateRestore
+  // carries the federate name alongside the handle). Empty when the
+  // manager has no name on record. M37 Agent EA (additive, tag 3).
+  string federate_name = 3;
+}
+
+// RequestFederationRestoreSucceeded — IEEE 1516.1-2010 §4.25
+// requestFederationRestoreSucceeded. Fires on the REQUESTING federate
+// only, after the restore request is accepted (bundle found, no save or
+// restore already in progress). M37 Agent EA.
+message RequestFederationRestoreSucceeded {
+  string label = 1;
+}
+
+// RequestFederationRestoreFailed — IEEE 1516.1-2010 §4.25
+// requestFederationRestoreFailed. Fires on the REQUESTING federate only
+// when the restore request is rejected (unknown label, save/restore in
+// progress, ...). M37 Agent EA.
+message RequestFederationRestoreFailed {
+  string label = 1;
+  // Human-readable rejection cause (mirrors the RPC error detail).
+  string reason = 2;
+}
+
+// FederationRestoreBegun — IEEE 1516.1-2010 §4.26
+// federationRestoreBegun. Fires on EVERY joined federate when the
+// restore transitions out of idle, before the per-federate
+// InitiateFederateRestore events. M37 Agent EA.
+message FederationRestoreBegun {
 }
 
 // FederationRestored — IEEE 1516.1-2010 §4.14 federationRestored. Fires

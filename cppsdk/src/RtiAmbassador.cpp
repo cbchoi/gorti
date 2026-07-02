@@ -2401,10 +2401,27 @@ bool RTIambassadorImpl::dispatchOneEvent() {
       return true;
     case rti::v1::FederateEvent::kRestoreInitiate: {
       const auto& r = evt.restore_initiate();
+      // M37 Agent EA: dispatch the name-carrying §4.26 slot; its default
+      // body forwards to the legacy 2-arg slot for pre-M37 subclasses.
       fed_ambassador->initiateFederateRestore(
-          r.label(), FederateHandle(r.federate_handle()));
+          r.label(), r.federate_name(), FederateHandle(r.federate_handle()));
       return true;
     }
+    case rti::v1::FederateEvent::kRestoreRequestSucceeded:
+      // §4.25 — M37 Agent EA.
+      fed_ambassador->requestFederationRestoreSucceeded(
+          evt.restore_request_succeeded().label());
+      return true;
+    case rti::v1::FederateEvent::kRestoreRequestFailed: {
+      // §4.25 — M37 Agent EA.
+      const auto& f = evt.restore_request_failed();
+      fed_ambassador->requestFederationRestoreFailed(f.label(), f.reason());
+      return true;
+    }
+    case rti::v1::FederateEvent::kRestoreBegun:
+      // §4.26 — M37 Agent EA.
+      fed_ambassador->federationRestoreBegun();
+      return true;
     case rti::v1::FederateEvent::kRestoreCompleted:
       fed_ambassador->federationRestored(evt.restore_completed().label());
       return true;

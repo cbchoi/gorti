@@ -167,6 +167,36 @@ class FederateAmbassador {
       const std::string& /*label*/,
       FederateHandle /*federate_handle*/) {}
 
+  // §4.26 — initiateFederateRestore carrying the federate NAME the
+  // federate had at save time alongside the pre-save handle (empty
+  // when the bundle carries no name data). The default body forwards
+  // to the legacy 2-arg slot so pre-M37 subclasses keep firing.
+  // M37 Agent EA.
+  virtual void initiateFederateRestore(
+      const std::string& label,
+      const std::string& /*federate_name*/,
+      FederateHandle federate_handle) {
+    initiateFederateRestore(label, federate_handle);
+  }
+
+  // §4.25 — the restore request THIS federate issued was accepted;
+  // expect federationRestoreBegun + initiateFederateRestore next.
+  // M37 Agent EA.
+  virtual void requestFederationRestoreSucceeded(
+      const std::string& /*label*/) {}
+
+  // §4.25 — the restore request THIS federate issued was rejected
+  // (unknown label, save/restore already in progress, ...). ``reason``
+  // is the human-readable rejection cause. M37 Agent EA.
+  virtual void requestFederationRestoreFailed(
+      const std::string& /*label*/,
+      const std::string& /*reason*/) {}
+
+  // §4.26 — a federation restore is beginning; fires on every joined
+  // federate before the per-federate initiateFederateRestore events.
+  // M37 Agent EA.
+  virtual void federationRestoreBegun() {}
+
   // §4.14 — every federate completed; the federation restore is
   // finalized. M17.25 (Cut-4).
   virtual void federationRestored(const std::string& /*label*/) {}
