@@ -420,6 +420,10 @@ func (m *Manager) Acquire(
 	var fromUnownedAttrs []core.AttributeHandle
 	// Attributes that stay pending (owned, no completed divest).
 	var queueAttrs []core.AttributeHandle
+	// §7.11 (M37 Agent EA) — queued attrs grouped by their CURRENT
+	// owner, so RequestAttributeOwnershipRelease can target each owner
+	// after the lock drops.
+	queuedByOwner := map[core.FederateHandle][]core.AttributeHandle{}
 	// Pass 1 — classify. READ-ONLY: no state mutation until the whole
 	// attribute set has validated (M36 DC-5).
 	for _, a := range attrs {
@@ -462,6 +466,9 @@ func (m *Manager) Acquire(
 			return core.ErrOwnershipAcquirePending
 		}
 		queueAttrs = append(queueAttrs, a)
+		if rec, owned := st.owners[k]; owned {
+			queuedByOwner[rec.owner] = append(queuedByOwner[rec.owner], a)
+		}
 	}
 	// Pass 2 — mutate, now that the whole set validated.
 	for _, a := range fromUnownedAttrs {
@@ -505,6 +512,15 @@ func (m *Manager) Acquire(
 		}
 		_ = m.opts.Outbox.Send(ctx, fed, acquirer,
 			acquireNotificationEvent(obj, attrCopy, acquirer))
+	}
+	// §7.11 (M37 Agent EA) — the acquire stayed queued for attributes
+	// owned by another federate: ask each current owner to release.
+	// The pending entry is untouched (pre-M37 behavior preserved); the
+	// owner unblocks it via divestiture / DivestIfWanted.
+	for owner, ownedAttrs := range queuedByOwner {
+		slices.Sort(ownedAttrs)
+		_ = m.opts.Outbox.Send(ctx, fed, owner,
+			releaseRequestEvent(obj, ownedAttrs, tagCopy))
 	}
 	return nil
 }

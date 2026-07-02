@@ -2420,6 +2420,16 @@ bool RTIambassadorImpl::dispatchOneEvent() {
           FederateHandle(a.owning_federate()));
       return true;
     }
+    case rti::v1::FederateEvent::kOwnershipReleaseRequested: {
+      // §7.11 — M37 Agent EA.
+      const auto& r = evt.ownership_release_requested();
+      AttributeHandleSet attrs;
+      for (auto h : r.attribute_handles()) attrs.emplace(h);
+      VariableLengthData tag(r.tag().begin(), r.tag().end());
+      fed_ambassador->requestAttributeOwnershipRelease(
+          ObjectInstanceHandle(r.object_handle()), attrs, tag);
+      return true;
+    }
     case rti::v1::FederateEvent::kOwnershipDivestConfirmed: {
       const auto& a = evt.ownership_divest_confirmed();
       AttributeHandleSet attrs;

@@ -171,6 +171,15 @@ class FederateAmbassador {
       ObjectInstanceHandle /*object*/,
       const AttributeHandleSet& /*attributes*/) {}
 
+  // §7.11 — another federate called attributeOwnershipAcquisition
+  // against attributes THIS federate owns; the acquire is queued until
+  // this federate releases (divestiture / divestitureIfWanted).
+  // ``tag`` echoes the acquirer's user-supplied tag. M37 Agent EA.
+  virtual void requestAttributeOwnershipRelease(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/,
+      const VariableLengthData& /*tag*/) {}
+
   // §4.8 — the manager has begun a federation save. Each federate
   // serializes its state and calls federateSaveComplete or
   // federateSaveNotComplete. ``save_time`` (when set) is the logical

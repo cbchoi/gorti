@@ -45,6 +45,8 @@ message FederateEvent {
     RequestAttributeOwnershipAssumption ownership_assumption = 30;
     AttributeOwnershipAcquisitionNotification ownership_acquired = 31;
     RequestDivestitureConfirmation ownership_divest_confirmed = 32;
+    // Ownership release request (§7.11) — M37 Agent EA.
+    RequestAttributeOwnershipRelease ownership_release_requested = 33;
     // Save (§4.8 / §4.9).
     InitiateFederateSave save_initiate = 40;
     FederationSaved save_completed = 41;
@@ -189,6 +191,18 @@ message AttributeOwnershipAcquisitionNotification {
 message RequestDivestitureConfirmation {
   uint64 object_handle = 1;
   repeated uint64 attribute_handles = 2;
+}
+
+// RequestAttributeOwnershipRelease — IEEE 1516.1-2010 §7.11. Fires on
+// the CURRENT OWNER of the listed attributes when another federate
+// calls attributeOwnershipAcquisition against them (the acquire stays
+// queued as a pending entry; the owner may release via divestiture or
+// AttributeOwnershipDivestitureIfWanted). ``tag`` echoes the acquire
+// call's user-supplied tag. M37 Agent EA.
+message RequestAttributeOwnershipRelease {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  bytes tag = 3;
 }
 
 // InitiateFederateSave — IEEE 1516.1-2010 §4.8 initiateFederateSave.
