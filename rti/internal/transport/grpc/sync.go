@@ -95,7 +95,7 @@ func (s *syncService) RegisterFederationSynchronizationPoint(
 		)
 	}
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -148,7 +148,7 @@ func (s *syncService) SynchronizationPointAchieved(
 		)
 	}
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }

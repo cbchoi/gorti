@@ -81,7 +81,7 @@ func (s *federationService) CreateFederation(ctx context.Context, req *rtiv1.Cre
 		DDSDomainID:   domainID,
 	}
 	if err := s.fed.CreateFederation(ctx, coreReq); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	if s.onCreateFederationSuccess != nil {
 		s.onCreateFederationSuccess(ctx, coreReq.Name, coreReq.FOMModules)
@@ -101,7 +101,7 @@ func (s *federationService) DestroyFederation(ctx context.Context, req *rtiv1.De
 	}
 	name := core.FederationName(req.GetFederationName())
 	if err := s.fed.DestroyFederation(ctx, name); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	if s.onDestroyFederationSuccess != nil {
 		s.onDestroyFederationSuccess(ctx, name)
@@ -128,7 +128,7 @@ func (s *federationService) JoinFederation(ctx context.Context, req *rtiv1.JoinF
 		FederateType: req.GetFederateType(),
 	})
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 
 	// M19 Phase 1a: echo the federation's recorded transport mode
@@ -159,7 +159,7 @@ func (s *federationService) ResignFederation(ctx context.Context, req *rtiv1.Res
 		core.FederateHandle(req.GetFederateHandle()),
 		protoResignActionToCore(req.GetAction()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -174,7 +174,7 @@ func (s *federationService) ListFederations(ctx context.Context, req *rtiv1.List
 	}
 	summaries, err := s.fed.List(ctx)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	out := make([]*rtiv1.FederationSummary, 0, len(summaries))
 	for _, sum := range summaries {

@@ -103,7 +103,7 @@ func (s *declarationService) PublishObjectClassAttributes(
 		core.ObjectClassHandle(req.GetObjectClassHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -128,7 +128,7 @@ func (s *declarationService) UnpublishObjectClassAttributes(
 		core.ObjectClassHandle(req.GetObjectClassHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -152,7 +152,7 @@ func (s *declarationService) SubscribeObjectClassAttributes(
 		core.ObjectClassHandle(req.GetObjectClassHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -175,7 +175,7 @@ func (s *declarationService) UnsubscribeObjectClassAttributes(
 		core.ObjectClassHandle(req.GetObjectClassHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -198,7 +198,7 @@ func (s *declarationService) PublishInteractionClass(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.InteractionClassHandle(req.GetInteractionClassHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -221,7 +221,7 @@ func (s *declarationService) UnpublishInteractionClass(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.InteractionClassHandle(req.GetInteractionClassHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -244,7 +244,7 @@ func (s *declarationService) SubscribeInteractionClass(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.InteractionClassHandle(req.GetInteractionClassHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -266,7 +266,7 @@ func (s *declarationService) UnsubscribeInteractionClass(
 		core.FederateHandle(req.GetFederateHandle()),
 		core.InteractionClassHandle(req.GetInteractionClassHandle()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }

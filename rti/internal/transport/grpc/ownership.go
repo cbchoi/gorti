@@ -51,7 +51,7 @@ func (s *ownershipService) UnconditionalAttributeOwnershipDivestiture(
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -109,7 +109,7 @@ func (s *ownershipService) NegotiatedAttributeOwnershipDivestiture(
 		)
 	}
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -137,7 +137,7 @@ func (s *ownershipService) ConfirmDivestiture(
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -190,7 +190,7 @@ func (s *ownershipService) AttributeOwnershipAcquisition(
 		)
 	}
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -213,7 +213,7 @@ func (s *ownershipService) CancelNegotiatedAttributeOwnershipDivestiture(
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -236,7 +236,7 @@ func (s *ownershipService) CancelAttributeOwnershipAcquisition(
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }
@@ -259,7 +259,7 @@ func (s *ownershipService) AttributeOwnershipDivestitureIfWanted(
 		core.ObjectHandle(req.GetObjectHandle()),
 		attrHandles(req.GetAttributeHandles()),
 	); err != nil {
-		return nil, errToStatus(err)
+		return nil, errToStatus(ctx, err)
 	}
 	return &rtiv1.Empty{}, nil
 }

@@ -435,14 +435,14 @@ func TestDeclarationService_UnsubscribeInteractionClass_WireVersionMismatch(t *t
 
 func TestErrToStatus_NilIsOK(t *testing.T) {
 	t.Parallel()
-	if got := errToStatus(nil); got != nil {
-		t.Errorf("errToStatus(nil) = %v, want nil", got)
+	if got := errToStatus(context.Background(), nil); got != nil {
+		t.Errorf("errToStatus(context.Background(), nil) = %v, want nil", got)
 	}
 }
 
 func TestErrToStatus_FederationNotFound(t *testing.T) {
 	t.Parallel()
-	got := status.Code(errToStatus(core.ErrFederationNotFound))
+	got := status.Code(errToStatus(context.Background(), core.ErrFederationNotFound))
 	if got != codes.NotFound {
 		t.Errorf("ErrFederationNotFound: got %v, want NotFound", got)
 	}
@@ -450,7 +450,7 @@ func TestErrToStatus_FederationNotFound(t *testing.T) {
 
 func TestErrToStatus_FederateNotJoined(t *testing.T) {
 	t.Parallel()
-	got := status.Code(errToStatus(core.ErrFederateNotJoined))
+	got := status.Code(errToStatus(context.Background(), core.ErrFederateNotJoined))
 	if got != codes.FailedPrecondition {
 		t.Errorf("ErrFederateNotJoined: got %v, want FailedPrecondition", got)
 	}
@@ -458,7 +458,7 @@ func TestErrToStatus_FederateNotJoined(t *testing.T) {
 
 func TestErrToStatus_ObjectClassNotFound(t *testing.T) {
 	t.Parallel()
-	got := status.Code(errToStatus(core.ErrObjectClassNotFound))
+	got := status.Code(errToStatus(context.Background(), core.ErrObjectClassNotFound))
 	if got != codes.NotFound {
 		t.Errorf("ErrObjectClassNotFound: got %v, want NotFound", got)
 	}
@@ -466,7 +466,7 @@ func TestErrToStatus_ObjectClassNotFound(t *testing.T) {
 
 func TestErrToStatus_AttributeNotFound(t *testing.T) {
 	t.Parallel()
-	got := status.Code(errToStatus(core.ErrAttributeNotFound))
+	got := status.Code(errToStatus(context.Background(), core.ErrAttributeNotFound))
 	if got != codes.NotFound {
 		t.Errorf("ErrAttributeNotFound: got %v, want NotFound", got)
 	}
@@ -476,19 +476,19 @@ func TestErrToStatus_WrappedSentinelStillMaps(t *testing.T) {
 	t.Parallel()
 	wrapped := errors.New("decl: " + core.ErrFederationNotFound.Error())
 	// errors.New does NOT wrap; this is plain text and must map to Internal.
-	if got := status.Code(errToStatus(wrapped)); got != codes.Internal {
+	if got := status.Code(errToStatus(context.Background(), wrapped)); got != codes.Internal {
 		t.Errorf("plain text not-wrapped: got %v, want Internal", got)
 	}
 	// Truly wrapped sentinel should still map.
 	wrapped2 := errors.Join(errors.New("ctx"), core.ErrAttributeNotFound)
-	if got := status.Code(errToStatus(wrapped2)); got != codes.NotFound {
+	if got := status.Code(errToStatus(context.Background(), wrapped2)); got != codes.NotFound {
 		t.Errorf("wrapped ErrAttributeNotFound: got %v, want NotFound", got)
 	}
 }
 
 func TestErrToStatus_UnknownIsInternal(t *testing.T) {
 	t.Parallel()
-	got := status.Code(errToStatus(errors.New("boom")))
+	got := status.Code(errToStatus(context.Background(), errors.New("boom")))
 	if got != codes.Internal {
 		t.Errorf("unknown error: got %v, want Internal", got)
 	}
@@ -508,8 +508,8 @@ func TestErrToStatus_UnknownIsInternal(t *testing.T) {
 func TestDeclarationService_ErrorMapping_ReachableViaHandlerPath(t *testing.T) {
 	t.Parallel()
 	// Smoke check that handler returns nil-status for nil err.
-	if errToStatus(nil) != nil {
-		t.Fatal("errToStatus(nil) must be nil")
+	if errToStatus(context.Background(), nil) != nil {
+		t.Fatal("errToStatus(context.Background(), nil) must be nil")
 	}
 	// Mapping table is exercised by the table tests above; this just
 	// guards regression on the mapping helper used inside every handler.
@@ -522,7 +522,7 @@ func TestDeclarationService_ErrorMapping_ReachableViaHandlerPath(t *testing.T) {
 		{core.ErrObjectClassNotFound, codes.NotFound},
 		{core.ErrAttributeNotFound, codes.NotFound},
 	} {
-		if got := status.Code(errToStatus(tc.err)); got != tc.want {
+		if got := status.Code(errToStatus(context.Background(), tc.err)); got != tc.want {
 			t.Errorf("errToStatus(%v) = %v, want %v", tc.err, got, tc.want)
 		}
 	}
