@@ -1,2 +1,5 @@
 SUB: CONNECT
 SUB: JOIN federate=subscriber
+SUB: SUBSCRIBE class=Vehicle active=false
+SUB: SUBSCRIBE class=Vehicle active=true
+SUB: RESIGN

@@ -76,8 +76,20 @@ int main() {
     std::cout << "PUB: ADVISORY_SWITCH=ObjectClassRelevance" << std::endl;
 
     // Hold long enough for the subscriber to toggle passive → active
-    // and trigger START_REGISTRATION at the right point.
-    std::this_thread::sleep_for(std::chrono::seconds(4));
+    // and trigger START_REGISTRATION at the right point. Drain via
+    // §10.42 evokeMultipleCallbacks — legal under HLA_IMMEDIATE on both
+    // RTIs (Pitch delivers on background threads and the evoke is a
+    // harmless yield; gorti M17 buffers events and drains them on the
+    // evoking thread). Emits no canonical lines, so goldens are
+    // unaffected. Keep draining the full window even after the first
+    // START_REGISTRATION so a spurious second one (e.g. if the RTI
+    // wrongly fires on the passive subscribe too) would be captured —
+    // the golden asserts EXACTLY ONCE.
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    while (std::chrono::steady_clock::now() < deadline) {
+      amb->evokeMultipleCallbacks(0.05, 0.1);
+    }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
     std::cout << "PUB: RESIGN" << std::endl;
