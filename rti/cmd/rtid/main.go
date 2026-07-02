@@ -1021,6 +1021,16 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		return nil, err
 	}
 
+	// M36 — MOM object-instance fan-out: the MOM manager registers
+	// HLAfederation/HLAfederate instances through the standard object
+	// registry (discover/reflect/remove ride the normal fan-out), and
+	// the declaration manager's post-subscribe hook delivers
+	// retroactive Discover+Reflect to late subscribers of the MOM
+	// object classes. Wired here, AFTER objReg exists (the MOM
+	// manager itself is constructed before the registry).
+	momMgr.EnableInstanceFanout(objReg, declMgr, foms)
+	declMgr.SetOnSubscribeObjectClass(momMgr.ObjectClassSubscribed)
+
 	// M26 Phase F — bind the reservation-resign indirection now that
 	// objReg exists.
 	reservationResignHook = objReg.OnFederateResign

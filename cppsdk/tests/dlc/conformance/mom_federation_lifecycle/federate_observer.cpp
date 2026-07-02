@@ -53,7 +53,12 @@ class ObsFed : public rti1516e::NullFederateAmbassador {
     if (it != vals.end()) {
       rti1516e::HLAunicodeString name;
       name.decode(it->second);
-      std::string s(name.get().begin(), name.get().end());
+      // M36: HLAunicodeString::get() returns std::wstring BY VALUE (IEEE
+      // 1516.1-2010 DLC API shape) — bind once; calling .get() twice for
+      // begin()/end() mixes iterators of two temporaries (UB; crashed
+      // with std::length_error once MOM reflects actually arrived).
+      std::wstring w = name.get();
+      std::string s(w.begin(), w.end());
       std::printf("OBS: REFLECT HLAfederateName=%s\n", s.c_str());
     } else {
       std::printf("OBS: REFLECT attributes=[other]\n");

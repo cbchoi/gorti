@@ -293,6 +293,12 @@ class _FederateContextManager:
         self._federate_name = federate_name
         self._federate_type = federate_type
         self._federate: Federate | None = None
+        #: M36 — IEEE 1516.1-2010 §4.10 resign-action designator forwarded
+        #: to the transport on ``__aexit__``. ``None`` keeps the transport
+        #: default (UNCONDITIONALLY_DIVEST_ATTRIBUTES). Layer 2
+        #: (``standard.Rti1516eAmbassador.resignFederationExecution``) sets
+        #: this before exiting the context manager.
+        self.resign_action: str | int | None = None
 
     async def __aenter__(self) -> Federate:
         transport = self._connection.transport
@@ -341,6 +347,7 @@ class _FederateContextManager:
                 "resign_federation",
                 federate_handle=federate.handle,
                 federate_name=federate.name,
+                action=self.resign_action,
             )
 
 
