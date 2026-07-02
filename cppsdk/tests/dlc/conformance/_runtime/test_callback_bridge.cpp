@@ -196,6 +196,78 @@ class TrackingDLCFed : public rti1516e::NullFederateAmbassador {
     ++federation_not_saved_count;
     last_save_failure = r;
   }
+
+  // M36 Agent CA-4 — §7 ownership converters (own_* fixtures).
+  struct OwnershipAssumptionCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::vector<std::uint8_t> tag_bytes;
+  };
+  std::vector<OwnershipAssumptionCall> ownership_assumptions;
+  void requestAttributeOwnershipAssumption(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& offered,
+      rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    ownership_assumptions.push_back({obj, offered, std::move(bytes)});
+  }
+
+  struct AcquisitionNotificationCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::size_t tag_size;
+  };
+  std::vector<AcquisitionNotificationCall> acquisition_notifications;
+  void attributeOwnershipAcquisitionNotification(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& secured,
+      rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    acquisition_notifications.push_back({obj, secured, tag.size()});
+  }
+
+  struct DivestConfirmationCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+  };
+  std::vector<DivestConfirmationCall> divest_confirmations;
+  void requestDivestitureConfirmation(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& released)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    divest_confirmations.push_back({obj, released});
+  }
+
+  // M36 Agent CA-4 — §4 restore converters (fm_save_restore_roundtrip).
+  struct RestoreInitiateCall {
+    std::wstring label;
+    std::wstring federate_name;
+    rti1516e::FederateHandle handle;
+  };
+  std::vector<RestoreInitiateCall> restore_initiates;
+  void initiateFederateRestore(std::wstring const& label,
+                               std::wstring const& federateName,
+                               rti1516e::FederateHandle handle)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    restore_initiates.push_back({label, federateName, handle});
+  }
+
+  int federation_restored_count = 0;
+  int federation_not_restored_count = 0;
+  rti1516e::RestoreFailureReason last_restore_failure{
+      rti1516e::RTI_UNABLE_TO_RESTORE};
+  void federationRestored()
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++federation_restored_count;
+  }
+  void federationNotRestored(rti1516e::RestoreFailureReason r)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++federation_not_restored_count;
+    last_restore_failure = r;
+  }
 };
 
 // ===== Conversion helpers unit-level tests =====
@@ -453,6 +525,110 @@ TEST(BridgeDelivery, DlcFederateAccessorReturnsBoundPointer) {
   TrackingDLCFed mock;
   gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
   EXPECT_EQ(bridge.dlcFederate(), &mock);
+}
+
+// ===== M36 Agent CA-4 — §7 ownership converters =====
+
+TEST(BridgeDelivery, OwnershipAssumptionDropsDivestorForwardsTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{7});
+  attrs.insert(rti1516e_m17::AttributeHandle{9});
+  rti1516e_m17::VariableLengthData tag = {0xDE, 0xAD};
+  // M17 carries the divesting federate; the DLC signature drops it
+  // (catalogue row 4.27).
+  bridge.requestAttributeOwnershipAssumption(
+      rti1516e_m17::ObjectInstanceHandle{0x33}, attrs,
+      rti1516e_m17::FederateHandle{42}, tag);
+
+  ASSERT_EQ(mock.ownership_assumptions.size(), 1u);
+  auto const& call = mock.ownership_assumptions.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x33ULL));
+  EXPECT_EQ(call.attrs.size(), 2u);
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(7)),
+            1u);
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0xDE, 0xAD}));
+}
+
+TEST(BridgeDelivery, AcquisitionNotificationSupplementsEmptyTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{5});
+  // M17 carries the new owner; DLC drops it and adds a tag — the bridge
+  // supplements an empty one (catalogue row 4.28).
+  bridge.attributeOwnershipAcquisitionNotification(
+      rti1516e_m17::ObjectInstanceHandle{0x44}, attrs,
+      rti1516e_m17::FederateHandle{2});
+
+  ASSERT_EQ(mock.acquisition_notifications.size(), 1u);
+  auto const& call = mock.acquisition_notifications.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x44ULL));
+  EXPECT_EQ(call.attrs.size(), 1u);
+  EXPECT_EQ(call.tag_size, 0u);
+}
+
+TEST(BridgeDelivery, DivestitureConfirmationConvertsAttributeSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{11});
+  bridge.requestDivestitureConfirmation(
+      rti1516e_m17::ObjectInstanceHandle{0x55}, attrs);
+
+  ASSERT_EQ(mock.divest_confirmations.size(), 1u);
+  auto const& call = mock.divest_confirmations.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x55ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(11)),
+            1u);
+}
+
+// ===== M36 Agent CA-4 — §4 restore converters =====
+
+TEST(BridgeDelivery, InitiateRestoreSupplementsEmptyFederateName) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  bridge.initiateFederateRestore("checkpoint-1",
+                                 rti1516e_m17::FederateHandle{3});
+
+  ASSERT_EQ(mock.restore_initiates.size(), 1u);
+  auto const& call = mock.restore_initiates.front();
+  EXPECT_EQ(call.label, std::wstring(L"checkpoint-1"));
+  // M17 does not carry a federate name; bridge passes empty (header
+  // contract §4.27).
+  EXPECT_EQ(call.federate_name, std::wstring());
+  EXPECT_EQ(call.handle,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(3));
+}
+
+TEST(BridgeDelivery, FederationRestoredDropsLabelPerDLCSignature) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationRestored("anything");
+  EXPECT_EQ(mock.federation_restored_count, 1);
+}
+
+TEST(BridgeDelivery, FederationNotRestoredSupplementsFailureReason) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationNotRestored("anything");
+  EXPECT_EQ(mock.federation_not_restored_count, 1);
+  // M17 does not carry a reason; bridge picks RTI_UNABLE_TO_RESTORE per
+  // header comment.
+  EXPECT_EQ(mock.last_restore_failure, rti1516e::RTI_UNABLE_TO_RESTORE);
 }
 
 }  // namespace
