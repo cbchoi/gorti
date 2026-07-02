@@ -83,3 +83,48 @@ Fixture code untouched (observer already used the suite-standard
 evoke-drain `evokeMultipleCallbacks(0.05, 0.1)`). Run sequencing:
 observer joins/subscribes first; alice joins; bob joins while alice is
 still a member; alice resigns before bob (golden step order preserved).
+
+## M36 DD re-verdict (2026-07-02)
+
+**SPEC-FULL — 18/18 lines** (observer **12/12**, alice **3/3**, bob
+**3/3**), up from BLOCKED / PARTIAL 10/17 (observer 4/11). Run: fresh
+worktree rtid (M36 DD-2 + DA-1..5 C++ layer merged), manual driver
+sequencing identical to `test_mom_federation_lifecycle.cpp` (observer
+joins+subscribes first; alice joins, dwells 300 ms, resigns; then bob;
+observer pumps throughout). Canonicalized with `_harness/normalize.py`;
+inline `#` citations stripped from the golden before diff.
+
+What landed (M36 DD-2, `rti/internal/mom/instances.go`):
+- HLAmanager.HLAfederation registered per federation and
+  HLAmanager.HLAfederate per joined federate through the STANDARD
+  `object.Registry` path — Discover/Reflect/Remove ride the normal
+  subscriber fan-out (the M11 cut-1 deferred follow-up in
+  `mom/manager.go`).
+- Late subscribers to the MOM classes get retroactive Discover+Reflect
+  (declaration.Manager post-subscribe hook → MOM), which is what makes
+  the observer see its OWN HLAfederate record after subscribing.
+- `HLAfederateName` reflected as HLAunicodeString (uint32BE count +
+  UTF-16BE units — matches the DLC decoder);
+  `HLAfederatesInFederation` maintained on the federation instance as
+  HLAvariableArray of HLAhandle.
+- REMOVE delivery additionally required the C++ side's
+  `removeObjectInstance` wire→callback chain (Agent DA-2, merged).
+
+Golden amendments (documented in expected.observer.log header):
+instance names `HLAfederate.<H>` (IEEE §6.2 uniqueness makes the
+skeleton's three identical `name=HLAfederate` lines unrealizable;
+normalize.py/log_diff.h now canonicalize the RTI-assigned handle
+suffix), alice's REMOVE moved before bob's DISCOVER (matches the
+driver's sequencing), and bob's REMOVE added (he also resigns while
+the observer still pumps).
+
+Fixture-code fix: `federate_observer.cpp` bound
+`HLAunicodeString::get()` (returns std::wstring BY VALUE per the DLC
+API) to a local before taking begin()/end() — the skeleton called
+`.get()` twice, mixing iterators of two temporaries (UB; crashed with
+std::length_error the moment reflects actually arrived).
+
+Residual: none at fixture scope. (MOM attribute coverage beyond
+HLAfederateHandle/HLAfederateName/HLAfederateType +
+HLAfederationName/HLAfederatesInFederation — e.g. time-state, counters
+— is not exercised by this fixture and remains snapshot-only.)

@@ -1,17 +1,33 @@
-# M31 fixture mom_federation_lifecycle — observer golden (SKELETON).
+# M31 fixture mom_federation_lifecycle — observer golden.
 # expected.observer.log
 # attestation: spec-derived from IEEE 1516.1-2010 references below
 # Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
 # canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
 # spec-cites: see README.md
+#
+# M36 amendments to the M31 skeleton (see README "M36 DD re-verdict"):
+#  1. Instance names: the skeleton expected `name=HLAfederate` for all three
+#     instances, but IEEE 1516.1-2010 §6.2 requires object instance names to
+#     be UNIQUE — three identical names are unrealizable on any conforming
+#     RTI. RTI-assigned names are `HLAfederate.<federateHandle>` (Pitch-style
+#     convention); the harness normalizes the handle suffix
+#     (`name=HLAfederate.<H>`) per the same §5.2.1 policy as bare handle ints.
+#  2. REMOVE position: the skeleton put alice's REMOVE after bob's lines,
+#     contradicting both its own comment ("alice resigns first") and the
+#     driver sequencing (alice joins+resigns BEFORE bob starts). Causal
+#     stream order per §6 places alice's REMOVE before bob's DISCOVER.
+#  3. Added bob's REMOVE: bob also resigns (CANCEL_THEN_DELETE_THEN_DIVEST)
+#     while the observer is still pumping callbacks, so his HLAfederate
+#     instance removal is observed too (§6.15) — the skeleton missed it.
 OBS: CONNECT                                                       # §4.2
 OBS: JOIN federate=observer                                        # §4.9 — observer joins first
 OBS: SUBSCRIBE class=HLAobjectRoot.HLAmanager.HLAfederate attributes=[HLAfederateHandle,HLAfederateName] active=true  # §5.6 + §11 standard MOM path (catalogue 16.1 — no bespoke API)
-OBS: DISCOVER name=HLAfederate                                     # §11 — RTI publishes per-federate MOM object as federates join; §6.9 (catalogue 4.19 wstring)
+OBS: DISCOVER name=HLAfederate.<H>                                 # §11 — RTI publishes per-federate MOM object; late subscriber retro-discovers its own record; §6.9 (catalogue 4.19 wstring)
 OBS: REFLECT HLAfederateName=observer                              # §11 — MOM populates name attribute via standard reflectAttributeValues RO (catalogue 4.20)
-OBS: DISCOVER name=HLAfederate
+OBS: DISCOVER name=HLAfederate.<H>
 OBS: REFLECT HLAfederateName=alice
-OBS: DISCOVER name=HLAfederate
+OBS: REMOVE                                                        # §6.15 removeObjectInstance (catalogue 4.22) — alice resigns; MOM removes her HLAfederate object
+OBS: DISCOVER name=HLAfederate.<H>
 OBS: REFLECT HLAfederateName=bob
-OBS: REMOVE                                                        # §6.15 removeObjectInstance (catalogue 4.22) — alice resigns first; MOM removes her HLAfederate object
+OBS: REMOVE                                                        # §6.15 — bob resigns while the observer is still pumping
 OBS: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

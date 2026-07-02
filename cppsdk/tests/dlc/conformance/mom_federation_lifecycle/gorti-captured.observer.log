@@ -1,4 +1,12 @@
 OBS: CONNECT
 OBS: JOIN federate=observer
 OBS: SUBSCRIBE class=HLAobjectRoot.HLAmanager.HLAfederate attributes=[HLAfederateHandle,HLAfederateName] active=true
+OBS: DISCOVER name=HLAfederate.1
+OBS: REFLECT HLAfederateName=observer
+OBS: DISCOVER name=HLAfederate.2
+OBS: REFLECT HLAfederateName=alice
+OBS: REMOVE
+OBS: DISCOVER name=HLAfederate.3
+OBS: REFLECT HLAfederateName=bob
+OBS: REMOVE
 OBS: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

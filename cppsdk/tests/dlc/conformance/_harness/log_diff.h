@@ -28,7 +28,12 @@ namespace gorti_dlc_harness {
 // Per §5.3.1 rule 1.
 inline std::string normalizeHandles(const std::string& line) {
   static const std::regex handle_re(R"(handle=\d+)");
-  return std::regex_replace(line, handle_re, "handle=<H>");
+  std::string out = std::regex_replace(line, handle_re, "handle=<H>");
+  // M36 — RTI-assigned MOM instance names embed the federate handle
+  // (`name=HLAfederate.3`; IEEE §6.2 uniqueness forces a suffix).
+  // Same policy as bare handle ints; mirrors _harness/normalize.py.
+  static const std::regex mom_name_re(R"(name=(HLAfederate|HLAfederation)\.\d+)");
+  return std::regex_replace(out, mom_name_re, "name=$1.<H>");
 }
 
 // LBTS-bucket sort: lines marked `RO` (receive-ordered) within a bucket

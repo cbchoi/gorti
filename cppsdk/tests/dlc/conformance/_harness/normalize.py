@@ -41,6 +41,12 @@ _DIM_HANDLE = re.compile(r"\bdimension=([0-9]+)\b")
 _REGION_HANDLE = re.compile(r"\bregion=([0-9]+)\b")
 _RETRACTION_HANDLE = re.compile(r"\bretraction=([0-9]+)\b")
 
+# M36 — RTI-assigned MOM object instance names embed the federate handle
+# (`name=HLAfederate.3`, Pitch-style `HLAfederate.<h>`; IEEE 1516.1-2010
+# §6.2 requires instance-name uniqueness, so the RTI suffixes the handle).
+# Same §5.2.1 policy as bare handle ints: normalize the numeric suffix.
+_MOM_INSTANCE_NAME = re.compile(r"\bname=(HLAfederate|HLAfederation)\.([0-9]+)\b")
+
 # `2026-06-30T12:34:56.789Z` — strip ISO-8601 wall-clock timestamps.
 _WALL_CLOCK = re.compile(
     r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?\b"
@@ -72,6 +78,9 @@ def normalize_handles(line: str) -> str:
         _RETRACTION_HANDLE,
     ):
         line = pat.sub(lambda m: m.group(0).split("=")[0] + "=<H>", line)
+    # MOM instance names: keep the class prefix, normalize the handle
+    # suffix (`name=HLAfederate.3` → `name=HLAfederate.<H>`).
+    line = _MOM_INSTANCE_NAME.sub(lambda m: "name=" + m.group(1) + ".<H>", line)
     return line
 
 
