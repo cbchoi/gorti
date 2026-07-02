@@ -85,3 +85,28 @@ Run/environment notes (for reproduction):
 - `federate_subscriber.cpp`: pump switched to the suite-standard
   evoke-drain `evokeMultipleCallbacks(0.05, 0.1)` with early exit on
   REMOVE (golden unchanged).
+
+## M36 DD re-verdict (2026-07-02)
+
+**SPEC-FULL — 17/17 lines** (python_pub **8/8**, cpp_sub **9/9**), up
+from PARTIAL 16/17 (missing `SUB: REMOVE`). Run: worktree rtid, Python
+publisher on the worktree pysdk (venv site-packages +
+`~/.local/bin/python3.11` — repo venv symlink broken post-OS-upgrade),
+C++ subscriber built from the worktree (DA C++ layer merged).
+Canonicalized with `_harness/normalize.py`; inline `#` citations
+stripped from goldens before diff.
+
+The missing REMOVE required BOTH halves that landed in M36:
+- **pysdk (DD-1)**: `standard.py resignFederationExecution` no longer
+  discards the action (`del action`); the IEEE §4.10 designator is
+  threaded through the federate context manager and mapped to the
+  `rti.v1.ResignAction` wire enum in `_transport.py`
+  (`resign_action_to_proto`). `CANCEL_THEN_DELETE_THEN_DIVEST` now
+  reaches the server, whose M24 resign dispatch deletes the
+  publisher's `car-1` instance.
+- **cppsdk (DA-2, merged)**: `removeObjectInstance` wire→callback
+  delivery so the subscriber actually observes the delete.
+
+Residual: none at fixture scope. The §6.10 mandatory-tag pysdk surface
+divergence noted by parity-CF stands (golden locks value bytes, not
+the tag).
