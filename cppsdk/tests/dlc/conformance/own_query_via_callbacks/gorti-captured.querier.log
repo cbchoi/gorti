@@ -3,6 +3,8 @@ QUERIER: JOIN
 QUERIER: DISCOVER name=car-query handle=<H>
 QUERIER: INFORM_OWNERSHIP attr=OwnedAttr owner=<H>
 QUERIER: QUERY_OWNERSHIP attr=OwnedAttr
-QUERIER: INFORM_OWNERSHIP attr=UnownedAttr owner=<H>
+QUERIER: ATTRIBUTE_IS_NOT_OWNED attr=UnownedAttr
 QUERIER: QUERY_OWNERSHIP attr=UnownedAttr
+QUERIER: INFORM_OWNERSHIP attr=HLAprivilegeToDelete owner=<H>
+QUERIER: QUERY_OWNERSHIP attr=HLAprivilegeToDelete
 QUERIER: RESIGN

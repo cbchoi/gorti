@@ -44,56 +44,48 @@ Per TASK-362 traceability lint:
 
 RED. `TBD-pitch-capture` until Agent E TASK-363 clears.
 
-## gorti parity status (M35, parity-CD)
+## gorti parity status (M36, agent-DC)
 
-Verdict: **PARTIAL 11/14** (carrier FULL 4/4, querier 7/10; goldens
-are spec-derived, Pitch capture pending). Captured run:
-`gorti-captured.{querier,carrier}.log`.
+Carrier **FULL 4/4**; querier **PARTIAL 7/10 strict, 9/10 by content —
+every golden event now has a counterpart** (M35: events genuinely
+missing). Captured run: `gorti-captured.{carrier,querier}.log`
+(canonicalized), against the M36-DC rtid.
 
-Missing events (three):
-- `QUERIER: QUERY_OWNERSHIP attr=HLAprivilegeToDelete`
-- `QUERIER: ATTRIBUTE_IS_NOT_OWNED attr=UnownedAttr`
-- `QUERIER: ATTRIBUTE_IS_OWNED_BY_RTI attr=HLAprivilegeToDelete`
+M36 closed two of the three M35 gaps:
 
-Three distinct root causes:
+1. DC-3 — ownership seeding narrowed to PUBLISHED attributes.
+   `rti/internal/object/registry.go` no longer seeds the registrant as
+   owner of the blanket [1..8] probe range; only attributes the
+   registrant publishes (plus the implicit privilege attribute) are
+   seeded. `QUERIER: ATTRIBUTE_IS_NOT_OWNED attr=UnownedAttr` now
+   fires as the golden expects (§7.18).
+2. DC-4 — implicit HLAprivilegeToDeleteObject resolves.
+   `rti/cmd/rtid/foms.go` LookupAttribute walks the inheritance chain
+   (MIM declares the attribute on HLAobjectRoot) and aliases the
+   fixture's HLA 1.3-lineage spelling "HLAprivilegeToDelete".
+   `getAttributeHandle` succeeds and the third
+   `QUERIER: QUERY_OWNERSHIP attr=HLAprivilegeToDelete` line appears.
 
-1. **Implicit privilege attribute absent.** gorti's FOM repo only
-   knows FOM-declared attributes; the spec's implicit HLAobjectRoot
-   privilege attribute is never synthesized, so
-   `getAttributeHandle(HLAprivilegeToDelete)` throws RTIinternalError
-   ("attribute not found"). The querier now tolerates this (skips the
-   third query) instead of aborting; both §7.17 query-3 lines are
-   therefore unreachable, and §7.18 `attributeIsOwnedByRTI` is never
-   exercisable against gorti at all (the DLC synthesis in
-   RTIambassadorImpl.cpp maps query answers only to
-   informAttributeOwnership / attributeIsNotOwned).
+Remaining divergences (exactly two kinds):
 
-2. **Blanket initial-ownership seeding.** `UnownedAttr` (declared in
-   the FOM, published by nobody) answers `informAttributeOwnership`
-   with the carrier as owner instead of `attributeIsNotOwned`. Cause:
-   on registration, rtid's OnRegister hook
-   (rti/cmd/rtid/main.go → ownership.RegisterInitialOwnership) seeds
-   the registrant as owner of the hardcoded cut-1 probe range
-   `fanoutAttrProbe = [1..8]` (rti/internal/object/registry.go), not
-   the registrant's *published* attribute set. Per §7.17/§6.8 the
-   registering federate owns only published attributes (plus the
-   privilege attribute); gorti over-claims ownership of every
-   low-numbered attribute handle.
-
-3. **Synchronous callback synthesis (ordering).** The two answers
-   that do arrive are correct in content for OwnedAttr
-   (informAttributeOwnership, owner=carrier) but are delivered
-   synchronously *inside* the §7.17 call (parity-CA synthesis on
-   fed_amb_), so each answer precedes the fixture's own
-   QUERY_OWNERSHIP line; the golden models async delivery (all three
-   queries, then all three answers). Content-presence matching still
-   counts these lines; the interleave is a documented
-   delivery-mechanics divergence (arguably spec-legal under
-   HLA_IMMEDIATE, but it will never byte-match an async-RTI capture).
-
-Missing impl: (1) implicit MIM/privilege attribute synthesis in the
-FOM repo + an RTI-owned answer path (query owner==RTI →
-attributeIsOwnedByRTI), (2) publication-scoped initial ownership
-seeding (replace fanoutAttrProbe blanket with the registrant's
-published set), (3) optional: queue §7.18 answers through the
-callback queue instead of invoking fed_amb_ inline.
+- ORDERING (3 line swaps): each answer callback prints BEFORE the
+  fixture's own `QUERY_OWNERSHIP` line. The DLC emulates the void
+  §7.17 call by invoking the M17 RPC synchronously and firing the
+  §7.18 callback inside `queryAttributeOwnership`
+  (cppsdk/src/dlc/RTIambassadorImpl.cpp:1036-1049) — the callback
+  therefore precedes the caller's own print. Client-side artifact,
+  not addressable from the server; DA-owned if the callback is to be
+  deferred to the next evoke.
+- CONTENT (1 line): golden expects
+  `ATTRIBUTE_IS_OWNED_BY_RTI attr=HLAprivilegeToDelete`; gorti answers
+  `INFORM_OWNERSHIP attr=HLAprivilegeToDelete owner=<H>` (the
+  registrant). GOLDEN-REVIEW FLAG: per IEEE 1516.1-2010 §6.8 the
+  registering federate "shall own the instance attribute
+  HLAprivilegeToDeleteObject" of the instance it registers —
+  attributeIsOwnedByRTI applies to RTI-owned (MOM) instance
+  attributes. The spec-derived golden's OWNED_BY_RTI expectation looks
+  incorrect for a federate-registered instance; gorti's answer follows
+  §6.8. Additionally the DLC cannot synthesize attributeIsOwnedByRTI
+  from the M17 QueryOwnership result shape (owned + concrete owner
+  handle). Left for orchestrator adjudication rather than editing the
+  golden here.
