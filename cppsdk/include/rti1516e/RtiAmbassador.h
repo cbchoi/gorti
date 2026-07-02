@@ -275,6 +275,20 @@ class M17RTIambassador {
                        const ParameterHandleValueMap& parameters,
                        double logical_time);
 
+  // §8.21/§8.22 (M37 Agent EA) — TSO sends that allocate and return a
+  // MessageRetractionHandle (per-federate monotonic counter, gorti
+  // convention). Pass the returned handle to retract() to cancel the
+  // message while it is still buffered server-side; federates that
+  // would have received it get a requestRetraction callback.
+  MessageRetractionHandle updateAttributeValuesRetractable(
+      ObjectInstanceHandle obj,
+      const AttributeHandleValueMap& values,
+      double logical_time);
+  MessageRetractionHandle sendInteractionRetractable(
+      InteractionClassHandle cls,
+      const ParameterHandleValueMap& parameters,
+      double logical_time);
+
   // §6.14 — delete an object instance (owner-only). `tag` rides the
   // wire to subscribers' removeObjectInstance callbacks. Present
   // `logical_time` makes the delete TSO; absent → RO.

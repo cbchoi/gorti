@@ -96,6 +96,14 @@ class FederateAmbassador {
       const std::vector<std::string>& /*requested_names*/,
       const std::vector<std::string>& /*colliding_names*/) {}
 
+  // §8.22 — a TSO message this federate WOULD have received (it was
+  // buffered for delivery here) was retracted by its sender. The
+  // (sender, retraction_handle) pair identifies the message. M37
+  // Agent EA.
+  virtual void requestRetraction(
+      FederateHandle /*sender*/,
+      MessageRetractionHandle /*retraction_handle*/) {}
+
   // §8.8-12 — the manager has granted a time advance request. ``time``
   // is the granted logical time; per IEEE 1516.1 §8.8 this may be
   // earlier than the requested time (for NER / TARA).

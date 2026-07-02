@@ -200,6 +200,12 @@ class RTIambassadorImpl {
   FederateHandle federate_handle{};
   bool joined = false;
 
+  // §8.21/§8.22 (M37 Agent EA) — per-federate monotonic
+  // MessageRetractionHandle allocator for the *Retractable TSO send
+  // overloads (gorti convention: the federate allocates; the server
+  // stores the (federate, handle) pair with the buffered event).
+  std::atomic<std::uint64_t> next_retraction_handle{1};
+
   // M17.3 — handle / name caches. The cache key composes federation
   // name with the lookup target so resignFederationExecution +
   // rejoin to a different federation can't reuse stale handles.
@@ -2102,6 +2108,57 @@ void M17RTIambassador::sendInteraction(
   if (!s.ok()) throwFromStatus(s, "sendInteraction");
 }
 
+// §8.21/§8.22 (M37 Agent EA) — TSO sends carrying a freshly-allocated
+// MessageRetractionHandle. The returned handle feeds a later retract().
+
+MessageRetractionHandle M17RTIambassador::updateAttributeValuesRetractable(
+    ObjectInstanceHandle obj, const AttributeHandleValueMap& values,
+    double logical_time) {
+  requireJoined(*impl_, "updateAttributeValues");
+  const MessageRetractionHandle handle =
+      impl_->next_retraction_handle.fetch_add(1);
+  rti::v1::UpdateAttributeValuesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(obj.raw());
+  auto* m = req.mutable_attributes();
+  for (const auto& kv : values) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  req.set_logical_time(logical_time);
+  req.set_message_retraction_handle(handle);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->UpdateAttributeValues(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
+  return handle;
+}
+
+MessageRetractionHandle M17RTIambassador::sendInteractionRetractable(
+    InteractionClassHandle cls, const ParameterHandleValueMap& parameters,
+    double logical_time) {
+  requireJoined(*impl_, "sendInteraction");
+  const MessageRetractionHandle handle =
+      impl_->next_retraction_handle.fetch_add(1);
+  rti::v1::SendInteractionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  auto* m = req.mutable_parameters();
+  for (const auto& kv : parameters) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  req.set_logical_time(logical_time);
+  req.set_message_retraction_handle(handle);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "sendInteraction");
+  return handle;
+}
+
 void M17RTIambassador::deleteObjectInstance(
     ObjectInstanceHandle obj, const VariableLengthData& tag,
     std::optional<double> logical_time) {
@@ -2553,6 +2610,14 @@ bool RTIambassadorImpl::dispatchOneEvent() {
       fed_ambassador->turnInteractionsOff(InteractionClassHandle(
           evt.turn_interactions_off().interaction_class_handle()));
       return true;
+    case rti::v1::FederateEvent::kRetractionRequested: {
+      // §8.22 — M37 Agent EA.
+      const auto& r = evt.retraction_requested();
+      fed_ambassador->requestRetraction(
+          FederateHandle(r.sender_federate()),
+          MessageRetractionHandle(r.message_retraction_handle()));
+      return true;
+    }
     case rti::v1::FederateEvent::kAttributesInScope: {
       // §6.17 — M37 Agent EA.
       const auto& a = evt.attributes_in_scope();

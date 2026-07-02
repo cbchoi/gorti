@@ -74,6 +74,8 @@ message FederateEvent {
     // DDM scope advisories (§6.17 / §6.18) — M37 Agent EA.
     AttributesInScope attributes_in_scope = 64;
     AttributesOutOfScope attributes_out_of_scope = 65;
+    // Retraction (§8.22) — M37 Agent EA.
+    RequestRetraction retraction_requested = 66;
     FederationHalted halted = 99;
   }
 }
@@ -327,6 +329,17 @@ message TurnInteractionsOn {
 // when the interaction class loses its last subscriber. M37 Agent EA.
 message TurnInteractionsOff {
   uint64 interaction_class_handle = 1;
+}
+
+// RequestRetraction — IEEE 1516.1-2010 §8.22. Fires on each federate
+// that WOULD have received the retracted TSO message (its per-federate
+// buffer held a matching entry when the sender's Retract RPC landed).
+// The (sender_federate, message_retraction_handle) pair is the
+// MessageRetractionHandle the receiver may have seen on the original
+// TSO delivery. M37 Agent EA.
+message RequestRetraction {
+  uint64 sender_federate = 1;
+  uint64 message_retraction_handle = 2;
 }
 
 // AttributesInScope — IEEE 1516.1-2010 §6.17. Fires on a SUBSCRIBER

@@ -124,6 +124,18 @@ func toFederateEvent(evt core.OutboundEvent) (*rtiv1.FederateEvent, error) {
 				},
 			},
 		}, nil
+	case *timepkg.RequestRetraction:
+		// §8.22 (M37 Agent EA) — same layering rationale as the two
+		// cases above: the time package must not import the proto.
+		return &rtiv1.FederateEvent{
+			Seq: v.Seq(),
+			Event: &rtiv1.FederateEvent_RetractionRequested{
+				RetractionRequested: &rtiv1.RequestRetraction{
+					SenderFederate:          uint64(v.Sender),
+					MessageRetractionHandle: v.RetractionHandle,
+				},
+			},
+		}, nil
 	}
 	return nil, errOutboundEventNotConvertible
 }

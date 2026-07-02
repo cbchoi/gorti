@@ -547,6 +547,38 @@ func (r *Registry) RetractMessage(
 	return r.opts.TSOGate.RetractMessage(fed, sender, retractionHandle)
 }
 
+// retractNotifier is the optional §8.22-aware retraction entrypoint the
+// production time.Manager exposes (M37 Agent EA): removal PLUS a
+// RequestRetraction event to every federate that would have received
+// the message. Duck-typed so core.TSODeliveryGate keeps its frozen
+// shape.
+type retractNotifier interface {
+	RetractMessageNotify(
+		ctx context.Context,
+		fed core.FederationName,
+		sender core.FederateHandle,
+		retractionHandle uint64,
+	) int
+}
+
+// RetractMessageNotify — §8.22 (M37 Agent EA). Prefers the gate's
+// notifying entrypoint; falls back to the plain removal when the gate
+// (or a test fake) doesn't implement it.
+func (r *Registry) RetractMessageNotify(
+	ctx context.Context,
+	fed core.FederationName,
+	sender core.FederateHandle,
+	retractionHandle uint64,
+) int {
+	if r.opts.TSOGate == nil {
+		return 0
+	}
+	if rn, ok := r.opts.TSOGate.(retractNotifier); ok {
+		return rn.RetractMessageNotify(ctx, fed, sender, retractionHandle)
+	}
+	return r.opts.TSOGate.RetractMessage(fed, sender, retractionHandle)
+}
+
 // Snapshot returns aggregate object-instance counts for the
 // AdminService handler. Phase 1 of the rtid-TUI plan
 // (docs/rtid-tui.md): consumed by the drill-down view's
