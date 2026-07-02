@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>IVCT-subset conformance FOM</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <description>
+      Minimal FOM for the IVCT-inspired Python conformance subset
+      (tests/conformance/rti/ivct-subset). One Vehicle object class with
+      a TimeStamp-ordered attribute (Position, DivestAcquire — drives the
+      TM and ownership themes) and a Receive-ordered attribute (Velocity,
+      DivestAcquire), plus one Tick interaction (TimeStamp-ordered) for
+      TSO interaction delivery. Derived from
+      examples/pitch-typed-smoke/federation.fom.xml with the switches
+      block copied from the cppsdk DLC conformance fixtures.
+    </description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>Position</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+        </attribute>
+        <attribute>
+          <name>Velocity</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>PublishSubscribe</sharing>
+      <interactionClass>
+        <name>Tick</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <parameter>
+          <name>Count</name>
+          <dataType>HLAinteger32BE</dataType>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <!-- NOTE: the four *Advisory switch elements present in the cppsdk
+         DLC fixtures are omitted here — pysdk's strict FOM parser
+         (rti1516e.fom, FOM-009) rejects them, which would silently
+         empty the SDK-side name→handle tables. The Go-side parser
+         accepts the FOM either way. -->
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>

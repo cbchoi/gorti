@@ -2,7 +2,7 @@
 # ci-gates.sh — the full gate sequence for the DLC compliance program.
 #
 # Usage: scripts/ci-gates.sh [stage...]
-#   stages: stubs go cpp lockfile static sweep   (default: all, in order)
+#   stages: stubs go cpp lockfile static sweep ivct   (default: all, in order)
 #
 # Runs identically locally and in CI (.github/workflows/conformance.yml).
 # Every gate here exists because its absence cost a debugging cycle at
@@ -139,9 +139,25 @@ gate_sweep() {
   done
 }
 
+# ----------------------------------------------------------------- ivct --
+gate_ivct() {
+  note "ivct: IVCT-inspired Python conformance subset vs live rtid"
+  [ -x bin/rtid ] || die "bin/rtid missing (run the go stage first)"
+  # CI: python3.11 + pip-installed grpcio/protobuf/pytest and the
+  # buf-generated pysdk stubs (stubs stage) are already in place.
+  # Locally the repo .venv provides grpcio/protobuf; if this fails to
+  # import, run with:
+  #   PYTHONPATH=$REPO/.venv/lib/python3.11/site-packages \
+  #     PYTHON=python3.11 scripts/ci-gates.sh ivct
+  # (pysdk/rti1516e/_generated must be regenerated after proto changes —
+  #  stale stubs fail on the M37 ownership request flags.)
+  "${PYTHON:-python}" -m pytest tests/conformance/rti/ivct-subset -v \
+    || fail "ivct subset — locally: PYTHONPATH=\$REPO/.venv/lib/python3.11/site-packages PYTHON=python3.11 scripts/ci-gates.sh ivct (and regenerate pysdk stubs after proto changes)"
+}
+
 # ----------------------------------------------------------------- main --
 STAGES=("$@")
-[ ${#STAGES[@]} -eq 0 ] && STAGES=(stubs go cpp lockfile static sweep)
+[ ${#STAGES[@]} -eq 0 ] && STAGES=(stubs go cpp lockfile static sweep ivct)
 
 for s in "${STAGES[@]}"; do
   case "$s" in
@@ -151,7 +167,8 @@ for s in "${STAGES[@]}"; do
     lockfile) gate_lockfile ;;
     static)   gate_static ;;
     sweep)    gate_sweep ;;
-    *) die "unknown stage: $s (stages: stubs go cpp lockfile static sweep)" ;;
+    ivct)     gate_ivct ;;
+    *) die "unknown stage: $s (stages: stubs go cpp lockfile static sweep ivct)" ;;
   esac
 done
 

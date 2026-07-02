@@ -44,34 +44,59 @@ frozen at the time the M35+ implementer commits real bodies, from a
 fresh read of the current IVCT `TestSuites/` catalog. Renumbering is
 fine; the theme coverage is what matters.
 
-## Current status — M35 SCAFFOLD
+## Current status — IMPLEMENTED (M35 scaffold → real bodies)
 
-Every test body is `pytest.skip("stub — impl in follow-on")`. The
-purpose of the scaffold is:
+All 35 test bodies are implemented (no `pytest.skip` remains). Score:
+**30 pass + 5 xfail**, every xfail naming its exact gap:
 
-1. **Structural precedent** for a Python conformance suite that lives
-   outside `pysdk/tests/spec/` (which is spec-traceability, not
-   IVCT-inspired).
-2. **Directory + naming convention** so follow-on milestones can add
-   new `tc_*.py` files without re-litigating layout.
-3. **CI wiring** by the same `pytest tests/conformance/rti/ivct-subset`
-   invocation the DoD acceptance gate will use.
+| File | Pass | xfail | xfail causes |
+|---|---|---|---|
+| `tc_create_join_resign.py` | 6 | 0 | — |
+| `tc_sync_point.py` | 5 | 1 | §4.12 registration ack: wire event `sync_registration_succeeded` (M37) dropped by pysdk `_transport._translate_event` |
+| `tc_object_pub_sub.py` | 9 | 0 | — |
+| `tc_time_regulation.py` | 5 | 1 | §8.10 NER grants at LBTS, not next-TSO-message time (`time/advance.go decideGrant` has no TSO-queue input) |
+| `tc_ownership_divest.py` | 5 | 3 | §7.10 `ownership_unavailable` + §7.11 `ownership_release_requested` wire events dropped by pysdk; §7.2 old-owner update accepted (gorti gates updates on class publication, not per-instance ownership) |
+
+Infrastructure:
+
+- `conftest.py` — session-scoped `rtid_url` fixture spawning
+  `$REPO/bin/rtid` (builds nothing) on kernel-picked ports with metrics
+  relocated + admin disabled; per-test unique `federation_name`
+  (≤32 bytes — gorti's eventlog rejects longer names).
+- `_driver.py` — `Recorder` ambassador (thread-safe callback capture +
+  deadline waits) and raw `rti.v1` stub helpers for wire semantics the
+  pysdk cannot express (create/destroy negative paths; the M37
+  `two_phase` / `if_available` ownership flags + `ConfirmDivestiture`).
+- `federation.fom.xml` — suite FOM. NB: pysdk's strict FOM parser
+  rejects the four `*Advisory` switch elements that the cppsdk DLC
+  fixtures carry; they are omitted here.
 
 ## Running
 
 ```bash
-# Skipped everywhere until follow-on implements the bodies.
-pytest tests/conformance/rti/ivct-subset -v
+go build -o bin/rtid ./rti/cmd/rtid   # once per checkout / rtid change
+python3.11 -m pytest tests/conformance/rti/ivct-subset -v
+# If grpcio/protobuf are not installed for python3.11, reuse the repo venv:
+PYTHONPATH=$PWD/.venv/lib/python3.11/site-packages \
+  python3.11 -m pytest tests/conformance/rti/ivct-subset -v
 ```
+
+The suite requires up-to-date generated Python stubs at
+`pysdk/rti1516e/_generated` (`buf generate`, or
+`python -m grpc_tools.protoc -Iproto --python_out=... --grpc_python_out=...`);
+stale pre-M37 stubs fail the ownership tests on the missing
+`if_available` / `two_phase` request fields.
+
+CI: the `ivct` stage in `scripts/ci-gates.sh` (after `sweep`) runs this
+suite in `.github/workflows/conformance.yml`.
 
 ## Follow-on work
 
-- Impl each `tc_*.py` body. See individual file docstrings for the
-  IVCT-inspired assertion catalog per theme.
-- Add `conftest.py` with a shared `rtid_url` fixture that spawns rtid
-  the same way `pysdk/tests/spec/m28/test_pitch_typed_smoke.py` does.
-- Expand from 5 initial files to a 30-test subset once the base bodies
-  are green (matches `RTI_CONFORMANCE_AUDIT.md` §6 recommendation).
+- Close the pysdk `_translate_event` gaps (sync registration acks,
+  ownership unavailable / release-request) and flip the corresponding
+  xfails to hard assertions.
+- Expand toward the 30-test subset themes not yet covered (DDM, MOM,
+  save/restore) per `RTI_CONFORMANCE_AUDIT.md` §6.
 - Track long-term Java-based IVCT integration as a separate, deferrable
   milestone (paths a/b).
 
