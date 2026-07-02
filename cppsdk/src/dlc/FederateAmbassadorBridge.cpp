@@ -158,6 +158,10 @@ rti1516e::AttributeHandleSet to_dlc_attr_set(
 
 }  // namespace conv
 
+// ===== FR-DLC-14 re-entrancy witness (M36 Agent DA) =====
+
+thread_local bool tls_in_callback = false;
+
 // ===== Bridge impl =====
 
 DLCFederateAmbassadorBridge::DLCFederateAmbassadorBridge(
@@ -169,6 +173,7 @@ void DLCFederateAmbassadorBridge::discoverObjectInstance(
     rti1516e_m17::ObjectClassHandle object_class,
     const std::string& object_name) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   // §6.9 two-arg overload (no producingFederate on M17). Delegate to the
   // 3-arg DLC overload.
   dlc_fed_->discoverObjectInstance(
@@ -182,6 +187,7 @@ void DLCFederateAmbassadorBridge::reflectAttributeValues(
     const rti1516e_m17::AttributeHandleValueMap& values,
     std::optional<double> timestamp) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   auto oh = conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw());
   auto vm = conv::to_dlc_attr_map(values);
   rti1516e::VariableLengthData tag;  // M17 does not carry user tag on reflect
@@ -206,6 +212,7 @@ void DLCFederateAmbassadorBridge::receiveInteraction(
     const rti1516e_m17::ParameterHandleValueMap& parameters,
     std::optional<double> timestamp) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   auto ih = conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
       interaction_class.raw());
   auto pm = conv::to_dlc_param_map(parameters);
@@ -222,15 +229,50 @@ void DLCFederateAmbassadorBridge::receiveInteraction(
   }
 }
 
+void DLCFederateAmbassadorBridge::removeObjectInstance(
+    rti1516e_m17::ObjectInstanceHandle object,
+    std::optional<double> timestamp,
+    const rti1516e_m17::VariableLengthData& tag) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  auto oh = conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw());
+  auto vtag = conv::to_dlc_vld(tag);
+  rti1516e::SupplementalRemoveInfo supp;
+  if (timestamp.has_value()) {
+    // §6.15 TSO 6-arg overload — no MessageRetractionHandle on the M17
+    // wire, so the 7-arg retraction overload is never selected.
+    rti1516e::HLAfloat64Time t(*timestamp);
+    dlc_fed_->removeObjectInstance(oh, vtag, rti1516e::TIMESTAMP, t,
+                                   rti1516e::TIMESTAMP, supp);
+  } else {
+    // §6.15 RO 4-arg overload.
+    dlc_fed_->removeObjectInstance(oh, vtag, rti1516e::RECEIVE, supp);
+  }
+}
+
+void DLCFederateAmbassadorBridge::provideAttributeValueUpdate(
+    rti1516e_m17::ObjectInstanceHandle object,
+    const rti1516e_m17::AttributeHandleSet& attributes,
+    const rti1516e_m17::VariableLengthData& tag) {
+  if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
+  dlc_fed_->provideAttributeValueUpdate(
+      conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
+      conv::to_dlc_attr_set(attributes),
+      conv::to_dlc_vld(tag));
+}
+
 void DLCFederateAmbassadorBridge::objectInstanceNameReservationSucceeded(
     const std::string& object_name) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->objectInstanceNameReservationSucceeded(conv::s2ws(object_name));
 }
 
 void DLCFederateAmbassadorBridge::objectInstanceNameReservationFailed(
     const std::string& object_name) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->objectInstanceNameReservationFailed(conv::s2ws(object_name));
 }
 
@@ -238,6 +280,7 @@ void DLCFederateAmbassadorBridge::
     multipleObjectInstanceNameReservationSucceeded(
         const std::vector<std::string>& object_names) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->multipleObjectInstanceNameReservationSucceeded(
       conv::s2ws_set(object_names));
 }
@@ -247,6 +290,7 @@ void DLCFederateAmbassadorBridge::
         const std::vector<std::string>& /*requested_names*/,
         const std::vector<std::string>& colliding_names) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   // §6.6 DLC callback takes the requested-names set. Per header comment we
   // forward the COLLIDING set — which is what tests observe today. If callers
   // need the full requested set instead, swap arg here.
@@ -256,6 +300,7 @@ void DLCFederateAmbassadorBridge::
 
 void DLCFederateAmbassadorBridge::timeAdvanceGrant(double time) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   rti1516e::HLAfloat64Time t(time);
   dlc_fed_->timeAdvanceGrant(t);
 }
@@ -264,6 +309,7 @@ void DLCFederateAmbassadorBridge::announceSynchronizationPoint(
     const std::string& label,
     const rti1516e_m17::VariableLengthData& tag) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->announceSynchronizationPoint(conv::s2ws(label),
                                          conv::to_dlc_vld(tag));
 }
@@ -271,6 +317,7 @@ void DLCFederateAmbassadorBridge::announceSynchronizationPoint(
 void DLCFederateAmbassadorBridge::federationSynchronized(
     const std::string& label) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   // §4.15 DLC callback: (label, failedToSyncSet). M17 carries no such set;
   // pass empty.
   rti1516e::FederateHandleSet empty;
@@ -283,6 +330,7 @@ void DLCFederateAmbassadorBridge::requestAttributeOwnershipAssumption(
     rti1516e_m17::FederateHandle /*divesting_federate*/,
     const rti1516e_m17::VariableLengthData& tag) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->requestAttributeOwnershipAssumption(
       conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
       conv::to_dlc_attr_set(attributes),
@@ -294,6 +342,7 @@ void DLCFederateAmbassadorBridge::attributeOwnershipAcquisitionNotification(
     const rti1516e_m17::AttributeHandleSet& attributes,
     rti1516e_m17::FederateHandle /*owning_federate*/) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   rti1516e::VariableLengthData empty_tag;
   dlc_fed_->attributeOwnershipAcquisitionNotification(
       conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
@@ -305,6 +354,7 @@ void DLCFederateAmbassadorBridge::requestDivestitureConfirmation(
     rti1516e_m17::ObjectInstanceHandle object,
     const rti1516e_m17::AttributeHandleSet& attributes) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->requestDivestitureConfirmation(
       conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(object.raw()),
       conv::to_dlc_attr_set(attributes));
@@ -314,6 +364,7 @@ void DLCFederateAmbassadorBridge::initiateFederateSave(
     const std::string& label,
     std::optional<double> save_time) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   if (save_time.has_value()) {
     rti1516e::HLAfloat64Time t(*save_time);
     dlc_fed_->initiateFederateSave(conv::s2ws(label), t);
@@ -325,6 +376,7 @@ void DLCFederateAmbassadorBridge::initiateFederateSave(
 void DLCFederateAmbassadorBridge::federationSaved(
     const std::string& /*label*/) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   // §4.20 DLC callback takes no label.
   dlc_fed_->federationSaved();
 }
@@ -332,6 +384,7 @@ void DLCFederateAmbassadorBridge::federationSaved(
 void DLCFederateAmbassadorBridge::federationNotSaved(
     const std::string& /*label*/) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   // §4.20 DLC callback takes a SaveFailureReason; M17 does not carry one.
   dlc_fed_->federationNotSaved(rti1516e::RTI_UNABLE_TO_SAVE);
 }
@@ -340,6 +393,7 @@ void DLCFederateAmbassadorBridge::initiateFederateRestore(
     const std::string& label,
     rti1516e_m17::FederateHandle federate_handle) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   // §4.27 DLC callback: (label, federateName, handle). M17 does not carry a
   // name; forward empty.
   std::wstring empty_name;
@@ -351,12 +405,14 @@ void DLCFederateAmbassadorBridge::initiateFederateRestore(
 void DLCFederateAmbassadorBridge::federationRestored(
     const std::string& /*label*/) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->federationRestored();
 }
 
 void DLCFederateAmbassadorBridge::federationNotRestored(
     const std::string& /*label*/) {
   if (!dlc_fed_) return;
+  CallbackScope scope;  // FR-DLC-14 — mark the callback context
   dlc_fed_->federationNotRestored(rti1516e::RTI_UNABLE_TO_RESTORE);
 }
 

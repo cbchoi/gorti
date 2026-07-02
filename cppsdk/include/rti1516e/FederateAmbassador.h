@@ -58,6 +58,22 @@ class FederateAmbassador {
       const ParameterHandleValueMap& /*parameters*/,
       std::optional<double> /*timestamp*/) {}
 
+  // §6.15 — a subscribed object instance was deleted by its owner.
+  // ``timestamp`` is empty for RO delivery; present for TSO. ``tag``
+  // echoes the deleter's user-supplied tag. M36 Agent DA.
+  virtual void removeObjectInstance(
+      ObjectInstanceHandle /*object*/,
+      std::optional<double> /*timestamp*/,
+      const VariableLengthData& /*tag*/) {}
+
+  // §6.20 — a peer called requestAttributeValueUpdate for attributes
+  // this federate owns; respond with updateAttributeValues carrying
+  // fresh values for ``attributes``. M36 Agent DA.
+  virtual void provideAttributeValueUpdate(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/,
+      const VariableLengthData& /*tag*/) {}
+
   // §6.2 — a previously-requested name reservation succeeded.
   // M17.10 (Cut-2). The federate may now call registerObjectInstance
   // with the reserved name.

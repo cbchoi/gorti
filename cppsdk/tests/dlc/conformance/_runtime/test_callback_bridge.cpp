@@ -268,6 +268,59 @@ class TrackingDLCFed : public rti1516e::NullFederateAmbassador {
     ++federation_not_restored_count;
     last_restore_failure = r;
   }
+
+  // M36 Agent DA — §6.15 removeObjectInstance (RO 4-arg + TSO 6-arg).
+  struct RemoveNoTimeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    std::vector<std::uint8_t> tag_bytes;
+    rti1516e::OrderType sentOrder;
+  };
+  std::vector<RemoveNoTimeCall> remove_no_time_calls;
+  void removeObjectInstance(rti1516e::ObjectInstanceHandle obj,
+                            rti1516e::VariableLengthData const& tag,
+                            rti1516e::OrderType sent,
+                            rti1516e::SupplementalRemoveInfo /*supp*/)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    remove_no_time_calls.push_back({obj, std::move(bytes), sent});
+  }
+
+  struct RemoveWithTimeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    double time;
+    rti1516e::OrderType sentOrder;
+    rti1516e::OrderType recvOrder;
+  };
+  std::vector<RemoveWithTimeCall> remove_with_time_calls;
+  void removeObjectInstance(rti1516e::ObjectInstanceHandle obj,
+                            rti1516e::VariableLengthData const& /*tag*/,
+                            rti1516e::OrderType sent,
+                            rti1516e::LogicalTime const& t,
+                            rti1516e::OrderType recv,
+                            rti1516e::SupplementalRemoveInfo /*supp*/)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    auto const& tf = static_cast<rti1516e::HLAfloat64Time const&>(t);
+    remove_with_time_calls.push_back({obj, tf.getTime(), sent, recv});
+  }
+
+  // M36 Agent DA — §6.20 provideAttributeValueUpdate.
+  struct ProvideUpdateCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::vector<std::uint8_t> tag_bytes;
+  };
+  std::vector<ProvideUpdateCall> provide_update_calls;
+  void provideAttributeValueUpdate(rti1516e::ObjectInstanceHandle obj,
+                                   rti1516e::AttributeHandleSet const& attrs,
+                                   rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    provide_update_calls.push_back({obj, attrs, std::move(bytes)});
+  }
 };
 
 // ===== Conversion helpers unit-level tests =====
@@ -629,6 +682,108 @@ TEST(BridgeDelivery, FederationNotRestoredSupplementsFailureReason) {
   // M17 does not carry a reason; bridge picks RTI_UNABLE_TO_RESTORE per
   // header comment.
   EXPECT_EQ(mock.last_restore_failure, rti1516e::RTI_UNABLE_TO_RESTORE);
+}
+
+// ===== M36 Agent DA — §6.15 remove / §6.20 provide-update converters =====
+
+TEST(BridgeDelivery, RemoveNoTimestampSelectsROOverloadForwardsTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::VariableLengthData tag = {0x5A, 0x5B};
+  bridge.removeObjectInstance(rti1516e_m17::ObjectInstanceHandle{0x66},
+                              std::nullopt, tag);
+
+  ASSERT_EQ(mock.remove_no_time_calls.size(), 1u);
+  ASSERT_EQ(mock.remove_with_time_calls.size(), 0u);
+  auto const& call = mock.remove_no_time_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x66ULL));
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0x5A, 0x5B}));
+  EXPECT_EQ(call.sentOrder, rti1516e::RECEIVE);
+}
+
+TEST(BridgeDelivery, RemoveWithTimestampSelectsTSOOverload) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  bridge.removeObjectInstance(rti1516e_m17::ObjectInstanceHandle{0x67},
+                              std::optional<double>{7.25},
+                              rti1516e_m17::VariableLengthData{});
+
+  ASSERT_EQ(mock.remove_no_time_calls.size(), 0u);
+  ASSERT_EQ(mock.remove_with_time_calls.size(), 1u);
+  auto const& call = mock.remove_with_time_calls.front();
+  EXPECT_DOUBLE_EQ(call.time, 7.25);
+  EXPECT_EQ(call.sentOrder, rti1516e::TIMESTAMP);
+  EXPECT_EQ(call.recvOrder, rti1516e::TIMESTAMP);
+}
+
+TEST(BridgeDelivery, ProvideAttributeValueUpdateConvertsSetAndTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{21});
+  attrs.insert(rti1516e_m17::AttributeHandle{22});
+  rti1516e_m17::VariableLengthData tag = {0x01};
+  bridge.provideAttributeValueUpdate(
+      rti1516e_m17::ObjectInstanceHandle{0x99}, attrs, tag);
+
+  ASSERT_EQ(mock.provide_update_calls.size(), 1u);
+  auto const& call = mock.provide_update_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x99ULL));
+  EXPECT_EQ(call.attrs.size(), 2u);
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(21)),
+            1u);
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0x01}));
+}
+
+// ===== M36 Agent DA — FR-DLC-14 re-entrancy witness =====
+
+// Observer federate that samples gorti::dlc::tls_in_callback from INSIDE a
+// dispatched callback — pins that CallbackScope marks the callback context
+// for the ambassador-side requireNotInCallback() gate.
+class ReentryProbeFed : public rti1516e::NullFederateAmbassador {
+ public:
+  bool flag_inside_callback = false;
+  void discoverObjectInstance(rti1516e::ObjectInstanceHandle,
+                              rti1516e::ObjectClassHandle,
+                              std::wstring const&)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    flag_inside_callback = gorti::dlc::tls_in_callback;
+  }
+};
+
+TEST(BridgeReentrancy, TlsFlagSetDuringDispatchClearedAfter) {
+  ReentryProbeFed probe;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&probe);
+
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+  bridge.discoverObjectInstance(rti1516e_m17::ObjectInstanceHandle{1},
+                                rti1516e_m17::ObjectClassHandle{2}, "car-1");
+  EXPECT_TRUE(probe.flag_inside_callback);
+  // RAII CallbackScope must restore the flag after dispatch returns.
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+}
+
+TEST(BridgeReentrancy, CallbackScopeSavesAndRestoresNestedState) {
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+  {
+    gorti::dlc::CallbackScope outer;
+    EXPECT_TRUE(gorti::dlc::tls_in_callback);
+    {
+      gorti::dlc::CallbackScope inner;
+      EXPECT_TRUE(gorti::dlc::tls_in_callback);
+    }
+    // Inner scope restores the OUTER state (true), not false.
+    EXPECT_TRUE(gorti::dlc::tls_in_callback);
+  }
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
 }
 
 }  // namespace

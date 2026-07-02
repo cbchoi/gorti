@@ -168,6 +168,33 @@ class M17Bridge {
       std::uint64_t object,
       const std::vector<std::uint64_t>& attrs,
       const std::vector<std::uint8_t>& tag);
+  // §6.19 class-scoped variant — every owner of any instance of the
+  // class receives provideAttributeValueUpdate. M36 Agent DA.
+  void requestClassAttributeValueUpdate(
+      std::uint64_t object_class,
+      const std::vector<std::uint64_t>& attrs,
+      const std::vector<std::uint8_t>& tag);
+
+  // ---------- §6 TSO (timed) variants (M36 Agent DA) ------------------------
+  //
+  // `logical_time` is the HLAfloat64Time double the DLC layer narrowed
+  // from the spec-abstract LogicalTime. The M17 client sets the proto's
+  // `optional double logical_time`, engaging the server TSO gate. Tag
+  // remains a wire divergence on update/send (dropped — same as the RO
+  // paths); delete carries it end-to-end.
+  void updateAttributeValuesTimed(
+      std::uint64_t object,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& values,
+      const std::vector<std::uint8_t>& tag,
+      double logical_time);
+  void sendInteractionTimed(
+      std::uint64_t interaction_class,
+      const std::map<std::uint64_t, std::vector<std::uint8_t>>& params,
+      const std::vector<std::uint8_t>& tag,
+      double logical_time);
+  void deleteObjectInstanceTimed(std::uint64_t object,
+                                 const std::vector<std::uint8_t>& tag,
+                                 double logical_time);
 
   // ---------- §7 Ownership Management (M36 Agent CA-1) ---------------------
   //
@@ -314,6 +341,11 @@ class M17Bridge {
   std::string   getInteractionClassName(std::uint64_t handle);
   std::uint64_t getParameterHandle(std::uint64_t cls, const std::string& name);
   std::string   getParameterName(std::uint64_t cls, std::uint64_t param);
+  // §10.24/§10.25 — federate name <-> handle via the M24
+  // ListFederationMembers RPC (M36 Agent DA). Throws (NameNotFound
+  // prefix) when no joined federate matches.
+  std::uint64_t getFederateHandle(const std::string& federate_name);
+  std::string   getFederateName(std::uint64_t handle);
   void enableCallbacks();
   void disableCallbacks();
 
