@@ -597,3 +597,21 @@ interim GRANT (row above). It is a benign-liveness divergence (every
 mandated callback is delivered, in order), documented in the fixture
 README and pinned to `rti/internal/time/ner.go`.
 
+
+## M38 update (2026-07-02, agents GA+GB): last divergence closed
+
+- **tm_tso_ordering PARTIAL → FULL 10/10** — §8.8/§8.9 NMR now grants at
+  the next-TSO-message time (min(requested, T_next), strict LBTS guard for
+  NER, inclusive for NMRA); the forced-grant-at-LBTS interim semantics are
+  retired. The old golden's single-grant walk was itself unreachable under
+  the fixture's launch protocol and was re-derived (GRANT 1.0 → re-issued
+  NMR → GRANT 2.0).
+- **§6.6 per-instance ownership gate on updates** — an old owner can no
+  longer update an attribute after divesting it (AttributeNotOwned /
+  PERMISSION_DENIED, consistent with all §7 emissions). Found by the
+  IVCT-inspired subset; the C++ fixture choreography had never tried it.
+
+**Scoreboard: every runnable fixture is now FULL** (25 FULL + 2 manual-
+verdict SKIPs, both SPEC-FULL when run by hand). IVCT subset: 32 pass +
+3 xfail (all three remaining xfails are pysdk `_translate_event` drops of
+M37 event tags 22/33/34 — client-side parity backlog, not RTI compliance).
