@@ -77,6 +77,12 @@ type federationState struct {
 	// subscribe/register ordering. Entries for an object are dropped
 	// when the instance is deleted.
 	discovered map[discoverKey]struct{}
+
+	// scope is the §6.17/§6.18 per-(object, subscriber) in-scope
+	// attribute cache backing the DDM scope advisories (M37 Agent EA).
+	// Lazily allocated on the first DDM-aware update; nil for non-DDM
+	// federations (FR-DDM-6 zero-cost contract).
+	scope map[core.ObjectHandle]map[core.FederateHandle]map[core.AttributeHandle]struct{}
 }
 
 // discoverKey identifies one delivered DiscoverObjectInstance.
@@ -563,6 +569,38 @@ func (r *Registry) RetractMessage(
 ) int {
 	if r.opts.TSOGate == nil {
 		return 0
+	}
+	return r.opts.TSOGate.RetractMessage(fed, sender, retractionHandle)
+}
+
+// retractNotifier is the optional §8.22-aware retraction entrypoint the
+// production time.Manager exposes (M37 Agent EA): removal PLUS a
+// RequestRetraction event to every federate that would have received
+// the message. Duck-typed so core.TSODeliveryGate keeps its frozen
+// shape.
+type retractNotifier interface {
+	RetractMessageNotify(
+		ctx context.Context,
+		fed core.FederationName,
+		sender core.FederateHandle,
+		retractionHandle uint64,
+	) int
+}
+
+// RetractMessageNotify — §8.22 (M37 Agent EA). Prefers the gate's
+// notifying entrypoint; falls back to the plain removal when the gate
+// (or a test fake) doesn't implement it.
+func (r *Registry) RetractMessageNotify(
+	ctx context.Context,
+	fed core.FederationName,
+	sender core.FederateHandle,
+	retractionHandle uint64,
+) int {
+	if r.opts.TSOGate == nil {
+		return 0
+	}
+	if rn, ok := r.opts.TSOGate.(retractNotifier); ok {
+		return rn.RetractMessageNotify(ctx, fed, sender, retractionHandle)
 	}
 	return r.opts.TSOGate.RetractMessage(fed, sender, retractionHandle)
 }

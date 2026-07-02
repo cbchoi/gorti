@@ -28,6 +28,13 @@ message AchieveSyncPointRequest {
   string federation_name = 2;
   uint64 federate_handle = 3;
   string label = 4;
+  // IEEE 1516.1-2010 §4.14 synchronizationPointAchieved(label,
+  // successfully). Absent (old clients) means TRUE — the federate
+  // achieved the point successfully. When false the federate still
+  // counts toward sync completion but is reported in the §4.15
+  // FederationSynchronized.failed_to_sync set. M37 Agent EA
+  // (additive, tag 5).
+  optional bool successfully = 5;
 }
 
 // SyncPointSnapshotState — used inside SyncManagerState for the

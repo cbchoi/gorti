@@ -275,6 +275,20 @@ class M17RTIambassador {
                        const ParameterHandleValueMap& parameters,
                        double logical_time);
 
+  // §8.21/§8.22 (M37 Agent EA) — TSO sends that allocate and return a
+  // MessageRetractionHandle (per-federate monotonic counter, gorti
+  // convention). Pass the returned handle to retract() to cancel the
+  // message while it is still buffered server-side; federates that
+  // would have received it get a requestRetraction callback.
+  MessageRetractionHandle updateAttributeValuesRetractable(
+      ObjectInstanceHandle obj,
+      const AttributeHandleValueMap& values,
+      double logical_time);
+  MessageRetractionHandle sendInteractionRetractable(
+      InteractionClassHandle cls,
+      const ParameterHandleValueMap& parameters,
+      double logical_time);
+
   // §6.14 — delete an object instance (owner-only). `tag` rides the
   // wire to subscribers' removeObjectInstance callbacks. Present
   // `logical_time` makes the delete TSO; absent → RO.
@@ -540,13 +554,32 @@ class M17RTIambassador {
 
   // §7.3 — offer ownership to subscribers. ``tag`` is opaque user
   // data echoed in the announce callback on each subscriber.
+  // ``two_phase`` (M37 Agent EA, default false = pre-M37 one-phase):
+  // when true the server runs the REAL §7.3/§7.6 protocol — an
+  // engaging acquirer produces requestDivestitureConfirmation and the
+  // transfer completes only on confirmDivestiture().
   void negotiatedAttributeOwnershipDivestiture(
       ObjectInstanceHandle object,
       const AttributeHandleSet& attributes,
-      const VariableLengthData& tag);
+      const VariableLengthData& tag,
+      bool two_phase = false);
+
+  // §7.6 — complete a two-phase negotiated divestiture after the
+  // requestDivestitureConfirmation callback. M37 Agent EA.
+  void confirmDivestiture(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
 
   // §7.4 — request to acquire attributes from the current owner.
   void attributeOwnershipAcquisition(
+      ObjectInstanceHandle object,
+      const AttributeHandleSet& attributes);
+
+  // §7.9 — acquire ONLY the currently-available attributes (unowned or
+  // mid-divest); the unavailable remainder arrives via the §7.10
+  // attributeOwnershipUnavailable callback, and nothing is queued.
+  // M37 Agent EA.
+  void attributeOwnershipAcquisitionIfAvailable(
       ObjectInstanceHandle object,
       const AttributeHandleSet& attributes);
 
@@ -601,6 +634,12 @@ class M17RTIambassador {
   // §4.7 — this federate has achieved the sync point. Idempotent
   // server-side; double-achieve doesn't error.
   void synchronizationPointAchieved(const std::string& label);
+
+  // §4.14 — achieve carrying the ``successfully`` flag. When false the
+  // federate still counts toward sync completion but is reported in
+  // the §4.15 federationSynchronized failed-to-sync set. M37 Agent EA.
+  void synchronizationPointAchieved(const std::string& label,
+                                    bool successfully);
 
   // §11 — Management Object Model (MOM) ambassador delegates.
   //

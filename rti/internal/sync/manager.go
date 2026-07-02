@@ -7,6 +7,7 @@ import (
 	gosync "sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
 // ErrNotImplemented is retained as an exported sentinel for callers that
@@ -97,6 +98,11 @@ type syncPoint struct {
 	state    SyncPointState
 	required map[core.FederateHandle]struct{} // nil set means "any" mode
 	achieved map[core.FederateHandle]struct{}
+	// failed records federates that achieved with successfully=false
+	// (IEEE 1516.1-2010 §4.14). They still count toward completion but
+	// are reported in FederationSynchronized.failed_to_sync (§4.15).
+	// M37 Agent EA.
+	failed map[core.FederateHandle]struct{}
 	// dynamic is true when required was nil at Register-time AND
 	// no MembersResolver was wired. In that case the required set is
 	// grown lazily by Achieve calls; the sync point completes as soon
@@ -147,10 +153,62 @@ func (m *Manager) Register(
 	tag []byte,
 	requiredFederates []core.FederateHandle,
 ) error {
+	return m.register(ctx, fed, label, tag, requiredFederates, nil)
+}
+
+// RegisterBy is Register carrying the REGISTERING federate's handle so
+// the §4.12 synchronizationPointRegistrationSucceeded / Failed ack
+// events can target it. The gRPC handler duck-types for this richer
+// method (M37 Agent EA); the frozen core.SyncCoordinator method keeps
+// its shape and emits no ack.
+func (m *Manager) RegisterBy(
+	ctx context.Context,
+	fed core.FederationName,
+	registrant core.FederateHandle,
+	label string,
+	tag []byte,
+	requiredFederates []core.FederateHandle,
+) error {
+	return m.register(ctx, fed, label, tag, requiredFederates, &registrant)
+}
+
+func (m *Manager) register(
+	ctx context.Context,
+	fed core.FederationName,
+	label string,
+	tag []byte,
+	requiredFederates []core.FederateHandle,
+	registrant *core.FederateHandle,
+) error {
+	// §4.12 SET_MEMBER_NOT_JOINED — when an explicit required set is
+	// passed and the joined-members resolver is wired, every member
+	// must currently be joined. Per IEEE 1516.1-2010 the register CALL
+	// itself succeeds and the rejection arrives as the
+	// synchronizationPointRegistrationFailed callback, so this path
+	// returns nil (registrant-aware path only; the frozen Register
+	// keeps its pre-M37 behavior of accepting any explicit set).
+	if registrant != nil && requiredFederates != nil && m.opts.Members != nil {
+		joined := map[core.FederateHandle]struct{}{}
+		for _, h := range m.opts.Members(fed) {
+			joined[h] = struct{}{}
+		}
+		for _, h := range requiredFederates {
+			if _, ok := joined[h]; !ok {
+				_ = m.opts.Outbox.Send(ctx, fed, *registrant, registrationFailedEvent(
+					label, rtiv1.SyncPointFailureReason_SYNC_POINT_FAILURE_REASON_SET_MEMBER_NOT_JOINED))
+				return nil
+			}
+		}
+	}
+
 	m.mu.Lock()
 	st := m.stateForLocked(fed)
 	if _, exists := st.points[label]; exists {
 		m.mu.Unlock()
+		if registrant != nil {
+			_ = m.opts.Outbox.Send(ctx, fed, *registrant, registrationFailedEvent(
+				label, rtiv1.SyncPointFailureReason_SYNC_POINT_FAILURE_REASON_LABEL_NOT_UNIQUE))
+		}
 		return core.ErrSyncPointAlreadyRegistered
 	}
 
@@ -184,6 +242,7 @@ func (m *Manager) Register(
 		state:    StateAnnounced,
 		required: required,
 		achieved: map[core.FederateHandle]struct{}{},
+		failed:   map[core.FederateHandle]struct{}{},
 		dynamic:  dynamic,
 	}
 	st.points[label] = sp
@@ -199,6 +258,12 @@ func (m *Manager) Register(
 	// EventLog is nil).
 	if m.opts.EventLog != nil {
 		_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{kind: evtRegistered, label: label})
+	}
+
+	// §4.12 success ack to the registrant BEFORE the announce fanout
+	// (Pitch ordering: registrationSucceeded → announce). M37 Agent EA.
+	if registrant != nil {
+		_ = m.opts.Outbox.Send(ctx, fed, *registrant, registrationSucceededEvent(label))
 	}
 
 	// Fan out announceSynchronizationPoint. M12 W2: the proto
@@ -228,6 +293,32 @@ func (m *Manager) Achieve(
 	h core.FederateHandle,
 	label string,
 ) error {
+	return m.achieve(ctx, fed, h, label, true)
+}
+
+// AchieveWith is Achieve carrying the §4.14 `successfully` flag. A
+// federate achieving with successfully=false still counts toward sync
+// completion but is reported in the §4.15
+// FederationSynchronized.failed_to_sync set. The gRPC handler
+// duck-types for this richer method (M37 Agent EA); the frozen
+// core.SyncCoordinator Achieve means successfully=true.
+func (m *Manager) AchieveWith(
+	ctx context.Context,
+	fed core.FederationName,
+	h core.FederateHandle,
+	label string,
+	successfully bool,
+) error {
+	return m.achieve(ctx, fed, h, label, successfully)
+}
+
+func (m *Manager) achieve(
+	ctx context.Context,
+	fed core.FederationName,
+	h core.FederateHandle,
+	label string,
+	successfully bool,
+) error {
 	m.mu.Lock()
 	st, ok := m.fed[fed]
 	if !ok {
@@ -249,6 +340,12 @@ func (m *Manager) Achieve(
 		sp.required[h] = struct{}{}
 	}
 	sp.achieved[h] = struct{}{}
+	if !successfully {
+		if sp.failed == nil {
+			sp.failed = map[core.FederateHandle]struct{}{}
+		}
+		sp.failed[h] = struct{}{}
+	}
 
 	allAchieved := len(sp.required) > 0 && len(sp.achieved) >= len(sp.required)
 	if allAchieved {
@@ -263,10 +360,11 @@ func (m *Manager) Achieve(
 			}
 		}
 	}
-	var recipients []core.FederateHandle
+	var recipients, failedToSync []core.FederateHandle
 	if allAchieved {
 		sp.state = StateAchieved
 		recipients = sortedHandles(sp.required)
+		failedToSync = sortedHandles(sp.failed)
 	}
 	m.mu.Unlock()
 
@@ -279,7 +377,7 @@ func (m *Manager) Achieve(
 			_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{kind: evtSynchronized, label: label})
 		}
 		for _, dst := range recipients {
-			evt := synchronizedEvent(label)
+			evt := synchronizedEvent(label, failedToSync)
 			_ = m.opts.Outbox.Send(ctx, fed, dst, evt)
 		}
 	}

@@ -59,6 +59,44 @@ type Manager struct {
 		cls core.ObjectClassHandle,
 		attrs []core.AttributeHandle,
 	)
+
+	// advisoryOutbox — M37 Agent EA optional outbox for the §5.10-§5.13
+	// registration / interaction advisories. When nil (default), the
+	// manager stays pure and emits nothing (pre-M37 behavior).
+	advisoryOutbox core.Outbox
+}
+
+// SetAdvisoryOutbox wires the optional outbox for the §5.10-§5.13
+// advisories (M37 Agent EA). Call during composition, before the server
+// accepts RPCs; not synchronized against in-flight calls.
+func (m *Manager) SetAdvisoryOutbox(outbox core.Outbox) {
+	m.advisoryOutbox = outbox
+}
+
+// classHasSubscribersLocked reports whether ANY attribute of cls has at
+// least one subscriber. Caller MUST hold m.mu.
+func classHasSubscribersLocked(st *federationState, cls core.ObjectClassHandle) bool {
+	for k, set := range st.objSubs {
+		if k.cls == cls && len(set) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// classPublishersLocked returns the sorted union of publishers across
+// every attribute of cls. Caller MUST hold m.mu.
+func classPublishersLocked(st *federationState, cls core.ObjectClassHandle) []core.FederateHandle {
+	union := map[core.FederateHandle]struct{}{}
+	for k, set := range st.objPubs {
+		if k.cls != cls {
+			continue
+		}
+		for h := range set {
+			union[h] = struct{}{}
+		}
+	}
+	return sortedHandles(union)
 }
 
 // Compile-time assertion: *Manager satisfies core.DeclarationManagement.
@@ -186,6 +224,10 @@ func (m *Manager) SubscribeObjectClassAttributes(
 ) error {
 	m.mu.Lock()
 	st := m.stateLocked(fed)
+	// §5.10 (M37 Agent EA) — detect the "class gains its FIRST
+	// subscriber" flip before mutating; snapshot the publisher set
+	// under the lock, emit after release.
+	hadSubscribers := classHasSubscribersLocked(st, cls)
 	for _, a := range attrs {
 		k := objAttrKey{cls: cls, attr: a}
 		set, ok := st.objSubs[k]
@@ -195,7 +237,14 @@ func (m *Manager) SubscribeObjectClassAttributes(
 		}
 		set[sub] = struct{}{}
 	}
+	var startRecipients []core.FederateHandle
+	if m.advisoryOutbox != nil && !hadSubscribers && classHasSubscribersLocked(st, cls) {
+		startRecipients = classPublishersLocked(st, cls)
+	}
 	m.mu.Unlock()
+	for _, h := range startRecipients {
+		_ = m.advisoryOutbox.Send(ctx, fed, h, startRegistrationEvent(cls))
+	}
 	// M36 — fire the post-subscribe hook OUTSIDE the mutex (the MOM
 	// retroactive fan-out sends Outbox events and takes its own locks).
 	if m.onSubscribeObjectClass != nil {
@@ -206,18 +255,19 @@ func (m *Manager) SubscribeObjectClassAttributes(
 
 // UnsubscribeObjectClassAttributes is the symmetric remover.
 func (m *Manager) UnsubscribeObjectClassAttributes(
-	_ context.Context,
+	ctx context.Context,
 	fed core.FederationName,
 	sub core.FederateHandle,
 	cls core.ObjectClassHandle,
 	attrs []core.AttributeHandle,
 ) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st, ok := m.fed[fed]
 	if !ok {
+		m.mu.Unlock()
 		return nil
 	}
+	hadSubscribers := classHasSubscribersLocked(st, cls)
 	for _, a := range attrs {
 		k := objAttrKey{cls: cls, attr: a}
 		if set, ok := st.objSubs[k]; ok {
@@ -226,6 +276,15 @@ func (m *Manager) UnsubscribeObjectClassAttributes(
 				delete(st.objSubs, k)
 			}
 		}
+	}
+	// §5.11 (M37 Agent EA) — the class lost its LAST subscriber.
+	var stopRecipients []core.FederateHandle
+	if m.advisoryOutbox != nil && hadSubscribers && !classHasSubscribersLocked(st, cls) {
+		stopRecipients = classPublishersLocked(st, cls)
+	}
+	m.mu.Unlock()
+	for _, h := range stopRecipients {
+		_ = m.advisoryOutbox.Send(ctx, fed, h, stopRegistrationEvent(cls))
 	}
 	return nil
 }
@@ -274,41 +333,63 @@ func (m *Manager) UnpublishInteractionClass(
 
 // SubscribeInteractionClass records federate `sub`'s subscription.
 func (m *Manager) SubscribeInteractionClass(
-	_ context.Context,
+	ctx context.Context,
 	fed core.FederationName,
 	sub core.FederateHandle,
 	cls core.InteractionClassHandle,
 ) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st := m.stateLocked(fed)
 	set, ok := st.intSubs[cls]
 	if !ok {
 		set = map[core.FederateHandle]struct{}{}
 		st.intSubs[cls] = set
 	}
+	wasEmpty := len(set) == 0
 	set[sub] = struct{}{}
+	// §5.12 (M37 Agent EA) — the interaction class gained its FIRST
+	// subscriber: tell each publisher to turn interactions on.
+	var onRecipients []core.FederateHandle
+	if m.advisoryOutbox != nil && wasEmpty {
+		onRecipients = sortedHandles(st.intPubs[cls])
+	}
+	m.mu.Unlock()
+	for _, h := range onRecipients {
+		_ = m.advisoryOutbox.Send(ctx, fed, h, turnInteractionsOnEvent(cls))
+	}
 	return nil
 }
 
 // UnsubscribeInteractionClass is the symmetric remover.
 func (m *Manager) UnsubscribeInteractionClass(
-	_ context.Context,
+	ctx context.Context,
 	fed core.FederationName,
 	sub core.FederateHandle,
 	cls core.InteractionClassHandle,
 ) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st, ok := m.fed[fed]
 	if !ok {
+		m.mu.Unlock()
 		return nil
 	}
+	var offRecipients []core.FederateHandle
 	if set, ok := st.intSubs[cls]; ok {
+		hadSubscriber := len(set) > 0
 		delete(set, sub)
 		if len(set) == 0 {
 			delete(st.intSubs, cls)
+			// §5.13 (M37 Agent EA) — the interaction class lost its
+			// LAST subscriber: tell each publisher to turn
+			// interactions off.
+			if m.advisoryOutbox != nil && hadSubscriber {
+				offRecipients = sortedHandles(st.intPubs[cls])
+			}
 		}
+	}
+	m.mu.Unlock()
+	for _, h := range offRecipients {
+		_ = m.advisoryOutbox.Send(ctx, fed, h, turnInteractionsOffEvent(cls))
 	}
 	return nil
 }

@@ -169,14 +169,15 @@ func (o *federationNotSavedOutbound) Label() string               { return o.lab
 
 // initiateFederateRestoreOutbound — initiateFederateRestore (§4.13).
 // M17.25 wires the wire-format payload that the M17 Cut-3 placeholder
-// left empty.
+// left empty. M37 Agent EA adds the federate NAME (§4.26 carries the
+// name alongside the pre-save handle; empty when unknown).
 type initiateFederateRestoreOutbound struct {
 	pb    *rtiv1.FederateEvent
 	label string
 }
 
 func initiateFederateRestoreEvent(
-	label string, federateHandle core.FederateHandle,
+	label string, federateHandle core.FederateHandle, federateName string,
 ) *initiateFederateRestoreOutbound {
 	return &initiateFederateRestoreOutbound{
 		pb: &rtiv1.FederateEvent{
@@ -184,6 +185,7 @@ func initiateFederateRestoreEvent(
 				RestoreInitiate: &rtiv1.InitiateFederateRestore{
 					Label:          label,
 					FederateHandle: uint64(federateHandle),
+					FederateName:   federateName,
 				},
 			},
 		},
@@ -252,3 +254,85 @@ func (o *federationNotRestoredOutbound) Seq() uint64 {
 }
 func (o *federationNotRestoredOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
 func (o *federationNotRestoredOutbound) Label() string               { return o.label }
+
+// requestFederationRestoreSucceededOutbound — requestFederationRestoreSucceeded
+// (§4.25 success half). Targets the REQUESTING federate only. M37 Agent EA.
+type requestFederationRestoreSucceededOutbound struct {
+	pb    *rtiv1.FederateEvent
+	label string
+}
+
+func requestFederationRestoreSucceededEvent(label string) *requestFederationRestoreSucceededOutbound {
+	return &requestFederationRestoreSucceededOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_RestoreRequestSucceeded{
+				RestoreRequestSucceeded: &rtiv1.RequestFederationRestoreSucceeded{Label: label},
+			},
+		},
+		label: label,
+	}
+}
+
+func (o *requestFederationRestoreSucceededOutbound) Seq() uint64 {
+	if o == nil || o.pb == nil {
+		return 0
+	}
+	return o.pb.Seq
+}
+func (o *requestFederationRestoreSucceededOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *requestFederationRestoreSucceededOutbound) Label() string               { return o.label }
+
+// requestFederationRestoreFailedOutbound — requestFederationRestoreFailed
+// (§4.25 failure half). Targets the REQUESTING federate only. M37 Agent EA.
+type requestFederationRestoreFailedOutbound struct {
+	pb    *rtiv1.FederateEvent
+	label string
+}
+
+func requestFederationRestoreFailedEvent(label, reason string) *requestFederationRestoreFailedOutbound {
+	return &requestFederationRestoreFailedOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_RestoreRequestFailed{
+				RestoreRequestFailed: &rtiv1.RequestFederationRestoreFailed{
+					Label:  label,
+					Reason: reason,
+				},
+			},
+		},
+		label: label,
+	}
+}
+
+func (o *requestFederationRestoreFailedOutbound) Seq() uint64 {
+	if o == nil || o.pb == nil {
+		return 0
+	}
+	return o.pb.Seq
+}
+func (o *requestFederationRestoreFailedOutbound) Inner() *rtiv1.FederateEvent { return o.pb }
+func (o *requestFederationRestoreFailedOutbound) Label() string               { return o.label }
+
+// federationRestoreBegunOutbound — federationRestoreBegun (§4.26).
+// Broadcast to every joined federate when the restore leaves idle,
+// BEFORE the per-federate initiateFederateRestore events. M37 Agent EA.
+type federationRestoreBegunOutbound struct {
+	pb *rtiv1.FederateEvent
+}
+
+func federationRestoreBegunEvent() *federationRestoreBegunOutbound {
+	return &federationRestoreBegunOutbound{
+		pb: &rtiv1.FederateEvent{
+			Event: &rtiv1.FederateEvent_RestoreBegun{
+				RestoreBegun: &rtiv1.FederationRestoreBegun{},
+			},
+		},
+	}
+}
+
+func (o *federationRestoreBegunOutbound) Seq() uint64 {
+	if o == nil || o.pb == nil {
+		return 0
+	}
+	return o.pb.Seq
+}
+func (o *federationRestoreBegunOutbound) Inner() *rtiv1.FederateEvent { return o.pb }

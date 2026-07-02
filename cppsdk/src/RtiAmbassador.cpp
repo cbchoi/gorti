@@ -200,6 +200,12 @@ class RTIambassadorImpl {
   FederateHandle federate_handle{};
   bool joined = false;
 
+  // §8.21/§8.22 (M37 Agent EA) — per-federate monotonic
+  // MessageRetractionHandle allocator for the *Retractable TSO send
+  // overloads (gorti convention: the federate allocates; the server
+  // stores the (federate, handle) pair with the buffered event).
+  std::atomic<std::uint64_t> next_retraction_handle{1};
+
   // M17.3 — handle / name caches. The cache key composes federation
   // name with the lookup target so resignFederationExecution +
   // rejoin to a different federation can't reuse stale handles.
@@ -1162,6 +1168,29 @@ void M17RTIambassador::synchronizationPointAchieved(const std::string& label) {
   if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
 }
 
+// §4.14 (M37 Agent EA) — achieve with the explicit `successfully` flag.
+// The proto field is optional; absent (the 1-arg overload above) means
+// true server-side, so old wire behavior is untouched.
+void M17RTIambassador::synchronizationPointAchieved(const std::string& label,
+                                                    bool successfully) {
+  impl_->requireConnected();
+  if (!impl_->joined) {
+    throw FederateNotExecutionMember(
+        "synchronizationPointAchieved: federate not joined");
+  }
+  rti::v1::AchieveSyncPointRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_label(label);
+  req.set_successfully(successfully);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->sync_stub->SynchronizationPointAchieved(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "synchronizationPointAchieved");
+}
+
 // --- M17.15 §7 Ownership Management ---------------------------------------
 //
 // Eight RPCs over the OwnershipService. All require join; all
@@ -1213,7 +1242,8 @@ void M17RTIambassador::unconditionalAttributeOwnershipDivestiture(
 void M17RTIambassador::negotiatedAttributeOwnershipDivestiture(
     ObjectInstanceHandle object,
     const AttributeHandleSet& attributes,
-    const VariableLengthData& tag) {
+    const VariableLengthData& tag,
+    bool two_phase) {
   impl_->requireConnected();
   requireJoinedForOwnership(impl_->joined,
                             "negotiatedAttributeOwnershipDivestiture");
@@ -1221,11 +1251,28 @@ void M17RTIambassador::negotiatedAttributeOwnershipDivestiture(
   fillObjectAttrsReq(req, impl_->joined_federation,
                      impl_->federate_handle.raw(), object.raw(), attributes);
   req.set_tag(tag.data(), tag.size());
+  // M37 Agent EA — additive §7.6 flag; old servers ignore it (one-phase).
+  if (two_phase) req.set_two_phase(true);
   grpc::ClientContext ctx;
   rti::v1::Empty resp;
   const auto s = impl_->ownership_stub->NegotiatedAttributeOwnershipDivestiture(
       &ctx, req, &resp);
   if (!s.ok()) throwFromStatus(s, "negotiatedAttributeOwnershipDivestiture");
+}
+
+// §7.6 (M37 Agent EA) — complete a two-phase negotiated divestiture.
+void M17RTIambassador::confirmDivestiture(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined, "confirmDivestiture");
+  rti::v1::ConfirmDivestitureRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->ownership_stub->ConfirmDivestiture(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "confirmDivestiture");
 }
 
 void M17RTIambassador::attributeOwnershipAcquisition(
@@ -1241,6 +1288,25 @@ void M17RTIambassador::attributeOwnershipAcquisition(
   const auto s =
       impl_->ownership_stub->AttributeOwnershipAcquisition(&ctx, req, &resp);
   if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisition");
+}
+
+// §7.9 (M37 Agent EA) — same RPC with the additive if_available flag;
+// old servers ignore the unknown field and fall back to §7.8 queueing.
+void M17RTIambassador::attributeOwnershipAcquisitionIfAvailable(
+    ObjectInstanceHandle object,
+    const AttributeHandleSet& attributes) {
+  impl_->requireConnected();
+  requireJoinedForOwnership(impl_->joined,
+                            "attributeOwnershipAcquisitionIfAvailable");
+  rti::v1::AcquireRequest req;
+  fillObjectAttrsReq(req, impl_->joined_federation,
+                     impl_->federate_handle.raw(), object.raw(), attributes);
+  req.set_if_available(true);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s =
+      impl_->ownership_stub->AttributeOwnershipAcquisition(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "attributeOwnershipAcquisitionIfAvailable");
 }
 
 void M17RTIambassador::cancelNegotiatedAttributeOwnershipDivestiture(
@@ -2060,6 +2126,57 @@ void M17RTIambassador::sendInteraction(
   if (!s.ok()) throwFromStatus(s, "sendInteraction");
 }
 
+// §8.21/§8.22 (M37 Agent EA) — TSO sends carrying a freshly-allocated
+// MessageRetractionHandle. The returned handle feeds a later retract().
+
+MessageRetractionHandle M17RTIambassador::updateAttributeValuesRetractable(
+    ObjectInstanceHandle obj, const AttributeHandleValueMap& values,
+    double logical_time) {
+  requireJoined(*impl_, "updateAttributeValues");
+  const MessageRetractionHandle handle =
+      impl_->next_retraction_handle.fetch_add(1);
+  rti::v1::UpdateAttributeValuesRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_object_handle(obj.raw());
+  auto* m = req.mutable_attributes();
+  for (const auto& kv : values) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  req.set_logical_time(logical_time);
+  req.set_message_retraction_handle(handle);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->UpdateAttributeValues(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "updateAttributeValues");
+  return handle;
+}
+
+MessageRetractionHandle M17RTIambassador::sendInteractionRetractable(
+    InteractionClassHandle cls, const ParameterHandleValueMap& parameters,
+    double logical_time) {
+  requireJoined(*impl_, "sendInteraction");
+  const MessageRetractionHandle handle =
+      impl_->next_retraction_handle.fetch_add(1);
+  rti::v1::SendInteractionRequest req;
+  req.set_wire_version(rti::v1::WIRE_VERSION_V1);
+  req.set_federation_name(impl_->joined_federation);
+  req.set_federate_handle(impl_->federate_handle.raw());
+  req.set_interaction_class_handle(cls.raw());
+  auto* m = req.mutable_parameters();
+  for (const auto& kv : parameters) {
+    (*m)[kv.first.raw()] = std::string(kv.second.begin(), kv.second.end());
+  }
+  req.set_logical_time(logical_time);
+  req.set_message_retraction_handle(handle);
+  grpc::ClientContext ctx;
+  rti::v1::Empty resp;
+  const auto s = impl_->object_stub->SendInteraction(&ctx, req, &resp);
+  if (!s.ok()) throwFromStatus(s, "sendInteraction");
+  return handle;
+}
+
 void M17RTIambassador::deleteObjectInstance(
     ObjectInstanceHandle obj, const VariableLengthData& tag,
     std::optional<double> logical_time) {
@@ -2351,10 +2468,30 @@ bool RTIambassadorImpl::dispatchOneEvent() {
       fed_ambassador->announceSynchronizationPoint(a.label(), tag);
       return true;
     }
-    case rti::v1::FederateEvent::kSyncSynchronized:
-      fed_ambassador->federationSynchronized(
-          evt.sync_synchronized().label());
+    case rti::v1::FederateEvent::kSyncSynchronized: {
+      // §4.15 — M37 Agent EA: dispatch the failed-set-carrying slot;
+      // its default body forwards to the legacy 1-arg slot.
+      const auto& sy = evt.sync_synchronized();
+      std::vector<FederateHandle> failed;
+      failed.reserve(sy.failed_to_sync_size());
+      for (auto h : sy.failed_to_sync()) failed.emplace_back(h);
+      fed_ambassador->federationSynchronized(sy.label(), failed);
       return true;
+    }
+    case rti::v1::FederateEvent::kSyncRegistrationSucceeded:
+      // §4.12 — M37 Agent EA.
+      fed_ambassador->synchronizationPointRegistrationSucceeded(
+          evt.sync_registration_succeeded().label());
+      return true;
+    case rti::v1::FederateEvent::kSyncRegistrationFailed: {
+      // §4.12 — M37 Agent EA. Proto enum values mirror the M17 enum.
+      const auto& f = evt.sync_registration_failed();
+      fed_ambassador->synchronizationPointRegistrationFailed(
+          f.label(),
+          static_cast<FederateAmbassador::SyncPointFailureReason>(
+              static_cast<int>(f.reason())));
+      return true;
+    }
     case rti::v1::FederateEvent::kOwnershipAssumption: {
       const auto& a = evt.ownership_assumption();
       AttributeHandleSet attrs;
@@ -2375,6 +2512,25 @@ bool RTIambassadorImpl::dispatchOneEvent() {
           ObjectInstanceHandle(a.object_handle()),
           attrs,
           FederateHandle(a.owning_federate()));
+      return true;
+    }
+    case rti::v1::FederateEvent::kOwnershipUnavailable: {
+      // §7.10 — M37 Agent EA.
+      const auto& u = evt.ownership_unavailable();
+      AttributeHandleSet attrs;
+      for (auto h : u.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->attributeOwnershipUnavailable(
+          ObjectInstanceHandle(u.object_handle()), attrs);
+      return true;
+    }
+    case rti::v1::FederateEvent::kOwnershipReleaseRequested: {
+      // §7.11 — M37 Agent EA.
+      const auto& r = evt.ownership_release_requested();
+      AttributeHandleSet attrs;
+      for (auto h : r.attribute_handles()) attrs.emplace(h);
+      VariableLengthData tag(r.tag().begin(), r.tag().end());
+      fed_ambassador->requestAttributeOwnershipRelease(
+          ObjectInstanceHandle(r.object_handle()), attrs, tag);
       return true;
     }
     case rti::v1::FederateEvent::kOwnershipDivestConfirmed: {
@@ -2401,10 +2557,27 @@ bool RTIambassadorImpl::dispatchOneEvent() {
       return true;
     case rti::v1::FederateEvent::kRestoreInitiate: {
       const auto& r = evt.restore_initiate();
+      // M37 Agent EA: dispatch the name-carrying §4.26 slot; its default
+      // body forwards to the legacy 2-arg slot for pre-M37 subclasses.
       fed_ambassador->initiateFederateRestore(
-          r.label(), FederateHandle(r.federate_handle()));
+          r.label(), r.federate_name(), FederateHandle(r.federate_handle()));
       return true;
     }
+    case rti::v1::FederateEvent::kRestoreRequestSucceeded:
+      // §4.25 — M37 Agent EA.
+      fed_ambassador->requestFederationRestoreSucceeded(
+          evt.restore_request_succeeded().label());
+      return true;
+    case rti::v1::FederateEvent::kRestoreRequestFailed: {
+      // §4.25 — M37 Agent EA.
+      const auto& f = evt.restore_request_failed();
+      fed_ambassador->requestFederationRestoreFailed(f.label(), f.reason());
+      return true;
+    }
+    case rti::v1::FederateEvent::kRestoreBegun:
+      // §4.26 — M37 Agent EA.
+      fed_ambassador->federationRestoreBegun();
+      return true;
     case rti::v1::FederateEvent::kRestoreCompleted:
       fed_ambassador->federationRestored(evt.restore_completed().label());
       return true;
@@ -2433,6 +2606,52 @@ bool RTIambassadorImpl::dispatchOneEvent() {
                              p.user_supplied_tag().end());
       fed_ambassador->provideAttributeValueUpdate(
           ObjectInstanceHandle(p.object_handle()), attrs, tag);
+      return true;
+    }
+    case rti::v1::FederateEvent::kStartRegistration:
+      // §5.10 — M37 Agent EA.
+      fed_ambassador->startRegistrationForObjectClass(
+          ObjectClassHandle(evt.start_registration().object_class_handle()));
+      return true;
+    case rti::v1::FederateEvent::kStopRegistration:
+      // §5.11 — M37 Agent EA.
+      fed_ambassador->stopRegistrationForObjectClass(
+          ObjectClassHandle(evt.stop_registration().object_class_handle()));
+      return true;
+    case rti::v1::FederateEvent::kTurnInteractionsOn:
+      // §5.12 — M37 Agent EA.
+      fed_ambassador->turnInteractionsOn(InteractionClassHandle(
+          evt.turn_interactions_on().interaction_class_handle()));
+      return true;
+    case rti::v1::FederateEvent::kTurnInteractionsOff:
+      // §5.13 — M37 Agent EA.
+      fed_ambassador->turnInteractionsOff(InteractionClassHandle(
+          evt.turn_interactions_off().interaction_class_handle()));
+      return true;
+    case rti::v1::FederateEvent::kRetractionRequested: {
+      // §8.22 — M37 Agent EA.
+      const auto& r = evt.retraction_requested();
+      fed_ambassador->requestRetraction(
+          FederateHandle(r.sender_federate()),
+          MessageRetractionHandle(r.message_retraction_handle()));
+      return true;
+    }
+    case rti::v1::FederateEvent::kAttributesInScope: {
+      // §6.17 — M37 Agent EA.
+      const auto& a = evt.attributes_in_scope();
+      AttributeHandleSet attrs;
+      for (auto h : a.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->attributesInScope(
+          ObjectInstanceHandle(a.object_handle()), attrs);
+      return true;
+    }
+    case rti::v1::FederateEvent::kAttributesOutOfScope: {
+      // §6.18 — M37 Agent EA.
+      const auto& a = evt.attributes_out_of_scope();
+      AttributeHandleSet attrs;
+      for (auto h : a.attribute_handles()) attrs.emplace(h);
+      fed_ambassador->attributesOutOfScope(
+          ObjectInstanceHandle(a.object_handle()), attrs);
       return true;
     }
     default:

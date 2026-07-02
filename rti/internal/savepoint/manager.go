@@ -713,25 +713,66 @@ func (m *Manager) RequestFederationRestore(
 	fed core.FederationName,
 	label string,
 ) error {
+	return m.requestFederationRestore(ctx, fed, label, nil)
+}
+
+// RequestFederationRestoreBy is RequestFederationRestore carrying the
+// REQUESTING federate's handle so the §4.25 requestFederationRestore
+// Succeeded / Failed ack events can target it. The gRPC handler
+// duck-types for this richer method (M37 Agent EA); the plain
+// core.SavepointCoordinator method keeps its frozen shape and emits no
+// ack.
+func (m *Manager) RequestFederationRestoreBy(
+	ctx context.Context,
+	fed core.FederationName,
+	requester core.FederateHandle,
+	label string,
+) error {
+	return m.requestFederationRestore(ctx, fed, label, &requester)
+}
+
+// requestRestoreFailed emits the §4.25 failure ack to the requester (when
+// known) and passes the causing error through.
+func (m *Manager) requestRestoreFailed(
+	ctx context.Context,
+	fed core.FederationName,
+	requester *core.FederateHandle,
+	label string,
+	err error,
+) error {
+	if requester != nil {
+		_ = m.opts.Outbox.Send(ctx, fed, *requester,
+			requestFederationRestoreFailedEvent(label, err.Error()))
+	}
+	return err
+}
+
+func (m *Manager) requestFederationRestore(
+	ctx context.Context,
+	fed core.FederationName,
+	label string,
+	requester *core.FederateHandle,
+) error {
 	if !m.opts.BundleStore.Exists(fed, label) {
-		return ErrSaveBundleNotFound
+		return m.requestRestoreFailed(ctx, fed, requester, label, ErrSaveBundleNotFound)
 	}
 
 	m.mu.Lock()
 	if _, busy := m.restore[fed]; busy {
 		m.mu.Unlock()
-		return core.ErrRestoreAlreadyInProgress
+		return m.requestRestoreFailed(ctx, fed, requester, label, core.ErrRestoreAlreadyInProgress)
 	}
 	m.mu.Unlock()
 
 	rdr, err := m.opts.BundleStore.Reader(fed, label)
 	if err != nil {
-		return err
+		return m.requestRestoreFailed(ctx, fed, requester, label, err)
 	}
 	manifest, _, err := ReadBundle(rdr)
 	_ = rdr.Close()
 	if err != nil {
-		return fmt.Errorf("savepoint: read bundle (%s/%s): %w", fed, label, err)
+		return m.requestRestoreFailed(ctx, fed, requester, label,
+			fmt.Errorf("savepoint: read bundle (%s/%s): %w", fed, label, err))
 	}
 
 	// M13 thread C: apply the per-manager state snapshots from the
@@ -744,7 +785,8 @@ func (m *Manager) RequestFederationRestore(
 	// nil — applyManagerSnapshots is then a no-op and the restore
 	// falls back to the cut-1 event-log-only path.
 	if err := m.applyManagerSnapshots(fed, manifest.ManagerSnapshots); err != nil {
-		return fmt.Errorf("savepoint: apply manager snapshots (%s/%s): %w", fed, label, err)
+		return m.requestRestoreFailed(ctx, fed, requester, label,
+			fmt.Errorf("savepoint: apply manager snapshots (%s/%s): %w", fed, label, err))
 	}
 
 	// M36 DB-3: route by federate NAME (IEEE 1516.1 §4.27). A saved
@@ -776,7 +818,7 @@ func (m *Manager) RequestFederationRestore(
 	if _, busy := m.restore[fed]; busy {
 		// Lost the race; someone else took it between checks.
 		m.mu.Unlock()
-		return core.ErrRestoreAlreadyInProgress
+		return m.requestRestoreFailed(ctx, fed, requester, label, core.ErrRestoreAlreadyInProgress)
 	}
 	ar := &activeRestore{
 		label:    label,
@@ -793,15 +835,59 @@ func (m *Manager) RequestFederationRestore(
 		_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{kind: evtRestoreRequested, label: label})
 	}
 
+	// §4 state-machine ordering (M37 Agent EA):
+	//   requestFederationRestoreSucceeded (requester only)
+	//   → federationRestoreBegun (every joined federate)
+	//   → initiateFederateRestore (each restore participant).
+	if requester != nil {
+		_ = m.opts.Outbox.Send(ctx, fed, *requester,
+			requestFederationRestoreSucceededEvent(label))
+	}
+	for _, dst := range restoreBegunRecipients(m.opts.Roster, fed, recipients) {
+		_ = m.opts.Outbox.Send(ctx, fed, dst, federationRestoreBegunEvent())
+	}
+
 	for i, dst := range recipients {
-		// Payload carries the handle this federate had AT SAVE TIME
-		// (§4.13 semantics — see stream.proto InitiateFederateRestore);
-		// the envelope destination is the current handle. The two only
-		// differ for participants remapped by name above.
-		evt := initiateFederateRestoreEvent(label, manifest.Federates[i])
+		// Payload carries the handle (and name, when the bundle has
+		// one) this federate had AT SAVE TIME (§4.13/§4.26 semantics —
+		// see stream.proto InitiateFederateRestore); the envelope
+		// destination is the current handle. The two only differ for
+		// participants remapped by name above.
+		name := ""
+		if len(manifest.FederateNames) == len(manifest.Federates) {
+			name = manifest.FederateNames[i]
+		}
+		evt := initiateFederateRestoreEvent(label, manifest.Federates[i], name)
 		_ = m.opts.Outbox.Send(ctx, fed, dst, evt)
 	}
 	return nil
+}
+
+// restoreBegunRecipients resolves "every joined federate" for the §4.26
+// federationRestoreBegun broadcast: the live roster when wired, else the
+// restore participant set (sorted for determinism).
+func restoreBegunRecipients(
+	roster func(core.FederationName) []core.FederationMember,
+	fed core.FederationName,
+	participants []core.FederateHandle,
+) []core.FederateHandle {
+	var out []core.FederateHandle
+	if roster != nil {
+		for _, mem := range roster(fed) {
+			out = append(out, mem.Handle)
+		}
+	} else {
+		seen := map[core.FederateHandle]struct{}{}
+		for _, h := range participants {
+			if _, dup := seen[h]; dup {
+				continue
+			}
+			seen[h] = struct{}{}
+			out = append(out, h)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // FederateRestoreComplete records a federate's successful restore.

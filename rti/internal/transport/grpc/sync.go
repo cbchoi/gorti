@@ -48,6 +48,22 @@ func federateHandlesFromUint64s(in []uint64) []core.FederateHandle {
 	return out
 }
 
+// syncRegistrantAware is the optional richer register entrypoint the
+// production *sync.Manager exposes (M37 Agent EA): it carries the
+// REGISTERING federate handle so the §4.12
+// synchronizationPointRegistrationSucceeded / Failed ack events can
+// target it. Duck-typed so core.SyncCoordinator keeps its frozen shape.
+type syncRegistrantAware interface {
+	RegisterBy(
+		ctx context.Context,
+		fed core.FederationName,
+		registrant core.FederateHandle,
+		label string,
+		tag []byte,
+		requiredFederates []core.FederateHandle,
+	) error
+}
+
 // RegisterFederationSynchronizationPoint implements §4.6.
 func (s *syncService) RegisterFederationSynchronizationPoint(
 	ctx context.Context,
@@ -59,16 +75,43 @@ func (s *syncService) RegisterFederationSynchronizationPoint(
 	if err := validateWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
-	if err := s.mgr.Register(
-		ctx,
-		core.FederationName(req.GetFederationName()),
-		req.GetLabel(),
-		req.GetTag(),
-		federateHandlesFromUint64s(req.GetRequiredFederates()),
-	); err != nil {
+	var err error
+	if ra, ok := s.mgr.(syncRegistrantAware); ok {
+		err = ra.RegisterBy(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetLabel(),
+			req.GetTag(),
+			federateHandlesFromUint64s(req.GetRequiredFederates()),
+		)
+	} else {
+		err = s.mgr.Register(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			req.GetLabel(),
+			req.GetTag(),
+			federateHandlesFromUint64s(req.GetRequiredFederates()),
+		)
+	}
+	if err != nil {
 		return nil, errToStatus(err)
 	}
 	return &rtiv1.Empty{}, nil
+}
+
+// syncSuccessAware is the optional richer achieve entrypoint the
+// production *sync.Manager exposes (M37 Agent EA): it carries the §4.14
+// `successfully` flag. Duck-typed so core.SyncCoordinator keeps its
+// frozen shape.
+type syncSuccessAware interface {
+	AchieveWith(
+		ctx context.Context,
+		fed core.FederationName,
+		h core.FederateHandle,
+		label string,
+		successfully bool,
+	) error
 }
 
 // SynchronizationPointAchieved implements §4.7.
@@ -82,12 +125,29 @@ func (s *syncService) SynchronizationPointAchieved(
 	if err := validateWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
-	if err := s.mgr.Achieve(
-		ctx,
-		core.FederationName(req.GetFederationName()),
-		core.FederateHandle(req.GetFederateHandle()),
-		req.GetLabel(),
-	); err != nil {
+	// §4.14: absent `successfully` (old clients) means TRUE.
+	successfully := true
+	if req.Successfully != nil {
+		successfully = req.GetSuccessfully()
+	}
+	var err error
+	if sa, ok := s.mgr.(syncSuccessAware); ok {
+		err = sa.AchieveWith(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetLabel(),
+			successfully,
+		)
+	} else {
+		err = s.mgr.Achieve(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetLabel(),
+		)
+	}
+	if err != nil {
 		return nil, errToStatus(err)
 	}
 	return &rtiv1.Empty{}, nil

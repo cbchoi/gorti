@@ -141,6 +141,21 @@ func (s *savepointService) QuerySaveState(
 	return &rtiv1.QuerySaveStateResponse{State: saveStateToProto(st)}, nil
 }
 
+// restoreRequesterAware is the optional richer restore entrypoint the
+// production *savepoint.Manager exposes (M37 Agent EA): it carries the
+// REQUESTING federate handle so the §4.25 requestFederationRestore
+// Succeeded / Failed ack events can target it. Duck-typed here (like
+// SubscribableOutbox in stream.go) so core.SavepointCoordinator keeps
+// its frozen shape.
+type restoreRequesterAware interface {
+	RequestFederationRestoreBy(
+		ctx context.Context,
+		fed core.FederationName,
+		requester core.FederateHandle,
+		label string,
+	) error
+}
+
 // RequestFederationRestore implements §4.12.
 func (s *savepointService) RequestFederationRestore(
 	ctx context.Context,
@@ -152,11 +167,22 @@ func (s *savepointService) RequestFederationRestore(
 	if err := validateWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
 	}
-	if err := s.mgr.RequestFederationRestore(
-		ctx,
-		core.FederationName(req.GetFederationName()),
-		req.GetLabel(),
-	); err != nil {
+	var err error
+	if ra, ok := s.mgr.(restoreRequesterAware); ok {
+		err = ra.RequestFederationRestoreBy(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetLabel(),
+		)
+	} else {
+		err = s.mgr.RequestFederationRestore(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			req.GetLabel(),
+		)
+	}
+	if err != nil {
 		return nil, savepointErrToStatus(err)
 	}
 	return &rtiv1.Empty{}, nil

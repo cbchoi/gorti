@@ -98,6 +98,9 @@ func (r *Registry) Delete(
 			delete(st.discovered, k)
 		}
 	}
+	// M37 Agent EA — drop the §6.17/§6.18 in-scope cache with the
+	// instance.
+	delete(st.scope, obj)
 	st.mu.Unlock()
 
 	// (d) Build the envelope. ts is *core.LogicalTime; map to

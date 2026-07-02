@@ -96,11 +96,40 @@ class FederateAmbassador {
       const std::vector<std::string>& /*requested_names*/,
       const std::vector<std::string>& /*colliding_names*/) {}
 
+  // §8.22 — a TSO message this federate WOULD have received (it was
+  // buffered for delivery here) was retracted by its sender. The
+  // (sender, retraction_handle) pair identifies the message. M37
+  // Agent EA.
+  virtual void requestRetraction(
+      FederateHandle /*sender*/,
+      MessageRetractionHandle /*retraction_handle*/) {}
+
   // §8.8-12 — the manager has granted a time advance request. ``time``
   // is the granted logical time; per IEEE 1516.1 §8.8 this may be
   // earlier than the requested time (for NER / TARA).
   // M17.11 (Cut-2). Fires once per outstanding advance request.
   virtual void timeAdvanceGrant(double /*time*/) {}
+
+  // §4.12 — SynchronizationPointFailureReason for
+  // synchronizationPointRegistrationFailed. Values mirror
+  // rti.v1.SyncPointFailureReason. M37 Agent EA.
+  enum class SyncPointFailureReason {
+    kUnspecified = 0,
+    kSynchronizationPointLabelNotUnique = 1,
+    kSynchronizationSetMemberNotJoined = 2,
+  };
+
+  // §4.12 — the sync-point registration THIS federate issued was
+  // accepted; expect the §4.13 announce next. M37 Agent EA.
+  virtual void synchronizationPointRegistrationSucceeded(
+      const std::string& /*label*/) {}
+
+  // §4.12 — the sync-point registration THIS federate issued was
+  // rejected (label not unique / required-set member not joined).
+  // M37 Agent EA.
+  virtual void synchronizationPointRegistrationFailed(
+      const std::string& /*label*/,
+      SyncPointFailureReason /*reason*/) {}
 
   // §4.7 — a synchronization point was registered by some federate.
   // ``tag`` is opaque user data echoed verbatim from the register
@@ -114,6 +143,49 @@ class FederateAmbassador {
   // §4.7 — every required federate has achieved the sync point; the
   // federation is now synchronized at ``label``. M17.14 (Cut-3).
   virtual void federationSynchronized(const std::string& /*label*/) {}
+
+  // §4.15 — federationSynchronized carrying the set of federates that
+  // achieved with successfully=false (empty when everyone succeeded).
+  // The default body forwards to the legacy 1-arg slot so pre-M37
+  // subclasses keep firing. M37 Agent EA.
+  virtual void federationSynchronized(
+      const std::string& label,
+      const std::vector<FederateHandle>& /*failed_to_sync*/) {
+    federationSynchronized(label);
+  }
+
+  // §5.10 — the object class gained its first subscriber; this
+  // federate (a publisher of the class) should start registering
+  // instances. M37 Agent EA.
+  virtual void startRegistrationForObjectClass(
+      ObjectClassHandle /*object_class*/) {}
+
+  // §5.11 — the object class lost its last subscriber; registrations
+  // are no longer relevant. M37 Agent EA.
+  virtual void stopRegistrationForObjectClass(
+      ObjectClassHandle /*object_class*/) {}
+
+  // §5.12 — the interaction class gained its first subscriber; this
+  // federate (a publisher) should start sending. M37 Agent EA.
+  virtual void turnInteractionsOn(
+      InteractionClassHandle /*interaction_class*/) {}
+
+  // §5.13 — the interaction class lost its last subscriber. M37 Agent EA.
+  virtual void turnInteractionsOff(
+      InteractionClassHandle /*interaction_class*/) {}
+
+  // §6.17 — DDM region overlap brought the listed attributes of a
+  // subscribed instance into scope; reflects for them will follow.
+  // M37 Agent EA.
+  virtual void attributesInScope(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/) {}
+
+  // §6.18 — the listed attributes dropped out of region-overlap scope;
+  // no further reflects until they re-enter. M37 Agent EA.
+  virtual void attributesOutOfScope(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/) {}
 
   // §7.3 — an owner has called negotiatedAttributeOwnershipDivestiture
   // and the federation is asking this federate (a subscriber of the
@@ -139,6 +211,22 @@ class FederateAmbassador {
   virtual void requestDivestitureConfirmation(
       ObjectInstanceHandle /*object*/,
       const AttributeHandleSet& /*attributes*/) {}
+
+  // §7.10 — the §7.9 acquireIfAvailable this federate issued could not
+  // grant the listed attributes (owned elsewhere, no divest pending);
+  // nothing was queued. M37 Agent EA.
+  virtual void attributeOwnershipUnavailable(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/) {}
+
+  // §7.11 — another federate called attributeOwnershipAcquisition
+  // against attributes THIS federate owns; the acquire is queued until
+  // this federate releases (divestiture / divestitureIfWanted).
+  // ``tag`` echoes the acquirer's user-supplied tag. M37 Agent EA.
+  virtual void requestAttributeOwnershipRelease(
+      ObjectInstanceHandle /*object*/,
+      const AttributeHandleSet& /*attributes*/,
+      const VariableLengthData& /*tag*/) {}
 
   // §4.8 — the manager has begun a federation save. Each federate
   // serializes its state and calls federateSaveComplete or
@@ -166,6 +254,36 @@ class FederateAmbassador {
   virtual void initiateFederateRestore(
       const std::string& /*label*/,
       FederateHandle /*federate_handle*/) {}
+
+  // §4.26 — initiateFederateRestore carrying the federate NAME the
+  // federate had at save time alongside the pre-save handle (empty
+  // when the bundle carries no name data). The default body forwards
+  // to the legacy 2-arg slot so pre-M37 subclasses keep firing.
+  // M37 Agent EA.
+  virtual void initiateFederateRestore(
+      const std::string& label,
+      const std::string& /*federate_name*/,
+      FederateHandle federate_handle) {
+    initiateFederateRestore(label, federate_handle);
+  }
+
+  // §4.25 — the restore request THIS federate issued was accepted;
+  // expect federationRestoreBegun + initiateFederateRestore next.
+  // M37 Agent EA.
+  virtual void requestFederationRestoreSucceeded(
+      const std::string& /*label*/) {}
+
+  // §4.25 — the restore request THIS federate issued was rejected
+  // (unknown label, save/restore already in progress, ...). ``reason``
+  // is the human-readable rejection cause. M37 Agent EA.
+  virtual void requestFederationRestoreFailed(
+      const std::string& /*label*/,
+      const std::string& /*reason*/) {}
+
+  // §4.26 — a federation restore is beginning; fires on every joined
+  // federate before the per-federate initiateFederateRestore events.
+  // M37 Agent EA.
+  virtual void federationRestoreBegun() {}
 
   // §4.14 — every federate completed; the federation restore is
   // finalized. M17.25 (Cut-4).

@@ -127,11 +127,30 @@ func (s *objectService) Retract(ctx context.Context, req *rtiv1.RetractRequest) 
 	if !validWireVersion(req.GetWireVersion()) {
 		return nil, status.Error(codes.FailedPrecondition, "unsupported wire version")
 	}
-	_ = s.obj.RetractMessage(
-		core.FederationName(req.GetFederationName()),
-		core.FederateHandle(req.GetFederateHandle()),
-		req.GetMessageRetractionHandle(),
-	)
+	// M37 Agent EA — prefer the §8.22-aware entrypoint (removal + a
+	// RequestRetraction event to every would-have-received federate);
+	// fall back to the frozen removal-only method.
+	if rn, ok := s.obj.(interface {
+		RetractMessageNotify(
+			ctx context.Context,
+			fed core.FederationName,
+			sender core.FederateHandle,
+			retractionHandle uint64,
+		) int
+	}); ok {
+		_ = rn.RetractMessageNotify(
+			ctx,
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetMessageRetractionHandle(),
+		)
+	} else {
+		_ = s.obj.RetractMessage(
+			core.FederationName(req.GetFederationName()),
+			core.FederateHandle(req.GetFederateHandle()),
+			req.GetMessageRetractionHandle(),
+		)
+	}
 	return &rtiv1.Empty{}, nil
 }
 

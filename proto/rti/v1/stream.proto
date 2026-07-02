@@ -38,10 +38,17 @@ message FederateEvent {
     // Sync (§4.6 / §4.7).
     SynchronizationPointAnnounced sync_announced = 20;
     FederationSynchronized sync_synchronized = 21;
+    // Sync registration ack (§4.12) — M37 Agent EA.
+    SyncRegistrationSucceeded sync_registration_succeeded = 22;
+    SyncRegistrationFailed sync_registration_failed = 23;
     // Ownership (§7.3 / §7.4).
     RequestAttributeOwnershipAssumption ownership_assumption = 30;
     AttributeOwnershipAcquisitionNotification ownership_acquired = 31;
     RequestDivestitureConfirmation ownership_divest_confirmed = 32;
+    // Ownership release request (§7.11) — M37 Agent EA.
+    RequestAttributeOwnershipRelease ownership_release_requested = 33;
+    // Ownership unavailable (§7.10) — M37 Agent EA.
+    AttributeOwnershipUnavailable ownership_unavailable = 34;
     // Save (§4.8 / §4.9).
     InitiateFederateSave save_initiate = 40;
     FederationSaved save_completed = 41;
@@ -50,11 +57,25 @@ message FederateEvent {
     InitiateFederateRestore restore_initiate = 43;
     FederationRestored restore_completed = 44;
     FederationNotRestored restore_failed = 45;
+    // Restore request ack + begun (§4.25 / §4.26) — M37 Agent EA.
+    RequestFederationRestoreSucceeded restore_request_succeeded = 46;
+    RequestFederationRestoreFailed restore_request_failed = 47;
+    FederationRestoreBegun restore_begun = 48;
     // Object instance name reservation (§6.1 / §6.5 — M26 Phase F).
     ObjectInstanceNameReservationSucceeded reservation_succeeded = 50;
     ObjectInstanceNameReservationFailed reservation_failed = 51;
     MultipleObjectInstanceNameReservationSucceeded reservation_multi_succeeded = 52;
     MultipleObjectInstanceNameReservationFailed reservation_multi_failed = 53;
+    // Registration / interaction advisories (§5.10-§5.13) — M37 Agent EA.
+    StartRegistrationForObjectClass start_registration = 60;
+    StopRegistrationForObjectClass stop_registration = 61;
+    TurnInteractionsOn turn_interactions_on = 62;
+    TurnInteractionsOff turn_interactions_off = 63;
+    // DDM scope advisories (§6.17 / §6.18) — M37 Agent EA.
+    AttributesInScope attributes_in_scope = 64;
+    AttributesOutOfScope attributes_out_of_scope = 65;
+    // Retraction (§8.22) — M37 Agent EA.
+    RequestRetraction retraction_requested = 66;
     FederationHalted halted = 99;
   }
 }
@@ -123,6 +144,34 @@ message SynchronizationPointAnnounced {
 // last required achieve lands.
 message FederationSynchronized {
   string label = 1;
+  // IEEE 1516.1-2010 §4.15 federationSynchronized carries the set of
+  // federates that achieved the point with successfully=false. Empty
+  // when everyone succeeded (and for pre-M37 servers). M37 Agent EA
+  // (additive, tag 2).
+  repeated uint64 failed_to_sync = 2;
+}
+
+// SyncRegistrationSucceeded — IEEE 1516.1-2010 §4.12
+// synchronizationPointRegistrationSucceeded. Fires on the REGISTERING
+// federate only, when the label was accepted (unique in the
+// federation). M37 Agent EA.
+message SyncRegistrationSucceeded {
+  string label = 1;
+}
+
+// SyncPointFailureReason — IEEE 1516.1-2010 SynchronizationPointFailureReason.
+enum SyncPointFailureReason {
+  SYNC_POINT_FAILURE_REASON_UNSPECIFIED = 0;
+  SYNC_POINT_FAILURE_REASON_LABEL_NOT_UNIQUE = 1;
+  SYNC_POINT_FAILURE_REASON_SET_MEMBER_NOT_JOINED = 2;
+}
+
+// SyncRegistrationFailed — IEEE 1516.1-2010 §4.12
+// synchronizationPointRegistrationFailed. Fires on the REGISTERING
+// federate only, when the register call was rejected. M37 Agent EA.
+message SyncRegistrationFailed {
+  string label = 1;
+  SyncPointFailureReason reason = 2;
 }
 
 // RequestAttributeOwnershipAssumption — IEEE 1516.1-2010 §7.3.
@@ -154,6 +203,28 @@ message AttributeOwnershipAcquisitionNotification {
 message RequestDivestitureConfirmation {
   uint64 object_handle = 1;
   repeated uint64 attribute_handles = 2;
+}
+
+// AttributeOwnershipUnavailable — IEEE 1516.1-2010 §7.10. Fires on the
+// federate that called attributeOwnershipAcquisitionIfAvailable (§7.9)
+// for the subset of requested attributes that were NOT available
+// (owned by another federate with no completed divest). No pending
+// acquire is queued for these. M37 Agent EA.
+message AttributeOwnershipUnavailable {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// RequestAttributeOwnershipRelease — IEEE 1516.1-2010 §7.11. Fires on
+// the CURRENT OWNER of the listed attributes when another federate
+// calls attributeOwnershipAcquisition against them (the acquire stays
+// queued as a pending entry; the owner may release via divestiture or
+// AttributeOwnershipDivestitureIfWanted). ``tag`` echoes the acquire
+// call's user-supplied tag. M37 Agent EA.
+message RequestAttributeOwnershipRelease {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  bytes tag = 3;
 }
 
 // InitiateFederateSave — IEEE 1516.1-2010 §4.8 initiateFederateSave.
@@ -189,6 +260,35 @@ message InitiateFederateRestore {
   // that compute identity from their own handle use this to map
   // back to the pre-save value; absent / zero indicates no remap.
   uint64 federate_handle = 2;
+  // The federate's name (IEEE 1516.1-2010 §4.26 initiateFederateRestore
+  // carries the federate name alongside the handle). Empty when the
+  // manager has no name on record. M37 Agent EA (additive, tag 3).
+  string federate_name = 3;
+}
+
+// RequestFederationRestoreSucceeded — IEEE 1516.1-2010 §4.25
+// requestFederationRestoreSucceeded. Fires on the REQUESTING federate
+// only, after the restore request is accepted (bundle found, no save or
+// restore already in progress). M37 Agent EA.
+message RequestFederationRestoreSucceeded {
+  string label = 1;
+}
+
+// RequestFederationRestoreFailed — IEEE 1516.1-2010 §4.25
+// requestFederationRestoreFailed. Fires on the REQUESTING federate only
+// when the restore request is rejected (unknown label, save/restore in
+// progress, ...). M37 Agent EA.
+message RequestFederationRestoreFailed {
+  string label = 1;
+  // Human-readable rejection cause (mirrors the RPC error detail).
+  string reason = 2;
+}
+
+// FederationRestoreBegun — IEEE 1516.1-2010 §4.26
+// federationRestoreBegun. Fires on EVERY joined federate when the
+// restore transitions out of idle, before the per-federate
+// InitiateFederateRestore events. M37 Agent EA.
+message FederationRestoreBegun {
 }
 
 // FederationRestored — IEEE 1516.1-2010 §4.14 federationRestored. Fires
@@ -203,6 +303,62 @@ message FederationRestored {
 // not-complete or the bundle couldn't be loaded). M17.25 (Cut-4).
 message FederationNotRestored {
   string label = 1;
+}
+
+// StartRegistrationForObjectClass — IEEE 1516.1-2010 §5.10. Fires on
+// each PUBLISHER of an object class when the class gains its first
+// subscriber (registrations become relevant). M37 Agent EA.
+message StartRegistrationForObjectClass {
+  uint64 object_class_handle = 1;
+}
+
+// StopRegistrationForObjectClass — IEEE 1516.1-2010 §5.11. Fires on
+// each publisher when the class loses its last subscriber. M37 Agent EA.
+message StopRegistrationForObjectClass {
+  uint64 object_class_handle = 1;
+}
+
+// TurnInteractionsOn — IEEE 1516.1-2010 §5.12. Fires on each PUBLISHER
+// of an interaction class when the class gains its first subscriber.
+// M37 Agent EA.
+message TurnInteractionsOn {
+  uint64 interaction_class_handle = 1;
+}
+
+// TurnInteractionsOff — IEEE 1516.1-2010 §5.13. Fires on each publisher
+// when the interaction class loses its last subscriber. M37 Agent EA.
+message TurnInteractionsOff {
+  uint64 interaction_class_handle = 1;
+}
+
+// RequestRetraction — IEEE 1516.1-2010 §8.22. Fires on each federate
+// that WOULD have received the retracted TSO message (its per-federate
+// buffer held a matching entry when the sender's Retract RPC landed).
+// The (sender_federate, message_retraction_handle) pair is the
+// MessageRetractionHandle the receiver may have seen on the original
+// TSO delivery. M37 Agent EA.
+message RequestRetraction {
+  uint64 sender_federate = 1;
+  uint64 message_retraction_handle = 2;
+}
+
+// AttributesInScope — IEEE 1516.1-2010 §6.17. Fires on a SUBSCRIBER
+// when DDM region-overlap membership brings the listed attributes of
+// `object` into scope (evaluated on the update path where the overlap
+// is computed — a subscriber newly present in the per-attribute
+// recipient set). Precedes the corresponding Reflect. M37 Agent EA.
+message AttributesInScope {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// AttributesOutOfScope — IEEE 1516.1-2010 §6.18. Fires on a SUBSCRIBER
+// when the listed attributes drop out of region-overlap scope (the
+// subscriber left the per-attribute recipient set it was in on the
+// previous update). M37 Agent EA.
+message AttributesOutOfScope {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
 }
 
 // ObjectInstanceNameReservationSucceeded — IEEE 1516.1-2010 §6.1 (M26
