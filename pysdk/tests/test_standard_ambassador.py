@@ -85,7 +85,11 @@ def test_ambassador_callbacks_dispatch_from_event_pump(fake_rti: FakeRtiServer) 
 
     class Sub(Rti1516eAmbassador):
         def discoverObjectInstance(  # noqa: N802
-            self, object_handle: int, class_name: str, instance_name: str
+            self,
+            object_handle: int,
+            class_name: str,
+            instance_name: str,
+            object_class: int | None = None,  # M39 typed-handle parity (§6.9)
         ) -> None:
             received["discover"] = (object_handle, class_name, instance_name)
 

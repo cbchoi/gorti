@@ -6,12 +6,14 @@ Two access levels:
   callback thread-safely and offers deadline-based waiting. This is the
   primary instrument: tests assert on the recorded callback stream.
 - ``raw_*`` helpers — thin synchronous gRPC stubs over the generated
-  ``rti.v1`` protos, used ONLY where the pysdk deliberately papers over
-  wire semantics the tests must observe (Layer 1 rolls create+join into
-  one idempotent call and swallows ALREADY_EXISTS; it never exposes
-  DestroyFederation; the ownership client lacks the M37 ``two_phase`` /
-  ``if_available`` request flags and the ConfirmDivestiture RPC).
-  Each raw call site names the pysdk gap it works around.
+  ``rti.v1`` protos, kept for tests that assert WIRE-level semantics
+  directly (gRPC status codes on the negative federation-management
+  paths in tc_create_join_resign.py). The M35-era pysdk gaps these
+  used to paper over are closed as of M39: Layer 2 exposes
+  ``createFederationExecution`` (typed FederationExecutionAlreadyExists),
+  ``destroyFederationExecution``, the M37 ``two_phase`` /
+  ``if_available`` ownership flags and ``confirmDivestiture`` — the
+  tc_* bodies drive those through the ambassador now.
 
 Not a report file — this is test infrastructure imported by tc_*.py.
 """
@@ -34,6 +36,7 @@ for _p in (str(PYSDK), str(GENERATED)):
 
 # ruff: noqa: E402
 from rti1516e import Rti1516eAmbassador
+from rti1516e.errors import FederationExecutionAlreadyExists
 
 FOM = str(HERE / "federation.fom.xml")
 
@@ -169,6 +172,32 @@ class Recorder(Rti1516eAmbassador):
     def synchronizationPointRegistrationSucceeded(self, label: str) -> None:  # noqa: N802
         self._record("synchronizationPointRegistrationSucceeded", label=label)
 
+    def synchronizationPointRegistrationFailed(  # noqa: N802
+        self, label: str, reason: Any
+    ) -> None:
+        self._record(
+            "synchronizationPointRegistrationFailed", label=label, reason=reason
+        )
+
+    def requestAttributeOwnershipRelease(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...], tag: bytes
+    ) -> None:
+        self._record(
+            "requestAttributeOwnershipRelease",
+            object_handle=object_handle,
+            attribute_handles=attribute_handles,
+            tag=tag,
+        )
+
+    def attributeOwnershipUnavailable(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...]
+    ) -> None:
+        self._record(
+            "attributeOwnershipUnavailable",
+            object_handle=object_handle,
+            attribute_handles=attribute_handles,
+        )
+
     def requestAttributeOwnershipAssumption(  # noqa: N802
         self,
         object_handle: int,
@@ -228,7 +257,13 @@ def join(url: str, federation: str, federate: str) -> Recorder:
     amb = Recorder()
     amb.connect(amb, url)
     try:
-        amb.createFederationExecution(federation, [FOM])
+        # §4.5 (M39): create is eager+strict at Layer 2 — a peer that
+        # created the federation first raises the typed exception; the
+        # standard HLA pattern is to swallow it and join.
+        try:
+            amb.createFederationExecution(federation, [FOM])
+        except FederationExecutionAlreadyExists:
+            pass
         amb.joinFederationExecution(federate, federation)
     except BaseException:
         amb.disconnect()
@@ -277,12 +312,6 @@ def raw_federation_stub(channel: Any) -> Any:
     from rti.v1 import federation_pb2_grpc
 
     return federation_pb2_grpc.FederationServiceStub(channel)
-
-
-def raw_ownership_stub(channel: Any) -> Any:
-    from rti.v1 import ownership_pb2_grpc
-
-    return ownership_pb2_grpc.OwnershipServiceStub(channel)
 
 
 def fom_modules_proto() -> list[Any]:
@@ -342,84 +371,8 @@ def raw_destroy(stub: Any, federation: str) -> None:
     )
 
 
-def raw_negotiated_divest_two_phase(
-    stub: Any,
-    federation: str,
-    federate_handle: int,
-    object_handle: int,
-    attribute_handles: list[int],
-    tag: bytes = b"",
-) -> None:
-    """§7.3 negotiated divest with the M37 two_phase flag.
-
-    pysdk gap: rti1516e.ownership.OwnershipClient.negotiated_divest never
-    sets NegotiatedDivestRequest.two_phase (proto tag 7), so Layer 2 can
-    only drive the pre-M37 one-phase flow.
-    """
-    from rti.v1 import common_pb2, ownership_pb2
-
-    stub.NegotiatedAttributeOwnershipDivestiture(
-        ownership_pb2.NegotiatedDivestRequest(
-            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
-            federation_name=federation,
-            federate_handle=federate_handle,
-            object_handle=object_handle,
-            attribute_handles=attribute_handles,
-            tag=tag,
-            two_phase=True,
-        )
-    )
-
-
-def raw_confirm_divestiture(
-    stub: Any,
-    federation: str,
-    federate_handle: int,
-    object_handle: int,
-    attribute_handles: list[int],
-) -> None:
-    """§7.6 confirmDivestiture.
-
-    pysdk gap: OwnershipClient has no confirm_divestiture wrapper for the
-    M37 ConfirmDivestiture RPC; Layer 2 cannot complete a two-phase divest.
-    """
-    from rti.v1 import common_pb2, ownership_pb2
-
-    stub.ConfirmDivestiture(
-        ownership_pb2.ConfirmDivestitureRequest(
-            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
-            federation_name=federation,
-            federate_handle=federate_handle,
-            object_handle=object_handle,
-            attribute_handles=attribute_handles,
-        )
-    )
-
-
-def raw_acquire_if_available(
-    stub: Any,
-    federation: str,
-    federate_handle: int,
-    object_handle: int,
-    attribute_handles: list[int],
-    tag: bytes = b"",
-) -> None:
-    """§7.8 attributeOwnershipAcquisitionIfAvailable.
-
-    pysdk gap: OwnershipClient.acquire never sets
-    AcquireRequest.if_available (proto tag 7), so Layer 2 always queues a
-    pending acquire instead of the §7.8 grab-only-available semantics.
-    """
-    from rti.v1 import common_pb2, ownership_pb2
-
-    stub.AttributeOwnershipAcquisition(
-        ownership_pb2.AcquireRequest(
-            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
-            federation_name=federation,
-            federate_handle=federate_handle,
-            object_handle=object_handle,
-            attribute_handles=attribute_handles,
-            tag=tag,
-            if_available=True,
-        )
-    )
+# NB: the M35-era raw ownership helpers (raw_negotiated_divest_two_phase,
+# raw_confirm_divestiture, raw_acquire_if_available) were removed in M39 —
+# pysdk's Layer-2 ambassador now exposes the two_phase / if_available
+# flags and confirmDivestiture directly; tc_ownership_divest.py drives
+# those flows through the SDK under test.

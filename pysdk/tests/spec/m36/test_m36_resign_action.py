@@ -19,9 +19,10 @@ from __future__ import annotations
 import pytest
 
 from rti1516e import Rti1516eAmbassador
-from rti1516e._transport import resign_action_to_proto
 
 # Spec-test-only fake (same consumption pattern as tests/spec/m4).
+from rti1516e._inprocess import RecordedCall
+from rti1516e._transport import resign_action_to_proto
 from tests.spec.m4._fakes import FakeRtiServer
 
 
@@ -30,7 +31,7 @@ def fake_rti() -> FakeRtiServer:
     return FakeRtiServer()
 
 
-def _resign_calls(fake_rti: FakeRtiServer) -> list:
+def _resign_calls(fake_rti: FakeRtiServer) -> list[RecordedCall]:
     return [c for c in fake_rti.calls if c.method == "resign_federation"]
 
 

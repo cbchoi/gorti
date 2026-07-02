@@ -87,8 +87,16 @@ class OwnershipClient:
         attribute_handles: _AttributeRefList,
         *,
         tag: bytes = b"",
+        two_phase: bool = False,
     ) -> None:
-        """§7.3 — offer ownership; transfer fires when an acquirer arrives."""
+        """§7.3 — offer ownership; transfer fires when an acquirer arrives.
+
+        ``two_phase=True`` (M37 wire flag, M39 HA-2 surface): when an
+        acquirer engages, the transfer PARKS on the divester's
+        requestDivestitureConfirmation callback and completes only on a
+        subsequent :meth:`confirm_divestiture` (§7.6). ``False`` keeps
+        the pre-M37 one-phase gorti flow.
+        """
         from rti.v1 import common_pb2, ownership_pb2
 
         req = ownership_pb2.NegotiatedDivestRequest(
@@ -98,6 +106,7 @@ class OwnershipClient:
             object_handle=int(object_handle),
             attribute_handles=[int(h) for h in attribute_handles],
             tag=bytes(tag),
+            two_phase=bool(two_phase),
         )
         try:
             await self._stub.NegotiatedAttributeOwnershipDivestiture(req)
@@ -110,8 +119,16 @@ class OwnershipClient:
         attribute_handles: _AttributeRefList,
         *,
         tag: bytes = b"",
+        if_available: bool = False,
     ) -> None:
-        """§7.4 — request ownership; matched against pending divestitures."""
+        """§7.8 — request ownership; matched against pending divestitures.
+
+        ``if_available=True`` (M37 wire flag, M39 HA-2 surface) selects
+        the §7.9 attributeOwnershipAcquisitionIfAvailable semantics:
+        only currently-unowned attributes transfer, nothing is queued,
+        and the unavailable subset comes back via the §7.10
+        attributeOwnershipUnavailable callback.
+        """
         from rti.v1 import common_pb2, ownership_pb2
 
         req = ownership_pb2.AcquireRequest(
@@ -121,9 +138,33 @@ class OwnershipClient:
             object_handle=int(object_handle),
             attribute_handles=[int(h) for h in attribute_handles],
             tag=bytes(tag),
+            if_available=bool(if_available),
         )
         try:
             await self._stub.AttributeOwnershipAcquisition(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def confirm_divestiture(
+        self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
+    ) -> None:
+        """§7.6 confirmDivestiture (M37 RPC, M39 HA-2 surface).
+
+        Completes a parked two-phase negotiated divest (see
+        :meth:`negotiated_divest` with ``two_phase=True``): the queued
+        acquirer becomes the owner atomically.
+        """
+        from rti.v1 import common_pb2, ownership_pb2
+
+        req = ownership_pb2.ConfirmDivestitureRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            object_handle=int(object_handle),
+            attribute_handles=[int(h) for h in attribute_handles],
+        )
+        try:
+            await self._stub.ConfirmDivestiture(req)
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 

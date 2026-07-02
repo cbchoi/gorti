@@ -4,14 +4,13 @@ Spec-anchored assertions (IEEE 1516.1-2010):
 
 - §4.11 ``registerFederationSynchronizationPoint`` — succeeds when the
         label is unique; duplicate label is a registration failure.
-- §4.12 ``synchronizationPointRegistrationSucceeded/Failed`` — M37 added
+- §4.12 ``synchronizationPointRegistrationSucceeded/Failed`` — M37 put
         the ack events on the wire (stream.proto ``sync_registration_
-        succeeded``/``failed``, tags 22/23), but pysdk's
-        ``_transport._translate_event`` has no branch for either, so the
-        Layer-2 callback never fires. Where the ack itself is the
-        assertion we xfail with that named gap; elsewhere we assert the
-        observable equivalents (announce delivery / typed duplicate
-        exception).
+        succeeded``/``failed``, tags 22/23) and M39 closed the pysdk
+        translation gap, so the Layer-2 callbacks fire and are asserted
+        hard. (gorti also rejects a duplicate register at the RPC
+        itself; the typed ``SyncPointAlreadyExists`` path is asserted
+        alongside.)
 - §4.13 ``announceSynchronizationPoint`` — every federate in the sync
         set receives the announce exactly once; tag bytes round-trip.
 - §4.14 ``synchronizationPointAchieved`` — all required federates
@@ -34,26 +33,21 @@ def test_tc002_register_sync_point_success_callback(
 ) -> None:
     """§4.12 — registrar gets synchronizationPointRegistrationSucceeded.
 
-    xfail: the wire event exists (M37, stream.proto tag 22) but pysdk's
-    ``_transport._translate_event`` drops it, so the Layer-2
-    ``synchronizationPointRegistrationSucceeded`` callback can never fire.
+    Hard assertion since M39: pysdk translates the M37 wire event
+    (stream.proto sync_registration_succeeded, tag 22) into the Layer-2
+    ack callback.
     """
     amb = join(rtid_url, federation_name, "alice")
     try:
         amb.registerFederationSynchronizationPoint("ready", b"tag")
         # Registration is observably in effect (the announce arrives)...
         amb.wait_for("announceSynchronizationPoint", label="ready")
-        # ...but the §4.12 ack callback itself never surfaces.
-        try:
-            amb.wait_for(
-                "synchronizationPointRegistrationSucceeded", label="ready", timeout=1.0
-            )
-        except TimeoutError:
-            pytest.xfail(
-                "pysdk gap: _transport._translate_event has no branch for "
-                "stream.proto sync_registration_succeeded (tag 22), so the "
-                "§4.12 registration ack never reaches Layer 2"
-            )
+        # ...and the §4.12 ack callback fires at the registrant.
+        amb.wait_for("synchronizationPointRegistrationSucceeded", label="ready")
+        # §4.12 — the ack fires on the REGISTERING federate exactly once.
+        assert amb.count("synchronizationPointRegistrationSucceeded") == 1, (
+            "§4.12: the registration ack must fire exactly once"
+        )
     finally:
         leave(amb)
 

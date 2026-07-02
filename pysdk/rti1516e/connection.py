@@ -248,6 +248,33 @@ class RtiConnection:
             )
         return self._transport
 
+    async def create_federation(
+        self, spec: FederationSpec, *, exist_ok: bool = False
+    ) -> None:
+        """§4.5 createFederationExecution (M39 HA-2).
+
+        Unlike the rolled create-on-join path (``join_federation``,
+        which stays idempotent), this surfaces a duplicate name as the
+        typed :class:`rti1516e.errors.FederationExecutionAlreadyExists`
+        unless ``exist_ok=True``.
+        """
+        await _dispatch(
+            self.transport, "create_federation", spec=spec, exist_ok=exist_ok,
+        )
+
+    async def destroy_federation(self, federation_name: str) -> None:
+        """§4.6 destroyFederationExecution (M39 HA-2).
+
+        Raises the typed
+        :class:`rti1516e.errors.FederatesCurrentlyJoined` while members
+        remain joined and
+        :class:`rti1516e.errors.FederationExecutionDoesNotExist` for an
+        unknown name.
+        """
+        await _dispatch(
+            self.transport, "destroy_federation", federation_name=federation_name,
+        )
+
     def join_federation(
         self,
         spec: FederationSpec,
@@ -302,11 +329,13 @@ class _FederateContextManager:
 
     async def __aenter__(self) -> Federate:
         transport = self._connection.transport
-        # create_federation is idempotent on the server side; if it
-        # already exists with a compatible FOM the fake/server returns
-        # success. If the server rejects (e.g. ERR_FED_ALREADY_EXISTS
-        # cannot be reconciled), the typed exception propagates.
-        await _dispatch(transport, "create_federation", spec=self._spec)
+        # create_federation is idempotent on the rolled path (M39:
+        # explicit exist_ok=True); if the federation already exists
+        # with a compatible FOM the create is a silent no-op. Other
+        # rejections propagate as typed exceptions.
+        await _dispatch(
+            transport, "create_federation", spec=self._spec, exist_ok=True,
+        )
         join_response = await _dispatch(
             transport,
             "join_federation",

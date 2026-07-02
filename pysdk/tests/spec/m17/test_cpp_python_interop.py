@@ -17,13 +17,10 @@ ambassador methods, both wired against the same gorti rtid.
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import shutil
 import socket
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -40,7 +37,10 @@ from rti1516e.standard import Rti1516eAmbassador
 
 BIN_DIR = REPO_ROOT / "bin"
 RTID_BINARY = BIN_DIR / "rtid"
-CPP_PUBLISHER = REPO_ROOT / "cppsdk" / "build" / "examples" / "cpp-pitch-smoke" / "cpp_pitch_publisher"
+CPP_PUBLISHER = (
+    REPO_ROOT / "cppsdk" / "build" / "examples" / "cpp-pitch-smoke"
+    / "cpp_pitch_publisher"
+)
 CPP_FOM = REPO_ROOT / "examples" / "cpp-pitch-smoke" / "federation.fom.xml"
 FEDERATION = "cpp-pitch-smoke"
 
@@ -90,7 +90,11 @@ class _RecordingAmbassador(Rti1516eAmbassador):
         self.interactions: list[tuple[str, dict[str, Any]]] = []
 
     def discoverObjectInstance(  # noqa: N802
-        self, object_handle: int, class_name: str, instance_name: str
+        self,
+        object_handle: int,
+        class_name: str,
+        instance_name: str,
+        object_class: int | None = None,  # M39 typed-handle parity (§6.9)
     ) -> None:
         self.discovered.append((object_handle, class_name, instance_name))
 
@@ -99,6 +103,7 @@ class _RecordingAmbassador(Rti1516eAmbassador):
         object_handle: int,
         values: dict[str, Any],
         timestamp: float | None,
+        attribute_values: dict[Any, bytes] | None = None,  # M39 (§6.11)
     ) -> None:
         self.reflections.append((object_handle, dict(values)))
 

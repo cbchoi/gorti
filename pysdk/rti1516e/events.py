@@ -24,26 +24,51 @@ Use a discriminated union via ``isinstance`` (or ``match`` in 3.10+):
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover - type-check imports only
+    from rti1516e.handles import AttributeHandle, ObjectClassHandle
 
 
 @dataclass(frozen=True)
 class DiscoverObjectInstance:
-    """A new object instance was registered by another federate."""
+    """A new object instance was registered by another federate.
+
+    M39 (HA-2 typed-handle parity): ``object_class`` carries the typed
+    :class:`rti1516e.handles.ObjectClassHandle` per IEEE 1516.1-2010
+    §6.9 discoverObjectInstance. ``class_name`` is retained for
+    back-compat (stringified handle on the gRPC path; FOM name on
+    in-process transports that choose to populate it) and is
+    DEPRECATED as the class identity — new code should use
+    ``object_class``.
+    """
 
     object_handle: int
     class_name: str
     instance_name: str
+    # Typed §6.9 class handle. None only for legacy producers that
+    # construct the event without it (in-process test doubles).
+    object_class: ObjectClassHandle | None = None
 
 
 @dataclass(frozen=True)
 class ReflectAttributeValues:
-    """Attribute values updated on an object we subscribe to."""
+    """Attribute values updated on an object we subscribe to.
+
+    M39 (HA-2 typed-handle parity): ``attribute_values`` keys the same
+    payloads by typed :class:`rti1516e.handles.AttributeHandle` per
+    IEEE 1516.1-2010 §6.11. ``values`` (string-keyed) is retained for
+    back-compat and is DEPRECATED for handle identity — string keys on
+    the gRPC path are stringified attribute handles.
+    """
 
     object_handle: int
     values: dict[str, Any]
     timestamp: float | None  # None for RO; non-None for TSO
+    # Typed §6.11 attribute map. Empty for legacy producers.
+    attribute_values: dict[AttributeHandle, bytes] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -124,9 +149,45 @@ class FederationSynchronized:
 
     Fires on every required federate. Federates that were waiting on
     the achieve callback should now resume.
+
+    ``failed_to_sync`` (IEEE 1516.1-2010 §4.15, M37 wire tag 21 field 2)
+    lists the federates that achieved the point with
+    ``successfully=False``. Empty when everyone succeeded (and when
+    talking to pre-M37 servers).
     """
 
     label: str
+    failed_to_sync: tuple[int, ...] = field(default_factory=tuple)
+
+
+class SynchronizationPointFailureReason(enum.Enum):
+    """IEEE 1516.1-2010 SynchronizationPointFailureReason (§4.12)."""
+
+    SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE = "SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE"
+    SYNCHRONIZATION_SET_MEMBER_NOT_JOINED = "SYNCHRONIZATION_SET_MEMBER_NOT_JOINED"
+
+
+@dataclass(frozen=True)
+class SynchronizationPointRegistrationSucceeded:
+    """§4.12 — this federate's sync-point registration was accepted.
+
+    Fires on the REGISTERING federate only (M37 wire tag 22).
+    """
+
+    label: str
+
+
+@dataclass(frozen=True)
+class SynchronizationPointRegistrationFailed:
+    """§4.12 — this federate's sync-point registration was rejected.
+
+    Fires on the REGISTERING federate only (M37 wire tag 23).
+    ``reason`` is None when the server sent an unspecified/unknown
+    failure reason.
+    """
+
+    label: str
+    reason: SynchronizationPointFailureReason | None
 
 
 @dataclass(frozen=True)
@@ -251,3 +312,152 @@ class MultipleObjectInstanceNameReservationFailed:
 
     requested_names: tuple[str, ...]
     colliding_names: tuple[str, ...]
+
+
+# --- M39 (SDK Agent HA) — M37 wire-tag parity events ----------------------
+# Wire-side proto variants: stream.proto tags 33/34 (ownership),
+# 43/44/45/46/47/48 (restore family — 43-45 predate M37 but were
+# silently dropped by _translate_event until M39), 60-63 (registration /
+# interaction advisories), 64/65 (DDM scope), 66 (retraction).
+
+
+@dataclass(frozen=True)
+class RequestAttributeOwnershipRelease:
+    """§7.11 — another federate wants attributes this federate owns.
+
+    Fires on the CURRENT OWNER when a peer calls
+    attributeOwnershipAcquisition against owned attributes (the acquire
+    stays queued). ``tag`` echoes the acquirer's user-supplied tag.
+    """
+
+    object_handle: int
+    attribute_handles: tuple[int, ...]
+    tag: bytes
+
+
+@dataclass(frozen=True)
+class AttributeOwnershipUnavailable:
+    """§7.10 — an acquisition-if-available found the attributes owned.
+
+    Fires on the federate that called
+    attributeOwnershipAcquisitionIfAvailable (§7.9) for the subset of
+    requested attributes that were NOT available. No pending acquire
+    was queued for these.
+    """
+
+    object_handle: int
+    attribute_handles: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class InitiateFederateRestore:
+    """§4.26 — a federation restore began; load state and report back.
+
+    ``federate_handle`` is the handle this federate had at save time
+    (0 = no remap); ``federate_name`` is the name on record (may be
+    empty on pre-M37 servers).
+    """
+
+    label: str
+    federate_handle: int
+    federate_name: str
+
+
+@dataclass(frozen=True)
+class FederationRestored:
+    """§4.14 — the federation restore completed successfully."""
+
+    label: str
+
+
+@dataclass(frozen=True)
+class FederationNotRestored:
+    """§4.14 — the federation restore aborted."""
+
+    label: str
+
+
+@dataclass(frozen=True)
+class RequestFederationRestoreSucceeded:
+    """§4.25 — this federate's requestFederationRestore was accepted.
+
+    Fires on the REQUESTING federate only.
+    """
+
+    label: str
+
+
+@dataclass(frozen=True)
+class RequestFederationRestoreFailed:
+    """§4.25 — this federate's requestFederationRestore was rejected.
+
+    Fires on the REQUESTING federate only; ``reason`` mirrors the
+    server's rejection cause.
+    """
+
+    label: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class FederationRestoreBegun:
+    """§4.26 — the restore left idle; precedes InitiateFederateRestore."""
+
+
+@dataclass(frozen=True)
+class StartRegistrationForObjectClass:
+    """§5.10 — the class gained its first subscriber; registration is
+    now relevant. Fires on each PUBLISHER of the object class."""
+
+    object_class_handle: int
+
+
+@dataclass(frozen=True)
+class StopRegistrationForObjectClass:
+    """§5.11 — the class lost its last subscriber. Fires on publishers."""
+
+    object_class_handle: int
+
+
+@dataclass(frozen=True)
+class TurnInteractionsOn:
+    """§5.12 — the interaction class gained its first subscriber.
+    Fires on each PUBLISHER of the interaction class."""
+
+    interaction_class_handle: int
+
+
+@dataclass(frozen=True)
+class TurnInteractionsOff:
+    """§5.13 — the interaction class lost its last subscriber."""
+
+    interaction_class_handle: int
+
+
+@dataclass(frozen=True)
+class AttributesInScope:
+    """§6.17 — DDM region overlap brought the attributes into scope.
+
+    Fires on a SUBSCRIBER; precedes the corresponding Reflect.
+    """
+
+    object_handle: int
+    attribute_handles: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class AttributesOutOfScope:
+    """§6.18 — the attributes dropped out of region-overlap scope."""
+
+    object_handle: int
+    attribute_handles: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class RequestRetraction:
+    """§8.22 — a sender retracted a TSO message this federate may have
+    seen. ``(sender_federate, retraction_handle)`` is the
+    MessageRetractionHandle pair from the original TSO delivery."""
+
+    sender_federate: int
+    retraction_handle: int

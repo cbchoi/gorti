@@ -19,6 +19,7 @@ the event-pump task that drains ``Federate.events()``.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import threading
 from concurrent.futures import Future
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
@@ -27,11 +28,18 @@ from rti1516e import _transport
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.events import (
     AttributeOwnershipAcquisitionNotification,
+    AttributeOwnershipUnavailable,
+    AttributesInScope,
+    AttributesOutOfScope,
     DiscoverObjectInstance,
     FederationHalted,
+    FederationNotRestored,
     FederationNotSaved,
+    FederationRestoreBegun,
+    FederationRestored,
     FederationSaved,
     FederationSynchronized,
+    InitiateFederateRestore,
     InitiateFederateSave,
     MultipleObjectInstanceNameReservationFailed,
     MultipleObjectInstanceNameReservationSucceeded,
@@ -42,9 +50,20 @@ from rti1516e.events import (
     ReflectAttributeValues,
     RemoveObjectInstance,
     RequestAttributeOwnershipAssumption,
+    RequestAttributeOwnershipRelease,
     RequestDivestitureConfirmation,
+    RequestFederationRestoreFailed,
+    RequestFederationRestoreSucceeded,
+    RequestRetraction,
+    StartRegistrationForObjectClass,
+    StopRegistrationForObjectClass,
     SynchronizationPointAnnounced,
+    SynchronizationPointFailureReason,
+    SynchronizationPointRegistrationFailed,
+    SynchronizationPointRegistrationSucceeded,
     TimeAdvanceGrant,
+    TurnInteractionsOff,
+    TurnInteractionsOn,
 )
 from rti1516e.factories import (
     AttributeHandleSetFactory,
@@ -59,6 +78,7 @@ from rti1516e.handles import (
     DimensionHandle,
     FederateHandle,
     InteractionClassHandle,
+    MessageRetractionHandle,
     ObjectClassHandle,
     ObjectInstanceHandle,
     ParameterHandle,
@@ -151,6 +171,11 @@ class Rti1516eAmbassador:
         self._federate_handle_set_factory = FederateHandleSetFactory()
         self._dimension_handle_set_factory = DimensionHandleSetFactory()
         self._region_handle_set_factory = RegionHandleSetFactory()
+        # M39 — per-(class, callback) cache of which optional kwargs an
+        # override accepts (see _invoke_compat).
+        self._accepted_kwargs_cache: dict[
+            tuple[type, str], frozenset[str] | None
+        ] = {}
 
     # --- Connection / federation lifecycle ---
 
@@ -179,15 +204,44 @@ class Rti1516eAmbassador:
         self._stop_loop()
 
     def createFederationExecution(self, name: str, fom_modules: list[str]) -> None:  # noqa: N802
-        """Stash the federation spec for the upcoming join.
+        """§4.5 — create the federation execution.
 
-        In a real RTI, ``create`` and ``join`` are distinct calls. The
-        Layer 1 SDK rolls them into ``join_federation`` (idempotent on the
-        server side), so we just record the args here and apply them on
-        the next ``joinFederationExecution`` call.
+        M39 HA-2: when connected, the create RPC is issued EAGERLY and a
+        duplicate name raises the typed
+        :class:`rti1516e.errors.FederationExecutionAlreadyExists`
+        (IEEE §4.5) — the standard HLA pattern is::
+
+            try:
+                amb.createFederationExecution(name, foms)
+            except FederationExecutionAlreadyExists:
+                pass  # someone else created it first
+            amb.joinFederationExecution(federate, name)
+
+        The spec is also stashed for the upcoming join, and the rolled
+        create-on-join path stays idempotent — federates that skip
+        ``createFederationExecution`` entirely keep working (Layer 1's
+        ``join_federation`` creates with ``exist_ok=True``).
         """
         self._federation_name = name
         self._fom_modules = list(fom_modules)
+        if self._connection is not None and self._connection_cm_open:
+            spec = FederationSpec(name=name, fom_modules=list(fom_modules))
+            self._run(self._connection.create_federation(spec))
+
+    def destroyFederationExecution(self, name: str) -> None:  # noqa: N802
+        """§4.6 — destroy the federation execution.
+
+        M39 HA-2. Raises the typed
+        :class:`rti1516e.errors.FederatesCurrentlyJoined` while members
+        remain joined and
+        :class:`rti1516e.errors.FederationExecutionDoesNotExist` for an
+        unknown name.
+        """
+        if self._connection is None:
+            raise RuntimeError(
+                "connect() must be called before destroyFederationExecution()"
+            )
+        self._run(self._connection.destroy_federation(name))
 
     def joinFederationExecution(  # noqa: N802
         self,
@@ -538,8 +592,17 @@ class Rti1516eAmbassador:
             )
         )
 
-    def synchronizationPointAchieved(self, label: str) -> None:  # noqa: N802
-        self._run(self._fed().sync.synchronization_point_achieved(label))
+    def synchronizationPointAchieved(  # noqa: N802
+        self, label: str, successfully: bool = True
+    ) -> None:
+        """§4.14 — M39 HA-2: ``successfully=False`` still counts toward
+        the sync transition but lands this federate in the §4.15
+        ``failed_to_sync`` set on federationSynchronized."""
+        self._run(
+            self._fed().sync.synchronization_point_achieved(
+                label, successfully=successfully,
+            )
+        )
 
     # --- §7 Ownership Management (M25 Phase C) ---
 
@@ -557,10 +620,23 @@ class Rti1516eAmbassador:
         object_handle: ObjectInstanceRef,
         attribute_handles: AttributeRefList,
         tag: bytes = b"",
+        two_phase: bool = False,
     ) -> None:
+        """§7.3 — M39 HA-2: ``two_phase=True`` parks the transfer on
+        requestDivestitureConfirmation until :meth:`confirmDivestiture`."""
         self._run(
             self._fed().ownership.negotiated_divest(
-                object_handle, list(attribute_handles), tag=tag
+                object_handle, list(attribute_handles), tag=tag, two_phase=two_phase
+            )
+        )
+
+    def confirmDivestiture(  # noqa: N802
+        self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
+    ) -> None:
+        """§7.6 — complete a parked two-phase negotiated divest (M39 HA-2)."""
+        self._run(
+            self._fed().ownership.confirm_divestiture(
+                object_handle, list(attribute_handles)
             )
         )
 
@@ -572,6 +648,21 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(
             self._fed().ownership.acquire(object_handle, list(attribute_handles), tag=tag)
+        )
+
+    def attributeOwnershipAcquisitionIfAvailable(  # noqa: N802
+        self,
+        object_handle: ObjectInstanceRef,
+        attribute_handles: AttributeRefList,
+        tag: bytes = b"",
+    ) -> None:
+        """§7.9 — grab only currently-unowned attributes; nothing is
+        queued (M39 HA-2). The unavailable subset arrives via the §7.10
+        attributeOwnershipUnavailable callback."""
+        self._run(
+            self._fed().ownership.acquire(
+                object_handle, list(attribute_handles), tag=tag, if_available=True
+            )
         )
 
     def cancelNegotiatedAttributeOwnershipDivestiture(  # noqa: N802
@@ -854,17 +945,37 @@ class Rti1516eAmbassador:
     # --- Callbacks: subclass overrides these ---
 
     def discoverObjectInstance(  # noqa: N802
-        self, object_handle: int, class_name: str, instance_name: str
+        self,
+        object_handle: int,
+        class_name: str,
+        instance_name: str,
+        object_class: ObjectClassHandle | None = None,
     ) -> None:
-        """Override to handle DiscoverObjectInstance."""
+        """Override to handle DiscoverObjectInstance.
+
+        M39 typed-handle parity (§6.9): ``object_class`` is the typed
+        :class:`ObjectClassHandle`. Overrides declared with the legacy
+        3-argument signature keep working — the dispatcher only passes
+        ``object_class`` to overrides that accept it. ``class_name``
+        (stringified handle on the gRPC path) is DEPRECATED as the
+        class identity; compare against ``object_class`` instead.
+        """
 
     def reflectAttributeValues(  # noqa: N802
         self,
         object_handle: int,
         values: dict[str, Any],
         timestamp: float | None,
+        attribute_values: dict[AttributeHandle, bytes] | None = None,
     ) -> None:
-        """Override to handle ReflectAttributeValues."""
+        """Override to handle ReflectAttributeValues.
+
+        M39 typed-handle parity (§6.11): ``attribute_values`` keys the
+        payloads by typed :class:`AttributeHandle`. Legacy 3-argument
+        overrides keep working (the dispatcher only passes it to
+        overrides that accept it); the string-keyed ``values`` map is
+        DEPRECATED for handle identity.
+        """
 
     def receiveInteraction(  # noqa: N802
         self,
@@ -999,11 +1110,19 @@ class Rti1516eAmbassador:
         """§6.26 — peer requested fresh values; owner should respond."""
 
     def synchronizationPointRegistrationSucceeded(self, label: str) -> None:  # noqa: N802
-        """§4.5 — sync-point registration succeeded.
+        """§4.12 — this federate's sync-point registration was accepted.
 
-        Currently fires via the Federate.events() stream as
-        SynchronizationPointAnnounced for the registrant; this
-        callback is provided for Pitch symmetry.
+        M39: fires from the wire's SyncRegistrationSucceeded event
+        (stream.proto tag 22, registrant only).
+        """
+
+    def synchronizationPointRegistrationFailed(  # noqa: N802
+        self, label: str, reason: SynchronizationPointFailureReason | None
+    ) -> None:
+        """§4.12 — this federate's sync-point registration was rejected.
+
+        M39: fires from the wire's SyncRegistrationFailed event
+        (stream.proto tag 23, registrant only).
         """
 
     def announceSynchronizationPoint(self, label: str, tag: bytes) -> None:  # noqa: N802
@@ -1013,8 +1132,16 @@ class Rti1516eAmbassador:
         SynchronizationPointAnnounced event.
         """
 
-    def federationSynchronized(self, label: str) -> None:  # noqa: N802
-        """§4.7 — all required federates have achieved the sync point."""
+    def federationSynchronized(  # noqa: N802
+        self, label: str, failed_to_sync: tuple[int, ...] = ()
+    ) -> None:
+        """§4.15 — all required federates have achieved the sync point.
+
+        ``failed_to_sync`` lists federates that achieved with
+        ``successfully=False`` (empty when everyone succeeded). Legacy
+        1-argument overrides keep working — the dispatcher only passes
+        the set to overrides that accept it.
+        """
 
     def requestAttributeOwnershipAssumption(  # noqa: N802
         self,
@@ -1067,6 +1194,76 @@ class Rti1516eAmbassador:
     ) -> None:
         """§6.5 — an atomic batch reservation was rejected (NONE reserved)."""
 
+    # --- M39 (SDK Agent HA) — M37 wire-parity callbacks ---
+    # Each is a no-op by default; override the ones you care about.
+
+    def requestAttributeOwnershipRelease(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...], tag: bytes
+    ) -> None:
+        """§7.11 — another federate wants attributes this federate owns."""
+
+    def attributeOwnershipUnavailable(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...]
+    ) -> None:
+        """§7.10 — acquisition-if-available found the attributes owned."""
+
+    def initiateFederateRestore(  # noqa: N802
+        self, label: str, federate_handle: int, federate_name: str
+    ) -> None:
+        """§4.26 — a federation restore began; load state and report back."""
+
+    def federationRestored(self, label: str) -> None:  # noqa: N802
+        """§4.14 — the federation restore completed successfully."""
+
+    def federationNotRestored(self, label: str) -> None:  # noqa: N802
+        """§4.14 — the federation restore aborted."""
+
+    def requestFederationRestoreSucceeded(self, label: str) -> None:  # noqa: N802
+        """§4.25 — this federate's restore request was accepted."""
+
+    def requestFederationRestoreFailed(self, label: str, reason: str) -> None:  # noqa: N802
+        """§4.25 — this federate's restore request was rejected."""
+
+    def federationRestoreBegun(self) -> None:  # noqa: N802
+        """§4.26 — the restore left idle (precedes initiateFederateRestore)."""
+
+    def startRegistrationForObjectClass(  # noqa: N802
+        self, object_class_handle: ObjectClassHandle
+    ) -> None:
+        """§5.10 — the object class gained its first subscriber."""
+
+    def stopRegistrationForObjectClass(  # noqa: N802
+        self, object_class_handle: ObjectClassHandle
+    ) -> None:
+        """§5.11 — the object class lost its last subscriber."""
+
+    def turnInteractionsOn(  # noqa: N802
+        self, interaction_class_handle: InteractionClassHandle
+    ) -> None:
+        """§5.12 — the interaction class gained its first subscriber."""
+
+    def turnInteractionsOff(  # noqa: N802
+        self, interaction_class_handle: InteractionClassHandle
+    ) -> None:
+        """§5.13 — the interaction class lost its last subscriber."""
+
+    def attributesInScope(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...]
+    ) -> None:
+        """§6.17 — DDM region overlap brought the attributes into scope."""
+
+    def attributesOutOfScope(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...]
+    ) -> None:
+        """§6.18 — the attributes dropped out of region-overlap scope."""
+
+    def requestRetraction(  # noqa: N802
+        self,
+        retraction_handle: MessageRetractionHandle,
+        sender_federate: FederateHandle,
+    ) -> None:
+        """§8.22 — a sender retracted a TSO message this federate saw."""
+
     # --- Internals ---
 
     def _start_loop(self) -> None:
@@ -1115,6 +1312,46 @@ class Rti1516eAmbassador:
             raise RuntimeError("not joined — call joinFederationExecution() first")
         return self._federate
 
+    def _invoke_compat(self, method_name: str, *args: Any, **optional: Any) -> None:
+        """Call ``target.<method_name>(*args)`` plus the ``optional``
+        kwargs the override's signature accepts.
+
+        M39: lets the dispatcher pass NEW callback arguments (typed
+        handles on discover/reflect, §4.15 failed_to_sync) without
+        breaking subclasses written against the older, shorter
+        signatures. Acceptance is resolved per (class, method) once and
+        cached.
+        """
+        target = self._callback_target
+        method = getattr(target, method_name)
+        accepted_names = self._accepted_kwargs(type(target), method_name, method)
+        if accepted_names is None:  # **kwargs override — pass everything
+            method(*args, **optional)
+            return
+        method(*args, **{k: v for k, v in optional.items() if k in accepted_names})
+
+    def _accepted_kwargs(
+        self, target_type: type, method_name: str, method: Any
+    ) -> frozenset[str] | None:
+        """Return the parameter names ``method`` accepts beyond its
+        positionals, or None when it takes ``**kwargs``. Cached per
+        (target class, method name)."""
+        key = (target_type, method_name)
+        if key in self._accepted_kwargs_cache:
+            return self._accepted_kwargs_cache[key]
+        try:
+            params = inspect.signature(method).parameters
+            if any(
+                p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+            ):
+                result: frozenset[str] | None = None
+            else:
+                result = frozenset(params)
+        except (TypeError, ValueError):  # builtins / exotic callables
+            result = frozenset()
+        self._accepted_kwargs_cache[key] = result
+        return result
+
     def _dispatch_event(self, event: Any) -> bool:
         """Dispatch one event to its callback. Return True if recognized.
 
@@ -1134,12 +1371,23 @@ class Rti1516eAmbassador:
             return True
         target = self._callback_target
         if isinstance(event, DiscoverObjectInstance):
-            target.discoverObjectInstance(
-                event.object_handle, event.class_name, event.instance_name
+            # M39 §6.9 — the typed object_class rides as an optional
+            # kwarg so legacy 3-argument overrides keep working.
+            self._invoke_compat(
+                "discoverObjectInstance",
+                event.object_handle,
+                event.class_name,
+                event.instance_name,
+                object_class=event.object_class,
             )
         elif isinstance(event, ReflectAttributeValues):
-            target.reflectAttributeValues(
-                event.object_handle, event.values, event.timestamp
+            # M39 §6.11 — typed attribute_values as an optional kwarg.
+            self._invoke_compat(
+                "reflectAttributeValues",
+                event.object_handle,
+                event.values,
+                event.timestamp,
+                attribute_values=event.attribute_values,
             )
         elif isinstance(event, ReceiveInteraction):
             target.receiveInteraction(
@@ -1160,7 +1408,16 @@ class Rti1516eAmbassador:
         elif isinstance(event, SynchronizationPointAnnounced):
             target.announceSynchronizationPoint(event.label, event.tag)
         elif isinstance(event, FederationSynchronized):
-            target.federationSynchronized(event.label)
+            # M39 §4.15 — failed_to_sync as an optional kwarg.
+            self._invoke_compat(
+                "federationSynchronized",
+                event.label,
+                failed_to_sync=event.failed_to_sync,
+            )
+        elif isinstance(event, SynchronizationPointRegistrationSucceeded):
+            target.synchronizationPointRegistrationSucceeded(event.label)
+        elif isinstance(event, SynchronizationPointRegistrationFailed):
+            target.synchronizationPointRegistrationFailed(event.label, event.reason)
         elif isinstance(event, RequestAttributeOwnershipAssumption):
             target.requestAttributeOwnershipAssumption(
                 event.object_handle,
@@ -1193,6 +1450,54 @@ class Rti1516eAmbassador:
         elif isinstance(event, MultipleObjectInstanceNameReservationFailed):
             target.multipleObjectInstanceNameReservationFailed(
                 event.requested_names, event.colliding_names
+            )
+        # M39 (SDK Agent HA) — M37 wire-parity dispatch.
+        elif isinstance(event, RequestAttributeOwnershipRelease):
+            target.requestAttributeOwnershipRelease(
+                event.object_handle, event.attribute_handles, event.tag
+            )
+        elif isinstance(event, AttributeOwnershipUnavailable):
+            target.attributeOwnershipUnavailable(
+                event.object_handle, event.attribute_handles
+            )
+        elif isinstance(event, InitiateFederateRestore):
+            target.initiateFederateRestore(
+                event.label, event.federate_handle, event.federate_name
+            )
+        elif isinstance(event, FederationRestored):
+            target.federationRestored(event.label)
+        elif isinstance(event, FederationNotRestored):
+            target.federationNotRestored(event.label)
+        elif isinstance(event, RequestFederationRestoreSucceeded):
+            target.requestFederationRestoreSucceeded(event.label)
+        elif isinstance(event, RequestFederationRestoreFailed):
+            target.requestFederationRestoreFailed(event.label, event.reason)
+        elif isinstance(event, FederationRestoreBegun):
+            target.federationRestoreBegun()
+        elif isinstance(event, StartRegistrationForObjectClass):
+            target.startRegistrationForObjectClass(
+                ObjectClassHandle(event.object_class_handle)
+            )
+        elif isinstance(event, StopRegistrationForObjectClass):
+            target.stopRegistrationForObjectClass(
+                ObjectClassHandle(event.object_class_handle)
+            )
+        elif isinstance(event, TurnInteractionsOn):
+            target.turnInteractionsOn(
+                InteractionClassHandle(event.interaction_class_handle)
+            )
+        elif isinstance(event, TurnInteractionsOff):
+            target.turnInteractionsOff(
+                InteractionClassHandle(event.interaction_class_handle)
+            )
+        elif isinstance(event, AttributesInScope):
+            target.attributesInScope(event.object_handle, event.attribute_handles)
+        elif isinstance(event, AttributesOutOfScope):
+            target.attributesOutOfScope(event.object_handle, event.attribute_handles)
+        elif isinstance(event, RequestRetraction):
+            target.requestRetraction(
+                MessageRetractionHandle(event.retraction_handle),
+                FederateHandle(event.sender_federate),
             )
         else:
             return False

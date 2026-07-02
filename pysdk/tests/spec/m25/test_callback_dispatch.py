@@ -41,12 +41,20 @@ class RecordingAmbassador(Rti1516eAmbassador):
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
 
     def discoverObjectInstance(  # noqa: N802
-        self, object_handle: int, class_name: str, instance_name: str
+        self,
+        object_handle: int,
+        class_name: str,
+        instance_name: str,
+        object_class: int | None = None,  # M39 typed-handle parity (§6.9)
     ) -> None:
         self.calls.append(("discoverObjectInstance", (object_handle, class_name, instance_name)))
 
     def reflectAttributeValues(  # noqa: N802
-        self, object_handle: int, values: dict[str, Any], timestamp: float | None
+        self,
+        object_handle: int,
+        values: dict[str, Any],
+        timestamp: float | None,
+        attribute_values: dict[Any, bytes] | None = None,  # M39 (§6.11)
     ) -> None:
         self.calls.append(("reflectAttributeValues", (object_handle, values, timestamp)))
 
@@ -76,7 +84,9 @@ class RecordingAmbassador(Rti1516eAmbassador):
     def announceSynchronizationPoint(self, label: str, tag: bytes) -> None:  # noqa: N802
         self.calls.append(("announceSynchronizationPoint", (label, tag)))
 
-    def federationSynchronized(self, label: str) -> None:  # noqa: N802
+    def federationSynchronized(  # noqa: N802
+        self, label: str, failed_to_sync: tuple[int, ...] = ()
+    ) -> None:
         self.calls.append(("federationSynchronized", (label,)))
 
     def requestAttributeOwnershipAssumption(  # noqa: N802

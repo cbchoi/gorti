@@ -23,18 +23,14 @@ pysdk surface notes:
   are asserted via their observable state instead: the query surface
   (``queryLookahead``) and the typed already-enabled rejection on
   re-enable.
-- pysdk's TIME transport paths translate gRPC failures into the typed
-  ``rti1516e.errors.Time*`` exceptions (detail-string sniffing in
-  ``_grpc_errors``), but the OBJECT path (``updateAttributeValues``)
-  does not — the §8.1.2 floor violation therefore surfaces as a raw
-  ``grpc.aio.AioRpcError`` (INVALID_ARGUMENT, gorti's
-  ``ErrTimeInvalidLogicalTime`` text "invalid logical time"). Known
-  pysdk mapping gap; asserted via code + message substring.
+- Since M39 the OBJECT path (``updateAttributeValues``) shares the TIME
+  path's typed-exception translator, so the §8.1.2 floor violation
+  surfaces as the typed ``rti1516e.errors.InvalidLogicalTime`` (IEEE
+  Annex C name for gorti's ``ErrTimeInvalidLogicalTime``).
 """
 
 from __future__ import annotations
 
-import grpc
 import pytest
 
 from _driver import join, leave
@@ -122,15 +118,13 @@ def test_tc010_lookahead_query_modify_and_floor(
         obj = amb.registerObjectInstance("Vehicle")
 
         # §8.1.2 — currentTime=0, lookahead=2 → TSO stamp 0.5 is below the
-        # floor and must be rejected InvalidLogicalTime.
-        # pysdk mapping gap: raw AioRpcError instead of a typed error;
-        # assert gorti's ErrTimeInvalidLogicalTime text.
-        with pytest.raises(grpc.aio.AioRpcError) as exc_info:
+        # floor and must be rejected InvalidLogicalTime. Typed since M39:
+        # the object path shares the time path's exception translator.
+        from rti1516e.errors import InvalidLogicalTime
+
+        with pytest.raises(InvalidLogicalTime):
+            # §8.1.2 — below-floor TSO send must fail InvalidLogicalTime.
             amb.updateAttributeValues(obj, {int(pos): b"\x00" * 8}, timestamp=0.5)
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT, (
-            "§8.1.2: below-floor TSO send must be InvalidLogicalTime"
-        )
-        assert "invalid logical time" in exc_info.value.details().lower()
 
         # ...and a stamp exactly ON the floor is legal (§8.1.2 boundary).
         amb.updateAttributeValues(obj, {int(pos): b"\x00" * 8}, timestamp=2.0)

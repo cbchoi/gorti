@@ -21,15 +21,16 @@ pysdk surface notes:
   the FOM map for discover), so class assertions compare against
   ``int(getObjectClassHandle(...))``.
 - ``reflectAttributeValues`` keys its values dict by stringified
-  attribute handle; byte payload comparisons use those keys.
-- cut-1 object RPC errors surface as raw ``grpc.aio.AioRpcError`` (no
-  typed-exception translation on the object path) — a known pysdk
-  mapping gap; assertions match the gRPC code + message substring.
+  attribute handle; byte payload comparisons use those keys. (M39 also
+  delivers typed forms alongside — ``object_class`` on discover,
+  ``attribute_values`` on reflect — for overrides that accept them.)
+- object-path RPC errors are translated to typed ``rti1516e.errors``
+  exceptions since M39 (same shared translator as the time path); the
+  register-without-publish assertion below is typed.
 """
 
 from __future__ import annotations
 
-import grpc
 import pytest
 
 from _driver import federate_handle, join, leave
@@ -64,21 +65,17 @@ def test_tc005_register_unpublished_class_rejected(
     """§6.8 precondition — registering an instance of a class the federate
     does not publish fails ObjectClassNotPublished (M37-DC enforcement).
 
-    pysdk mapping gap: the cut-1 object path raises raw AioRpcError
-    (FAILED_PRECONDITION) instead of rti1516e.errors.ObjectClassNotPublished;
-    asserted via gRPC code + message substring.
+    Typed since M39: the object path shares the time path's exception
+    translator, so pysdk raises rti1516e.errors.ObjectClassNotPublished
+    (the IEEE Annex C name) instead of a raw AioRpcError.
     """
+    from rti1516e.errors import ObjectClassNotPublished
+
     amb = join(rtid_url, federation_name, "nopub")
     try:
-        with pytest.raises(grpc.aio.AioRpcError) as exc_info:
+        with pytest.raises(ObjectClassNotPublished):
+            # §6.8 — register without publish must fail ObjectClassNotPublished.
             amb.registerObjectInstance("Vehicle")
-        assert exc_info.value.code() == grpc.StatusCode.FAILED_PRECONDITION, (
-            "§6.8: register without publish must fail ObjectClassNotPublished"
-        )
-        assert "not published" in exc_info.value.details().lower(), (
-            f"§6.8: expected an ObjectClassNotPublished-style message, "
-            f"got {exc_info.value.details()!r}"
-        )
     finally:
         leave(amb)
 
