@@ -52,3 +52,29 @@ non-DDM surface.
 ## M31 status
 
 RED. Goldens are `TBD-pitch-capture` until Agent E's TASK-363 clears.
+
+## gorti parity status (M35, parity-CC)
+
+Publisher PARTIAL 4/6, subscriber PARTIAL 5/7. Captured run:
+`gorti-captured.{publisher,subscriber}.log`.
+
+Missing events:
+
+- `SUB: DISCOVER name=car-inst handle=<H>` — gorti M17 has no late-join
+  discovery: subscribing after the instance was registered does not
+  retroactively fire §6.9 discoverObjectInstance (om_helloworld_pubsub
+  passes because there the subscribe precedes the register).
+- `PUB: PROVIDE_UPDATE_INSTANCE handle=<H> attrs=2` — the DLC
+  §6.19 requestAttributeValueUpdate instance-handle overload (RTIambassadorImpl.cpp:845)
+  is a silent no-op, so the request never reaches the server, even
+  though the server CAN emit provide_update (request_update.go); and
+  §6.20 provideAttributeValueUpdate is not declared on the M17 Cut-1
+  FederateAmbassador, so the bridge has nothing to convert (catalogue
+  row 4.24).
+- `PUB: UPDATE name=car-inst Position=33.000000 Velocity=44.000000`
+  and `SUB: REFLECT name=car-inst Position=33 Velocity=44` — causal
+  downstream of the missing provide (fixture only responds when asked).
+
+Fixture side is ready: evoke-drain loops everywhere, and the response
+update is guarded on provide arrival, so the capture will pick up the
+full chain as soon as the DLC request wiring + bridge converter land.

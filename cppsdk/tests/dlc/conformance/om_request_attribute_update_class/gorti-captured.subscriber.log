@@ -1,0 +1,5 @@
+SUB: CONNECT
+SUB: JOIN
+SUB: SUBSCRIBE Vehicle Position Velocity
+SUB: REQUEST_UPDATE class=Vehicle attrs=[Position,Velocity]
+SUB: RESIGN
