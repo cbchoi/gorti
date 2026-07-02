@@ -1004,6 +1004,15 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		OnRegister: func(fed core.FederationName, owner core.FederateHandle, obj core.ObjectHandle, _ core.ObjectClassHandle, attrs []core.AttributeHandle) {
 			ownMgr.RegisterInitialOwnership(fed, owner, obj, attrs)
 		},
+		// M38 GB — §6.6 per-instance ownership gate: UpdateAttributes
+		// requires the producer to be the CURRENT §7 owner of every
+		// updated attribute (publication stays the §5 class-level
+		// precondition, necessary but not sufficient). ownMgr
+		// satisfies object.InstanceAttributeOwnership via
+		// core.OwnershipCoordinator.IsOwnedBy; state is seeded by the
+		// OnRegister hook above and mutated by the §7 divest/acquire
+		// flows. The internal MOM producer is exempt at the gate.
+		Ownership: ownMgr,
 		// M11: per-federate MOM counters (FR-MOM-1). See momCounterHooks.
 		OnUpdateSent:           momMgr.IncrementUpdatesSent,
 		OnInteractionSent:      momMgr.IncrementInteractionsSent,

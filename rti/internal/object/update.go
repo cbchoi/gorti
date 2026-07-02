@@ -9,6 +9,14 @@ import (
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
+// internalMOMProducer mirrors mom.momProducer (max-uint64): the
+// FederateHandle the RTI itself uses to produce HLAmanager object
+// instances (IEEE 1516.1-2010 §11, M36 DD-2). It can never collide
+// with real federate handles (the federation manager allocates small
+// monotonic handles starting at 1). The §6.6 per-instance ownership
+// gate exempts it — see updateAttributes (M38 GB).
+const internalMOMProducer = ^core.FederateHandle(0)
+
 // Order is the per-attribute or per-interaction declared delivery order
 // in the FOM. TASK-077: when the federation operates in best-effort
 // mode and an attribute / interaction is declared OrderReceive, the
@@ -112,6 +120,27 @@ func (r *Registry) updateAttributes(
 
 	if !r.producerOwnsAllAttrs(ctx, fed, producer, inst.cls, attrs) {
 		return core.ErrAttributeNotOwned
+	}
+
+	// M38 GB — §6.6 precondition: the producer must be the CURRENT §7
+	// owner of EVERY instance-attribute in the update. The publication
+	// probe above is the §5 class-level condition — necessary, not
+	// sufficient — so without this gate a federate that divested an
+	// attribute (or never acquired it) could keep updating it.
+	//
+	// Runs AFTER st.mu is released and takes only the ownership
+	// manager's own RLock per attribute (a map hit, no scan) — no
+	// registry↔manager lock nesting (M36 DD re-entry discipline).
+	// The RTI-internal MOM producer is exempt: its §11 HLAmanager
+	// reflects are RTI-maintained state whose FOM-resolved attribute
+	// handles may lie outside the cut-1 ownership-seeding probe range
+	// (see initialOwnedAttrs / fanoutAttrProbe).
+	if r.opts.Ownership != nil && producer != internalMOMProducer {
+		for attr := range attrs {
+			if !r.opts.Ownership.IsOwnedBy(fed, producer, obj, attr) {
+				return core.ErrAttributeNotOwned
+			}
+		}
 	}
 
 	// M37 EB-3 — §8.1.2 outgoing-TSO timestamp validation, BEFORE the
