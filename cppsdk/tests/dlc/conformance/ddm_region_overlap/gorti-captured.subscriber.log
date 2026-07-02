@@ -5,6 +5,7 @@ SUB: SET_RANGE region=<R> dim=X lower=250 upper=750
 SUB: SET_RANGE region=<R> dim=Y lower=250 upper=750
 SUB: COMMIT_REGION region=<R>
 SUB: SUBSCRIBE_WITH_REGIONS class=Vehicle attributes=[Position] active=true
+SUB: DISCOVER name=car-1
 SUB: REFLECT Position=150.000000
 SUB: REFLECT Position=200.000000
 SUB: REFLECT Position=250.000000
