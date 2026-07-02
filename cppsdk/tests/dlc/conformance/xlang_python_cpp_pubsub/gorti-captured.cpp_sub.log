@@ -1,0 +1,8 @@
+SUB: CONNECT
+SUB: JOIN federate=cpp-sub
+SUB: SUBSCRIBE class=Vehicle attributes=[Position] active=true
+SUB: DISCOVER name=car-1
+SUB: REFLECT Position=10.000000
+SUB: REFLECT Position=20.000000
+SUB: REFLECT Position=30.000000
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

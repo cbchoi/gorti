@@ -66,10 +66,16 @@ def main() -> int:
     # §6.10 updateAttributeValues — RO; mandatory tag (catalogue 17.1).
     # pysdk M28 encodes HLAfloat64BE the same way as cppsdk's
     # rti1516e::HLAfloat64BE so the C++ subscriber decodes byte-identical.
+    #
+    # NOTE (parity-CF): pysdk M28 updateAttributeValues has NO ``tag``
+    # parameter (signature: (object_handle, values, timestamp=None)) —
+    # the §6.10 mandatory user-supplied tag is a pysdk surface divergence
+    # documented in the README verdict. The golden locks the VALUE bytes,
+    # not the tag, so the fixture remains valid without it.
     import struct
     for value in (10.0, 20.0, 30.0):
         encoded = struct.pack(">d", value)  # HLAfloat64BE — big-endian double
-        fed.updateAttributeValues(inst, {p_attr: encoded}, tag=b"")
+        fed.updateAttributeValues(inst, {p_attr: encoded})
         print(f"PUB: UPDATE name=car-1 Position={value:.6f}", flush=True)
         time.sleep(0.05)
 

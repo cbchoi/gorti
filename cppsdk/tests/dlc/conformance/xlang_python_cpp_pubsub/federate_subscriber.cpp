@@ -31,6 +31,7 @@ rti1516e::AttributeHandle gPositionAttr;
 
 class XlangSubFed : public rti1516e::NullFederateAmbassador {
  public:
+  bool removed = false;
   void discoverObjectInstance(
       rti1516e::ObjectInstanceHandle /*theObject*/,
       rti1516e::ObjectClassHandle /*theObjectClass*/,
@@ -54,6 +55,7 @@ class XlangSubFed : public rti1516e::NullFederateAmbassador {
       rti1516e::VariableLengthData const& /*theUserSuppliedTag*/,
       rti1516e::OrderType /*sentOrder*/,
       rti1516e::SupplementalRemoveInfo /*theRemoveInfo*/) override {
+    removed = true;
     std::printf("SUB: REMOVE\n");
   }
 };
@@ -91,8 +93,11 @@ int main(int argc, char** argv) {
   amb->subscribeObjectClassAttributes(vClass, attrs, /*active=*/true);
   std::printf("SUB: SUBSCRIBE class=Vehicle attributes=[Position] active=true\n");
 
-  // Pump for the publisher's lifetime.
-  for (int i = 0; i < 200; ++i) amb->evokeMultipleCallbacks(0.02, 0.05);
+  // Pump for the publisher's lifetime — suite-standard evoke-drain.
+  // Break early once the REMOVE lands (publisher resigned); otherwise
+  // keep draining for the full window so slow Python-side startup
+  // cannot truncate the capture.
+  for (int i = 0; i < 150 && !fed.removed; ++i) amb->evokeMultipleCallbacks(0.05, 0.1);
 
   amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
   std::printf("SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST\n");

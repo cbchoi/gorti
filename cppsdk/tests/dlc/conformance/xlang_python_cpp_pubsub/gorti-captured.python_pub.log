@@ -1,0 +1,8 @@
+PUB: CONNECT
+PUB: JOIN federate=py-pub
+PUB: PUBLISH class=Vehicle attributes=[Position]
+PUB: REGISTER class=Vehicle name=car-1
+PUB: UPDATE name=car-1 Position=10.000000
+PUB: UPDATE name=car-1 Position=20.000000
+PUB: UPDATE name=car-1 Position=30.000000
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
