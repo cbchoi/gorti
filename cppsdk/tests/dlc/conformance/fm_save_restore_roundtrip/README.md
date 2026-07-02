@@ -31,36 +31,35 @@ Per TASK-362 traceability lint:
 - `FED: FEDERATE_RESTORE_COMPLETE` — §4.28 federateRestoreComplete
 - `FED: FEDERATION_RESTORED` — §4.29 federationRestored (catalogue row 4.14: no label)
 
-## Status (M35 parity pass)
+## Status (M36, agent-DB)
 
-**PARTIAL 12/18.** The golden is spec-derived (Pitch capture pending),
-so a clean diff would be SPEC-FULL, not Pitch-FULL.
+**PARTIAL 15/18** (was 12/18 in the M35 parity pass). The golden is
+spec-derived (Pitch capture pending), so a clean diff would be
+SPEC-FULL, not Pitch-FULL.
 
-Matching (12): CONNECT → JOIN → REGISTER → UPDATE →
-REQUEST_FEDERATION_SAVE → INITIATE_FEDERATE_SAVE →
-FEDERATE_SAVE_BEGUN → FEDERATE_SAVE_COMPLETE → FEDERATION_SAVED →
-RESIGN → REJOIN → REQUEST_FEDERATION_RESTORE. The full §4.16-§4.20
-save-side callback chain works after converting the fixture's wait
-loops to `evokeMultipleCallbacks` drains (gorti M17 buffers callbacks
-for caller-thread drain).
+M35 gap 1 is FIXED (M36 DB-3): `rti/internal/savepoint` now captures
+federate NAMES in the save manifest (`federate_names`, index-parallel
+to `federates`) and `RequestFederationRestore` routes
+`initiateFederateRestore` by matching saved names against the CURRENT
+roster (§4.27), with the §4.13 payload still carrying the handle the
+federate had at save time. The resign→rejoin federate (same name, new
+handle) now receives the initiate and its `federateRestoreComplete`
+is accepted. Newly matching: FEDERATE_RESTORE_COMPLETE,
+FEDERATION_RESTORED, final RESIGN — the restore round-trip completes.
 
-Missing (6): RESTORE_REQUEST_SUCCEEDED, RESTORE_BEGUN,
-INITIATE_FEDERATE_RESTORE, FEDERATE_RESTORE_COMPLETE,
-FEDERATION_RESTORED, final RESIGN. Three impl gaps outside this
-fixture (server + DLC bridge, not fixture-fixable):
+Remaining misses (3), all outside DB scope (proto / DLC bridge):
 
-1. `rti/internal/savepoint/manager.go RequestFederationRestore`
-   routes `initiateFederateRestore` to the FederateHandles recorded in
-   the save manifest. gorti never reuses handles, so the resign→rejoin
-   federate (new handle) never receives §4.27, and its
-   `federateRestoreComplete` is rejected with
-   ErrFederateNotInRestore. Spec §4.27 matches by federate NAME
-   (hence the callback's `federateName` + `postRestoreFederateHandle`
-   args).
-2. The server emits no §4.25 `requestFederationRestoreSucceeded` and
-   no §4.26 `federationRestoreBegun` events, and
-   `cppsdk/src/dlc/FederateAmbassadorBridge.cpp` has no dispatch paths
-   for either callback.
-3. `DLCFederateAmbassadorBridge::initiateFederateRestore` forwards an
-   empty `federateName` (M17 wire does not carry it); the golden
-   expects `federate=saver`.
+1. RESTORE_REQUEST_SUCCEEDED + RESTORE_BEGUN: the proto FederateEvent
+   oneof (`proto/rti/v1/stream.proto`, restore tags 43/44/45 =
+   initiate/completed/failed) has NO slots for §4.25
+   `requestFederationRestoreSucceeded` or §4.26
+   `federationRestoreBegun`; adding them is a proto change (out of
+   scope for M36 DB) plus bridge dispatch paths in
+   `cppsdk/src/dlc/FederateAmbassadorBridge.cpp`.
+2. INITIATE_FEDERATE_RESTORE now ARRIVES but reads `federate=` (empty)
+   vs golden `federate=saver`: proto `InitiateFederateRestore` carries
+   only label + federate_handle (no federate_name field), and
+   `DLCFederateAmbassadorBridge::initiateFederateRestore` forwards an
+   empty name. Either a proto field or a bridge-side fill from the
+   federate's own join name (DA's call) turns this line into a match
+   (→ 16/18).
