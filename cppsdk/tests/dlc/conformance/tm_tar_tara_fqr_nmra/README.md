@@ -28,3 +28,19 @@ Catalogue row **9.6** is BLOCKING: M17's `timeAdvanceRequest(double)` (RtiAmbass
 - `federation.fom.xml`
 - `expected.walker.log`
 - `test_tm_tar_tara_fqr_nmra.cpp`
+
+## gorti parity status (M35, parity-CE)
+
+**FULL 15/15.** Captured run: `gorti-captured.walker.log` (canonicalized)
+byte-matches the spec-derived golden.
+
+All five §8 advance primitives (TAR §8.10, TARA §8.11, FQR §8.12,
+NMR §8.8, NMRA §8.9) delegate through the parity-CA §8 wire-through and
+each produces a §8.13 grant at exactly the requested target
+(`time=%.6f` match). §8.3/§8.6 enable acks arrive at time=0.000000 as
+synthesized post-RPC callbacks (parity-CA).
+
+Fixture-side change only: wait loops switched from `evokeCallback(0.1)`
+to the §10.42 evoke-drain pattern (`evokeMultipleCallbacks(0.05, 0.1)`)
+— mandatory under gorti M17; sleep-only/single-evoke loops can miss
+stream callbacks. No golden edits.
