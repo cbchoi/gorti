@@ -1,0 +1,13 @@
+PUB: CONNECT
+PUB: JOIN federate=pub
+PUB: PUBLISH class=Vehicle attributes=[Position]
+PUB: CREATE_REGION dims=[X,Y]
+PUB: SET_RANGE region=<R> dim=X lower=0 upper=500
+PUB: SET_RANGE region=<R> dim=Y lower=0 upper=500
+PUB: COMMIT_REGION region=<R>
+PUB: NAME_RESERVED name=car-1
+PUB: REGISTER class=Vehicle name=car-1 region=<R>
+PUB: UPDATE name=car-1 Position=150.000000
+PUB: UPDATE name=car-1 Position=200.000000
+PUB: UPDATE name=car-1 Position=250.000000
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

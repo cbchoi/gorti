@@ -41,3 +41,34 @@ The fixture exercises only the DLC shapes, locking source-compat with Pitch-port
 - `expected.publisher.log`
 - `expected.subscriber.log`
 - `test_ddm_region_overlap.cpp`
+
+## gorti parity status (M35, parity-CE)
+
+Publisher **FULL 13/13**; subscriber **PARTIAL 10/11**. Captured run:
+`gorti-captured.{publisher,subscriber}.log` (canonicalized).
+
+The fixture's core assertion — §9 region-filtered delivery through the
+R_pub∩R_sub overlap — WORKS end-to-end: createRegion, setRangeBounds,
+commitRegionModifications, registerObjectInstanceWithRegions (parity-CA
+fused as §6.8 register + §9.6 associateRegionsForUpdates),
+subscribeObjectClassAttributesWithRegions, and all three region-routed
+REFLECTs arrive with exact values.
+
+Missing event (exactly one): `SUB: DISCOVER name=car-1`.
+
+Root cause — discover fanout is not DDM-aware:
+`rti/internal/object/discover.go` fanoutDiscover selects recipients from
+`Declarations.SubscribersFor` only, while the reflect path
+(`rti/internal/object/update.go` subscribersForUpdate, M10 FR-DDM-3..6)
+replaces that set with `DDM.SubscribersForUpdate` when the producer has
+region associations. A federate subscribed ONLY via
+SubscribeObjectClassAttributesWithRegions (ddm.Manager tables; no
+declaration.Manager entry) therefore gets every region-filtered REFLECT
+but never the §6.9 discoverObjectInstance that HLA requires to precede
+them. Missing impl: make fanoutDiscover consult the DDM subscription
+tables (or have the DDM subscribe also record a declaration
+subscription) — one-line recipient-set union plus determinism-order
+merge.
+
+Fixture-side change: publisher name-reservation wait moved to the
+§10.42 evoke-drain pattern. No golden edits.
