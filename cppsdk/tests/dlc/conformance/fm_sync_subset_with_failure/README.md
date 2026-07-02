@@ -91,3 +91,13 @@ gaps. Exactly two residual gap kinds, both M37 EA proto verticals:
 - `FEDERATION_SYNCHRONIZED ... failedToSyncSet.size=0` on bob+carol
   where golden wants `size=1` (§4.15 — failedToSyncSet forwarded
   empty).
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+`_harness/run_fixture.sh fm_sync_subset_with_failure` vs integrated
+main (post M37-EA/EB/EC merges): **SPEC-FULL 17/17** (registrar 5/5,
+bob 6/6, carol 6/6). Both ED residuals closed by the M37 proto
+vertical: §4.12 registration ack now on the wire + bridged, and §4.15
+`failedToSyncSet` now carries carol (`size=1` on bob and carol, and
+carol's §4.14 `successfully=false` achieve is recorded as failed).
+No residual.
