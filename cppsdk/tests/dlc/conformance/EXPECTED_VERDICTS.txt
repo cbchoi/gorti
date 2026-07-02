@@ -1,0 +1,43 @@
+# CI expectations for the DLC conformance sweep (scripts/ci-gates.sh sweep).
+#
+# One line per fixture: <fixture> <expectation>
+#   FULL     — run_fixture.sh must exit 0 (every role FULL)
+#   PARTIAL  — a documented divergence is allowed; run_fixture.sh exit 1
+#              is tolerated (but exit 2 = harness error still fails CI).
+#              The rationale MUST be in the fixture README.
+#   SKIP:<reason> — not runnable under the generic driver in CI.
+#
+# Improving a fixture to FULL requires updating this file in the same
+# commit — CI fails on any mismatch in either direction, so a fixture
+# silently regressing from FULL and a fixture silently improving past
+# its documented divergence are both caught.
+#
+# Snapshot basis: M37-EE final sweep 2026-07-02 (26/27 FULL/SPEC-FULL,
+# 459/459 golden events; sole divergence tm_tso interim GRANT).
+fm_create_join_resign FULL
+fm_list_executions FULL
+fm_save_restore_roundtrip FULL
+fm_sync_full FULL
+fm_sync_subset_with_failure FULL
+dm_pub_sub_active_passive FULL
+dm_unpublish_whole_vs_attrs FULL
+om_helloworld_pubsub FULL
+om_delete_object_tso FULL
+om_local_delete FULL
+om_message_retraction FULL
+om_request_attribute_update_class FULL
+om_request_attribute_update_instance FULL
+om_reserve_multi_atomic FULL
+own_acquire_if_available_race SKIP:race-branch-requires-SIGSTOP-choreography-(manual-verdict,-see-README)
+own_negotiated_divest_two_phase FULL
+own_query_via_callbacks FULL
+own_release_request_denied FULL
+tm_lookahead_change FULL
+tm_ner_pair FULL
+tm_tar_tara_fqr_nmra FULL
+tm_tso_ordering PARTIAL
+ddm_region_overlap FULL
+ddm_region_mod_in_flight FULL
+mom_federation_lifecycle FULL
+threading_callback_reentry FULL
+xlang_python_cpp_pubsub SKIP:python-publisher-not-expressible-in-driver.conf-(manual-verdict,-see-README)
