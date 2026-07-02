@@ -98,13 +98,18 @@ class SyncClient:
         except Exception as exc:  # noqa: BLE001 — translate_rpc_error reraises
             translate_rpc_error(exc)
 
-    async def synchronization_point_achieved(self, label: str) -> None:
-        """Signal that this federate has achieved ``label`` (§4.7).
+    async def synchronization_point_achieved(
+        self, label: str, *, successfully: bool = True
+    ) -> None:
+        """Signal that this federate has achieved ``label`` (§4.14).
 
         When all required federates have called this, the RTI
         transitions the sync point to Achieved and emits
-        ``federationSynchronized`` (see cut-3 wire limitation in the
-        module docstring).
+        ``federationSynchronized``.
+
+        ``successfully=False`` (M37 wire field, M39 HA-2 surface, IEEE
+        §4.14) still counts toward the transition but lands this
+        federate in ``FederationSynchronized.failed_to_sync`` (§4.15).
         """
         from rti.v1 import common_pb2, sync_pb2
 
@@ -113,6 +118,7 @@ class SyncClient:
             federation_name=self._federation_name,
             federate_handle=self._federate_handle,
             label=label,
+            successfully=bool(successfully),
         )
         try:
             await self._stub.SynchronizationPointAchieved(req)

@@ -17,13 +17,10 @@ ambassador methods, both wired against the same gorti rtid.
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import shutil
 import socket
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -40,7 +37,10 @@ from rti1516e.standard import Rti1516eAmbassador
 
 BIN_DIR = REPO_ROOT / "bin"
 RTID_BINARY = BIN_DIR / "rtid"
-CPP_PUBLISHER = REPO_ROOT / "cppsdk" / "build" / "examples" / "cpp-pitch-smoke" / "cpp_pitch_publisher"
+CPP_PUBLISHER = (
+    REPO_ROOT / "cppsdk" / "build" / "examples" / "cpp-pitch-smoke"
+    / "cpp_pitch_publisher"
+)
 CPP_FOM = REPO_ROOT / "examples" / "cpp-pitch-smoke" / "federation.fom.xml"
 FEDERATION = "cpp-pitch-smoke"
 

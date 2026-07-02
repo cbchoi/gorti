@@ -247,7 +247,11 @@ class GrpcTransport:
         treat the result as opaque.
         """
         if method == "create_federation":
-            return await self._create_federation(kwargs["spec"])
+            return await self._create_federation(
+                kwargs["spec"], exist_ok=kwargs.get("exist_ok", True),
+            )
+        if method == "destroy_federation":
+            return await self._destroy_federation(kwargs["federation_name"])
         if method == "join_federation":
             return await self._join_federation(
                 kwargs["spec"],
@@ -390,8 +394,17 @@ class GrpcTransport:
 
     # --- Per-RPC dispatch helpers ------------------------------------------
 
-    async def _create_federation(self, spec: Any) -> None:
+    async def _create_federation(self, spec: Any, *, exist_ok: bool = True) -> None:
+        """CreateFederation. ``exist_ok=True`` (the rolled create-on-join
+        path) swallows FederationAlreadyExists so the second federate to
+        create the same federation succeeds silently; ``exist_ok=False``
+        (§4.5 createFederationExecution, M39 HA-2) surfaces it as the
+        typed ``FederationExecutionAlreadyExists``. Every other failure
+        is translated either way.
+        """
         from rti.v1 import common_pb2, federation_pb2
+
+        from ._grpc_errors import translate_rpc_error
 
         self._federation_name = spec.name
         # Build FOMModule list + cache the name→handle maps (Python-side
@@ -415,18 +428,38 @@ class GrpcTransport:
         )
         try:
             await self.federation.CreateFederation(req)
-        except Exception as exc:
-            # FederationAlreadyExists is benign — the second federate to
-            # create the same federation should succeed silently.
-            if _is_already_exists(exc):
+        except Exception as exc:  # noqa: BLE001 — translate_rpc_error reraises
+            # FederationAlreadyExists is benign on the rolled path — the
+            # second federate to create the same federation should
+            # succeed silently.
+            if exist_ok and _is_already_exists(exc):
                 return
-            raise
+            translate_rpc_error(exc)
         return
+
+    async def _destroy_federation(self, federation_name: str) -> None:
+        """§4.6 destroyFederationExecution (M39 HA-2). Typed failures:
+        FederatesCurrentlyJoined while members remain,
+        FederationExecutionDoesNotExist for an unknown name."""
+        from rti.v1 import common_pb2, federation_pb2
+
+        from ._grpc_errors import translate_rpc_error
+
+        req = federation_pb2.DestroyFederationRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=federation_name,
+        )
+        try:
+            await self.federation.DestroyFederation(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
 
     async def _join_federation(
         self, spec: Any, federate_name: str, federate_type: str = ""
     ) -> int:
         from rti.v1 import common_pb2, federation_pb2
+
+        from ._grpc_errors import translate_rpc_error
 
         self._federation_name = spec.name
         # Make sure the handle tables are populated even if the caller
@@ -444,7 +477,11 @@ class GrpcTransport:
             federate_name=federate_name,
             federate_type=federate_type,
         )
-        resp = await self.federation.JoinFederation(req)
+        try:
+            resp = await self.federation.JoinFederation(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+            raise  # unreachable; translate_rpc_error always raises
         federate_handle = int(resp.federate_handle)
         # Open the per-federate event stream as soon as we know the
         # handle; the background task pushes events into the queue
@@ -493,6 +530,8 @@ class GrpcTransport:
         the safe path."""
         from rti.v1 import common_pb2, declaration_pb2
 
+        from ._grpc_errors import translate_rpc_error
+
         cls = self._resolve_interaction_class_handle(class_arg)
         req = declaration_pb2.PubInterRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
@@ -500,7 +539,10 @@ class GrpcTransport:
             federate_handle=federate_handle,
             interaction_class_handle=cls,
         )
-        await self.declaration.PublishInteractionClass(req)
+        try:
+            await self.declaration.PublishInteractionClass(req)
+        except Exception as exc:  # noqa: BLE001 — translate_rpc_error reraises
+            translate_rpc_error(exc)
         return
 
     async def _subscribe_interaction(
@@ -509,6 +551,8 @@ class GrpcTransport:
         """M27 Phase D: see _publish_interaction."""
         from rti.v1 import common_pb2, declaration_pb2
 
+        from ._grpc_errors import translate_rpc_error
+
         cls = self._resolve_interaction_class_handle(class_arg)
         req = declaration_pb2.SubInterRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
@@ -516,7 +560,10 @@ class GrpcTransport:
             federate_handle=federate_handle,
             interaction_class_handle=cls,
         )
-        await self.declaration.SubscribeInteractionClass(req)
+        try:
+            await self.declaration.SubscribeInteractionClass(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
         return
 
     async def _send_interaction(
@@ -555,7 +602,12 @@ class GrpcTransport:
         )
         if timestamp is not None:
             req.logical_time = float(timestamp)
-        await self.objects.SendInteraction(req)
+        try:
+            await self.objects.SendInteraction(req)
+        except Exception as exc:  # noqa: BLE001
+            from ._grpc_errors import translate_rpc_error
+
+            translate_rpc_error(exc)
         return
 
     # --- M21 TASK-208: TimeService dispatchers ---------------------------------
@@ -983,7 +1035,12 @@ class GrpcTransport:
             object_class_handle=cls,
             attribute_handles=attr_handles,
         )
-        await self.declaration.PublishObjectClassAttributes(req)
+        try:
+            await self.declaration.PublishObjectClassAttributes(req)
+        except Exception as exc:  # noqa: BLE001
+            from ._grpc_errors import translate_rpc_error
+
+            translate_rpc_error(exc)
         return
 
     async def _subscribe_object_class(
@@ -1007,7 +1064,12 @@ class GrpcTransport:
             object_class_handle=cls,
             attribute_handles=attr_handles,
         )
-        await self.declaration.SubscribeObjectClassAttributes(req)
+        try:
+            await self.declaration.SubscribeObjectClassAttributes(req)
+        except Exception as exc:  # noqa: BLE001
+            from ._grpc_errors import translate_rpc_error
+
+            translate_rpc_error(exc)
         return
 
     async def _register_object_instance(
@@ -1031,7 +1093,13 @@ class GrpcTransport:
             object_class_handle=cls,
             object_name=instance_name or "",
         )
-        resp = await self.objects.RegisterObjectInstance(req)
+        try:
+            resp = await self.objects.RegisterObjectInstance(req)
+        except Exception as exc:  # noqa: BLE001
+            from ._grpc_errors import translate_rpc_error
+
+            translate_rpc_error(exc)
+            raise  # unreachable; translate_rpc_error always raises
         return int(resp.object_handle)
 
     async def _update_attributes(
@@ -1079,7 +1147,12 @@ class GrpcTransport:
         )
         if timestamp is not None:
             req.logical_time = float(timestamp)
-        await self.objects.UpdateAttributeValues(req)
+        try:
+            await self.objects.UpdateAttributeValues(req)
+        except Exception as exc:  # noqa: BLE001
+            from ._grpc_errors import translate_rpc_error
+
+            translate_rpc_error(exc)
         return
 
     def _object_class_handle_for(self, class_name: str) -> int:

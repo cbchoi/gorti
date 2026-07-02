@@ -204,15 +204,44 @@ class Rti1516eAmbassador:
         self._stop_loop()
 
     def createFederationExecution(self, name: str, fom_modules: list[str]) -> None:  # noqa: N802
-        """Stash the federation spec for the upcoming join.
+        """§4.5 — create the federation execution.
 
-        In a real RTI, ``create`` and ``join`` are distinct calls. The
-        Layer 1 SDK rolls them into ``join_federation`` (idempotent on the
-        server side), so we just record the args here and apply them on
-        the next ``joinFederationExecution`` call.
+        M39 HA-2: when connected, the create RPC is issued EAGERLY and a
+        duplicate name raises the typed
+        :class:`rti1516e.errors.FederationExecutionAlreadyExists`
+        (IEEE §4.5) — the standard HLA pattern is::
+
+            try:
+                amb.createFederationExecution(name, foms)
+            except FederationExecutionAlreadyExists:
+                pass  # someone else created it first
+            amb.joinFederationExecution(federate, name)
+
+        The spec is also stashed for the upcoming join, and the rolled
+        create-on-join path stays idempotent — federates that skip
+        ``createFederationExecution`` entirely keep working (Layer 1's
+        ``join_federation`` creates with ``exist_ok=True``).
         """
         self._federation_name = name
         self._fom_modules = list(fom_modules)
+        if self._connection is not None and self._connection_cm_open:
+            spec = FederationSpec(name=name, fom_modules=list(fom_modules))
+            self._run(self._connection.create_federation(spec))
+
+    def destroyFederationExecution(self, name: str) -> None:  # noqa: N802
+        """§4.6 — destroy the federation execution.
+
+        M39 HA-2. Raises the typed
+        :class:`rti1516e.errors.FederatesCurrentlyJoined` while members
+        remain joined and
+        :class:`rti1516e.errors.FederationExecutionDoesNotExist` for an
+        unknown name.
+        """
+        if self._connection is None:
+            raise RuntimeError(
+                "connect() must be called before destroyFederationExecution()"
+            )
+        self._run(self._connection.destroy_federation(name))
 
     def joinFederationExecution(  # noqa: N802
         self,
@@ -563,8 +592,17 @@ class Rti1516eAmbassador:
             )
         )
 
-    def synchronizationPointAchieved(self, label: str) -> None:  # noqa: N802
-        self._run(self._fed().sync.synchronization_point_achieved(label))
+    def synchronizationPointAchieved(  # noqa: N802
+        self, label: str, successfully: bool = True
+    ) -> None:
+        """§4.14 — M39 HA-2: ``successfully=False`` still counts toward
+        the sync transition but lands this federate in the §4.15
+        ``failed_to_sync`` set on federationSynchronized."""
+        self._run(
+            self._fed().sync.synchronization_point_achieved(
+                label, successfully=successfully,
+            )
+        )
 
     # --- §7 Ownership Management (M25 Phase C) ---
 
@@ -582,10 +620,23 @@ class Rti1516eAmbassador:
         object_handle: ObjectInstanceRef,
         attribute_handles: AttributeRefList,
         tag: bytes = b"",
+        two_phase: bool = False,
     ) -> None:
+        """§7.3 — M39 HA-2: ``two_phase=True`` parks the transfer on
+        requestDivestitureConfirmation until :meth:`confirmDivestiture`."""
         self._run(
             self._fed().ownership.negotiated_divest(
-                object_handle, list(attribute_handles), tag=tag
+                object_handle, list(attribute_handles), tag=tag, two_phase=two_phase
+            )
+        )
+
+    def confirmDivestiture(  # noqa: N802
+        self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
+    ) -> None:
+        """§7.6 — complete a parked two-phase negotiated divest (M39 HA-2)."""
+        self._run(
+            self._fed().ownership.confirm_divestiture(
+                object_handle, list(attribute_handles)
             )
         )
 
@@ -597,6 +648,21 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(
             self._fed().ownership.acquire(object_handle, list(attribute_handles), tag=tag)
+        )
+
+    def attributeOwnershipAcquisitionIfAvailable(  # noqa: N802
+        self,
+        object_handle: ObjectInstanceRef,
+        attribute_handles: AttributeRefList,
+        tag: bytes = b"",
+    ) -> None:
+        """§7.9 — grab only currently-unowned attributes; nothing is
+        queued (M39 HA-2). The unavailable subset arrives via the §7.10
+        attributeOwnershipUnavailable callback."""
+        self._run(
+            self._fed().ownership.acquire(
+                object_handle, list(attribute_handles), tag=tag, if_available=True
+            )
         )
 
     def cancelNegotiatedAttributeOwnershipDivestiture(  # noqa: N802
