@@ -125,3 +125,14 @@ verdict vs the existing M36 capture: 10/10 by content; the only
 remaining strict-order diff is the 3 answer-before-query line swaps
 (client-side DLC synchronous-callback artifact, DA-owned; see
 ORDERING above).
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 14/14 strict** (carrier 4/4, querier 10/10;
+`_harness/run_fixture.sh own_query_via_callbacks`). The three
+answer-before-query strict swaps are closed: the DLC now defers
+synthesized ownership-query callbacks to the evoke queue (M37 EC), so
+each informAttributeOwnership / attributeIsNotOwned lands after the
+fixture's own QUERY print, matching the ED-amended golden
+(INFORM_OWNERSHIP owner=carrier for HLAprivilegeToDelete per §6.8).
+No residual.
