@@ -211,6 +211,22 @@ type Options struct {
 	// MOM.IncrementInteractionsReceived.
 	OnInteractionDelivered func(fed core.FederationName, recipient core.FederateHandle)
 
+	// Ownership is the OPTIONAL per-instance attribute-ownership
+	// lookup (M38 GB / IEEE 1516.1-2010 §6.6 precondition). When
+	// non-nil, updateAttributes requires the producer to be the
+	// CURRENT §7 owner of EVERY attribute in the update — the
+	// class-level publication check (producerOwnsAllAttrs, the §5
+	// precondition) remains necessary but is no longer sufficient.
+	// The RTI-internal MOM producer (max-uint64, mom.momProducer) is
+	// exempt — see internalMOMProducer in update.go.
+	//
+	// OPTIONAL: when nil, the pre-M38 publication-only gate applies
+	// (in-process fixtures composed without an ownership manager keep
+	// working — same relaxation pattern as TSOGate / TSOValidator).
+	// cmd/rtid wires the production ownership.Manager here, whose
+	// state is seeded by the OnRegister hook below.
+	Ownership InstanceAttributeOwnership
+
 	// DDM is the OPTIONAL Data Distribution Management filter
 	// (M10 / FR-DDM-3..6). When non-nil, the registry consults
 	// the DDM manager on every update / interaction send to:
@@ -228,6 +244,17 @@ type Options struct {
 	//
 	// MUST satisfy DDMFilter (defined below).
 	DDM DDMFilter
+}
+
+// InstanceAttributeOwnership is the contract the update gate consumes
+// from the ownership manager (M38 GB): "is federate h the CURRENT §7
+// owner of instance-attribute (obj, attr)?". ownership.Manager (and
+// the core.OwnershipCoordinator interface) satisfy it directly via
+// IsOwnedBy — a per-attribute map hit under the manager's RLock, safe
+// on the update hot path. Consumer-owned interface, same direction as
+// Declarations / DDMFilter.
+type InstanceAttributeOwnership interface {
+	IsOwnedBy(fed core.FederationName, h core.FederateHandle, obj core.ObjectHandle, attr core.AttributeHandle) bool
 }
 
 // DDMFilter is the contract object.Registry consumes from the DDM
@@ -309,6 +336,9 @@ func New(opts Options) (*Registry, error) {
 	}
 	if isNilInterface(opts.DDM) {
 		opts.DDM = nil
+	}
+	if isNilInterface(opts.Ownership) {
+		opts.Ownership = nil
 	}
 	return &Registry{
 		opts:         opts,
