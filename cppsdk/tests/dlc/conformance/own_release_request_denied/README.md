@@ -76,3 +76,13 @@ attributeOwnershipReleaseDenied RPC to resolve the pending acquire,
 (3) bridge conversion for the §7.11 callback. Both federate wait
 loops use the evoke-drain pattern, so the event will be captured as
 soon as the impl lands.
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 11/11** (alice 6/6, bob 5/5;
+`_harness/run_fixture.sh own_release_request_denied`). The M35 residual
+is closed: §7.11 requestAttributeOwnershipRelease is on the wire and
+bridged (M37 EA/EC) — `ALICE: RELEASE_REQUEST attrs=1` now fires when
+bob's acquire targets alice's owned attribute, alice denies, and bob
+correctly receives no acquisitionNotification (the negative assertion
+now holds for the right reason). No residual.
