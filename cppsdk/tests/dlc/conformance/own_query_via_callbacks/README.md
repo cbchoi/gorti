@@ -16,7 +16,7 @@ hitting a different §7.18 branch:
 |---|---|---|
 | `OwnedAttr` | Carrier publishes + registered owner | `informAttributeOwnership` |
 | `UnownedAttr` | FOM declares it, nobody publishes | `attributeIsNotOwned` |
-| `HLAprivilegeToDelete` | RTI-managed implicit attribute | `attributeIsOwnedByRTI` |
+| `HLAprivilegeToDelete` | Implicit attribute; owned by the REGISTRANT per §6.8 | `informAttributeOwnership` (owner=carrier) |
 
 ## Spec citations per event in goldens
 
@@ -76,16 +76,52 @@ Remaining divergences (exactly two kinds):
   therefore precedes the caller's own print. Client-side artifact,
   not addressable from the server; DA-owned if the callback is to be
   deferred to the next evoke.
-- CONTENT (1 line): golden expects
+- CONTENT (1 line): golden expected
   `ATTRIBUTE_IS_OWNED_BY_RTI attr=HLAprivilegeToDelete`; gorti answers
   `INFORM_OWNERSHIP attr=HLAprivilegeToDelete owner=<H>` (the
-  registrant). GOLDEN-REVIEW FLAG: per IEEE 1516.1-2010 §6.8 the
-  registering federate "shall own the instance attribute
-  HLAprivilegeToDeleteObject" of the instance it registers —
-  attributeIsOwnedByRTI applies to RTI-owned (MOM) instance
-  attributes. The spec-derived golden's OWNED_BY_RTI expectation looks
-  incorrect for a federate-registered instance; gorti's answer follows
-  §6.8. Additionally the DLC cannot synthesize attributeIsOwnedByRTI
-  from the M17 QueryOwnership result shape (owned + concrete owner
-  handle). Left for orchestrator adjudication rather than editing the
-  golden here.
+  registrant). RESOLVED by the M37 golden review below — golden
+  amended; gorti's answer is the spec-correct one.
+
+## Golden review (M37 agent-ED, 2026-07-02) — OWNED_BY_RTI line
+
+Adjudication of the M36-DC flag: **the golden was wrong; gorti is
+spec-correct. Golden amended (spec-wins).**
+
+Reasoning, per IEEE 1516.1-2010:
+
+1. §6.8 (registerObjectInstance), ownership postcondition: the
+   registering joined federate "shall own the instance attribute
+   HLAprivilegeToDeleteObject" of each object instance it registers
+   (publication of any object class implicitly publishes
+   HLAprivilegeToDeleteObject, so the registrant is eligible to own
+   it). In this fixture the CARRIER registers `car-query`, so the
+   carrier — a joined federate, not the RTI — owns the privilege
+   attribute for the entire run (it never divests, and resigns only
+   after the querier's queries complete).
+2. §7.17 (queryAttributeOwnership) is void; the answer arrives as
+   exactly one of the three §7.18 callbacks, selected by the actual
+   owner: a joined federate → `informAttributeOwnership(attr, owner)`;
+   nobody → `attributeIsNotOwned`; the RTI → `attributeIsOwnedByRTI`.
+3. `attributeIsOwnedByRTI` therefore requires the RTI itself to be
+   the owner. The RTI owns instance attributes of the MOM object
+   instances it registers (§6.8 in conjunction with §10 MOM
+   semantics); it does not own the privilege attribute of a
+   federate-registered instance. No divestiture-to-RTI occurs in this
+   scenario. Hence the OWNED_BY_RTI expectation had no spec-legal
+   trigger here.
+4. Consequence: the third query's correct answer is
+   `informAttributeOwnership(HLAprivilegeToDeleteObject,
+   owner=carrier)` — exactly what gorti emits
+   (`INFORM_OWNERSHIP attr=HLAprivilegeToDelete owner=<H>`).
+
+Golden change: `expected.querier.log` line
+`QUERIER: ATTRIBUTE_IS_OWNED_BY_RTI attr=HLAprivilegeToDelete` →
+`QUERIER: INFORM_OWNERSHIP attr=HLAprivilegeToDelete owner=<H>`,
+with an amendment note in the golden header. Post-amendment the fixture
+witnesses two of the three §7.18 flavors; a genuine
+`attributeIsOwnedByRTI` witness needs an RTI-owned (MOM) instance
+attribute and belongs in a MOM-side fixture, not here. Post-amendment
+verdict vs the existing M36 capture: 10/10 by content; the only
+remaining strict-order diff is the 3 answer-before-query line swaps
+(client-side DLC synchronous-callback artifact, DA-owned; see
+ORDERING above).
