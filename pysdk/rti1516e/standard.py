@@ -23,6 +23,7 @@ import threading
 from concurrent.futures import Future
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
+from rti1516e import _transport
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.events import (
     AttributeOwnershipAcquisitionNotification,
@@ -231,11 +232,25 @@ class Rti1516eAmbassador:
     def resignFederationExecution(  # noqa: N802
         self, action: str = "UNCONDITIONALLY_DIVEST_ATTRIBUTES"
     ) -> None:
-        del action  # accepted for API compat; semantics handled server-side
+        """IEEE 1516.1-2010 §4.10 — resign with an explicit action.
+
+        M36: the action designator is threaded through the federate
+        context manager down to the wire (M24 W2 ResignAction enum), so
+        e.g. ``CANCEL_THEN_DELETE_THEN_DIVEST`` makes the rtid delete
+        the resigning federate's instances (subscribers see REMOVE).
+        Unknown designators raise ``ValueError`` before any state is
+        torn down (§4.10 InvalidResignAction).
+        """
+        if action not in _transport.RESIGN_ACTION_NAMES:
+            valid = ", ".join(sorted(_transport.RESIGN_ACTION_NAMES))
+            raise ValueError(
+                f"invalid resign action {action!r}; expected one of: {valid}"
+            )
         if self._event_pump_task is not None:
             self._event_pump_task.cancel()
             self._event_pump_task = None
         if self._federate_cm is not None:
+            self._federate_cm.resign_action = action
             self._run(self._federate_cm.__aexit__(None, None, None))
             self._federate_cm = None
         self._federate = None

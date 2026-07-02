@@ -92,6 +92,52 @@ def clear() -> None:
     _TRANSPORT_REGISTRY.clear()
 
 
+# --- Resign-action mapping (M36) ---------------------------------------------
+
+# IEEE 1516.1-2010 §4.10 resign-action designators → ``rti.v1.ResignAction``
+# wire enum names (M24 W2). Three of the proto names are shortened forms of
+# the IEEE designators, so a plain ``"RESIGN_ACTION_" + name`` concat is NOT
+# correct — keep this table exhaustive and explicit.
+_RESIGN_ACTION_WIRE_NAMES: dict[str, str] = {
+    "UNCONDITIONALLY_DIVEST_ATTRIBUTES": "RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES",
+    "DELETE_OBJECTS": "RESIGN_ACTION_DELETE_OBJECTS",
+    "CANCEL_PENDING_OWNERSHIP_ACQUISITIONS": "RESIGN_ACTION_CANCEL_PENDING_OWNERSHIP",
+    "DELETE_OBJECTS_THEN_DIVEST": "RESIGN_ACTION_DELETE_THEN_DIVEST",
+    "CANCEL_THEN_DELETE_THEN_DIVEST": "RESIGN_ACTION_CANCEL_THEN_DELETE",
+    "NO_ACTION": "RESIGN_ACTION_NO_ACTION",
+}
+
+#: Public view of the accepted IEEE §4.10 designator strings (Layer 2
+#: validates against this before dispatching the resign).
+RESIGN_ACTION_NAMES = frozenset(_RESIGN_ACTION_WIRE_NAMES)
+
+
+def resign_action_to_proto(action: int | str | None) -> int:
+    """Map a resign action to the ``rti.v1.ResignAction`` enum value.
+
+    - ``None``  → ``RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES``
+      (the pre-M24 default).
+    - ``int``   → passed through unchanged (caller already holds the
+      proto enum value; M24 W2 contract).
+    - ``str``   → IEEE 1516.1-2010 §4.10 designator, translated via
+      :data:`_RESIGN_ACTION_WIRE_NAMES`. Unknown names raise
+      ``ValueError`` (§4.10 InvalidResignAction).
+    """
+    from rti.v1 import common_pb2
+
+    if action is None:
+        return int(
+            common_pb2.ResignAction.RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES
+        )
+    if isinstance(action, int):
+        return action
+    wire_name = _RESIGN_ACTION_WIRE_NAMES.get(action)
+    if wire_name is None:
+        valid = ", ".join(sorted(_RESIGN_ACTION_WIRE_NAMES))
+        raise ValueError(f"invalid resign action {action!r}; expected one of: {valid}")
+    return int(common_pb2.ResignAction.Value(wire_name))
+
+
 # --- Real-gRPC transport ----------------------------------------------------
 
 
@@ -402,7 +448,7 @@ class GrpcTransport:
         return federate_handle
 
     async def _resign_federation(
-        self, federate_handle: int, action: int | None = None,
+        self, federate_handle: int, action: int | str | None = None,
     ) -> None:
         from rti.v1 import common_pb2, federation_pb2
 
@@ -418,9 +464,10 @@ class GrpcTransport:
             with contextlib.suppress(BaseException):
                 await task
         # M24 W2 — caller may pass an explicit ResignAction value.
+        # M36 — Layer 2 passes the IEEE §4.10 designator string; map it
+        # here so the higher layers stay proto-free.
         # Default = UNCONDITIONALLY_DIVEST_ATTRIBUTES (matches pre-M24).
-        if action is None:
-            action = common_pb2.ResignAction.RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES
+        action = resign_action_to_proto(action)
         req = federation_pb2.ResignFederationRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name,
