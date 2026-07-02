@@ -59,13 +59,14 @@
     </interactionClass>
   </interactions>
   <switches>
+    <!-- NOTE: the four *Advisory switch elements present in the cppsdk
+         DLC fixtures are omitted here — pysdk's strict FOM parser
+         (rti1516e.fom, FOM-009) rejects them, which would silently
+         empty the SDK-side name→handle tables. The Go-side parser
+         accepts the FOM either way. -->
     <autoProvide isEnabled="false"/>
     <conveyRegionDesignatorSets isEnabled="false"/>
     <conveyProducingFederate isEnabled="false"/>
-    <attributeScopeAdvisory isEnabled="false"/>
-    <attributeRelevanceAdvisory isEnabled="false"/>
-    <objectClassRelevanceAdvisory isEnabled="false"/>
-    <interactionRelevanceAdvisory isEnabled="false"/>
     <serviceReporting isEnabled="false"/>
     <exceptionReporting isEnabled="false"/>
     <delaySubscriptionEvaluation isEnabled="false"/>
