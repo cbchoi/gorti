@@ -1,0 +1,9 @@
+FED: CONNECT
+FED: JOIN federate=unpublisher
+FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
+FED: UNPUBLISH_ATTRS class=Vehicle attributes=[Position]
+FED: REGISTER class=Vehicle name=car-phase1 handle=<H>
+FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
+FED: UNPUBLISH_CLASS class=Vehicle
+FED: REGISTER class=Vehicle name=car-phase2 handle=<H>
+FED: RESIGN
