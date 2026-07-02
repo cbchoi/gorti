@@ -110,9 +110,14 @@ runs: **subscriber 9/9 golden lines matched (+1 extra), publishers FULL
   three §8.15 tie-break RECVs (alice→bob→carol) and
   `SUB: GRANT time=2.000000` (previously missing).
 - Sole residual: extra `SUB: GRANT time=1.000000` printed before the
-  RECVs — the rti/internal/time/ner.go grant-before-delivery defect
-  (§8.14 requires delivery first). Disappears with the server-side
-  order fix (M37 EB).
+  RECVs. Re-run against main + the M37 EB branch (EB-2 §8.14
+  drain-before-grant): identical 9/9 (+1) — so this is NOT the §8.14
+  drain-order defect (tm_ner_pair goes FULL/FULL on that branch). It
+  is gorti's interim NER semantics: the "forced grant at LBTS keeps
+  pending" fires GRANT 1.0 before the publishers' T=1.0 Ticks have
+  arrived (nothing buffered to drain); under strict §8.8/§8.13 no
+  intermediate grant callback is emitted for a still-pending NER.
+  Server-side (rti/internal/time ner.go), M37 EB/follow-on.
 
 Fixture fixes that made this deterministic (M37 ED):
 
