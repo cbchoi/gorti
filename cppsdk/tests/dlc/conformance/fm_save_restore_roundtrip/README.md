@@ -63,3 +63,16 @@ Remaining misses (3), all outside DB scope (proto / DLC bridge):
    empty name. Either a proto field or a bridge-side fill from the
    federate's own join name (DA's call) turns this line into a match
    (→ 16/18).
+
+## M37 EE final verdict (2026-07-02) — integrated main
+
+**SPEC-FULL 18/18** (`_harness/run_fixture.sh fm_save_restore_roundtrip`).
+All three M36-DB residuals are closed by the M37 proto vertical:
+§4.25 requestFederationRestoreSucceeded + §4.26 federationRestoreBegun
+now have wire slots (RESTORE_REQUEST_SUCCEEDED + RESTORE_BEGUN
+captured), and InitiateFederateRestore carries federate_name
+(`federate=saver`). Determinism note: rtid persists savepoint bundles
+(gorti-saves/) in its cwd; a stale bundle from a previous run makes the
+next requestFederationSave abort. The harness now starts rtid with its
+cwd in the per-run temp dir, making back-to-back runs deterministic
+(verified 3x FULL). No residual.
