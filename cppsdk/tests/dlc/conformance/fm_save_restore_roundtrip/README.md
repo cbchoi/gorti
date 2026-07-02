@@ -31,6 +31,36 @@ Per TASK-362 traceability lint:
 - `FED: FEDERATE_RESTORE_COMPLETE` — §4.28 federateRestoreComplete
 - `FED: FEDERATION_RESTORED` — §4.29 federationRestored (catalogue row 4.14: no label)
 
-## M31 status
+## Status (M35 parity pass)
 
-RED. `TBD-pitch-capture` until Agent E TASK-363 clears.
+**PARTIAL 12/18.** The golden is spec-derived (Pitch capture pending),
+so a clean diff would be SPEC-FULL, not Pitch-FULL.
+
+Matching (12): CONNECT → JOIN → REGISTER → UPDATE →
+REQUEST_FEDERATION_SAVE → INITIATE_FEDERATE_SAVE →
+FEDERATE_SAVE_BEGUN → FEDERATE_SAVE_COMPLETE → FEDERATION_SAVED →
+RESIGN → REJOIN → REQUEST_FEDERATION_RESTORE. The full §4.16-§4.20
+save-side callback chain works after converting the fixture's wait
+loops to `evokeMultipleCallbacks` drains (gorti M17 buffers callbacks
+for caller-thread drain).
+
+Missing (6): RESTORE_REQUEST_SUCCEEDED, RESTORE_BEGUN,
+INITIATE_FEDERATE_RESTORE, FEDERATE_RESTORE_COMPLETE,
+FEDERATION_RESTORED, final RESIGN. Three impl gaps outside this
+fixture (server + DLC bridge, not fixture-fixable):
+
+1. `rti/internal/savepoint/manager.go RequestFederationRestore`
+   routes `initiateFederateRestore` to the FederateHandles recorded in
+   the save manifest. gorti never reuses handles, so the resign→rejoin
+   federate (new handle) never receives §4.27, and its
+   `federateRestoreComplete` is rejected with
+   ErrFederateNotInRestore. Spec §4.27 matches by federate NAME
+   (hence the callback's `federateName` + `postRestoreFederateHandle`
+   args).
+2. The server emits no §4.25 `requestFederationRestoreSucceeded` and
+   no §4.26 `federationRestoreBegun` events, and
+   `cppsdk/src/dlc/FederateAmbassadorBridge.cpp` has no dispatch paths
+   for either callback.
+3. `DLCFederateAmbassadorBridge::initiateFederateRestore` forwards an
+   empty `federateName` (M17 wire does not carry it); the golden
+   expects `federate=saver`.
