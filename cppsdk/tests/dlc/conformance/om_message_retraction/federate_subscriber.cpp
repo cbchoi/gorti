@@ -88,9 +88,11 @@ int main() {
     amb->joinFederationExecution(L"subscriber", L"om_message_retraction");
     std::cout << "SUB: JOIN" << std::endl;
 
+    // Callback-wait loops drain via §10.42 evokeMultipleCallbacks (see
+    // publisher note; legal + silent under both RTIs).
     amb->enableTimeConstrained();
     for (int i = 0; i < 100 && !fed.constrained_enabled_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     const auto honk = amb->getInteractionClassHandle(L"HLAinteractionRoot.Honk");
@@ -104,12 +106,20 @@ int main() {
     amb->timeAdvanceRequest(t15);
 
     for (int i = 0; i < 200 && !fed.retraction_received_.load(); ++i) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      amb->evokeMultipleCallbacks(0.05, 0.1);
     }
 
     // Hold a moment to detect any spurious RECEIVE that the retraction
     // failed to suppress.
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    {
+      // Drain (not sleep) so a spurious RECEIVE would actually be
+      // delivered under gorti's buffered caller-thread model.
+      const auto deadline = std::chrono::steady_clock::now() +
+                            std::chrono::milliseconds(500);
+      while (std::chrono::steady_clock::now() < deadline) {
+        amb->evokeMultipleCallbacks(0.05, 0.1);
+      }
+    }
 
     amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);
     std::cout << "SUB: RESIGN" << std::endl;

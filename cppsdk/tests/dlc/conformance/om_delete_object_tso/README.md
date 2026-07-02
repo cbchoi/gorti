@@ -53,3 +53,29 @@ from gorti M17. Row 4.22 (MAJOR): subscriber-side `removeObjectInstance`
 
 RED. `WILL_FAIL TRUE` per dispatch plan §3 criterion 2. Goldens are
 `TBD-pitch-capture` until Agent E's TASK-363 (Pitch EULA review) clears.
+
+## gorti parity status (M35, parity-CC)
+
+BLOCKED(DLC §8 time surface unwired) — capture stops at 2/8 per side
+(CONNECT, JOIN). Captured run: `gorti-captured.{publisher,subscriber}.log`.
+
+The very first §8 call aborts both federates:
+`enableTimeRegulation` / `enableTimeConstrained` throw from
+`DLCRTIambassadorImpl` with "M17 time surface not yet wired into
+DLCRTIambassadorImpl (M34 follow-up — needs a private M17 client
+member on RTIambassadorImpl.h; tracked as 'M34 header pImpl' in the
+dispatch plan)". Everything downstream (TAR/grant, the §6.14 TSO
+delete, the §6.15 REMOVE_TSO callback) is unreachable through DLC.
+
+Beyond the §8 wiring, this fixture will still need:
+- DLC `deleteObjectInstance` (both overloads) wired — currently no-ops
+  (RTIambassadorImpl.cpp:814-835; the TSO overload returns an invalid
+  MessageRetractionHandle);
+- `removeObjectInstance` declared on the M17 FederateAmbassador +
+  bridge conversion (catalogue rows 11.5/4.22) — the server DOES emit
+  it (rti/internal/object/delete.go, proto slot remove=12).
+
+Fixture side is ready: all callback-wait loops use the §10.42
+evoke-drain pattern, the subscriber gates its TAR on DISCOVER (so the
+grant cannot race the TSO delete) and drains until both REMOVE_TSO and
+the grant land.
