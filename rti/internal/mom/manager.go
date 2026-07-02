@@ -72,6 +72,13 @@ type Options struct {
 type Manager struct {
 	opts Options
 
+	// fanout — M36 object-instance fan-out dependencies. Set once via
+	// EnableInstanceFanout during cmd/rtid composition (after the
+	// object registry exists — the Manager itself is constructed
+	// first); the zero value disables fan-out and preserves the
+	// pre-M36 snapshot-only behavior. See instances.go.
+	fanout instanceFanoutDeps
+
 	mu  gosync.RWMutex
 	fed map[core.FederationName]*momState
 }
@@ -107,12 +114,10 @@ func (m *Manager) FederationCreated(
 	fed core.FederationName,
 	fomModules []core.FOMModule,
 ) error {
-	_ = ctx
 	if fed == "" {
 		return errors.New("mom: FederationCreated requires non-empty federation name")
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st, ok := m.fed[fed]
 	if !ok {
 		st = newMOMState()
@@ -120,7 +125,11 @@ func (m *Manager) FederationCreated(
 	}
 	st.federation.name = fed
 	st.federation.fomModuleNames = fomModuleNamesFor(fomModules)
-	return nil
+	m.mu.Unlock()
+	// M36 — register the HLAfederation instance through the standard
+	// object-registry path (instances.go). MUST run outside m.mu: the
+	// registry re-enters the Manager via counter hooks.
+	return m.setupFederationInstance(ctx, fed)
 }
 
 // FederationDestroyed removes the HLAfederation MOM instance and any
@@ -155,12 +164,10 @@ func (m *Manager) FederateJoined(
 	name string,
 	federateType string,
 ) error {
-	_ = ctx
 	if h == core.InvalidFederateHandle {
 		return errors.New("mom: FederateJoined requires non-zero handle")
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st, ok := m.fed[fed]
 	if !ok {
 		st = newMOMState()
@@ -178,7 +185,10 @@ func (m *Manager) FederateJoined(
 		federateType: federateType,
 	}
 	st.addFederateHandle(h)
-	return nil
+	m.mu.Unlock()
+	// M36 — HLAfederate instance registration + reflects via the
+	// standard object-registry path (instances.go). Outside m.mu.
+	return m.registerFederateInstance(ctx, fed, h, name, federateType)
 }
 
 // FederateResigned removes the HLAfederate MOM object AND updates
@@ -191,16 +201,25 @@ func (m *Manager) FederateResigned(
 	fed core.FederationName,
 	h core.FederateHandle,
 ) error {
-	_ = ctx
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st, ok := m.fed[fed]
 	if !ok {
+		m.mu.Unlock()
 		return nil
+	}
+	// Capture the MOM object instance handle BEFORE dropping the
+	// snapshot — removeFederateInstance needs it for the standard
+	// registry Delete (Remove fan-out to subscribers).
+	var obj core.ObjectHandle
+	if fs, ok := st.federates[h]; ok {
+		obj = fs.objectHandle
 	}
 	delete(st.federates, h)
 	st.removeFederateHandle(h)
-	return nil
+	m.mu.Unlock()
+	// M36 — delete the HLAfederate instance via the standard registry
+	// path (instances.go). Outside m.mu.
+	return m.removeFederateInstance(ctx, fed, obj)
 }
 
 // TimeStateChanged updates HLAfederate.HLAtimeRegulating /

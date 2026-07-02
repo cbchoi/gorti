@@ -19,6 +19,12 @@ import (
 type momState struct {
 	federation federationSnapshot
 	federates  map[core.FederateHandle]*federateSnapshot
+
+	// objects — M36: FOM-resolved MOM class/attribute handles + the
+	// registered HLAfederation instance for the object-instance
+	// fan-out (instances.go). Zero value (ok=false) = fan-out not
+	// engaged for this federation.
+	objects momClassHandles
 }
 
 // federationSnapshot is the live HLAfederation attribute set.
@@ -41,6 +47,11 @@ type federateSnapshot struct {
 	handle          core.FederateHandle
 	name            string
 	federateType    string
+	// objectHandle/objectName — M36: the HLAfederate object instance
+	// registered for this federate via the standard object-registry
+	// path (instances.go). InvalidObjectHandle when fan-out is off.
+	objectHandle core.ObjectHandle
+	objectName   string
 	timeRegulating  bool
 	timeConstrained bool
 	lookahead       core.LogicalTime

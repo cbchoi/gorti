@@ -45,6 +45,20 @@ func newFederationState() *federationState {
 type Manager struct {
 	mu  sync.RWMutex
 	fed map[core.FederationName]*federationState
+
+	// onSubscribeObjectClass — M36 optional post-subscribe hook.
+	// Invoked AFTER a successful SubscribeObjectClassAttributes
+	// recording, outside the manager mutex. cmd/rtid wires this to
+	// mom.Manager.ObjectClassSubscribed so late subscribers to the
+	// MOM object classes receive retroactive Discover/Reflect for
+	// already-existing HLAfederation/HLAfederate instances.
+	onSubscribeObjectClass func(
+		ctx context.Context,
+		fed core.FederationName,
+		sub core.FederateHandle,
+		cls core.ObjectClassHandle,
+		attrs []core.AttributeHandle,
+	)
 }
 
 // Compile-time assertion: *Manager satisfies core.DeclarationManagement.
@@ -125,16 +139,28 @@ func (m *Manager) UnpublishObjectClassAttributes(
 	return nil
 }
 
+// SetOnSubscribeObjectClass registers the optional post-subscribe hook
+// (M36). Call during composition, before the server accepts RPCs; not
+// synchronized against in-flight SubscribeObjectClassAttributes calls.
+func (m *Manager) SetOnSubscribeObjectClass(fn func(
+	ctx context.Context,
+	fed core.FederationName,
+	sub core.FederateHandle,
+	cls core.ObjectClassHandle,
+	attrs []core.AttributeHandle,
+)) {
+	m.onSubscribeObjectClass = fn
+}
+
 // SubscribeObjectClassAttributes records federate `sub`'s subscription.
 func (m *Manager) SubscribeObjectClassAttributes(
-	_ context.Context,
+	ctx context.Context,
 	fed core.FederationName,
 	sub core.FederateHandle,
 	cls core.ObjectClassHandle,
 	attrs []core.AttributeHandle,
 ) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	st := m.stateLocked(fed)
 	for _, a := range attrs {
 		k := objAttrKey{cls: cls, attr: a}
@@ -144,6 +170,12 @@ func (m *Manager) SubscribeObjectClassAttributes(
 			st.objSubs[k] = set
 		}
 		set[sub] = struct{}{}
+	}
+	m.mu.Unlock()
+	// M36 — fire the post-subscribe hook OUTSIDE the mutex (the MOM
+	// retroactive fan-out sends Outbox events and takes its own locks).
+	if m.onSubscribeObjectClass != nil {
+		m.onSubscribeObjectClass(ctx, fed, sub, cls, attrs)
 	}
 	return nil
 }
