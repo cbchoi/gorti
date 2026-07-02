@@ -64,10 +64,10 @@ void report_state(rti1516e::RTIambassador* amb, char const* tag) {
 int main(int argc, char** argv) {
   std::string url = "grpc://127.0.0.1:8080";
   std::string fom = "./federation.fom.xml";
-  for (int i = 1; i + 1 < argc; i += 2) {
+  for (int i = 1; i < argc; ++i) {
     std::string k = argv[i];
-    if (k == "--url") url = argv[i + 1];
-    else if (k == "--fom") fom = argv[i + 1];
+    if (k == "--url" && i + 1 < argc) url = argv[++i];
+    else if (k == "--fom" && i + 1 < argc) fom = argv[++i];
   }
 
   rti1516e::RTIambassadorFactory factory;
