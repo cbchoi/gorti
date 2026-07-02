@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
 
   // §6.4 + §6.5 reservation then §6.8 register with regions.
   amb->reserveObjectInstanceName(L"car-1");
-  while (!fed.reservation_ok) amb->evokeCallback(0.1);
+  while (!fed.reservation_ok) amb->evokeMultipleCallbacks(0.05, 0.1);
 
   // §9.5 registerObjectInstanceWithRegions — catalogue 10.3.
   //   vector< pair< AttributeHandleSet, RegionHandleSet > >

@@ -33,3 +33,45 @@ The driver spawns the subscriber first (so it owns the federation create) and wa
 - `federation.fom.xml`
 - `expected.{alice,bob,carol,subscriber}.log`
 - `test_tm_tso_ordering.cpp`
+
+## gorti parity status (M35, parity-CE)
+
+Publishers alice/bob/carol **FULL 5/5 each**; subscriber **PARTIAL 5/9**
+(+1 extra line). Captured run:
+`gorti-captured.{alice,bob,carol,subscriber}.log` (canonicalized).
+Golden is spec-derived (>2 federates exceeds the Pitch Free cap).
+
+Subscriber diff vs golden:
+- missing `SUB: RECV ... source={alice,bob,carol} order=TIMESTAMP` (3) —
+  the §8.15 strict-TSO-order assertion, THE point of this fixture, is
+  unobservable under gorti today;
+- missing `SUB: GRANT time=2.000000`, extra `SUB: GRANT time=1.000000`.
+
+Three distinct M17 gaps, in causal order:
+
+1. **TSO sends degrade to RO** (same root cause as tm_ner_pair, see its
+   README for the full trace): `cppsdk/src/dlc/RTIambassadorImpl.cpp:818`
+   discards `theTime`; the M17 client never sets
+   `SendInteractionRequest.logical_time`. The three Ticks are delivered
+   immediately as RO through the plain 6-arg `receiveInteraction`
+   overload, so no TIMESTAMP RECVs and no server-side TSO queue to order.
+   Until fixed, gorti's §8.15 within-bucket FederateHandle tie-break
+   (which its deterministic tryGrantPending handle-sorted iteration —
+   advance.go candidateGrants, NFR-DET-1 — is well positioned to honour)
+   cannot be witnessed.
+2. **NER forced grant at LBTS** (documented interim semantics,
+   `rti/internal/time/advance.go` decideGrant): the subscriber's sole
+   pending NER(2.0) is force-granted at LBTS=1.0 with pending kept —
+   hence the extra `GRANT time=1.000000`. (Spec §8.8 would also grant at
+   1.0 here, but only WITH the three message deliveries; the golden
+   models the no-pending-message case as a single full grant at 2.0.)
+3. **Resign never re-evaluates pending grants**:
+   `rti/internal/time/manager.go` OnFederateResign deletes the resigned
+   regulator's state but does not re-run tryGrantPending, so the kept
+   pending NER(2.0) is never re-granted after the last publisher
+   resigns (LBTS -> +Inf) — the walk cannot reach t=2. The fixture
+   bounds its drain loop (~6 s) to capture this without hanging.
+
+Fixture-side changes (no golden edits): 2 s pre-send dwell in the
+publishers so the launcher can start the subscriber before the T=1.0
+sends; evoke-drain everywhere; bounded NER drain per gap 3.

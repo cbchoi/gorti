@@ -1,0 +1,5 @@
+carol: CONNECT
+carol: JOIN federate=carol
+carol: PUBLISH interaction=Tick
+carol: SEND interaction=Tick seq=1 source=carol time=1
+carol: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

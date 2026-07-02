@@ -52,7 +52,7 @@ class WalkerFed : public rti1516e::NullFederateAmbassador {
 };
 
 void wait_grant(rti1516e::RTIambassador* amb, WalkerFed& fed, double prior) {
-  while (fed.lastGrant <= prior) amb->evokeCallback(0.1);
+  while (fed.lastGrant <= prior) amb->evokeMultipleCallbacks(0.05, 0.1);
 }
 
 }  // namespace
@@ -83,9 +83,9 @@ int main(int argc, char** argv) {
   // §8.2 regulation + §8.5 constrained, both async.
   rti1516e::HLAfloat64Interval lookahead(1.0);
   amb->enableTimeRegulation(lookahead);
-  while (!fed.regulating) amb->evokeCallback(0.1);
+  while (!fed.regulating) amb->evokeMultipleCallbacks(0.05, 0.1);
   amb->enableTimeConstrained();
-  while (!fed.constrained) amb->evokeCallback(0.1);
+  while (!fed.constrained) amb->evokeMultipleCallbacks(0.05, 0.1);
 
   // TAR §8.10
   {

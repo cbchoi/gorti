@@ -1,0 +1,5 @@
+bob: CONNECT
+bob: JOIN federate=bob
+bob: PUBLISH interaction=Tick
+bob: SEND interaction=Tick seq=1 source=bob time=1
+bob: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

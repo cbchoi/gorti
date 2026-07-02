@@ -94,15 +94,25 @@ int main(int argc, char** argv) {
   amb->subscribeInteractionClass(ick, /*active=*/true);
   std::printf("CON: SUBSCRIBE interaction=Tick active=true\n");
 
-  // §8.5 enable constrained. Async — wait for §8.6 callback.
+  // §8.5 enable constrained. Async — wait for §8.6 callback (evoke-drain).
   amb->enableTimeConstrained();
-  while (!fed.constrained) amb->evokeCallback(0.1);
+  while (!fed.constrained) amb->evokeMultipleCallbacks(0.05, 0.1);
+
+  // Launch-order gate (§8.16 queryGALT): GALT is defined iff at least one
+  // regulating federate exists. Without this the NER loop below races the
+  // regulator's §8.2 enableTimeRegulation — a constrained federate with no
+  // regulator present is granted immediately and the TSO cycle never engages.
+  // Emits no golden events (queries are not logged).
+  {
+    rti1516e::HLAfloat64Time galt(0.0);
+    while (!amb->queryGALT(galt)) amb->evokeMultipleCallbacks(0.05, 0.1);
+  }
 
   for (int t = 1; t <= 5; ++t) {
     rti1516e::HLAfloat64Time target(static_cast<double>(t));
     double priorGrant = fed.lastGrant;
     amb->nextMessageRequest(target);
-    while (fed.lastGrant == priorGrant) amb->evokeCallback(0.1);
+    while (fed.lastGrant == priorGrant) amb->evokeMultipleCallbacks(0.05, 0.1);
   }
 
   amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

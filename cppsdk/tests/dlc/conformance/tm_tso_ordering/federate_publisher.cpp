@@ -20,9 +20,11 @@
 #include <RTI/encoding/HLAinteger32BE.h>
 #include <RTI/encoding/HLAASCIIstring.h>
 
+#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -79,9 +81,14 @@ int main(int argc, char** argv) {
   // Regulating with lookahead=1.0 lets us send TSO at theTime=federate_time+1.
   rti1516e::HLAfloat64Interval lookahead(1.0);
   amb->enableTimeRegulation(lookahead);
-  while (!fed.regulating) amb->evokeCallback(0.1);
+  while (!fed.regulating) amb->evokeMultipleCallbacks(0.05, 0.1);
   amb->enableTimeConstrained();
-  while (!fed.constrained) amb->evokeCallback(0.1);
+  while (!fed.constrained) amb->evokeMultipleCallbacks(0.05, 0.1);
+
+  // Launch-order dwell: the subscriber joins LAST (see fixture header); give
+  // it wall-clock room to subscribe before the T=1.0 sends so delivery is a
+  // routing question, not a join race. Emits no golden events.
+  std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
   // §6.12 TSO send at T=1.0 — same logical time across all 3 publishers
   // so subscriber sees the §5.2.1 TSO tie-break ordering.
@@ -104,7 +111,7 @@ int main(int argc, char** argv) {
     double prior = fed.lastGrant;
     amb->timeAdvanceRequest(target);
     while (fed.lastGrant < 1.0 - 1e-9 && fed.lastGrant <= prior)
-      amb->evokeCallback(0.1);
+      amb->evokeMultipleCallbacks(0.05, 0.1);
   }
 
   amb->resignFederationExecution(rti1516e::CANCEL_THEN_DELETE_THEN_DIVEST);

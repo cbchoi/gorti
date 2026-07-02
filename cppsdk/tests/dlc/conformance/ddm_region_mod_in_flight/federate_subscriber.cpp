@@ -35,6 +35,7 @@ rti1516e::AttributeHandle gValueAttr;
 
 class SubFed : public rti1516e::NullFederateAmbassador {
  public:
+  int reflects = 0;
   void discoverObjectInstance(
       rti1516e::ObjectInstanceHandle /*theObject*/,
       rti1516e::ObjectClassHandle /*theObjectClass*/,
@@ -51,6 +52,7 @@ class SubFed : public rti1516e::NullFederateAmbassador {
       rti1516e::SupplementalReflectInfo /*info*/) override {
     rti1516e::HLAfloat64BE v;
     v.decode(vals.at(gValueAttr));
+    ++reflects;
     std::printf("SUB: REFLECT Value=%.6f\n", v.get());
   }
   // §6.17 attributesInScope (catalogue 4.23)
@@ -122,8 +124,11 @@ int main(int argc, char** argv) {
                                                  /*updateRate=*/L"");
   std::printf("SUB: SUBSCRIBE_WITH_REGIONS class=Sensor attributes=[Value] active=true\n");
 
-  // Pump for ~180 ms — should catch reflects 1..3.
-  for (int i = 0; i < 4; ++i) {
+  // Pump until reflects 1..3 have arrived (bounded ~10 s). The scenario
+  // contract (see golden header) is that the region modification lands
+  // between updates 3 and 4 — counting reflects realises that contract
+  // robustly instead of racing the publisher on wall-clock.
+  for (int i = 0; i < 200 && fed.reflects < 3; ++i) {
     amb->evokeMultipleCallbacks(0.05, 0.06);
   }
 
@@ -134,7 +139,7 @@ int main(int argc, char** argv) {
 
   // Pump for the rest — reflects 4..6 should be filtered out;
   // attributesOutOfScope advisory should fire.
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 20; ++i) {
     amb->evokeMultipleCallbacks(0.05, 0.06);
   }
 
