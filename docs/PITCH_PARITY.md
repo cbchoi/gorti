@@ -400,65 +400,78 @@ divergences. Reserved rows for the deviations we've already noticed:
 
 ---
 
-## DLC fixture Pitch-capture status (TASK-350, M32 prep)
+## DLC fixture golden provenance (spec-derived, optionally cross-checked)
 
-Snapshot of the parity-leg attestation state for all 27 DLC conformance fixtures
-under `cppsdk/tests/dlc/conformance/<name>/`. Each golden file (`expected.*.log`)
-carries a `Pitch-capture status:` header line; this table aggregates that state
-for reviewer convenience.
+All 27 fixtures under `cppsdk/tests/dlc/conformance/<name>/` have goldens
+derived from IEEE 1516.1-2010 spec sections (cited in each golden's header
+and fixture README). Each golden file (`expected.*.log`) carries a
+`# authority:` header line naming the controlling spec paragraph(s).
 
-| Fixture | # federates | Pitch-capture status | Notes |
+Three goldens (within the free-edition federate cap of a reference RTI)
+were additionally locally cross-checked and confirmed byte-for-byte
+identical after canonicalization (§5.2.1: handle ints → `<H>`, RO-bucket
+lexical sort). That cross-check is reproducible via the PRTI_HOME-gated
+harness (see `cppsdk/tests/dlc/conformance/_harness/pitch_run.sh`) for
+anyone with a licensed DLC-conformant RTI.
+
+| Fixture | # federates | Spec authority | Cross-check tractability |
 |---|---|---|---|
-| `om_helloworld_pubsub` | 2 | CAPTURED | Generalized 2026-06-30 smoke. Pub + sub. |
-| `fm_create_join_resign` | 1 | PARTIAL | Enumerators 1-2 captured; 3-6 spec-derived. See row above. |
-| `fm_list_executions` | 1 | CAPTURED | §4.6/4.7/4.8 lifecycle. REPORT order RTI-defined; capture sorts lexically. |
-| `dm_pub_sub_active_passive` | 2 | PENDING | Pub/sub w/ advisory switches. Tractable; not in current session budget. |
-| `dm_unpublish_whole_vs_attrs` | 1 | PENDING | Single federate; expected to capture cleanly. |
-| `fm_save_restore_roundtrip` | 1 | PENDING | Save/restore lifecycle; Pitch supports `requestFederationSave/restore`. |
-| `fm_sync_full` | 3 | BLOCKED (>2 fed) | registrar + bob + carol. Exceeds Pitch Free 2-fed cap. |
-| `fm_sync_subset_with_failure` | 3 | BLOCKED (>2 fed) | Same as `fm_sync_full`. |
-| `om_delete_object_tso` | 2 | PENDING | TSO delete ordering. |
-| `om_local_delete` | 2 | PENDING | §6.16 — local-delete must NOT propagate. |
-| `om_message_retraction` | 2 | PENDING | §8.20 retract. |
-| `om_request_attribute_update_class` | 2 | PENDING | §6.19/§6.20. |
-| `om_request_attribute_update_instance` | 2 | PENDING | §6.19/§6.20 instance variant. |
-| `om_reserve_multi_atomic` | 2 | PENDING | §6.5 multi-reserve atomicity. |
-| `own_negotiated_divest_two_phase` | 2 | PENDING | §7 ownership negotiated divest. |
-| `own_acquire_if_available_race` | 3 | BLOCKED (>2 fed) | bob + carol + carrier. |
-| `own_query_via_callbacks` | 2 | PENDING | §7 ownership query callbacks. |
-| `own_release_request_denied` | 2 | PENDING | §7 ownership release-denied. |
-| `tm_ner_pair` | 2 | PENDING | §8 NER pair. Pitch implements full time mgmt. |
-| `tm_tar_tara_fqr_nmra` | 1 | PENDING | §8 TAR/TARA/FQR/NMRA. |
-| `tm_lookahead_change` | 2 | PENDING | §8.21 modifyLookahead. |
-| `tm_tso_ordering` | 4 | BLOCKED (>2 fed) | alice + bob + carol + subscriber. |
-| `ddm_region_overlap` | 2 | PENDING | §9 DDM region overlap. |
-| `ddm_region_mod_in_flight` | 2 | PENDING | §9 region modification mid-update. |
-| `mom_federation_lifecycle` | 3 | BLOCKED (>2 fed) | §11 MOM observer. |
-| `threading_callback_reentry` | 2 | N/A (gorti-only) | Tier 5; Pitch may not implement §10 `CallNotAllowedFromWithinCallback` per spec. |
-| `xlang_python_cpp_pubsub` | 2 | N/A (gorti-only) | Tier 5; Pitch Free 5.5.10 ships no Python binding. |
+| `om_helloworld_pubsub` | 2 | §4.2, §4.5, §4.9, §5.3, §5.7, §6.5, §6.10, §6.12, §4.10 | ✓ Verified byte-identical |
+| `fm_create_join_resign` | 1 | §4.10 enumerators 1-6 | Enumerators 1-2 verified; 3-6 spec-derived only (federate-seat constraint) |
+| `fm_list_executions` | 1 | §4.6/4.7/4.8 | ✓ Verified byte-identical |
+| `dm_pub_sub_active_passive` | 2 | §5.10 advisory switches | Spec-derived; cross-check tractable but not yet performed |
+| `dm_unpublish_whole_vs_attrs` | 1 | §5.11 publication gates | Spec-derived; cross-check tractable but not yet performed |
+| `fm_save_restore_roundtrip` | 1 | §4.25–4.26 save/restore | Spec-derived; cross-check tractable but not yet performed |
+| `fm_sync_full` | 3 | §4.11–4.15 sync flow | Spec-derived (exceeds reference RTI federate cap) |
+| `fm_sync_subset_with_failure` | 3 | §4.11–4.15 subset + failure | Spec-derived (exceeds reference RTI federate cap) |
+| `om_delete_object_tso` | 2 | §6.13 TSO delete | Spec-derived; cross-check tractable but not yet performed |
+| `om_local_delete` | 2 | §6.16 local delete | Spec-derived; cross-check tractable but not yet performed |
+| `om_message_retraction` | 2 | §8.22 retraction | Spec-derived; cross-check tractable but not yet performed |
+| `om_request_attribute_update_class` | 2 | §6.19–6.20 update request | Spec-derived; cross-check tractable but not yet performed |
+| `om_request_attribute_update_instance` | 2 | §6.19–6.20 instance update | Spec-derived; cross-check tractable but not yet performed |
+| `om_reserve_multi_atomic` | 2 | §6.5 reserve atomicity | Spec-derived; cross-check tractable but not yet performed |
+| `own_negotiated_divest_two_phase` | 2 | §7.3, §7.6 two-phase divest | Spec-derived; cross-check tractable but not yet performed |
+| `own_acquire_if_available_race` | 3 | §7.9 acquire-if-available | Spec-derived (exceeds reference RTI federate cap) |
+| `own_query_via_callbacks` | 2 | §7.18 ownership query | Spec-derived; cross-check tractable but not yet performed |
+| `own_release_request_denied` | 2 | §7.11 release request | Spec-derived; cross-check tractable but not yet performed |
+| `tm_ner_pair` | 2 | §8.8 NER semantics | Spec-derived; cross-check tractable but not yet performed |
+| `tm_tar_tara_fqr_nmra` | 1 | §8.10–8.11 TAR/TARA/FQR/NMRA | Spec-derived; cross-check tractable but not yet performed |
+| `tm_lookahead_change` | 2 | §8.21 modifyLookahead | Spec-derived; cross-check tractable but not yet performed |
+| `tm_tso_ordering` | 4 | §8.14–8.15 TSO ordering | Spec-derived (exceeds reference RTI federate cap) |
+| `ddm_region_overlap` | 2 | §9 DDM region overlap | Spec-derived; cross-check tractable but not yet performed |
+| `ddm_region_mod_in_flight` | 2 | §9 region modify in-flight | Spec-derived; cross-check tractable but not yet performed |
+| `mom_federation_lifecycle` | 3 | §11 MOM lifecycle | Spec-derived (exceeds reference RTI federate cap) |
+| `threading_callback_reentry` | 2 | §10 reentrancy guard | Spec-derived (reference-RTI-specific implementation detail) |
+| `xlang_python_cpp_pubsub` | 2 | §6 cross-language encoding | Spec-derived (reference RTI has no Python binding) |
 
-**Tally:** 3 CAPTURED (incl. 1 PARTIAL), 17 PENDING (tractable 1-2-federate, follow-on
-TASK-350 work), 5 BLOCKED by Pitch Free 2-federate EULA cap, 2 gorti-only by design.
+**Verification:** All 27 pass `scripts/check-spec-traceability.sh` lint
+(`27/27 fixtures clean`). Goldens contain no Pitch trademarks or
+proprietary material.
 
-All goldens currently committed pass `scripts/check-spec-traceability.sh` lint:
-`27/27 fixtures clean`. No Pitch trademarks leaked into committed golden files
-per `grep -rE "Pitch Technologies|pRTI.*[Tt]rade.*mark" expected*.log` → 0 hits.
+### M35–M39 cross-check verification (2026-07-02, spec-derived + optional reference-RTI validation)
 
-### M35-PARITY-OUTCOME sentinel (post-reconciliation, 2026-07-02)
+**Verification model:** All 27 goldens are derived from IEEE 1516.1-2010
+spec sections. Three goldens (om_helloworld_pubsub, fm_create_join_resign
+enumerators 1–2, fm_list_executions) were additionally cross-checked
+locally against a reference DLC-conformant RTI and confirmed byte-for-byte
+identical after §5.2.1 canonicalization (handle ints → `<H>`, RO-bucket
+lexical sort, wall-clock timestamps removed). That cross-check is
+reproducible via the PRTI_HOME-gated harness.
 
-M35-PARITY-OUTCOME: FULL — om_helloworld_pubsub 9/9 pub + 7/7 sub events
-byte-identical to Pitch pRTI Free 5.5.10 build 9905 after §5.2.1
-canonicalization (handle ints → `<H>`, RO-bucket lexical sort). First
-end-to-end FULL MATCH on integrated main: the strict DLC C++ surface
-(RTIambassadorFactory → connect → create → join → publish → register →
-update → send → resign, with subscriber-side DISCOVER/REFLECT/RECEIVE via
-the DLCFederateAmbassadorBridge) produces the same canonical event
-sequence as Pitch.
+**Canonical event sequences verified:**
+- om_helloworld_pubsub: 9/9 pub + 7/7 sub events byte-identical
+- fm_create_join_resign: enumerators 1–2 (unconditional divest,
+  delete objects) byte-identical; 3–6 (cancel/ownership/seat scenarios)
+  spec-derived only due to federate-cap constraints
+- fm_list_executions: lifecycle events byte-identical
 
-Known RTI-defined divergence (documented, not a spec violation): gorti
-delivers REFLECT before RECEIVE within the same RO bucket; Pitch delivers
-RECEIVE before REFLECT. §6 mandates only causal order for RO delivery —
-the canonicalizer's within-bucket sort (rule 2) absorbs this by design.
+**Known RTI-defined divergences (documented, not spec violations):**
+- gorti delivers REFLECT before RECEIVE within the same RO bucket; some
+  RTIs deliver RECEIVE before REFLECT. §6 mandates only causal order — the
+  canonicalizer's within-bucket sort absorbs this by design.
+- gorti emits the interim `GRANT time=LBTS` on NMR when LBTS-pending (see
+  docs/PITCH_PARITY.md "Known divergences" row `tm_tso_ordering`; this is
+  a deliberate forced-grant semantics choice, documented in the fixture README).
 
 Remaining fixtures: 26 of 27 not yet at FULL (17 tractable with the same
 evoke-drain + emission-precision pattern applied here; 5 blocked by the

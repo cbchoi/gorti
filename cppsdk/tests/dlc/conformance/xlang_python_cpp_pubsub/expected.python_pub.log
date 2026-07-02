@@ -1,5 +1,5 @@
 # M31 fixture xlang_python_cpp_pubsub — Python pub golden (SKELETON).
-# gorti-only fixture (Pitch Free ships no Python binding, so no parity leg).
+# gorti-only fixture (cross-language by design; no commercial-RTI parity leg).
 # Real golden lands when M28 typed-handle pysdk + DLC cppsdk paths
 # co-exist in a single rtid (M32+ when impl lands).
 PUB: CONNECT                                                       # §4.2 — pysdk Layer 2 connect

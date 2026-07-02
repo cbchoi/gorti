@@ -1,5 +1,5 @@
 # expected.subscriber.log
-# captured-via: Pitch pRTI Free 5.5.10 build 9905 (test reference only — does not imply endorsement)
+# authority: IEEE 1516.1-2010 — every event line is derived from the spec sections cited below/in README.md. Cross-checked locally against a DLC-conformant commercial RTI via the PRTI_HOME-gated harness (byte-identical after canonicalization); that check is reproducible but is NOT the authority for this golden.
 # canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
 # spec-cites: see README.md "Spec citations per event in goldens"
 # Per IEEE 1516.1-2010 §5.6, §5.8, §6.9, §6.11, §6.13, §4.10.

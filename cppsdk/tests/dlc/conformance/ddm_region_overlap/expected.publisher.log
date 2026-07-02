@@ -1,7 +1,7 @@
 # M31 fixture ddm_region_overlap — publisher golden (SKELETON).
 # expected.publisher.log
 # attestation: spec-derived from IEEE 1516.1-2010 references below
-# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the PRTI_HOME-gated harness against any DLC-conformant RTI)
 # canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
 # spec-cites: see README.md
 PUB: CONNECT                                                       # §4.2

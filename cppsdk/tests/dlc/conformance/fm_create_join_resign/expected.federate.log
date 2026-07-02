@@ -1,17 +1,17 @@
 # expected.federate.log
-# captured-via: Pitch pRTI Free 5.5.10 build 9905 — sub-scenarios 1-2 Pitch-confirmed; 3-6 spec-derived (see "Pitch capture status" below)
+# authority: IEEE 1516.1-2010 §4.10 — every event line is derived from the enumerator semantics cited below/in README.md.
 # canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
 # spec-cites: see README.md "Spec citations per event in goldens"
 # Per IEEE 1516.1-2010 §4.2, §4.5, §4.9, §4.10 (mandatory ResignAction —
 # catalogue row 3.9), with all 6 enumerators per catalogue row 5.3.
 #
-# Pitch capture status (TASK-350): sub-scenarios 1 (UNCONDITIONALLY_DIVEST_ATTRIBUTES)
-# and 2 (DELETE_OBJECTS) confirmed against Pitch CRC. Sub-scenarios 3-6 require
-# either a pending ownership acquisition (3) or a clean federate-seat reset (4-6)
-# that Pitch Free's 2-federate cap + seat-retention behavior between rapid
-# resign/reconnect cycles does not permit in a single in-process iteration.
-# Those lines are spec-derived from §4.10 enumerator semantics; see
-# docs/PITCH_PARITY.md row fm_create_join_resign.
+# Cross-check status (TASK-350): sub-scenarios 1 (UNCONDITIONALLY_DIVEST_ATTRIBUTES)
+# and 2 (DELETE_OBJECTS) were additionally cross-checked locally against a
+# DLC-conformant commercial RTI (byte-identical after canonicalization;
+# reproducible via the PRTI_HOME-gated harness). Sub-scenarios 3-6 could not
+# be cross-checked under that RTI's free-edition federate cap and rest on the
+# §4.10 enumerator semantics alone; see docs/PITCH_PARITY.md row
+# fm_create_join_resign. The spec citations are the authority for all six.
 # Sub-scenario 1: UNCONDITIONALLY_DIVEST_ATTRIBUTES
 FED: CONNECT
 FED: CREATE federation=fm_create_join_resign

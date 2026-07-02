@@ -1,13 +1,13 @@
 # M31 fixture ddm_region_mod_in_flight — subscriber golden (SKELETON).
 # expected.subscriber.log
 # attestation: spec-derived from IEEE 1516.1-2010 references below
-# Pitch-capture status: pending (TASK-350 follow-on; 2-federate scenario, tractable against Pitch Free)
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the PRTI_HOME-gated harness against any DLC-conformant RTI)
 # canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
 # spec-cites: see README.md
 #
 # Timing-sensitive: depends on driver coordination of region modify
 # landing between updates 3 and 4. The golden documents the contract,
-# not the exact interleave; real Pitch capture will record the actual
+# not the exact interleave; a cross-check run would record the actual
 # witnessed sequence and TASK-362 will validate the spec cites.
 SUB: CONNECT                                                       # §4.2
 SUB: JOIN federate=sub                                             # §4.9

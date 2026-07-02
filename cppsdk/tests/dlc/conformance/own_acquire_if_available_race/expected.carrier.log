@@ -1,6 +1,6 @@
 # expected.carrier.log
 # attestation: spec-derived from IEEE 1516.1-2010 references below
-# Pitch-capture status: BLOCKED — fixture uses >2 federates; exceeds Pitch Free EULA 2-federate cap. Parity leg requires Pitch Pro / MAK / Portico. See docs/PITCH_PARITY.md.
+# Cross-check status: NOT CROSS-CHECKED — fixture uses >2 federates; exceeds the free-edition federate cap of the reference RTI used for local cross-checks. Independently verifiable against any DLC-conformant RTI via the PRTI_HOME-gated harness. See docs/PITCH_PARITY.md.
 # canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
 # spec-cites: see README.md
 # Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §7.2, §4.10:
