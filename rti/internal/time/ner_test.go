@@ -42,29 +42,34 @@ func (r *recordingOutbox) snapshot() []recordedSend {
 	return out
 }
 
-// TestCheckLookahead_ZeroLookahead_AcceptsCurrentTime: with lookahead=0
-// a NER to the federate's exact current time satisfies the floor
-// (currentTime + 0 == currentTime).
-func TestCheckLookahead_ZeroLookahead_AcceptsCurrentTime(t *testing.T) {
-	if err := checkLookahead(2.0, 0, 2.0); err != nil {
-		t.Errorf("zero-lookahead self-time: err = %v, want nil", err)
+// M36 DB-1: the pre-M36 checkLookahead floored the advance target at
+// currentTime + lookahead, which violates IEEE 1516.1 §8.8 (lookahead
+// constrains outgoing TSO timestamps, not the advance target). The
+// three tests below cover the corrected checkAdvanceTarget semantics.
+
+// TestCheckAdvanceTarget_AcceptsCurrentTime: a request to the
+// federate's exact current time is legal (equality granted).
+func TestCheckAdvanceTarget_AcceptsCurrentTime(t *testing.T) {
+	if err := checkAdvanceTarget(2.0, 2.0); err != nil {
+		t.Errorf("self-time target: err = %v, want nil", err)
 	}
 }
 
-// TestCheckLookahead_PositiveLookahead_RejectsBelowFloor: a NER below
-// currentTime + lookahead returns ErrTimeRequestInPast.
-func TestCheckLookahead_PositiveLookahead_RejectsBelowFloor(t *testing.T) {
-	err := checkLookahead(2.0, 1.0, 2.5)
+// TestCheckAdvanceTarget_AcceptsBelowLookaheadFloor: a target above
+// currentTime but below the OLD currentTime + lookahead floor is legal
+// — the fixture-exposed case (advance to 1.0 with lookahead 2.0).
+func TestCheckAdvanceTarget_AcceptsBelowLookaheadFloor(t *testing.T) {
+	if err := checkAdvanceTarget(0.0, 1.0); err != nil {
+		t.Errorf("target below old lookahead floor: err = %v, want nil", err)
+	}
+}
+
+// TestCheckAdvanceTarget_RejectsPast: a target strictly below
+// currentTime returns ErrTimeRequestInPast.
+func TestCheckAdvanceTarget_RejectsPast(t *testing.T) {
+	err := checkAdvanceTarget(2.0, 1.5)
 	if !errors.Is(err, core.ErrTimeRequestInPast) {
-		t.Errorf("requested below floor: err = %v, want ErrTimeRequestInPast", err)
-	}
-}
-
-// TestCheckLookahead_PositiveLookahead_AcceptsExactlyFloor: equality
-// at currentTime + lookahead is granted (strict-less rejection).
-func TestCheckLookahead_PositiveLookahead_AcceptsExactlyFloor(t *testing.T) {
-	if err := checkLookahead(2.0, 1.0, 3.0); err != nil {
-		t.Errorf("requested == floor: err = %v, want nil", err)
+		t.Errorf("target in past: err = %v, want ErrTimeRequestInPast", err)
 	}
 }
 

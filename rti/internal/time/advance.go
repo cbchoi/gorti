@@ -172,9 +172,9 @@ func decideGrant(mode AdvanceMode, currentTime, requested, lbts core.LogicalTime
 // Pre-flight ordering matches NER (manager.go-frozen behaviour):
 //  1. Halted-federation check.
 //  2. Eligibility (regulating OR constrained).
-//  3. Lookahead enforcement (regulating federates only). FQR shares
-//     the same lookahead floor in cut-1; cut-3 may relax once the TSO
-//     queue ships and "flush below currentTime" becomes meaningful.
+//  3. Advance-target enforcement (t >= currentTime, all federates).
+//     M36 DB-1: lookahead no longer floors the target — per IEEE
+//     1516.1 §8.8 it constrains outgoing TSO timestamps only.
 //  4. Duplicate-request check (any outstanding request blocks; the
 //     federate cannot mix modes either).
 //
@@ -192,28 +192,25 @@ func (m *Manager) dispatchAdvance(ctx context.Context, fed core.FederationName, 
 	m.states.mu.Lock()
 	regSt := m.states.getLocked(fed, h)
 	var regulating, constrained bool
-	var lookahead core.LogicalTime
 	if regSt != nil {
 		regulating = regSt.regulating
 		constrained = regSt.constrained
-		lookahead = regSt.lookahead
 	}
 	m.states.mu.Unlock()
 	if !regulating && !constrained {
 		return core.ErrTimeNotRegulating
 	}
 
-	// (3) Lookahead. Same rule as NER for cut-1; FQR included since
-	// "flush below current promise" cannot reduce the regulator's TSO
-	// floor without breaking causality.
+	// (3) Advance-target check: t >= currentTime for every mode and
+	// every requester (M36 DB-1 — IEEE 1516.1 §8.8). Lookahead no
+	// longer floors the target; it constrains outgoing TSO timestamps
+	// only. See checkAdvanceTarget in lookahead.go.
 	ext.mu.Lock()
 	ns := ext.getOrCreateLocked(fed, h)
 	currentTime := ns.currentTime
-	if regulating {
-		if err := checkLookahead(currentTime, lookahead, t); err != nil {
-			ext.mu.Unlock()
-			return err
-		}
+	if err := checkAdvanceTarget(currentTime, t); err != nil {
+		ext.mu.Unlock()
+		return err
 	}
 
 	// (4) Duplicate-request check (cross-mode: any outstanding request blocks).

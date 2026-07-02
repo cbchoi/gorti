@@ -29,8 +29,16 @@ func TestSpec_M3_NER_NotRegulating_RejectsRequest(t *testing.T) {
 }
 
 // TestSpec_M3_NER_RequestInPast_Rejected: requesting an advance to a
-// time less than currentTime + lookahead violates the lookahead invariant.
-// Returns core.ErrTimeRequestInPast.
+// time less than the federate's current logical time returns
+// core.ErrTimeRequestInPast.
+//
+// M36 DB-1: the original test asserted rejection of t <
+// currentTime + lookahead (advance to 1.0 from time 0 with lookahead
+// 2.0). That floor was a spec violation — IEEE 1516.1 §8.8 only
+// requires t >= currentTime; lookahead constrains OUTGOING TSO
+// timestamps. The test now advances the sole regulator to 5.0 first
+// and asserts rejection of a genuinely past target, and additionally
+// asserts the sub-lookahead target is ACCEPTED.
 //
 // Implements: FR-TM-2, FR-TM-5.
 func TestSpec_M3_NER_RequestInPast_Rejected(t *testing.T) {
@@ -39,11 +47,20 @@ func TestSpec_M3_NER_RequestInPast_Rejected(t *testing.T) {
 		t.Skip("time.Manager not yet wired")
 	}
 	ctx := context.Background()
-	// Federate at time 0 with lookahead 2 cannot request advance to t < 2.
 	if err := mgr.EnableRegulation(ctx, "fed", 1, core.LogicalTime(2.0)); err != nil {
 		t.Fatalf("EnableRegulation: %v", err)
 	}
-	err := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(1.0))
+	// Sub-lookahead target from time 0 is legal (§8.8): sole regulator
+	// full-grants immediately, advancing currentTime to 1.0.
+	if err := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(1.0)); err != nil {
+		t.Fatalf("NER to 1.0 (below lookahead, above currentTime): %v", err)
+	}
+	// Advance further to 5.0 so a past target exists.
+	if err := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(5.0)); err != nil {
+		t.Fatalf("NER to 5.0: %v", err)
+	}
+	// A target below currentTime (5.0) is in the past.
+	err := mgr.NextMessageRequest(ctx, "fed", 1, core.LogicalTime(4.0))
 	if !errors.Is(err, core.ErrTimeRequestInPast) {
 		t.Errorf("NER to past: err = %v, want ErrTimeRequestInPast", err)
 	}

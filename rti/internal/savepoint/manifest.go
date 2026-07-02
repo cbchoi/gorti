@@ -53,6 +53,16 @@ type Manifest struct {
 	// initiateFederateRestore broadcast in the same order.
 	Federates []core.FederateHandle `json:"federates"`
 
+	// FederateNames is index-parallel to Federates: FederateNames[i]
+	// is the federate name bound to handle Federates[i] at save time.
+	// M36 DB-3 — IEEE 1516.1 §4.27 matches restore participants by
+	// NAME, and gorti never reuses handles across resign + rejoin, so
+	// restore routing needs the saved names to find the CURRENT handle
+	// of each participant. Optional (omitempty): bundles written
+	// without a Roster resolver — and all pre-M36 bundles — omit it,
+	// in which case restore falls back to handle-based routing.
+	FederateNames []string `json:"federate_names,omitempty"`
+
 	// EventLogBytes is the byte length of the event-log slice that
 	// follows the manifest in the bundle. Zero when no slice is
 	// captured (cut-1 default — see writeBundle in manager.go).

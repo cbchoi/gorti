@@ -941,6 +941,13 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			// receive the save-callback delivery that the M12 W2
 			// proto FederateEvent variants made possible.
 			Members: fedMgr.MembersOf,
+			// M36 DB-3: wire the (handle, name) roster so save
+			// bundles capture federate names and restore routes
+			// initiateFederateRestore by NAME (IEEE 1516.1 §4.27)
+			// — a participant that resigned and rejoined under a
+			// new handle still receives the initiate and its
+			// federateRestoreComplete is accepted.
+			Roster: fedMgr.ListMembers,
 			// M13 thread C (docs/srs.md §10.4): wire the four
 			// service-group managers as snapshot participants. On
 			// save, each Marshal(fed) result is bundled into the

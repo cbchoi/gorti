@@ -170,7 +170,10 @@ func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName
 		return err
 	}
 	m.fireTimeStateChanged(ctx, fed, h)
-	return nil
+	// M36 DB-2: shrinking the regulating set can only raise LBTS —
+	// re-evaluate peers' pending advance requests (same liveness gap
+	// as OnFederateResign).
+	return m.tryGrantPending(ctx, fed)
 }
 
 // OnFederateResign drops any pending advance-request state for the
@@ -183,7 +186,16 @@ func (m *Manager) DisableRegulation(ctx context.Context, fed core.FederationName
 //
 // Safe to call for federates that never registered any time state —
 // the cleanup is idempotent (delete on map miss is a no-op).
-func (m *Manager) OnFederateResign(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+//
+// M36 DB-2: after the cleanup the pending grants of the SURVIVING
+// federates are re-evaluated. Removing a regulator can only raise
+// LBTS, so a peer's outstanding NER/TAR/... that was blocked on the
+// resigning federate becomes grantable the moment it leaves — without
+// this re-run the peer hangs forever (traced via tm_tso_ordering /
+// parity-CE). Errors from the grant loop are best-effort here (the
+// resign itself already succeeded and this hook returns nothing);
+// outbox failures surface through the stream layer.
+func (m *Manager) OnFederateResign(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
 	// Drop nerStore entry (pending request + currentTime).
 	ext := extOf(m)
 	ext.mu.Lock()
@@ -193,6 +205,8 @@ func (m *Manager) OnFederateResign(_ context.Context, fed core.FederationName, h
 	m.states.mu.Lock()
 	delete(m.states.states, federateKey{fed: fed, h: h})
 	m.states.mu.Unlock()
+	// Re-evaluate pending grants against the post-resign LBTS.
+	_ = m.tryGrantPending(ctx, fed)
 }
 
 // ModifyLookahead updates the lookahead of an already-regulating federate
@@ -200,9 +214,9 @@ func (m *Manager) OnFederateResign(_ context.Context, fed core.FederationName, h
 // M21 TASK-202b — see docs/M21_DISPATCH_PLAN.md §1 (non-goals exception)
 // and §2.7.1.
 //
-// The mutation does not affect the grant gate of any pending advance
-// request: pendingNER captured the lookahead at the moment NER/TAR/etc
-// landed; subsequent ModifyLookahead changes only future requests.
+// The mutation immediately re-evaluates pending advance requests
+// (M36 DB-2): a raised lookahead raises this regulator's LBTS
+// contribution and may therefore unblock peers' outstanding grants.
 //
 // Errors:
 //   - core.ErrFederationHalted if the federation is in the halted
@@ -217,7 +231,11 @@ func (m *Manager) ModifyLookahead(ctx context.Context, fed core.FederationName, 
 		return err
 	}
 	m.fireTimeStateChanged(ctx, fed, h)
-	return nil
+	// M36 DB-2: raising a regulator's lookahead raises its LBTS
+	// contribution, which can unblock peers' pending requests. A
+	// lowered lookahead leaves LBTS unchanged-or-lower and the loop is
+	// then a cheap no-op, so we run it unconditionally.
+	return m.tryGrantPending(ctx, fed)
 }
 
 // EnableConstrained implements core.TimeManager. Constrained federates
@@ -266,8 +284,9 @@ func (m *Manager) DisableConstrained(ctx context.Context, fed core.FederationNam
 //     federates may NER per HLA semantics — actually, both regulating
 //     AND constrained federates may NER; the spec test will exercise
 //     both branches and Agent A reconciles).
-//   - core.ErrTimeRequestInPast if t < currentTime + lookahead (lookahead
-//     enforcement; TASK-044).
+//   - core.ErrTimeRequestInPast if t < currentTime (M36 DB-1 — the
+//     pre-M36 currentTime + lookahead floor was a spec violation;
+//     lookahead constrains outgoing TSO timestamps, not the target).
 func (m *Manager) NextMessageRequest(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
 	return m.nextMessageRequest(ctx, fed, h, t)
 }

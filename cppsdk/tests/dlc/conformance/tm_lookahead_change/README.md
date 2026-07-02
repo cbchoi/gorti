@@ -29,32 +29,26 @@ That third value is the witness: the observer sees the regulator's *new* lookahe
 - `expected.observer.log`
 - `test_tm_lookahead_change.cpp`
 
-## gorti parity status (M35, parity-CE)
+## gorti parity status (M36, agent-DB)
 
-Regulator **PARTIAL 8/9**; observer **PARTIAL 6/7**. Captured run:
-`gorti-captured.{regulator,observer}.log` (canonicalized).
+Regulator **FULL 9/9**; observer **FULL 7/7** — fixture total **FULL
+16/16** (was PARTIAL 14/16 in M35 parity-CE). Captured run:
+`gorti-captured.{regulator,observer}.log` (canonicalized); both are
+diff-identical to the canonicalized goldens. The goldens remain
+spec-derived (Pitch capture pending), so this is SPEC-FULL.
 
-The fixture's core assertion — §8.19 modifyLookahead propagates into the
-GALT peers see — IS witnessed: observer's after-modify probe reads
-2.500000 = regulator t=2.0 + new lookahead 0.5, exactly per golden.
-queryLookahead (§8.20) reflects 2.0 → 0.5 exactly.
+The M35 root cause is fixed (M36 DB-1): `rti/internal/time/lookahead.go`
+no longer floors the advance target at currentTime+lookahead; the check
+is now `checkAdvanceTarget` (target >= currentTime, per §8.10/§8.8 —
+lookahead constrains OUTGOING TSO timestamps, not advance targets).
+TAR(1.0) under lookahead=2.0 is accepted, so:
 
-Both misses share ONE root cause, a named M17 cut-1 divergence:
-`rti/internal/time/lookahead.go` `checkLookahead` rejects any advance
-request below currentTime+lookahead (`ErrTimeRequestInPast`), applied to
-TAR via `advance.go` dispatchAdvance pre-flight step 3 ("Same rule as
-NER for cut-1"). §8.10 only requires target >= current logical time —
-lookahead constrains outgoing message timestamps, not advance targets.
-Hence TAR(1.0) under lookahead=2.0 is rejected (surfaces as
-RTIinternalError; the DLC error mapping loses the specific type):
+- regulator: `REG: GRANT time=1.000000` now present (9/9);
+- observer: `after-first-advance` probe reads GALT 3.000000 = regulator
+  t=1 + lookahead 2.0 (7/7).
 
-- regulator: missing `REG: GRANT time=1.000000` (8/9);
-- observer: `after-first-advance` probe reads GALT 2.000000 instead of
-  3.000000, because the regulator never reached t=1 (6/7).
-
-Missing impl: relax dispatchAdvance step 3 for TAR/TARA/FQR/NER to the
-spec floor (target >= currentTime), keeping the lookahead floor for
-outgoing TSO message timestamps only.
+The regulator's fixture-side try/catch around TAR(1.0) (see below) is
+now dormant — the call no longer throws.
 
 ### Golden edit (spec justification)
 

@@ -122,6 +122,17 @@ type Options struct {
 	// Optional.
 	Halted HaltedResolver
 
+	// Roster resolves the current joined (handle, name) roster for a
+	// federation. Optional. M36 DB-3: when wired, save bundles capture
+	// each participant's federate NAME alongside its handle, and
+	// restore routes initiateFederateRestore by matching those saved
+	// names against the CURRENT roster — IEEE 1516.1 §4.27 identifies
+	// restore participants by name, and gorti never reuses handles
+	// across resign + rejoin. When nil (or when a bundle carries no
+	// names), restore falls back to the pre-M36 handle-based routing.
+	// Production wires federation.Manager.ListMembers via cmd/rtid.
+	Roster func(core.FederationName) []core.FederationMember
+
 	// ManagerSnapshots is the keyed set of per-manager Marshalers /
 	// Unmarshalers (M13 thread C). Production cmd/rtid wires the
 	// four cut-2 service-group managers (sync, ownership, mom, ddm)
@@ -376,6 +387,7 @@ func (m *Manager) recordFederateSave(
 				Label:            label,
 				SaveTime:         saveTime,
 				Federates:        feds,
+				FederateNames:    m.federateNamesFor(fed, feds),
 				ManagerSnapshots: snapshots,
 			}
 			if err := m.writeBundle(ctx, fed, label, manifest); err != nil {
@@ -435,6 +447,28 @@ func (m *Manager) markFederateAndAggregate(
 	}
 	feds = append([]core.FederateHandle(nil), as.federates...)
 	return true, failed, as.label, as.saveTime, feds, nil
+}
+
+// federateNamesFor resolves the federate name for each handle in feds
+// (index-parallel result) from the current roster. Returns nil when no
+// Roster resolver is wired — the manifest then omits federate_names
+// and restore falls back to handle-based routing. A handle absent from
+// the roster (should not happen while it is mid-save) yields an empty
+// string, which restore treats as "no name known; route by handle".
+// M36 DB-3.
+func (m *Manager) federateNamesFor(fed core.FederationName, feds []core.FederateHandle) []string {
+	if m.opts.Roster == nil {
+		return nil
+	}
+	byHandle := map[core.FederateHandle]string{}
+	for _, mem := range m.opts.Roster(fed) {
+		byHandle[mem.Handle] = mem.Name
+	}
+	names := make([]string, len(feds))
+	for i, h := range feds {
+		names[i] = byHandle[h]
+	}
+	return names
 }
 
 // allRequiredResponded reports whether every required federate has
@@ -713,11 +747,30 @@ func (m *Manager) RequestFederationRestore(
 		return fmt.Errorf("savepoint: apply manager snapshots (%s/%s): %w", fed, label, err)
 	}
 
-	required := make(map[core.FederateHandle]struct{}, len(manifest.Federates))
-	for _, h := range manifest.Federates {
+	// M36 DB-3: route by federate NAME (IEEE 1516.1 §4.27). A saved
+	// participant that resigned and rejoined carries the same name but
+	// a fresh handle; the saved names are matched against the current
+	// roster to find each participant's CURRENT handle. recipients is
+	// index-parallel to manifest.Federates so the §4.13 payload can
+	// still carry the handle the federate had at save time. Names that
+	// are empty / unresolvable — and bundles or configurations without
+	// name data at all — fall back to the saved handle.
+	recipients := append([]core.FederateHandle(nil), manifest.Federates...)
+	if m.opts.Roster != nil && len(manifest.FederateNames) == len(manifest.Federates) {
+		byName := map[string]core.FederateHandle{}
+		for _, mem := range m.opts.Roster(fed) {
+			byName[mem.Name] = mem.Handle
+		}
+		for i, name := range manifest.FederateNames {
+			if cur, ok := byName[name]; ok && name != "" {
+				recipients[i] = cur
+			}
+		}
+	}
+	required := make(map[core.FederateHandle]struct{}, len(recipients))
+	for _, h := range recipients {
 		required[h] = struct{}{}
 	}
-	recipients := append([]core.FederateHandle(nil), manifest.Federates...)
 
 	m.mu.Lock()
 	if _, busy := m.restore[fed]; busy {
@@ -740,8 +793,12 @@ func (m *Manager) RequestFederationRestore(
 		_ = m.opts.EventLog.Append(ctx, fed, &eventRecord{kind: evtRestoreRequested, label: label})
 	}
 
-	for _, dst := range recipients {
-		evt := initiateFederateRestoreEvent(label, dst)
+	for i, dst := range recipients {
+		// Payload carries the handle this federate had AT SAVE TIME
+		// (§4.13 semantics — see stream.proto InitiateFederateRestore);
+		// the envelope destination is the current handle. The two only
+		// differ for participants remapped by name above.
+		evt := initiateFederateRestoreEvent(label, manifest.Federates[i])
 		_ = m.opts.Outbox.Send(ctx, fed, dst, evt)
 	}
 	return nil
