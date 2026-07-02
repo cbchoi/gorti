@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Python SDK for the gorti RTI (IEEE 1516-2010 / HLA Evolved) and pyjevsim bridge."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 authors = [{ name = "gorti contributors" }]
 
 # Runtime dependencies. Keep tight — every dep is friction for users.

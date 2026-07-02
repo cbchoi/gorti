@@ -1,15 +1,50 @@
 # gorti
 
-Open-source [IEEE 1516-2010 (HLA Evolved)](https://standards.ieee.org/ieee/1516/4118/) Run-Time Infrastructure in Go, with a Python federate SDK that wraps [pyjevsim](https://github.com/cbchoi/pyjevsim) DEVS coupled models.
+Open-source [IEEE 1516-2010 (HLA Evolved)](https://standards.ieee.org/ieee/1516/4118/) Run-Time Infrastructure in Go, with a spec-strict IEEE 1516.1-2010 DLC C++ federate SDK, a Python federate SDK, and a [pyjevsim](https://github.com/cbchoi/pyjevsim) DEVS bridge.
 
-**Status**: MVP achieved (tag [`mvp`](https://github.com/cbchoi/gorti/releases/tag/mvp)). M0..M5 all DONE per [`docs/srs.md`](docs/srs.md) §10.2. See [`CHANGELOG-MASTERPLAN.md`](CHANGELOG-MASTERPLAN.md) for the full milestone history.
+**Status (v0.9.0)**: full HLA Evolved service surface with a CI-enforced
+conformance program — 27/27 conformance fixtures at FULL/SPEC-FULL
+(canonicalized event sequences byte-identical to their goldens; the 3
+goldens capturable under Pitch pRTI Free's 2-federate cap were captured
+from a live Pitch 5.5.10 and match byte-for-byte, the rest are derived
+from the IEEE spec text). See [`docs/PITCH_PARITY.md`](docs/PITCH_PARITY.md)
+for the scoreboard and its honest caveats, and
+[`CHANGELOG-MASTERPLAN.md`](CHANGELOG-MASTERPLAN.md) for the milestone
+history (M0 walking skeleton → M38/M39 conformance + SDK-parity close).
 
 What's in the box:
-- **`rtid`** — Go RTI server with full federation lifecycle, declaration management, object registry, time management (NER + LBTS + stall timeout), event log, and reproducible determinism (byte-identical event logs across runs).
-- **`rti1516e`** — Python federate SDK with idiomatic asyncio API (Layer 1) and a 1516-shaped ambassador adapter (Layer 2).
-- **`pyjevsim_bridge`** — DEVS↔HLA bridge so pyjevsim coupled models join HLA federations.
-- **Cross-language byte-identical encoding** — Python and Go encoders agree on every entry of `tests/conformance/encoding_vectors.json` (94 vectors).
-- **Same FOM diagnostics on both sides** — FOM-001..FOM-101 codes match between the Go and Python parsers.
+- **`rtid`** — Go RTI server: federation lifecycle, declaration + object
+  management, time management (TAR/TARA/NER/NMRA/FQR, strict TSO order,
+  §8.8 next-message grants), ownership (real §7.6 two-phase divest, atomic
+  §7.9 acquire-if-available), DDM with scope advisories, MOM (HLAmanager
+  instance fan-out + HLAreport interactions), save/restore, sync points,
+  message retraction, event log, and reproducible determinism
+  (byte-identical event logs across runs).
+- **`cppsdk`** — IEEE 1516.1-2010 **DLC C++ API** (`RTI/…` headers,
+  `rti1516e` namespace): source-compatible with federates written for any
+  DLC-conformant RTI. Locked by ~200 compile-time lockfile assertions, 121
+  runtime-tested Annex C exceptions, and 27 behavioral conformance fixtures.
+- **`rti1516e` (pysdk)** — Python federate SDK with idiomatic asyncio API
+  (Layer 1) and a 1516-shaped ambassador adapter (Layer 2); typed handles,
+  full FederateEvent coverage, Annex-C-named exceptions.
+- **`pyjevsim_bridge`** — DEVS↔HLA bridge so pyjevsim coupled models join
+  HLA federations.
+- **Cross-language byte-identical encoding** — Python, Go, and C++ agree on
+  every entry of `tests/conformance/encoding_vectors.json`; proven live by
+  the `xlang_python_cpp_pubsub` fixture (Python publisher → C++ subscriber).
+- **Conformance CI** — `scripts/ci-gates.sh` re-runs every fixture against
+  a fresh RTI on each commit and fails on any verdict change in either
+  direction (see `cppsdk/tests/dlc/conformance/EXPECTED_VERDICTS.txt`),
+  plus an IVCT-inspired Python subset (35 tests, 0 xfail).
+
+**Choosing gorti vs a commercial RTI** — honest guidance: gorti is a strong
+fit for C++/Python federates, development/CI (deterministic replay, no
+federate cap, headless), research, and education. It is **not yet** a
+substitute where you need a Java federate SDK (none exists here), certified
+IVCT compliance (our subset is IVCT-*inspired*; see
+`tests/conformance/rti/ivct-subset/README.md`), large-scale distributed
+federations (cluster/failover code is demo-grade; single-node is the
+supported mode), or legacy HLA 1.3 / 1516-2000 interfaces.
 
 ## Quickstart
 
@@ -134,7 +169,9 @@ Full flag list: `rtid --help`.
 
 ### Security caveats
 
-- The federate port supports server-side TLS only. **mTLS + OIDC client auth is M14 and not yet shipped** — treat `--listen` as a trusted-network port.
+- The federate port supports server-side TLS, and mTLS + OIDC client auth
+  (M14) for authenticated deployments — plaintext `--listen` remains a
+  trusted-network port.
 - `--admin-listen` is plaintext. Keep it on loopback; if you must expose it, front it with an ACL.
 - `--admin-mutating` performs irreversible operations (force-resign, destroy-federation). Off by default; the binary refuses to start with `--admin-mutating` on a non-loopback bind unless you explicitly opt in.
 
@@ -247,7 +284,22 @@ Reproduce: `go run -tags=perf ./rti/cmd/perf-baseline`.
 
 ## Standards conformance
 
-IEEE 1516-2010 only — not 1516-2000, not 1.3, not 1516-2025. Cut-1 scope is the walking-skeleton MVP per [`docs/srs.md`](docs/srs.md). M6+ work (cross-language handle alignment, gRPC TLS hardening, EventLog Writer concurrency, real-pyjevsim structural-hierarchy adapter) tracked in [`docs/reports/M5/agent-c.md`](docs/reports/M5/agent-c.md) "M6 follow-ups."
+IEEE 1516-2010 (HLA Evolved) only — not 1516-2000, not 1.3, not HLA 4.
+
+- **API**: the C++ SDK implements the IEEE 1516.1-2010 DLC header surface
+  (`RTI/…`, 30 headers) verbatim-compatible; drift is locked by
+  compile-time assertion TUs under `cppsdk/tests/dlc/lockfile/`.
+- **Behavior**: 27 conformance fixtures exercise every service group
+  end-to-end against a live `rtid`; verdicts are canonicalized-event
+  comparisons against goldens (3 captured from Pitch pRTI 5.5.10, the
+  rest spec-derived) and enforced by CI on every commit.
+- **Known divergences and scope-outs** are documented, not hidden:
+  [`docs/PITCH_PARITY.md`](docs/PITCH_PARITY.md) (scoreboard + caveats),
+  [`docs/DLC_DIVERGENCE_CATALOGUE.md`](docs/DLC_DIVERGENCE_CATALOGUE.md),
+  [`docs/RTI_CONFORMANCE_AUDIT.md`](docs/RTI_CONFORMANCE_AUDIT.md).
+- Exceptions carry a machine-readable channel (gRPC trailing metadata
+  `rti-spec-exception` = Annex C class name) — the contract for
+  third-party SDK authors is in `cppsdk/src/dlc/README.md`.
 
 ## For contributors
 
