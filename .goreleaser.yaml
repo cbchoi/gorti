@@ -1,9 +1,14 @@
 # GoReleaser config for gorti binary releases.
 #
 # Two binaries — rtid (RTI server) and rti-top (TUI) — built CGo-free
-# for linux/{amd64,arm64} and darwin/{amd64,arm64}. The default rtid
-# binary has been CGo-free since cut-2 (see CHANGELOG-MASTERPLAN.md
-# §M19), so cross-compilation is mechanical.
+# for linux/{amd64,arm64}, darwin/{amd64,arm64}, and windows/{amd64,arm64}.
+# The default rtid binary has been CGo-free since cut-2 (see
+# CHANGELOG-MASTERPLAN.md §M19), so cross-compilation is mechanical.
+# Windows targets are a v0.9.0 deployment addition (rtid.exe + rti-top.exe);
+# the C++ federate SDK on Windows is a documented future plan — see
+# docs/DEPLOYMENT.md. Both binaries verify-cross-build for windows/amd64 and
+# windows/arm64; the only Unix-ism is syscall.SIGTERM (compiles on Windows,
+# never delivered — Ctrl+C via os.Interrupt drives graceful shutdown).
 #
 # The DDS-capable rtid-dds variant is intentionally NOT shipped here:
 # Phase 1b onwards requires libcyclonedds at link time (CGo), which
@@ -28,7 +33,7 @@ builds:
     main: ./rti/cmd/rtid
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin]
+    goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
@@ -41,7 +46,7 @@ builds:
     main: ./rti/cmd/rti-top
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin]
+    goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
@@ -53,6 +58,10 @@ archives:
   - id: gorti
     ids: [rtid, rti-top]
     formats: [tar.gz]
+    # Windows users expect .zip, not .tar.gz.
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: >-
       gorti_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:

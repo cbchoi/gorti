@@ -66,11 +66,23 @@ curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.s
 curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh | INSTALL_DIR=$HOME/.local/bin sh
 ```
 
-Supported platforms: `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`. The script uses `curl` or `wget`, and `sha256sum` or `shasum -a 256` — whichever is available.
+The `install.sh` one-liner covers `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`. It uses `curl` or `wget`, and `sha256sum` or `shasum -a 256` — whichever is available.
 
-Prefer to do it by hand? Download a tarball + the matching `gorti_<version>_SHA256SUMS` from the [releases page](https://github.com/cbchoi/gorti/releases) and `tar -xz` the binaries.
+Prefer to do it by hand? Download a tarball (or, on Windows, a `.zip`) + the matching `gorti_<version>_SHA256SUMS` from the [releases page](https://github.com/cbchoi/gorti/releases) and extract the binaries.
 
-The release tarball is CGo-free (statically linked), so it has no runtime system dependencies. The DDS-capable `rtid-dds` variant is **not** in the release tarball — it requires Cyclone DDS and is built from source via `make build-dds` (see [M19 design doc](docs/m19-dds-adapter.md)).
+The release archive is CGo-free (statically linked), so it has no runtime system dependencies. The DDS-capable `rtid-dds` variant is **not** in the release archive — it requires Cyclone DDS and is built from source via `make build-dds` (see [M19 design doc](docs/m19-dds-adapter.md)).
+
+### Windows
+
+`rtid.exe` and `rti-top.exe` ship as `gorti_<version>_windows_<arch>.zip` on the [releases page](https://github.com/cbchoi/gorti/releases):
+
+```powershell
+Invoke-WebRequest -Uri https://github.com/cbchoi/gorti/releases/download/v0.9.0/gorti_0.9.0_windows_amd64.zip -OutFile gorti.zip
+Expand-Archive gorti.zip -DestinationPath gorti
+.\gorti\rtid.exe --listen :8442
+```
+
+Windows federate developers use the Python SDK (`pip install rti1516e`). The C++ federate SDK is Linux/macOS-only for now — see the [deployment plan](docs/DEPLOYMENT.md) for the full matrix and the Windows C++ roadmap.
 
 ### Run the Go reference example
 
@@ -179,7 +191,13 @@ Full flag list: `rtid --help`.
 
 ### Python (idiomatic, supported)
 
-`rti1516e` is the supported federate SDK. Install from the source tree:
+`rti1516e` is the supported federate SDK — a pure-Python wheel (Linux, Windows, macOS; Python 3.11+). From a release:
+
+```bash
+pip install rti1516e
+```
+
+Or from the source tree for development (editable, with the pyjevsim bridge):
 
 ```bash
 cd pysdk && pip install -e '.[dev]' pyjevsim==2.0.1

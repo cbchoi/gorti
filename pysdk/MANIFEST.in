@@ -1,0 +1,15 @@
+# Source-distribution manifest for the rti1516e wheel/sdist.
+#
+# The buf-generated gRPC wire stubs under rti1516e/_generated/ are gitignored
+# and produced by codegen (`buf generate`, or `python -m rti1516e._proto`)
+# *before* the package is built. They are NOT importable sub-packages — they
+# resolve as top-level `rti.v1.*` via a sys.path insertion (see
+# rti1516e/_transport.py::_ensure_generated_path) — so they ship as data.
+# [tool.setuptools.package-data] in pyproject.toml covers the wheel; this
+# manifest covers the sdist.
+recursive-include rti1516e/_generated *.py *.pyi
+include rti1516e/py.typed
+include README.md
+# LICENSE is copied into pysdk/ by the release workflow before build
+# (it lives at the repo root; MANIFEST.in cannot reference a parent dir).
+include LICENSE
