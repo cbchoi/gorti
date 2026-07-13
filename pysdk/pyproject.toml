@@ -73,7 +73,7 @@ pyjevsim = [
     # pysdk/pyjevsim_bridge/_protocol.py keeps the canonical names;
     # `examples/pyjevsim/_real_pyjevsim_adapter.py` maps the real
     # pyjevsim surface onto the Protocol.
-    "pyjevsim==2.0.1",
+    "pyjevsim==2.1.1",
 ]
 
 [tool.setuptools.packages.find]
