@@ -9,7 +9,7 @@
 Open-source [IEEE 1516-2010 (HLA Evolved)](https://standards.ieee.org/ieee/1516/4118/) Run-Time Infrastructure in Go, with a spec-strict IEEE 1516.1-2010 DLC C++ federate SDK, a Python federate SDK, and a [pyjevsim](https://github.com/cbchoi/pyjevsim) DEVS bridge.
 
 **Development status (v0.9.0 development version; latest public release
-v0.1.0)**: full HLA Evolved service surface with a CI-enforced
+v0.1.0)**: full HLA Evolved service surface with a locally verified
 conformance program — 27/27 conformance fixtures at FULL/SPEC-FULL
 (canonicalized event sequences byte-identical to their goldens; the 3
 goldens capturable under Pitch pRTI Free's 2-federate cap were captured
@@ -39,8 +39,8 @@ What's in the box:
 - **Cross-language byte-identical encoding** — Python, Go, and C++ agree on
   every entry of `tests/conformance/encoding_vectors.json`; proven live by
   the `xlang_python_cpp_pubsub` fixture (Python publisher → C++ subscriber).
-- **Conformance CI** — `scripts/ci-gates.sh` re-runs every fixture against
-  a fresh RTI on each commit and fails on any verdict change in either
+- **Local conformance gate** — `scripts/ci-gates.sh` re-runs every fixture
+  against a fresh RTI and fails on any verdict change in either
   direction (see `cppsdk/tests/dlc/conformance/EXPECTED_VERDICTS.txt`),
   plus an IVCT-inspired Python subset (35 tests, 0 xfail).
 
@@ -323,8 +323,8 @@ IEEE 1516-2010 (HLA Evolved) only — not 1516-2000, not 1.3, not HLA 4.
 ## Documentation and citation
 
 The user documentation builds strictly from `.readthedocs.yaml` and
-`mkdocs.yml`. Public Read the Docs and GitHub Pages hosting are release setup
-gates. Start with the [installation guide](docs/installation.md),
+`mkdocs.yml`. Public Read the Docs hosting must be enabled separately. Start
+with the [installation guide](docs/installation.md),
 [two-federate quickstart](docs/quickstart.md), and
 [reproducibility protocol](docs/reproducibility.md).
 

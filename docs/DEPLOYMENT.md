@@ -135,8 +135,8 @@ automatically. Python 3.11+.
 
 ## 5. Verification checklist (per release)
 
-CI already gates correctness on every push/PR (`.github/workflows/conformance.yml`
-+ `ci.yml`). At tag time, additionally confirm:
+Run the code and conformance gates locally with `make test` and
+`scripts/ci-gates.sh`. At tag time, additionally confirm:
 
 - [ ] `pysdk/pyproject.toml` version == tag (the PyPI workflow enforces this)
 - [ ] GitHub Release contains 6 archives (linux/darwin/windows × amd64/arm64 ×

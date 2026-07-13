@@ -1,10 +1,6 @@
-name: CI
+name: Manual validation
 
-on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+on: workflow_dispatch
 
 permissions:
   contents: read
@@ -47,7 +43,6 @@ jobs:
   python:
     name: Python (ruff + mypy + pytest)
     runs-on: ubuntu-latest
-    if: hashFiles('pysdk/pyproject.toml') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

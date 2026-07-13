@@ -1,4 +1,4 @@
-# DLC conformance gate — the M31-M37 compliance program's CI lane.
+# DLC conformance gate for explicit, manually requested remote runs.
 #
 # Runs the full gate sequence from scripts/ci-gates.sh:
 #   stubs → go → cpp → lockfile → static → sweep → ivct
@@ -8,8 +8,7 @@
 # in both directions (regression AND unrecorded improvement fail).
 #
 # The Pitch parity lane (capturing goldens from a live pRTI) remains
-# local-only, gated on PRTI_HOME — Pitch cannot be redistributed to CI.
-# CI verifies gorti against the *committed* goldens.
+# local-only, gated on PRTI_HOME because Pitch cannot be redistributed.
 #
 # First run builds gRPC/protobuf via conan (~40-60 min); later runs hit
 # the conan cache (~10-15 min total).
@@ -17,10 +16,6 @@
 name: Conformance
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

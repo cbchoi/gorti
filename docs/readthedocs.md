@@ -1,8 +1,8 @@
 # Publishing documentation
 
-The repository is configured for Read the Docs and GitHub Pages. The local and
-CI builds are strict and use the same pinned dependencies. The public hosting
-projects must still be enabled in their respective service settings.
+The repository is configured for Read the Docs. Local and CI builds are strict
+and use the same pinned dependencies. The public hosting project must still be
+enabled in the Read the Docs service settings.
 
 ## Local build
 
@@ -23,9 +23,7 @@ python -m mkdocs build --strict
 `.readthedocs.yaml` selects Ubuntu 22.04, Python 3.11, `mkdocs.yml`, and the
 pinned requirements in `docs/requirements.txt`.
 
-## GitHub Pages
-
-The documentation workflow runs `mkdocs build --strict` on pull requests and
-pushes. Deployment runs only for `main` after GitHub Pages is configured to use
-GitHub Actions. Keep links relative so the same content renders correctly on
-both hosts.
+The `GitHub Pages readiness` Actions workflow validates the same strict build,
+checks the generated entry point, and packages a Pages-compatible artifact.
+It does not configure or deploy a Pages site. Read the Docs owns publication;
+all code and conformance checks run locally.
