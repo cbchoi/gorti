@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
@@ -21,6 +23,9 @@ jobs:
       - uses: bufbuild/buf-setup-action@v1
       - name: buf generate
         run: buf generate
+
+      - name: generated Go bindings are current
+        run: git diff --exit-code -- rti/internal/genproto
 
       - name: gofmt check
         run: make go-fmt-check

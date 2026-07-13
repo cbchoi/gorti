@@ -84,6 +84,24 @@ async def test_internal_cycle_skips_unmapped_output_port() -> None:
 
 
 @pytest.mark.asyncio
+async def test_internal_cycle_sends_outputs_in_port_name_order() -> None:
+    fake = FakeRtiServer()
+    stub = StubCoupledModel()
+    stub._ta.append(1.0)  # noqa: SLF001
+    stub._outputs.append(  # noqa: SLF001
+        {"out_zeta": b"z", "out_alpha": b"a", "out_mu": b"m"}
+    )
+    fed = _make_federate(
+        stub,
+        {"out_zeta": "Zeta", "out_alpha": "Alpha", "out_mu": "Mu"},
+    )
+    await fed.step_once()
+    sends = fake.calls_for("send_interaction")
+    assert [call.args["class_name"] for call in sends] == ["Alpha", "Mu", "Zeta"]
+    await fed.aclose()
+
+
+@pytest.mark.asyncio
 async def test_now_advances_by_ta_on_internal_cycle() -> None:
     fake = FakeRtiServer()
     del fake

@@ -6,8 +6,7 @@ coverage.txt
 coverage.html
 coverage.out
 
-# Generated proto bindings
-rti/internal/genproto/
+# Generated SDK proto bindings (Go bindings are committed for clean builds)
 pysdk/rti1516e/_generated/
 cppsdk/_generated/
 

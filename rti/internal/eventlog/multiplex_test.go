@@ -129,6 +129,39 @@ func TestMultiplexWriter_CloseFlushesAll(t *testing.T) {
 	}
 }
 
+type closeErrorSink struct {
+	bytes.Buffer
+}
+
+func (*closeErrorSink) Close() error {
+	return errors.New("close failed")
+}
+
+func TestMultiplexWriter_CloseReturnsDeterministicFirstError(t *testing.T) {
+	const iterations = 20
+	for i := 0; i < iterations; i++ {
+		mux, err := NewMultiplexWriter(MultiplexOptions{
+			Clock: core.NewFakeClock(time.Unix(0, 0)),
+			Mode:  core.ModeVerbose,
+			Factory: func(opts WriterOptions) (*Writer, error) {
+				opts.Sink = &closeErrorSink{}
+				return NewWriter(opts)
+			},
+		})
+		if err != nil {
+			t.Fatalf("iteration %d: NewMultiplexWriter: %v", i, err)
+		}
+		for _, fed := range []core.FederationName{"zeta", "alpha"} {
+			if err := mux.Append(context.Background(), fed, &writerEvent{}); err != nil {
+				t.Fatalf("iteration %d: Append %s: %v", i, fed, err)
+			}
+		}
+		if err := mux.Close(); err == nil || err.Error() != `eventlog: close federation "alpha": close failed` {
+			t.Fatalf("iteration %d: Close error = %v", i, err)
+		}
+	}
+}
+
 func TestP0MultiplexWriter_CloseFederationKeepsOthersAvailable(t *testing.T) {
 	mux, _ := newMultiplexForTest(t)
 	defer func() { _ = mux.Close() }()

@@ -35,7 +35,7 @@ The reproducibility guarantee (SRS NFR-DET-1, NFR-DET-2) is load-bearing. Every 
 | Rule | Why |
 |---|---|
 | **D-1** No wall-clock reads. Use `core.Clock` (Go) / `Clock` protocol (Python). `RealClock` in production, `FakeClock` in tests. | Reproducibility |
-| **D-2** No iteration over Go maps without sorting keys first when iteration order affects output. Use `slices.Sorted(maps.Keys(m))` or equivalent. | Reproducibility |
+| **D-2** No iteration over Go maps or Python mappings without sorting keys first when iteration order affects output. Use `slices.Sorted(maps.Keys(m))`, `for key in sorted(mapping)`, or equivalent. | Reproducibility |
 | **D-3** No reliance on goroutine scheduling order. If order matters, serialize through a channel/queue with explicit ordering. | Reproducibility |
 | **D-4** Stable tie-break on equal HLA timestamps: federate handle → object handle → attribute handle. Never (handle, pointer address) or anything per-process. | Reproducibility |
 | **D-5** RNG seeded deterministically (federation name + federate handle, or configured seed). Never `math/rand` global, never `random.random()` without seeding. | Reproducibility |
@@ -43,7 +43,7 @@ The reproducibility guarantee (SRS NFR-DET-1, NFR-DET-2) is load-bearing. Every 
 | **D-7** No global mutable state in core packages. Inject dependencies through constructors. | Testability + reproducibility |
 | **D-8** Determinism tests run **at least 10 iterations** asserting byte-identical output. Single-iteration determinism tests will be rejected. | Catches latent flake |
 
-CI runs a determinism harness across PRs touching core packages; it will catch most violations of D-1, D-2, D-5.
+Run the local determinism harness before submitting core changes; it catches most violations of D-1, D-2, and D-5.
 
 ---
 

@@ -41,6 +41,11 @@ linters-settings:
             desc: "rti/pkg/* MUST NOT depend on rti/internal/* (must be standalone library)"
 
 issues:
+  exclude-dirs:
+    - rti/internal/genproto
+  # The repository predates the current lint profile. Keep that debt visible
+  # locally while rejecting newly introduced violations on branch changes.
+  new-from-rev: origin/main
   exclude-rules:
     - path: _test\.go
       linters: [gosec, gocyclo]
