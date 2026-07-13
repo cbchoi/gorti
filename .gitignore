@@ -49,8 +49,9 @@ eventlogs/
 *.pem
 *.key
 
-# Local toolchain + scratch caches. Never commit — they balloon the repo and
+# Local toolchain + scratch caches. Never commit; they balloon the repo and
 # are reproducible from CI.
+.cache/
 .tools/
 .tmp/
 
@@ -71,5 +72,5 @@ docs/reports/perf/*.prof
 /gorti-saves/
 /verification/fair-comparison/launchers.local.json
 
-# Local sandbox tooling — Dockerfile.codex etc. Per-machine; never committed.
+# Local sandbox tooling (Dockerfile.codex, etc.). Per-machine; never committed.
 docker/
