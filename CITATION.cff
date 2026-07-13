@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use gorti in research, please cite the software using this metadata."
+type: software
+title: "gorti: An open-source IEEE 1516-2010 Run-Time Infrastructure in Go"
+abstract: >-
+  gorti is an open-source IEEE 1516-2010 (HLA Evolved) Run-Time
+  Infrastructure implemented in Go. It provides federation, declaration,
+  object, ownership, data distribution, and time-management services together
+  with deterministic event logging and federate SDKs for Python and C++.
+authors:
+  - family-names: Choi
+    given-names: Changbeom
+version: 0.9.0
+repository-code: "https://github.com/cbchoi/gorti"
+url: "https://cbchoi.github.io/gorti/"
+license: MIT
+keywords:
+  - High Level Architecture
+  - HLA Evolved
+  - Run-Time Infrastructure
+  - distributed simulation
+  - logical time
+  - reproducible simulation

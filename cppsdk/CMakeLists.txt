@@ -21,7 +21,7 @@
 
 cmake_minimum_required(VERSION 3.18)
 project(gorti_cppsdk
-  VERSION 0.1.0
+  VERSION 0.9.0
   DESCRIPTION "gorti C++ SDK — IEEE 1516.1-2010 Pitch-style ambassador"
   LANGUAGES CXX
 )

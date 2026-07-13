@@ -1,9 +1,22 @@
 site_name: gorti
-site_description: Open-source IEEE 1516-2010 (HLA Evolved) RTI in Go with Python federate SDK
+site_description: Open-source IEEE 1516-2010 (HLA Evolved) RTI in Go
 site_url: https://cbchoi.github.io/gorti/
 repo_url: https://github.com/cbchoi/gorti
 repo_name: cbchoi/gorti
 edit_uri: edit/main/docs/
+
+# Keep internal agent/task history in Git without publishing it into the user
+# documentation search index.
+exclude_docs: |
+  tasks/
+  reports/
+  agent-*.md
+  *_DISPATCH_PLAN.md
+  AGENTS.md
+  DISPATCH.md
+  MILESTONE_CHECK.md
+  ORTHOGONALITY.md
+  templates/
 
 theme:
   name: material
@@ -70,64 +83,46 @@ plugins:
 
 nav:
   - Home: index.md
+  - Installation: installation.md
   - Quickstart: quickstart.md
-  - Architecture:
+  - User Guide:
+      - Runtime and SDKs: user-guide.md
+      - Time Management: time-management.md
+      - Operations: operations.md
+      - Deployment Matrix: DEPLOYMENT.md
+  - Verification:
+      - Interoperability: verification.md
+      - Reproducibility: reproducibility.md
+      - Performance: performance.md
+      - Pitch Parity: PITCH_PARITY.md
+      - RTI Conformance Audit: RTI_CONFORMANCE_AUDIT.md
+      - DLC Compliance Program: DLC_COMPLIANCE_PROGRAM.md
+      - DLC Spec Coverage: dlc-spec-coverage.md
+      - Known DLC Divergences: DLC_DIVERGENCE_CATALOGUE.md
+      - Pitch Golden Licensing: PITCH_GOLDEN_LICENSING.md
+  - Research:
+      - SoftwareX Submission: softwarex.md
+      - Citation: citation.md
+      - Roadmap: roadmap.md
+  - Architecture & Development:
       - Software Requirements (SRS): srs.md
       - Software Design (SDD): sdd.md
       - Interface Design (IDD): idd.md
-      - Path Ownership / Orthogonality: ORTHOGONALITY.md
-  - Workflow & Conventions:
-      - Test-Driven Discipline: TDD.md
-      - Coding Conventions: CODING_CONVENTIONS.md
-      - Multi-Agent Workflow: WORKFLOW.md
-      - Dispatch Model: DISPATCH.md
-      - Agents Overview: AGENTS.md
-      - Milestone Checking: MILESTONE_CHECK.md
-  - Research Platform:
       - Design (Phase 0): research-platform.md
       - How-to add an alternative: research-platform-howto.md
-  - rtid TUI:
-      - Design (Phase 0): rtid-tui.md
-  - DDS Adapter (M19):
-      - Design (Phase 0): m19-dds-adapter.md
-  - Agent Briefs:
-      - Agent A — RTI Core: agent-a-rti-core.md
-      - Agent B — FOM / Encoding: agent-b-fom-encoding.md
-      - Agent C — Python SDK: agent-c-pysdk.md
-  - Dispatch Plans:
-      - M2 Dispatch Plan: M2_DISPATCH_PLAN.md
-      - M3 Dispatch Plan: M3_DISPATCH_PLAN.md
-      - M4 Dispatch Plan: M4_DISPATCH_PLAN.md
-      - M5 Dispatch Plan: M5_DISPATCH_PLAN.md
-  - Milestone Reports:
-      - M5:
-          - Agent A: reports/M5/agent-a.md
-          - Agent B: reports/M5/agent-b.md
-          - Agent C: reports/M5/agent-c.md
-      - M6:
-          - Agent A — Hardening: reports/M6/agent-a-hardening.md
-          - Agent A — RememberFor: reports/M6/agent-a-rememberfor.md
-          - Agent C — Handle Alignment: reports/M6/agent-c-handle-alignment.md
-          - Agent C — Close: reports/M6/agent-c-close.md
-      - M7:
-          - Agent A: reports/M7/agent-a.md
-      - M8:
-          - Agent A: reports/M8/agent-a.md
-      - M9:
-          - Agent A: reports/M9/agent-a.md
-      - M10:
-          - Agent A: reports/M10/agent-a.md
-      - M11:
-          - Agent A: reports/M11/agent-a.md
-      - M12:
-          - Agent A: reports/M12/agent-a.md
-          - Agent C: reports/M12/agent-c.md
-      - Performance optimization pass: reports/perf/M12-optimization-pass.md
-  - Templates:
-      - Status Report: templates/status-report.md
+      - rtid TUI: rtid-tui.md
+      - DDS Adapter: m19-dds-adapter.md
+      - M17 to DLC Migration: MIGRATION_M17_TO_DLC.md
+      - Contributor Workflow: WORKFLOW.md
+      - Coding Conventions: CODING_CONVENTIONS.md
+      - Test-Driven Discipline: TDD.md
+  - Publishing: readthedocs.md
+  - v0.9 Release Candidate: releases/v0.9.0.md
   - Changelog: changelog.md
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/cbchoi/gorti
+
+copyright: Copyright &copy; 2026 Changbeom Choi

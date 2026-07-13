@@ -11,11 +11,25 @@ name: Deploy docs to GitHub Pages
 # After that, every push to main republishes the site.
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "paper/**"
+      - "mkdocs.yml"
+      - ".readthedocs.yaml"
+      - "CITATION.cff"
+      - "codemeta.json"
+      - ".github/workflows/docs.yml"
   push:
     branches: [main]
     paths:
       - "docs/**"
+      - "paper/**"
       - "mkdocs.yml"
+      - ".readthedocs.yaml"
+      - "CITATION.cff"
+      - "codemeta.json"
       - "CHANGELOG-MASTERPLAN.md"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -61,6 +75,7 @@ jobs:
           path: site
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-22.04
     environment:

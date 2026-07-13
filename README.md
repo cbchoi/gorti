@@ -1,8 +1,15 @@
 # gorti
 
+[![CI](https://github.com/cbchoi/gorti/actions/workflows/ci.yml/badge.svg)](https://github.com/cbchoi/gorti/actions/workflows/ci.yml)
+[![Documentation](https://github.com/cbchoi/gorti/actions/workflows/docs.yml/badge.svg)](https://github.com/cbchoi/gorti/actions/workflows/docs.yml)
+[![Release](https://img.shields.io/github/v/release/cbchoi/gorti?display_name=tag)](https://github.com/cbchoi/gorti/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cbchoi/gorti.svg)](https://pkg.go.dev/github.com/cbchoi/gorti)
+
 Open-source [IEEE 1516-2010 (HLA Evolved)](https://standards.ieee.org/ieee/1516/4118/) Run-Time Infrastructure in Go, with a spec-strict IEEE 1516.1-2010 DLC C++ federate SDK, a Python federate SDK, and a [pyjevsim](https://github.com/cbchoi/pyjevsim) DEVS bridge.
 
-**Status (v0.9.0)**: full HLA Evolved service surface with a CI-enforced
+**Development status (v0.9.0 submission candidate; latest public release
+v0.1.0)**: full HLA Evolved service surface with a CI-enforced
 conformance program — 27/27 conformance fixtures at FULL/SPEC-FULL
 (canonicalized event sequences byte-identical to their goldens; the 3
 goldens capturable under Pitch pRTI Free's 2-federate cap were captured
@@ -48,41 +55,23 @@ supported mode), or legacy HLA 1.3 / 1516-2000 interfaces.
 
 ## Quickstart
 
-### Install from a release (no Go toolchain required)
+### Build the submission candidate
 
-One-liner — fetches the latest release, verifies the SHA256, installs `rtid` + `rti-top` to `/usr/local/bin`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh | sh
-```
-
-Pin a version or override the install directory via env vars:
+The current v0.9 submission candidate is installed from source. Public v0.9
+release archives and the PyPI wheel are release gates and are not advertised as
+available until their tagged artifacts are published and verified.
 
 ```bash
-# Pin a specific tag
-curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh | VERSION=v0.1.0 sh
-
-# Install to ~/.local/bin (no sudo required)
-curl -fsSL https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh | INSTALL_DIR=$HOME/.local/bin sh
+git clone https://github.com/cbchoi/gorti.git
+cd gorti
+go build -o bin/rtid ./rti/cmd/rtid
+go build -o bin/rti-top ./rti/cmd/rti-top
+go test ./...
 ```
 
-The `install.sh` one-liner covers `linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`. It uses `curl` or `wget`, and `sha256sum` or `shasum -a 256` — whichever is available.
-
-Prefer to do it by hand? Download a tarball (or, on Windows, a `.zip`) + the matching `gorti_<version>_SHA256SUMS` from the [releases page](https://github.com/cbchoi/gorti/releases) and extract the binaries.
-
-The release archive is CGo-free (statically linked), so it has no runtime system dependencies. The DDS-capable `rtid-dds` variant is **not** in the release archive — it requires Cyclone DDS and is built from source via `make build-dds` (see [M19 design doc](docs/m19-dds-adapter.md)).
-
-### Windows
-
-`rtid.exe` and `rti-top.exe` ship as `gorti_<version>_windows_<arch>.zip` on the [releases page](https://github.com/cbchoi/gorti/releases):
-
-```powershell
-Invoke-WebRequest -Uri https://github.com/cbchoi/gorti/releases/download/v0.9.0/gorti_0.9.0_windows_amd64.zip -OutFile gorti.zip
-Expand-Archive gorti.zip -DestinationPath gorti
-.\gorti\rtid.exe --listen :8442
-```
-
-Windows federate developers use the Python SDK (`pip install rti1516e`). The C++ federate SDK is Linux/macOS-only for now — see the [deployment plan](docs/DEPLOYMENT.md) for the full matrix and the Windows C++ roadmap.
+On Windows, use `bin/rtid.exe` and `bin/rti-top.exe` output names. The C++
+federate SDK is Linux/macOS-only for now; see the
+[deployment plan](docs/DEPLOYMENT.md) for its Windows roadmap.
 
 ### Run the Go reference example
 
@@ -113,7 +102,8 @@ go build -o bin/rtid ./rti/cmd/rtid
 ./bin/rtid --listen :8442 --metrics-listen :9090
 ```
 
-Federate connects with `grpc://localhost:8442`. (TLS: `--tls-cert/--tls-key` pinned for production; M6 hardening track.)
+Federates connect to `127.0.0.1:8442` by default. Use `--tls-cert` and
+`--tls-key` when the federate endpoint crosses a trusted-network boundary.
 
 ### DDS data plane (opt-in, M19)
 
@@ -174,10 +164,17 @@ Pair `--pingpong-deterministic` / `--timed-deterministic` with the same `--log-d
 | `--log-level` | `debug`/`info`/`warn`/`error` (default `info`). |
 | `--log-format` | `json` (default) or `text`. |
 | `--federation-mode` | `verbose` (default; ack-accounted) or `best-effort`. |
+| `--outbox-batch-size` | Outbound events per batch, `1..1024` (default `32`). Larger batches favor throughput. |
+| `--outbox-flush-interval` | Maximum wait before a partial outbound batch is sent (default `1ms`; must be greater than zero). |
 | `--research-config` | TOML file selecting alternative LBTS/Grant/Negotiation strategies (see [`docs/research-platform-howto.md`](docs/research-platform-howto.md)). |
 | `--admin-mutating` | Enable `ForceResign`/`DestroyFederation` on the admin port. Refuses non-loopback bind unless `--admin-mutating-allow-non-loopback=true`. |
 
 Full flag list: `rtid --help`.
+
+`TimeAdvanceGrant` is a latency boundary: it immediately flushes that
+recipient's partial batch, including preceding TSO callbacks. This preserves
+TSO-before-grant ordering while avoiding the partial-batch timer on the
+logical-time critical path.
 
 ### Security caveats
 
@@ -191,13 +188,8 @@ Full flag list: `rtid --help`.
 
 ### Python (idiomatic, supported)
 
-`rti1516e` is the supported federate SDK — a pure-Python wheel (Linux, Windows, macOS; Python 3.11+). From a release:
-
-```bash
-pip install rti1516e
-```
-
-Or from the source tree for development (editable, with the pyjevsim bridge):
+`rti1516e` is the supported Python federate SDK (Linux, Windows, macOS;
+Python 3.11+). Install the submission candidate from the source tree:
 
 ```bash
 cd pysdk && pip install -e '.[dev]' pyjevsim==2.0.1
@@ -239,9 +231,14 @@ Connect URLs:
 
 Cut-3 service groups (`fed.sync`, `fed.ownership`, `fed.ddm`, `fed.savepoint`, `fed.mom`) are lazy properties — use them only when you need those service surfaces. Reference federates live under [`examples/`](examples/) (`pyjevsim`, `pyjevsim-relay`, `pyjevsim-time-advance`, `pyjevsim-sync-points`).
 
-### Go (raw gRPC)
+### Go (idiomatic SDK)
 
-There is no idiomatic Go federate SDK — the in-tree Go examples (`go-pingpong`, `go-timed`) drive `rtid` in `--mode=pingpong-demo`/`timed-demo`. External Go federates connect by generating gRPC stubs from [`proto/rti/v1/*.proto`](proto/rti/v1/) directly. The proto contracts are orchestrator-frozen; cross-language handle alignment landed at M6.
+[`rti/pkg/federate`](rti/pkg/federate/) is the exported Go federate SDK. It
+wraps federation join/resign, declaration, object registration and updates,
+interaction sends, typed callbacks, synchronization, and time management while
+keeping generated protobuf types out of application code. The
+[`go-tar-wait`](examples/go-tar-wait/) example runs two independent federate
+processes and shows a time advance remaining pending until its peer advances.
 
 ## Observing with `rti-top`
 
@@ -276,16 +273,18 @@ Mutating keys (`x`, `d`) only appear when `rtid` was started with `--admin-mutat
 
 ## Performance
 
-Reference baseline ([`docs/reports/M5/agent-a.md`](docs/reports/M5/agent-a.md), 12th Gen i7-12700, 20 cores, 10s/size, in-process):
+The claim-grade Pitch pRTI comparison uses identical FOM bytes, seed, two
+independent federate processes, choreography, callbacks, logging, measurement
+boundaries, five warmup pairs, twenty measured pairs, and balanced alternating
+AB/BA order. The retained result has a paired median gorti/Pitch ratio of
+1.218 for synchronous `sendInteraction`: gorti is still about 22% behind at
+that caller boundary, while it is faster at the completed-delivery boundary
+and competitive on object updates.
 
-| Federation size | Throughput (interactions/sec) | p50 (ms) | p99 (ms) |
-|---:|---:|---:|---:|
-| 2   | 3,035,333 |  0.044 |  0.125 |
-| 5   | 1,253,641 | 10.16  | 15.04  |
-| 25  |   184,191 |  2.90  | 23.22  |
-| 100 |    48,863 |  3.22  | 33.81  |
-
-Reproduce: `go run -tags=perf ./rti/cmd/perf-baseline`.
+This is a controlled-machine result, not a general vendor ranking. See
+[`docs/performance.md`](docs/performance.md), the fail-closed
+[`verification/fair-comparison/`](verification/fair-comparison/) protocol, and
+[`probe_result.md`](probe_result.md) for the evidence and attribution.
 
 ## Repo layout
 
@@ -294,10 +293,13 @@ Reproduce: `go run -tags=perf ./rti/cmd/perf-baseline`.
 | `proto/rti/v1/` | gRPC contracts (orchestrator-frozen) |
 | `rti/` | Go RTI server + encoder + FOM parser |
 | `pysdk/` | Python federate SDK + pyjevsim bridge |
+| `cppsdk/` | IEEE 1516.1-2010 C++ DLC SDK |
 | `examples/` | Reference federates (go-pingpong, go-timed, pyjevsim) |
 | `tests/conformance/` | Cross-language conformance vectors + FOM fixtures |
 | `tests/spec/M1/`, `rti/spec/M{2,3,5}/`, `pysdk/tests/spec/m{4,5}/` | Per-milestone specification tests (orchestrator-frozen) |
-| `docs/` | SRS, SDD, IDD, agent briefs, dispatch plans, status reports |
+| `verification/` | Cross-RTI semantic and fair-performance harnesses |
+| `docs/` | User, operations, verification, architecture, and API documentation |
+| `paper/` | SoftwareX manuscript source and submission checklist |
 | `CHANGELOG-MASTERPLAN.md` | Full milestone-by-milestone history |
 
 ## Standards conformance
@@ -318,6 +320,19 @@ IEEE 1516-2010 (HLA Evolved) only — not 1516-2000, not 1.3, not HLA 4.
 - Exceptions carry a machine-readable channel (gRPC trailing metadata
   `rti-spec-exception` = Annex C class name) — the contract for
   third-party SDK authors is in `cppsdk/src/dlc/README.md`.
+
+## Documentation and citation
+
+The user documentation builds strictly from `.readthedocs.yaml` and
+`mkdocs.yml`. Public Read the Docs and GitHub Pages hosting are release setup
+gates. Start with the [installation guide](docs/installation.md),
+[two-federate quickstart](docs/quickstart.md), and
+[reproducibility protocol](docs/reproducibility.md).
+
+Research users should cite the exact release and commit. Machine-readable
+metadata is provided in [`CITATION.cff`](CITATION.cff) and
+[`codemeta.json`](codemeta.json). The SoftwareX draft and pre-submission
+checklist are under [`paper/`](paper/).
 
 ## For contributors
 
