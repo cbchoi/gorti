@@ -66,3 +66,34 @@ type TSODeliveryGate interface {
 		retractionHandle uint64,
 	) int
 }
+
+// TSOBufferedDelivery is one timestamp-ordered callback considered for
+// server-side buffering. Sender and RetractionHandle are optional together.
+type TSOBufferedDelivery struct {
+	Recipient        FederateHandle
+	Timestamp        LogicalTime
+	Event            OutboundEvent
+	Sender           FederateHandle
+	RetractionHandle uint64
+}
+
+// TSOBufferReservation holds the federation's time-evaluation boundary from
+// final delivery classification through WAL and fanout admission.
+type TSOBufferReservation interface {
+	// Immediate returns deliveries promoted because logical time advanced
+	// between the caller's optimistic classification and this reservation.
+	Immediate() []TSOBufferedDelivery
+	Buffered() []TSOBufferedDelivery
+	// Commit transfers all remaining deliveries to the TSO buffer and releases
+	// the evaluation boundary. It is idempotent and cannot fail.
+	Commit(ctx context.Context)
+	Release()
+}
+
+// ReservableTSODeliveryGate closes the ShouldDeliverNow/BufferTSO race for
+// fanout paths that must append their WAL record between classification and
+// ownership transfer.
+type ReservableTSODeliveryGate interface {
+	TSODeliveryGate
+	ReserveTSO(fed FederationName, deliveries []TSOBufferedDelivery) TSOBufferReservation
+}

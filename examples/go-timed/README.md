@@ -4,7 +4,8 @@ Three Go federates with different lookaheads run TAR (TimeAdvanceRequest)
 cycles against a real `rtid` daemon. Each cycle issues an advance,
 waits for the matching `TimeAdvanceGrant` on the federate's
 `StreamService.Events` stream, then emits a `Tick` interaction at the
-granted time. Returned to life in M21 after the deletion in cut-3 —
+earliest valid TSO time (`grant + lookahead`). Returned to life in M21
+after the deletion in cut-3 —
 the wire path needed `TimeService` wired (M21 W2A) and grant emission
 on the wire (W2B).
 

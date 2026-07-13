@@ -141,9 +141,9 @@ func TestSpec_M15_2_RecordAssignmentSelfHostsCurrent(t *testing.T) {
 // TestSpec_M15_2_AssignmentsSnapshotReflectsState.
 func TestSpec_M15_2_AssignmentsSnapshotReflectsState(t *testing.T) {
 	mgr := cluster.New("node-a", "127.0.0.1:8442")
-	mgr.AssignFederation("fed-1")            // self
+	mgr.AssignFederation("fed-1") // self
 	mgr.RegisterPeer("node-b", "addr-b")
-	mgr.RecordAssignment("fed-2", "node-b")  // remote
+	mgr.RecordAssignment("fed-2", "node-b") // remote
 	snap := mgr.AssignmentsSnapshot()
 	if len(snap) != 2 {
 		t.Fatalf("snapshot len = %d, want 2", len(snap))

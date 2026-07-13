@@ -19,6 +19,24 @@ import (
 	"github.com/cbchoi/gorti/rti/internal/object"
 )
 
+func TestDigestFOMModulesUsesExactOrderedBytes(t *testing.T) {
+	a := []core.FOMModule{{Path: "one.xml", XML: []byte("ab")}, {Path: "two.xml", XML: []byte("c")}}
+	sameBytesDifferentPaths := []core.FOMModule{{Path: "x.xml", XML: []byte("ab")}, {Path: "y.xml", XML: []byte("c")}}
+	differentBoundary := []core.FOMModule{{Path: "one.xml", XML: []byte("a")}, {Path: "two.xml", XML: []byte("bc")}}
+	reordered := []core.FOMModule{{Path: "two.xml", XML: []byte("c")}, {Path: "one.xml", XML: []byte("ab")}}
+
+	got := digestFOMModules(a)
+	if got != digestFOMModules(sameBytesDifferentPaths) {
+		t.Fatal("diagnostic paths changed the FOM digest")
+	}
+	if got == digestFOMModules(differentBoundary) {
+		t.Fatal("module length framing did not distinguish byte boundaries")
+	}
+	if got == digestFOMModules(reordered) {
+		t.Fatal("module order did not affect the FOM digest")
+	}
+}
+
 // minimalFOMXML returns a small valid FOM with one Vehicle objectClass + one
 // Honk interactionClass; this matches tests/conformance/foms/good/minimal.xml
 // but is inlined here so tests don't depend on relative file paths.

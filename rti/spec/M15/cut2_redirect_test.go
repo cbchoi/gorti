@@ -33,7 +33,7 @@ type bufNode struct {
 }
 
 // newBufNode spins up an in-process rtid-shaped cluster node. The
-// listener is a bufconn instance keyed by ``addr`` (the in-process
+// listener is a bufconn instance keyed by “addr“ (the in-process
 // dial target); the dialer the cluster service uses dispatches by
 // the same key, simulating "host:port" routing.
 func newBufNode(t *testing.T, id, addr string, peerListeners map[string]*bufconn.Listener) *bufNode {

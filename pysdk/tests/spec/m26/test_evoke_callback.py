@@ -136,6 +136,20 @@ def test_spec_m26_evoke_callback_returns_false_when_idle() -> None:
 
 
 @pytest.mark.spec
+def test_spec_m26_evoke_reports_immediate_callback_once() -> None:
+    """A callback won by the immediate pump is not lost at the evoke boundary."""
+    amb = _RecordingAmbassador()
+    amb._start_loop()
+    try:
+        amb._dispatch_event(ReceiveInteraction("Early", {}, None))
+
+        assert amb.evokeCallback(approx_min_time=0.0) is True
+        assert amb.evokeCallback(approx_min_time=0.0) is False
+    finally:
+        amb._stop_loop()
+
+
+@pytest.mark.spec
 def test_spec_m26_evoke_multiple_callbacks_drains_batch() -> None:
     """evokeMultipleCallbacks reports True if any callback in the batch fires."""
     amb, fake, pump = _install_ambassador_with_fake_federate()

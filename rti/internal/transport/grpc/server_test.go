@@ -6,9 +6,13 @@ import (
 	"testing"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
 // stubFedStoreForServerTest is the smallest core.FederationStore that lets
@@ -219,4 +223,141 @@ func keys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+type stubMembershipValidator struct {
+	valid map[core.FederationName]core.FederateHandle
+}
+
+func (v stubMembershipValidator) ValidateMember(fed core.FederationName, h core.FederateHandle) error {
+	if v.valid[fed] != h {
+		return core.ErrFederateNotJoined
+	}
+	return nil
+}
+
+func (stubMembershipValidator) GenerationFor(core.FederationName) (uint64, bool) { return 0, true }
+
+func TestMembershipInterceptorRejectsStaleHandleBeforeHandler(t *testing.T) {
+	opts := validOpts()
+	opts.Membership = stubMembershipValidator{valid: map[core.FederationName]core.FederateHandle{"fed": 9}}
+	srv, err := NewServer(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	handler := func(context.Context, any) (any, error) {
+		called = true
+		return &rtiv1.Empty{}, nil
+	}
+	interceptor := srv.UnaryMembershipInterceptor()
+	_, err = interceptor(context.Background(), &rtiv1.SendInteractionRequest{
+		FederationName: "fed", FederateHandle: 1,
+	}, &grpc.UnaryServerInfo{}, handler)
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("stale handle status = %v, want FailedPrecondition", status.Code(err))
+	}
+	if called {
+		t.Fatal("handler ran for stale generation handle")
+	}
+	_, err = interceptor(context.Background(), &rtiv1.SendInteractionRequest{
+		FederationName: "fed", FederateHandle: 9,
+	}, &grpc.UnaryServerInfo{}, handler)
+	if err != nil || !called {
+		t.Fatalf("current member call = (%v, called=%v)", err, called)
+	}
+}
+
+func TestMembershipInterceptorDoesNotTreatMOMQueryTargetAsCaller(t *testing.T) {
+	opts := validOpts()
+	opts.Membership = stubMembershipValidator{valid: map[core.FederationName]core.FederateHandle{"fed": 9}}
+	srv, err := NewServer(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	_, err = srv.UnaryMembershipInterceptor()(
+		context.Background(),
+		&rtiv1.QueryFederateAttributesRequest{FederationName: "fed", FederateHandle: 99999},
+		&grpc.UnaryServerInfo{FullMethod: "/rti.v1.MomService/QueryFederateAttributes"},
+		func(context.Context, any) (any, error) {
+			called = true
+			return &rtiv1.QueryFederateAttributesResponse{Found: false}, nil
+		},
+	)
+	if err != nil || !called {
+		t.Fatalf("MOM target lookup = (%v, called=%v)", err, called)
+	}
+}
+
+type leaseMembershipValidator struct {
+	valid              core.FederateHandle
+	acquired, released int
+}
+
+func (v *leaseMembershipValidator) ValidateMember(_ core.FederationName, h core.FederateHandle) error {
+	if h != v.valid {
+		return core.ErrFederateNotJoined
+	}
+	return nil
+}
+
+func (*leaseMembershipValidator) GenerationFor(core.FederationName) (uint64, bool) { return 1, true }
+
+func (v *leaseMembershipValidator) AcquireMember(fed core.FederationName, h core.FederateHandle) (func(), error) {
+	if err := v.ValidateMember(fed, h); err != nil {
+		return nil, err
+	}
+	v.acquired++
+	return func() { v.released++ }, nil
+}
+
+type scriptedMembershipStream struct {
+	ctx      context.Context
+	requests []*rtiv1.SendInteractionRequest
+}
+
+func (*scriptedMembershipStream) SetHeader(metadata.MD) error  { return nil }
+func (*scriptedMembershipStream) SendHeader(metadata.MD) error { return nil }
+func (*scriptedMembershipStream) SetTrailer(metadata.MD)       {}
+func (s *scriptedMembershipStream) Context() context.Context   { return s.ctx }
+func (*scriptedMembershipStream) SendMsg(any) error            { return nil }
+func (s *scriptedMembershipStream) RecvMsg(message any) error {
+	request := s.requests[0]
+	s.requests = s.requests[1:]
+	*(message.(*rtiv1.SendInteractionRequest)) = *request
+	return nil
+}
+
+func TestP0InteractionStreamValidatesEveryMessageAndHoldsLeaseToAck(t *testing.T) {
+	validator := &leaseMembershipValidator{valid: 9}
+	base := &scriptedMembershipStream{ctx: context.Background(), requests: []*rtiv1.SendInteractionRequest{
+		{},
+		{FederationName: "fed", FederateHandle: 9},
+		{FederationName: "fed", FederateHandle: 1},
+	}}
+	stream := &membershipServerStream{
+		ServerStream: base, server: &Server{membership: validator}, interaction: true,
+	}
+	if err := stream.RecvMsg(new(rtiv1.SendInteractionRequest)); err != nil {
+		t.Fatal(err)
+	}
+	if validator.acquired != 0 {
+		t.Fatal("capability handshake acquired membership lease")
+	}
+	if err := stream.RecvMsg(new(rtiv1.SendInteractionRequest)); err != nil {
+		t.Fatal(err)
+	}
+	if validator.acquired != 1 || validator.released != 0 {
+		t.Fatalf("lease before ACK = acquired %d released %d", validator.acquired, validator.released)
+	}
+	if err := stream.SendMsg(&rtiv1.Empty{}); err != nil {
+		t.Fatal(err)
+	}
+	if validator.released != 1 {
+		t.Fatalf("lease releases after ACK = %d, want 1", validator.released)
+	}
+	if err := stream.RecvMsg(new(rtiv1.SendInteractionRequest)); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("stale second message status = %v, want FailedPrecondition", status.Code(err))
+	}
 }

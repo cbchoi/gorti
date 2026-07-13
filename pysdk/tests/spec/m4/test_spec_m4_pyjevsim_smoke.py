@@ -15,6 +15,7 @@ Implements: FR-PYJ-1 (version stability).
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 
 import pytest
 
@@ -22,9 +23,14 @@ import pytest
 @pytest.mark.spec
 def test_spec_m4_pyjevsim_required_symbols_present() -> None:
     try:
+        importlib.metadata.version("pyjevsim")
+    except importlib.metadata.PackageNotFoundError:
+        pytest.skip("pyjevsim distribution not installed in this environment")
+
+    try:
         pyjevsim = importlib.import_module("pyjevsim")
     except ImportError:
-        pytest.skip("pyjevsim not installed in this environment")
+        pytest.fail("pyjevsim distribution is installed but cannot be imported")
 
     # The bridge consumes these symbols. If a future pyjevsim release
     # renames or removes any of them, this test fails with a diagnostic

@@ -30,21 +30,28 @@ const defaultStallTimeoutSeconds = 60
 type Manager struct {
 	opts Options
 
-	mu          sync.RWMutex
-	federations map[core.FederationName]*federationState
+	mu             sync.RWMutex
+	federations    map[core.FederationName]*federationState
+	generations    map[core.FederationName]uint64
+	generationBase uint64
+	generationSpan uint64
 }
 
 // federationState is the per-federation in-memory record. Mutations require
 // the federation's own write lock (acquired via Manager.mu plus the per-
 // federation mu); reads can use the read lock.
 type federationState struct {
-	mu sync.RWMutex
+	mu         sync.RWMutex
+	lifecycle  sync.Mutex
+	operations sync.RWMutex
+	destroying bool
 
 	name         core.FederationName
 	mode         core.Mode
 	stallTimeout time.Duration
 	seed         uint64
 	fom          core.FOMHandle
+	generation   uint64
 
 	// M19 Phase 1a (docs/m19-dds-adapter.md §4.2): data-plane
 	// transport selection recorded at CreateFederation time. The
@@ -135,6 +142,17 @@ type Options struct {
 	// and falls back to the legacy "remove from roster + run
 	// OnFederateResigned" path. MUST NOT block.
 	OnFederateResigning func(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction)
+
+	// OnFederationDestroying runs after the empty-roster check and before the
+	// federation becomes externally absent.
+	OnFederationDestroying func(ctx context.Context, fed core.FederationName) error
+
+	// GenerationEpoch fences stale handles across RTI process restarts. Zero
+	// preserves the historical local-handle values used by embedded fixtures.
+	GenerationEpoch uint32
+	// GenerationSpan is the non-overlapping range reserved durably for this
+	// process. Zero leaves the range unbounded for embedded fixtures.
+	GenerationSpan uint32
 }
 
 // New constructs a Manager. Returns an error if any required dependency in
@@ -161,8 +179,11 @@ func New(opts Options) (*Manager, error) {
 		opts.EventLog = nil
 	}
 	return &Manager{
-		opts:        opts,
-		federations: map[core.FederationName]*federationState{},
+		opts:           opts,
+		federations:    map[core.FederationName]*federationState{},
+		generations:    map[core.FederationName]uint64{},
+		generationBase: uint64(opts.GenerationEpoch),
+		generationSpan: uint64(opts.GenerationSpan),
 	}, nil
 }
 
@@ -193,6 +214,26 @@ func isNilInterface(v any) bool {
 //   - Returns the assigned seed in CreateFederationResponse via the gRPC
 //     handler layer (this method only signals success/error).
 func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederationRequest) error {
+	return m.createFederation(ctx, req, nil)
+}
+
+// CreateFederationWithSetup publishes the new execution while holding its
+// exclusive operation gate through setup. The gRPC composition layer uses
+// this to install FOM, MOM, and cluster state before any Join can observe the
+// federation.
+func (m *Manager) CreateFederationWithSetup(
+	ctx context.Context,
+	req core.CreateFederationRequest,
+	setup func(generation uint64),
+) error {
+	return m.createFederation(ctx, req, setup)
+}
+
+func (m *Manager) createFederation(
+	ctx context.Context,
+	req core.CreateFederationRequest,
+	setup func(generation uint64),
+) error {
 	if req.Name == "" {
 		return core.ErrFederationInvalidName
 	}
@@ -228,16 +269,29 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if _, exists := m.federations[req.Name]; exists {
+		m.mu.Unlock()
 		return core.ErrFederationAlreadyExists
 	}
-	m.federations[req.Name] = &federationState{
+	generation, seen := m.generations[req.Name]
+	if !seen {
+		generation = m.generationBase
+	}
+	if generation > uint64(^uint32(0)) {
+		m.mu.Unlock()
+		return fmt.Errorf("federation %q generation exhausted", req.Name)
+	}
+	if m.generationSpan > 0 && generation >= m.generationBase+m.generationSpan {
+		m.mu.Unlock()
+		return fmt.Errorf("federation %q reserved generation block exhausted", req.Name)
+	}
+	fs := &federationState{
 		name:               req.Name,
 		mode:               mode,
 		stallTimeout:       stall,
 		seed:               req.Seed,
 		fom:                fom,
+		generation:         generation,
 		transportMode:      tm,
 		ddsDomainID:        req.DDSDomainID,
 		nextFederateHandle: 0, // first Join produces handle 1
@@ -245,6 +299,16 @@ func (m *Manager) CreateFederation(ctx context.Context, req core.CreateFederatio
 		handleToName:       map[core.FederateHandle]string{},
 		joinedAt:           map[core.FederateHandle]time.Time{},
 		federateType:       map[core.FederateHandle]string{},
+	}
+	if setup != nil {
+		fs.operations.Lock()
+	}
+	m.federations[req.Name] = fs
+	m.generations[req.Name] = generation + 1
+	m.mu.Unlock()
+	if setup != nil {
+		defer fs.operations.Unlock()
+		setup(generation)
 	}
 	return nil
 }
@@ -273,6 +337,9 @@ func (m *Manager) TransportFor(fed core.FederationName) (core.TransportMode, int
 func (m *Manager) ModeFor(fed core.FederationName) (core.Mode, bool) {
 	m.mu.RLock()
 	fs, ok := m.federations[fed]
+	if ok && fs.destroying {
+		ok = false
+	}
 	m.mu.RUnlock()
 	if !ok {
 		return core.ModeUnspecified, false
@@ -286,20 +353,60 @@ func (m *Manager) ModeFor(fed core.FederationName) (core.Mode, bool) {
 //
 // Rejects with core.ErrFederationHasFederatesJoined if any federate is
 // currently joined. Rejects unknown name with core.ErrFederationNotFound.
-func (m *Manager) DestroyFederation(_ context.Context, name core.FederationName) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *Manager) DestroyFederation(ctx context.Context, name core.FederationName) error {
+	return m.destroyFederation(ctx, name, nil)
+}
+
+func (m *Manager) DestroyFederationGeneration(ctx context.Context, name core.FederationName, expected uint64) error {
+	return m.destroyFederation(ctx, name, &expected)
+}
+
+func (m *Manager) destroyFederation(ctx context.Context, name core.FederationName, expected *uint64) error {
+	m.mu.RLock()
 	fs, ok := m.federations[name]
+	m.mu.RUnlock()
 	if !ok {
 		return core.ErrFederationNotFound
+	}
+	fs.lifecycle.Lock()
+	fs.operations.Lock()
+	m.mu.Lock()
+	if current, exists := m.federations[name]; !exists || current != fs {
+		m.mu.Unlock()
+		fs.operations.Unlock()
+		fs.lifecycle.Unlock()
+		return core.ErrFederationNotFound
+	}
+	if expected != nil && fs.generation != *expected {
+		m.mu.Unlock()
+		fs.operations.Unlock()
+		fs.lifecycle.Unlock()
+		return fmt.Errorf("%w: expected %d, current %d",
+			core.ErrFederationGenerationMismatch, *expected, fs.generation)
 	}
 	fs.mu.RLock()
 	joinedCount := len(fs.handleToName)
 	fs.mu.RUnlock()
 	if joinedCount > 0 {
+		m.mu.Unlock()
+		fs.operations.Unlock()
+		fs.lifecycle.Unlock()
 		return core.ErrFederationHasFederatesJoined
 	}
+	fs.destroying = true
+	m.mu.Unlock()
+	var cleanupErr error
+	if m.opts.OnFederationDestroying != nil {
+		cleanupErr = m.opts.OnFederationDestroying(ctx, name)
+	}
+	m.mu.Lock()
 	delete(m.federations, name)
+	m.mu.Unlock()
+	fs.operations.Unlock()
+	fs.lifecycle.Unlock()
+	if cleanupErr != nil {
+		return fmt.Errorf("federation %q destroy cleanup: %w", name, cleanupErr)
+	}
 	return nil
 }
 
@@ -335,10 +442,23 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 	if !ok {
 		return core.InvalidFederateHandle, core.ErrFederationNotFound
 	}
-
+	fs.lifecycle.Lock()
+	defer fs.lifecycle.Unlock()
+	fs.operations.Lock()
+	defer fs.operations.Unlock()
+	m.mu.RLock()
+	current, exists := m.federations[req.Federation]
+	m.mu.RUnlock()
+	if !exists || current != fs || fs.destroying {
+		return core.InvalidFederateHandle, core.ErrFederationNotFound
+	}
+	if req.ExpectedGeneration != nil && fs.generation != *req.ExpectedGeneration {
+		return core.InvalidFederateHandle, fmt.Errorf("%w: expected %d, current %d",
+			core.ErrFederationGenerationMismatch, *req.ExpectedGeneration, fs.generation)
+	}
 	fs.mu.Lock()
-	defer fs.mu.Unlock()
 	if _, dup := fs.nameToHandle[req.FederateName]; dup {
+		fs.mu.Unlock()
 		return core.InvalidFederateHandle, core.ErrFederateAlreadyJoined
 	}
 
@@ -346,7 +466,15 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 	// reused. Existing federates are untouched — their handles stay stable
 	// across other joins/resigns.
 	fs.nextFederateHandle++
-	assigned := core.FederateHandle(fs.nextFederateHandle)
+	localHandle := fs.nextFederateHandle
+	if localHandle > uint64(^uint32(0)) {
+		fs.mu.Unlock()
+		return core.InvalidFederateHandle, errors.New("federation: federate handle space exhausted")
+	}
+	assigned := core.FederateHandle(localHandle)
+	if fs.generation > 0 {
+		assigned = core.FederateHandle((fs.generation << 32) | localHandle)
+	}
 	fs.nameToHandle[req.FederateName] = assigned
 	fs.handleToName[assigned] = req.FederateName
 	// Phase-3 rtid-TUI: stamp the wall-clock join time so the
@@ -381,14 +509,111 @@ func (m *Manager) JoinFederation(ctx context.Context, req core.JoinFederationReq
 			delete(fs.handleToName, assigned)
 			delete(fs.joinedAt, assigned)
 			delete(fs.federateType, assigned)
+			fs.mu.Unlock()
 			return core.InvalidFederateHandle, fmt.Errorf("federation %q join %q: eventlog append: %w",
 				req.Federation, req.FederateName, err)
 		}
 	}
+	fs.mu.Unlock()
 	if m.opts.OnFederateJoined != nil {
 		m.opts.OnFederateJoined(ctx, req.Federation, assigned, req.FederateName, req.FederateType)
 	}
 	return assigned, nil
+}
+
+// ValidateMember checks the current federation generation and roster in one
+// lookup. Generation is encoded into handles after same-name recreation, so a
+// stale client cannot alias the first local handle of the new execution.
+func (m *Manager) ValidateMember(fed core.FederationName, h core.FederateHandle) error {
+	release, err := m.AcquireMember(fed, h)
+	if release != nil {
+		release()
+	}
+	return err
+}
+
+// AcquireMember holds a shared operation lease until release. Resign and
+// destroy take the exclusive side before changing membership or running
+// teardown, so a validated handler cannot recreate state after cleanup.
+func (m *Manager) AcquireMember(fed core.FederationName, h core.FederateHandle) (func(), error) {
+	if h == core.InvalidFederateHandle {
+		return nil, core.ErrFederateNotJoined
+	}
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, core.ErrFederationNotFound
+	}
+	fs.operations.RLock()
+	m.mu.RLock()
+	current, exists := m.federations[fed]
+	destroying := fs.destroying
+	m.mu.RUnlock()
+	if !exists || current != fs || destroying {
+		fs.operations.RUnlock()
+		return nil, core.ErrFederationNotFound
+	}
+	fs.mu.RLock()
+	_, joined := fs.handleToName[h]
+	fs.mu.RUnlock()
+	if !joined {
+		fs.operations.RUnlock()
+		return nil, core.ErrFederateNotJoined
+	}
+	return fs.operations.RUnlock, nil
+}
+
+func (m *Manager) AcquireGeneration(fed core.FederationName, expected uint64) (func(), error) {
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, core.ErrFederationNotFound
+	}
+	fs.operations.RLock()
+	m.mu.RLock()
+	current, exists := m.federations[fed]
+	destroying := fs.destroying
+	m.mu.RUnlock()
+	if !exists || current != fs || destroying {
+		fs.operations.RUnlock()
+		return nil, core.ErrFederationNotFound
+	}
+	// generation is immutable for the lifetime of fs.
+	generation := fs.generation
+	if generation != expected {
+		fs.operations.RUnlock()
+		return nil, core.ErrFederationGenerationMismatch
+	}
+	return fs.operations.RUnlock, nil
+}
+
+func (m *Manager) GenerationFor(fed core.FederationName) (uint64, bool) {
+	m.mu.RLock()
+	fs, ok := m.federations[fed]
+	if !ok || fs.destroying {
+		m.mu.RUnlock()
+		return 0, false
+	}
+	// generation is immutable for the lifetime of fs.
+	generation := fs.generation
+	m.mu.RUnlock()
+	return generation, true
+}
+
+// EventLogMetadataFor returns the immutable identity recorded in a v2 event
+// log header. A destroying federation is treated as absent so no new writer
+// can be opened after teardown has begun.
+func (m *Manager) EventLogMetadataFor(fed core.FederationName) (uint64, core.Mode, uint64, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	fs, ok := m.federations[fed]
+	if !ok || fs.destroying {
+		return 0, core.ModeUnspecified, 0, false
+	}
+	// generation, mode, and seed are immutable for the lifetime of fs.
+	return fs.generation, fs.mode, fs.seed, true
 }
 
 // federateJoinedEvent is the event written to EventLog when a federate
@@ -444,19 +669,25 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 	if !ok {
 		return core.ErrFederationNotFound
 	}
-
+	fs.lifecycle.Lock()
+	defer fs.lifecycle.Unlock()
+	fs.operations.Lock()
+	m.mu.RLock()
+	current, exists := m.federations[fed]
+	m.mu.RUnlock()
+	if !exists || current != fs || fs.destroying {
+		fs.operations.Unlock()
+		return core.ErrFederationNotFound
+	}
 	fs.mu.Lock()
-	defer fs.mu.Unlock()
 	name, joined := fs.handleToName[h]
 	if !joined {
+		fs.mu.Unlock()
+		fs.operations.Unlock()
 		return core.ErrFederateNotJoined
 	}
 
 	// M24 W2 — action-aware cleanup runs BEFORE the roster mutation.
-	if m.opts.OnFederateResigning != nil {
-		m.opts.OnFederateResigning(ctx, fed, h, action)
-	}
-
 	if m.opts.EventLog != nil {
 		if err := m.opts.EventLog.Append(ctx, fed, federateResignedEvent{
 			fed:      fed,
@@ -464,21 +695,34 @@ func (m *Manager) ResignFederation(ctx context.Context, fed core.FederationName,
 			handle:   h,
 			at:       m.opts.Clock.Now(),
 		}); err != nil {
+			fs.mu.Unlock()
+			fs.operations.Unlock()
 			return fmt.Errorf("federation %q resign %q: eventlog append: %w", fed, name, err)
 		}
 	}
+	fs.mu.Unlock()
 
+	// Action-aware cleanup observes the member as still joined while the
+	// lifecycle and operation gates prevent any competing mutation.
+	if m.opts.OnFederateResigning != nil {
+		m.opts.OnFederateResigning(ctx, fed, h, action)
+	}
+
+	fs.mu.Lock()
 	// Resign deletes the slot; the monotonic counter is NOT rolled back, so
-	// resigned handles are never reused. This preserves replay determinism:
-	// the FederateJoined event for handle h is durable, and replay sees
-	// exactly the same handle-to-name binding even after the resign.
+	// resigned handles are never reused. This preserves replay determinism.
 	delete(fs.nameToHandle, name)
 	delete(fs.handleToName, h)
 	delete(fs.joinedAt, h)
 	delete(fs.federateType, h)
+	fs.mu.Unlock()
+
+	// Keep the exclusive operation boundary through the post-remove hook. A
+	// surviving federate cannot publish against partially cleaned state.
 	if m.opts.OnFederateResigned != nil {
 		m.opts.OnFederateResigned(ctx, fed, h)
 	}
+	fs.operations.Unlock()
 	return nil
 }
 
@@ -507,6 +751,7 @@ func (m *Manager) List(_ context.Context) ([]core.FederationSummary, error) {
 			Name:            fs.name,
 			Mode:            fs.mode,
 			FederatesJoined: uint32(len(fs.handleToName)),
+			Generation:      fs.generation,
 		})
 		fs.mu.RUnlock()
 	}

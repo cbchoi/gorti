@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 	stdtime "time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/eventlog"
 )
 
 // TestTimedDemo_RunsToCompletion: a small in-process run completes
@@ -71,7 +71,7 @@ func TestTimedDemo_WritesLogFile(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("runTimedDemo: %v", err)
 	}
-	logPath := filepath.Join(dir, "timed-log.log")
+	logPath := eventlog.GenerationLogPath(dir, "timed-log", 0)
 	rdr, err := openTestReader(t, logPath)
 	if err != nil {
 		t.Fatalf("open log: %v", err)
@@ -124,11 +124,11 @@ func TestTimedDemo_DeterministicRunsByteIdentical(t *testing.T) {
 	if _, err := runTimedDemo(ctx, cfg); err != nil {
 		t.Fatalf("run B: %v", err)
 	}
-	a, err := readFileBytes(filepath.Join(dirA, "timed-det.log"))
+	a, err := readFileBytes(eventlog.GenerationLogPath(dirA, "timed-det", 0))
 	if err != nil {
 		t.Fatalf("read A: %v", err)
 	}
-	b, err := readFileBytes(filepath.Join(dirB, "timed-det.log"))
+	b, err := readFileBytes(eventlog.GenerationLogPath(dirB, "timed-det", 0))
 	if err != nil {
 		t.Fatalf("read B: %v", err)
 	}

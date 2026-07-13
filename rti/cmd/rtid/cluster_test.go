@@ -39,9 +39,9 @@ func TestParseClusterPeers_MultiplePeers(t *testing.T) {
 
 func TestParseClusterPeers_InvalidFormat(t *testing.T) {
 	cases := []string{
-		"node-b",            // no =
-		"=127.0.0.1:8443",   // empty id
-		"node-b=",           // empty address
+		"node-b",          // no =
+		"=127.0.0.1:8443", // empty id
+		"node-b=",         // empty address
 	}
 	for _, in := range cases {
 		if _, err := parseClusterPeers(in); err == nil {

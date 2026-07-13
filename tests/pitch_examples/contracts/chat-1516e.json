@@ -1,0 +1,70 @@
+{
+  "id": "chat-1516e",
+  "description": "Observable semantics shared by the Pitch pRTI IEEE 1516-2010 C++ and Java Chat samples.",
+  "reference_examples": ["chat-cpp", "chat-java"],
+  "reference_api_tokens": [
+    "publishObjectClassAttributes",
+    "subscribeObjectClassAttributes",
+    "publishInteractionClass",
+    "subscribeInteractionClass",
+    "reserveObjectInstanceName",
+    "registerObjectInstance",
+    "updateAttributeValues",
+    "sendInteraction",
+    "reflectAttributeValues",
+    "receiveInteraction",
+    "removeObjectInstance",
+    "provideAttributeValueUpdate",
+    "resignFederationExecution"
+  ],
+  "required_events": [
+    "PUB_JOINED",
+    "SUB_JOINED",
+    "SUBSCRIBED",
+    "NAME_RESERVATION_REQUESTED",
+    "NAME_RESERVED",
+    "PARTICIPANT_REGISTERED",
+    "PARTICIPANT_DISCOVERED",
+    "PARTICIPANT_NAME_UPDATED",
+    "PARTICIPANT_NAME_REFLECTED",
+    "MESSAGE_SENT",
+    "MESSAGE_RECEIVED",
+    "PUB_RESIGN_DELETE_REQUESTED",
+    "PARTICIPANT_REMOVED",
+    "PUB_RESIGNED",
+    "SUB_RESIGNED"
+  ],
+  "happens_before": [
+    ["PUB_JOINED", "SUB_JOINED"],
+    ["SUB_JOINED", "SUBSCRIBED"],
+    ["SUBSCRIBED", "NAME_RESERVATION_REQUESTED"],
+    ["NAME_RESERVATION_REQUESTED", "NAME_RESERVED"],
+    ["NAME_RESERVED", "PARTICIPANT_REGISTERED"],
+    ["PARTICIPANT_REGISTERED", "PARTICIPANT_DISCOVERED"],
+    ["PARTICIPANT_DISCOVERED", "PARTICIPANT_NAME_REFLECTED"],
+    ["PARTICIPANT_NAME_UPDATED", "PARTICIPANT_NAME_REFLECTED"],
+    ["MESSAGE_SENT", "MESSAGE_RECEIVED"],
+    ["MESSAGE_RECEIVED", "PUB_RESIGN_DELETE_REQUESTED"],
+    ["PUB_RESIGN_DELETE_REQUESTED", "PARTICIPANT_REMOVED"],
+    ["PUB_RESIGN_DELETE_REQUESTED", "PUB_RESIGNED"],
+    ["PARTICIPANT_REMOVED", "SUB_RESIGNED"]
+  ],
+  "payloads": {
+    "NAME_RESERVED": {"instance_name": "alice"},
+    "PARTICIPANT_REGISTERED": {"instance_name": "alice"},
+    "PARTICIPANT_DISCOVERED": {
+      "class_name": "Participant",
+      "instance_name": "alice"
+    },
+    "PARTICIPANT_NAME_REFLECTED": {"name": "alice"},
+    "MESSAGE_SENT": {"message": "hello", "sender": "alice"},
+    "MESSAGE_RECEIVED": {
+      "class_name": "Communication",
+      "message": "hello",
+      "sender": "alice"
+    },
+    "PUB_RESIGN_DELETE_REQUESTED": {
+      "action": "CANCEL_THEN_DELETE_THEN_DIVEST"
+    }
+  }
+}

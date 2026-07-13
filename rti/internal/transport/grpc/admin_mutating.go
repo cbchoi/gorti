@@ -39,6 +39,7 @@ type MutatingOptions struct {
 	// every mutation flows through the same code path the federate
 	// services use — preserving event-log + MOM hook symmetry.
 	Federations core.FederationStore
+	Membership  core.FederationMembershipValidator
 
 	// Version is the rtid build version returned in Probe.
 	Version string
@@ -181,6 +182,13 @@ func (s *mutatingService) DestroyFederation(ctx context.Context, req *rtiv1.Admi
 		return nil, status.Error(codes.InvalidArgument,
 			"MutatingService.DestroyFederation: federation_name is required")
 	}
+	expected, err := requireAdministrativeGeneration(
+		ctx, s.opts.Membership, core.FederationName(fed),
+		req.ExpectedFederationGeneration,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	resp := &rtiv1.AdminDestroyFederationResponse{}
 
@@ -209,7 +217,12 @@ func (s *mutatingService) DestroyFederation(ctx context.Context, req *rtiv1.Admi
 		}
 	}
 
-	if err := s.opts.Federations.DestroyFederation(ctx, core.FederationName(fed)); err != nil {
+	if guard, ok := s.opts.Federations.(core.FederationGenerationGuard); ok && expected != nil {
+		err = guard.DestroyFederationGeneration(ctx, core.FederationName(fed), *expected)
+	} else {
+		err = s.opts.Federations.DestroyFederation(ctx, core.FederationName(fed))
+	}
+	if err != nil {
 		return nil, errToStatus(ctx, err)
 	}
 	return resp, nil
@@ -238,6 +251,20 @@ func (s *mutatingService) PromoteFederation(
 	if target == "" {
 		return nil, status.Error(codes.InvalidArgument,
 			"target_node_id is required")
+	}
+	expected, err := requireAdministrativeGeneration(
+		ctx, s.opts.Membership, core.FederationName(fed),
+		req.ExpectedFederationGeneration,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if guard, ok := s.opts.Membership.(core.FederationGenerationGuard); ok && expected != nil {
+		release, acquireErr := guard.AcquireGeneration(core.FederationName(fed), *expected)
+		if acquireErr != nil {
+			return nil, errToStatus(ctx, acquireErr)
+		}
+		defer release()
 	}
 	prior, err := s.opts.Cluster.PromoteFederation(core.FederationName(fed), target)
 	if err != nil {
@@ -269,3 +296,29 @@ func (s *mutatingService) PromoteFederation(
 	}, nil
 }
 
+func requireAdministrativeGeneration(
+	ctx context.Context,
+	membership core.FederationMembershipValidator,
+	fed core.FederationName,
+	provided *uint64,
+) (*uint64, error) {
+	if membership == nil {
+		return provided, nil
+	}
+	current, ok := membership.GenerationFor(fed)
+	if !ok {
+		return nil, errToStatus(ctx, core.ErrFederationNotFound)
+	}
+	if provided == nil {
+		if current == 0 {
+			value := uint64(0)
+			return &value, nil
+		}
+		return nil, status.Error(codes.FailedPrecondition,
+			"expected_federation_generation is required")
+	}
+	if *provided != current {
+		return nil, errToStatus(ctx, core.ErrFederationGenerationMismatch)
+	}
+	return provided, nil
+}

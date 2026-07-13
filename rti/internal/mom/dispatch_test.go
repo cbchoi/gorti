@@ -13,9 +13,9 @@ import (
 // stubFOMHandle satisfies both core.FOMHandle and core.FOMHandleNameLookup
 // with a tiny in-memory table sufficient for the switch handlers.
 type stubFOMHandle struct {
-	icByName  map[string]core.InteractionClassHandle
-	icByH     map[core.InteractionClassHandle]string
-	paramByH  map[core.InteractionClassHandle]map[string]core.ParameterHandle
+	icByName map[string]core.InteractionClassHandle
+	icByH    map[core.InteractionClassHandle]string
+	paramByH map[core.InteractionClassHandle]map[string]core.ParameterHandle
 }
 
 func (s *stubFOMHandle) IsValid() bool { return true }
@@ -95,10 +95,10 @@ func TestDispatcher_IsManagerClass(t *testing.T) {
 	d := NewDispatcher(nil)
 	cases := map[string]bool{
 		"HLAmanager.HLAfederation.HLAadjust.HLAsetSwitches": true,
-		"HLAmanager":           false, // exact root, no dot
-		"HLAobjectRoot.Foo":    false,
-		"":                     false,
-		"HLAmanagerExtra.Bar":  false, // not the prefix
+		"HLAmanager":          false, // exact root, no dot
+		"HLAobjectRoot.Foo":   false,
+		"":                    false,
+		"HLAmanagerExtra.Bar": false, // not the prefix
 	}
 	for name, want := range cases {
 		if got := d.IsManagerClass(name); got != want {

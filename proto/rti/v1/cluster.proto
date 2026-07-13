@@ -83,6 +83,9 @@ message NotifyAssignmentRequest {
   WireVersion wire_version = 1;
   string from_node_id = 2;
   string federation_name = 3;
+
+  // Generation of the federation execution whose assignment is changing.
+  optional uint64 expected_federation_generation = 6;
   string host_node_id = 4;
   string host_address = 5;
 }

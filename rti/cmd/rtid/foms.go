@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -39,8 +42,9 @@ func newFOMRepository() *fomRepository {
 // fixtures that supply nil modules to exercise lifecycle without FOM
 // resolution; production code will typically supply at least one module.
 func (r *fomRepository) Load(_ context.Context, modules []core.FOMModule) (core.FOMHandle, error) {
+	digest := digestFOMModules(modules)
 	if len(modules) == 0 {
-		return &fomHandle{fom: model.NewFOM(nil, nil, nil)}, nil
+		return &fomHandle{fom: model.NewFOM(nil, nil, nil), sha256: digest}, nil
 	}
 
 	parserModules := make([]parser.Module, len(modules))
@@ -66,7 +70,23 @@ func (r *fomRepository) Load(_ context.Context, modules []core.FOMModule) (core.
 		}
 		fm = merged
 	}
-	return &fomHandle{fom: fm}, nil
+	return &fomHandle{fom: fm, sha256: digest}, nil
+}
+
+// digestFOMModules fingerprints the exact ordered XML byte slices. Length
+// framing keeps module boundaries unambiguous while deliberately excluding
+// diagnostic filesystem paths from compatibility identity.
+func digestFOMModules(modules []core.FOMModule) string {
+	h := sha256.New()
+	var framed [8]byte
+	binary.LittleEndian.PutUint64(framed[:], uint64(len(modules)))
+	_, _ = h.Write(framed[:])
+	for _, module := range modules {
+		binary.LittleEndian.PutUint64(framed[:], uint64(len(module.XML)))
+		_, _ = h.Write(framed[:])
+		_, _ = h.Write(module.XML)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // Get implements core.FOMRepository. Returns ErrFederationNotFound if no
@@ -90,6 +110,26 @@ func (r *fomRepository) RememberFor(fed core.FederationName, h core.FOMHandle) {
 	r.byFedKey[fed] = h
 }
 
+func (r *fomRepository) ForgetFor(fed core.FederationName) {
+	r.mu.Lock()
+	delete(r.byFedKey, fed)
+	r.mu.Unlock()
+}
+
+func (r *fomRepository) DigestFor(fed core.FederationName) (string, bool) {
+	r.mu.RLock()
+	h, ok := r.byFedKey[fed]
+	r.mu.RUnlock()
+	if !ok {
+		return "", false
+	}
+	digest, ok := h.(interface{ FOMSHA256() string })
+	if !ok || digest.FOMSHA256() == "" {
+		return "", false
+	}
+	return digest.FOMSHA256(), true
+}
+
 // formatDiagnostics builds a one-line summary of parser diagnostics for
 // inclusion in the Load error message.
 func formatDiagnostics(diags []parser.Diagnostic) string {
@@ -108,7 +148,15 @@ func formatDiagnostics(diags []parser.Diagnostic) string {
 // model's name-sorted slice (1-based; matches the cut-1 test FOM
 // fixtures' expectation that Vehicle = 1, Honk = 1).
 type fomHandle struct {
-	fom *model.FOM
+	fom    *model.FOM
+	sha256 string
+}
+
+func (h *fomHandle) FOMSHA256() string {
+	if h == nil {
+		return ""
+	}
+	return h.sha256
 }
 
 func (h *fomHandle) IsValid() bool { return h != nil && h.fom != nil }

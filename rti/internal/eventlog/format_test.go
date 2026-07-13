@@ -2,6 +2,7 @@ package eventlog
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"testing"
 
@@ -13,18 +14,21 @@ import (
 func TestEncodeHeader_MagicAndSize(t *testing.T) {
 	buf := make([]byte, HeaderSize)
 	hdr := core.EventLogHeader{
-		Magic:       Magic,
-		Version:     Version,
-		Federation:  "demo",
-		CreatedAtNs: 0,
-		Seed:        0,
-		Mode:        core.ModeVerbose,
+		Magic:      Magic,
+		Version:    Version,
+		Federation: "demo",
+		Generation: 0x0102030405060708,
+		Seed:       0,
+		Mode:       core.ModeVerbose,
 	}
 	if err := EncodeHeader(buf, hdr); err != nil {
 		t.Fatalf("EncodeHeader: %v", err)
 	}
 	if !bytes.Equal(buf[:8], Magic[:]) {
 		t.Errorf("magic = %x, want %x", buf[:8], Magic[:])
+	}
+	if got := binary.LittleEndian.Uint64(buf[44:52]); got != hdr.Generation {
+		t.Errorf("v2 metadata at offset 44 = %#x, want generation %#x", got, hdr.Generation)
 	}
 }
 
@@ -52,15 +56,15 @@ func TestEncodeHeader_RejectsShortBuffer(t *testing.T) {
 // round-trip through Encode → Decode.
 func TestDecodeHeader_RoundTrip(t *testing.T) {
 	cases := []core.EventLogHeader{
-		{Magic: Magic, Version: Version, Federation: "demo", CreatedAtNs: 1234567890, Seed: 42, Mode: core.ModeVerbose},
-		{Magic: Magic, Version: Version, Federation: "x", CreatedAtNs: 0, Seed: 0, Mode: core.ModeBestEffort},
-		{Magic: Magic, Version: Version, Federation: "", CreatedAtNs: 1, Seed: 0xDEADBEEF, Mode: core.ModeUnspecified},
+		{Magic: Magic, Version: Version, Federation: "demo", Generation: 1234567890, Seed: 42, Mode: core.ModeVerbose},
+		{Magic: Magic, Version: Version, Federation: "x", Generation: 0, Seed: 0, Mode: core.ModeBestEffort},
+		{Magic: Magic, Version: Version, Federation: "", Generation: 1, Seed: 0xDEADBEEF, Mode: core.ModeUnspecified},
 		// 32-byte name (max length).
 		{Magic: Magic, Version: Version,
-			Federation:  core.FederationName(bytes.Repeat([]byte{'a'}, MaxFederationNameBytes)),
-			CreatedAtNs: 9999, Seed: 1, Mode: core.ModeVerbose},
+			Federation: core.FederationName(bytes.Repeat([]byte{'a'}, MaxFederationNameBytes)),
+			Generation: 9999, Seed: 1, Mode: core.ModeVerbose},
 		// Maximum field values.
-		{Magic: Magic, Version: Version, Federation: "max", CreatedAtNs: ^uint64(0), Seed: ^uint64(0), Mode: core.ModeVerbose},
+		{Magic: Magic, Version: Version, Federation: "max", Generation: ^uint64(0), Seed: ^uint64(0), Mode: core.ModeVerbose},
 	}
 	for _, want := range cases {
 		t.Run(string(want.Federation), func(t *testing.T) {
@@ -76,6 +80,32 @@ func TestDecodeHeader_RoundTrip(t *testing.T) {
 				t.Errorf("round-trip mismatch:\n want=%+v\n got=%+v", want, got)
 			}
 		})
+	}
+}
+
+func TestDecodeHeader_V1CreatedAtCompatibility(t *testing.T) {
+	want := core.EventLogHeader{
+		Magic: Magic, Version: 1, Federation: "legacy",
+		CreatedAtNs: 1234567890123, Seed: 99, Mode: core.ModeBestEffort,
+	}
+	// Build the legacy bytes directly so compatibility does not depend on the
+	// current encoder making the same assumption as the decoder.
+	buf := make([]byte, HeaderSize)
+	copy(buf[0:8], Magic[:])
+	binary.LittleEndian.PutUint32(buf[8:12], 1)
+	copy(buf[12:44], []byte(want.Federation))
+	binary.LittleEndian.PutUint64(buf[44:52], want.CreatedAtNs)
+	binary.LittleEndian.PutUint64(buf[52:60], want.Seed)
+	buf[60] = byte(want.Mode)
+	got, err := DecodeHeader(buf)
+	if err != nil {
+		t.Fatalf("DecodeHeader(v1): %v", err)
+	}
+	if got != want {
+		t.Fatalf("v1 compatibility mismatch:\n want=%+v\n got=%+v", want, got)
+	}
+	if got.Generation != 0 {
+		t.Errorf("v1 Generation = %d, want 0", got.Generation)
 	}
 }
 

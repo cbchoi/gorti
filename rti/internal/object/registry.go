@@ -56,6 +56,9 @@ type Registry struct {
 type federationState struct {
 	mu sync.Mutex
 
+	managementClassMu sync.RWMutex
+	managementClasses map[core.InteractionClassHandle]managementClassClassification
+
 	// nextObjectHandle is the monotonic counter for ObjectHandle
 	// assignment. Replay re-reads ObjectRegistered events from the event
 	// log to reproduce the same handles.
@@ -93,9 +96,10 @@ type discoverKey struct {
 
 func newFederationState() *federationState {
 	return &federationState{
-		instances:    map[core.ObjectHandle]*objectInstance{},
-		nameToHandle: map[string]core.ObjectHandle{},
-		discovered:   map[discoverKey]struct{}{},
+		instances:         map[core.ObjectHandle]*objectInstance{},
+		nameToHandle:      map[string]core.ObjectHandle{},
+		discovered:        map[discoverKey]struct{}{},
+		managementClasses: map[core.InteractionClassHandle]managementClassClassification{},
 	}
 }
 

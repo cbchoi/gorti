@@ -15,8 +15,8 @@ import (
 	stdtime "time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/object"
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	"github.com/cbchoi/gorti/rti/internal/object"
 )
 
 // captureOutbox records every outbound event so reservation success/fail

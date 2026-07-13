@@ -52,8 +52,11 @@ func runReplayFromFile(ctx context.Context, inputPath, outputDir string) error {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("rtid replay: mkdir %s: %w", outputDir, err)
 	}
-	outPath := filepath.Join(outputDir, string(fed)+".log")
-	outFile, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644) //nolint:gosec
+	outPath := eventlog.GenerationLogPath(outputDir, fed, hdr.Generation)
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return fmt.Errorf("rtid replay: mkdir %s: %w", filepath.Dir(outPath), err)
+	}
+	outFile, err := os.OpenFile(outPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("rtid replay: open output %s: %w", outPath, err)
 	}
@@ -73,6 +76,7 @@ func runReplayFromFile(ctx context.Context, inputPath, outputDir string) error {
 	w, err := eventlog.NewWriter(eventlog.WriterOptions{
 		Sink:       captured,
 		Federation: fed,
+		Generation: hdr.Generation,
 		Mode:       hdr.Mode,
 		Seed:       hdr.Seed,
 		Clock:      captureClock,

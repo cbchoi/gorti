@@ -129,6 +129,48 @@ def test_grpc_transport_populates_handle_tables_from_bridge_fom() -> None:
     asyncio.run(transport.close())
 
 
+def test_grpc_transport_maps_declared_interaction_parameters() -> None:
+    """Callback translation uses FOM parameter names, not the bridge fallback."""
+    pytest.importorskip("grpc")
+
+    from rti1516e._transport import GrpcTransport, build_grpc_transport
+
+    fom_path = REPO_ROOT / "examples" / "pitch-chat-parity" / "federation.fom.xml"
+
+    async def _exercise() -> GrpcTransport:
+        return await build_grpc_transport("grpc://127.0.0.1:1")
+
+    transport = asyncio.run(_exercise())
+    transport._populate_handle_tables([str(fom_path)])  # noqa: SLF001
+    assert transport._parameter_indices_for("Communication") == {  # noqa: SLF001
+        "Message": 1,
+        "Sender": 2,
+    }
+    assert transport._parameter_indices_for("NotInFom") == {  # noqa: SLF001
+        "_payload": 1
+    }
+    asyncio.run(transport.close())
+
+
+def test_grpc_transport_maps_bridge_payload_to_single_declared_parameter() -> None:
+    """The pyjevsim opaque alias is accepted only for a one-parameter class."""
+    pytest.importorskip("grpc")
+
+    from rti1516e._transport import GrpcTransport, build_grpc_transport
+
+    fom_path = REPO_ROOT / "examples" / "pyjevsim" / "pyjevsim-fom.xml"
+
+    async def _exercise() -> GrpcTransport:
+        return await build_grpc_transport("grpc://127.0.0.1:1")
+
+    transport = asyncio.run(_exercise())
+    transport._populate_handle_tables([str(fom_path)])  # noqa: SLF001
+    assert transport._parameter_indices_for("ProducerOutput") == {  # noqa: SLF001
+        "seq": 1
+    }
+    asyncio.run(transport.close())
+
+
 def test_grpc_transport_unknown_method_raises_not_implemented() -> None:
     """``record(method=...)`` raises NotImplementedError for methods we
     haven't wired in cut-1. This protects against silent drops if the
@@ -142,6 +184,33 @@ def test_grpc_transport_unknown_method_raises_not_implemented() -> None:
         try:
             with pytest.raises(NotImplementedError):
                 await transport.record("totally_made_up_method")
+        finally:
+            await transport.close()
+
+    asyncio.run(_exercise())
+
+
+def test_grpc_transport_direct_event_sink_and_queue_fallback() -> None:
+    pytest.importorskip("grpc")
+
+    from rti1516e._transport import build_grpc_transport
+
+    async def _exercise() -> None:
+        transport = await build_grpc_transport("grpc://127.0.0.1:1")
+        try:
+            queue = transport.events_for(7)
+            transport._deliver_event(7, "queued")  # noqa: SLF001
+            assert await queue.get() == "queued"
+
+            received: list[object] = []
+            transport.set_event_sink(7, received.append)
+            transport._deliver_event(7, "direct")  # noqa: SLF001
+            assert received == ["direct"]
+            assert queue.empty()
+
+            transport.set_event_sink(7, None)
+            transport._deliver_event(7, "queued-again")  # noqa: SLF001
+            assert await queue.get() == "queued-again"
         finally:
             await transport.close()
 

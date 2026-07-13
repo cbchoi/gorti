@@ -49,6 +49,8 @@ func savepointErrToStatus(ctx context.Context, err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, savepoint.ErrSaveBundleExists):
 		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, savepoint.ErrSaveBundleIncompatible):
+		return status.Error(codes.FailedPrecondition, err.Error())
 	default:
 		return errToStatus(ctx, err)
 	}

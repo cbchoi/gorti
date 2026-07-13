@@ -84,17 +84,34 @@ type nerState struct {
 // stateStore.mu, copied out, then nerStore.mu is taken. This avoids
 // deadlock entirely.
 type nerStore struct {
-	mu       sync.Mutex
-	states   map[federateKey]*nerState
-	haltedMu sync.Mutex
-	halted   map[core.FederationName]struct{}
+	mu        sync.Mutex
+	states    map[federateKey]*nerState
+	haltedMu  sync.Mutex
+	halted    map[core.FederationName]struct{}
+	evalMu    sync.Mutex
+	evalLocks map[core.FederationName]*sync.Mutex
 }
 
 func newNERStore() *nerStore {
 	return &nerStore{
-		states: make(map[federateKey]*nerState),
-		halted: make(map[core.FederationName]struct{}),
+		states:    make(map[federateKey]*nerState),
+		halted:    make(map[core.FederationName]struct{}),
+		evalLocks: make(map[core.FederationName]*sync.Mutex),
 	}
+}
+
+// evaluatorLock returns the mutex serialising grant evaluation for fed.
+// The map mutex is held only for lookup/allocation; callers hold the returned
+// federation mutex across the complete tryGrantPending fixed-point loop.
+func (n *nerStore) evaluatorLock(fed core.FederationName) *sync.Mutex {
+	n.evalMu.Lock()
+	defer n.evalMu.Unlock()
+	if lock := n.evalLocks[fed]; lock != nil {
+		return lock
+	}
+	lock := &sync.Mutex{}
+	n.evalLocks[fed] = lock
+	return lock
 }
 
 // getOrCreateLocked returns the nerState for (fed, h), creating a
@@ -268,6 +285,10 @@ func (m *Manager) nextMessageRequest(ctx context.Context, fed core.FederationNam
 // permissiveEventLog never fail, so the nominal path returns nil.
 func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) error {
 	ext := extOf(m)
+	evalLock := ext.evaluatorLock(fed)
+	evalLock.Lock()
+	defer evalLock.Unlock()
+
 	for {
 		snap := m.regulatingSnapshot(fed)
 		// Strategy hook: default LBTSStrategy delegates to the package
@@ -368,25 +389,55 @@ func (m *Manager) tryGrantPending(ctx context.Context, fed core.FederationName) 
 // Determinism: EventLog.Append happens-before Outbox.Send happens-
 // before state mutation. Replay reads from the log; see SRS NFR-DET-1.
 func (m *Manager) emitGrant(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime, clearPending bool) error {
-	// (a) Write-ahead to EventLog (cut-1 relaxation: nil silently drops).
-	if m.opts.EventLog != nil {
-		rec := &timeAdvanceGrantedRecord{Federate: h, Time: t}
-		if err := m.opts.EventLog.Append(ctx, fed, rec); err != nil {
+	// Production outboxes reserve the complete TSO-before-grant sequence before
+	// the write-ahead append. Admission failure restores the extracted TSO
+	// events and leaves currentTime/pending state untouched.
+	release := m.takeBufferedTSO(fed, h, &t)
+	grant := &TimeAdvanceGrant{Time: t}
+	var reservation core.OutboxReservation
+	if reservable, ok := m.opts.Outbox.(core.ReservableOutbox); ok {
+		deliveries := make([]core.OutboxDelivery, 0, len(release)+1)
+		for _, buffered := range release {
+			deliveries = append(deliveries, core.OutboxDelivery{Recipient: h, Event: buffered.event})
+		}
+		deliveries = append(deliveries, core.OutboxDelivery{Recipient: h, Event: grant})
+		var err error
+		reservation, err = reservable.Reserve(ctx, fed, deliveries)
+		if err != nil {
+			m.restoreBufferedTSO(fed, h, release)
 			return err
 		}
 	}
 
-	// (b) §8.14 — release any buffered TSO events with timestamp <= t
-	// BEFORE the grant. Federates with async delivery off accumulate
-	// events in the per-federate buffer; the advance grant is the
-	// release point, and the released events must precede it on the
-	// wire. Drain in FIFO order outside the lock.
-	m.releaseBufferedTSO(ctx, fed, h, t)
+	// (a) Write-ahead to EventLog (cut-1 relaxation: nil silently drops).
+	if m.opts.EventLog != nil {
+		rec := &timeAdvanceGrantedRecord{Federate: h, Time: t}
+		if err := m.opts.EventLog.Append(ctx, fed, rec); err != nil {
+			if reservation != nil {
+				reservation.Release()
+			}
+			m.restoreBufferedTSO(fed, h, release)
+			return err
+		}
+	}
 
-	// (c) Send the grant on the federate's outbound stream.
-	grant := &TimeAdvanceGrant{Time: t}
-	if err := m.opts.Outbox.Send(ctx, fed, h, grant); err != nil {
-		return err
+	// (b/c) Transfer every eligible TSO callback followed by the grant. The
+	// reservable production path cannot fail after WAL append. Legacy in-process
+	// outboxes retain explicit requeue/withhold behavior for test compatibility.
+	if reservation != nil {
+		if err := reservation.Commit(); err != nil {
+			return err
+		}
+	} else {
+		for i, buffered := range release {
+			if err := m.opts.Outbox.Send(ctx, fed, h, buffered.event); err != nil {
+				m.restoreBufferedTSO(fed, h, release[i:])
+				return err
+			}
+		}
+		if err := m.opts.Outbox.Send(ctx, fed, h, grant); err != nil {
+			return err
+		}
 	}
 
 	// (d) State mutation: advance currentTime; optionally clear pending.

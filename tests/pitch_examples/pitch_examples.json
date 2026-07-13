@@ -1,0 +1,59 @@
+{
+  "pitch_product": "pRTI Free 5.5.2",
+  "sample_root": "samples",
+  "examples": [
+    {
+      "name": "chat-cpp",
+      "language": "C++",
+      "hla_standard": "IEEE 1516-2010",
+      "status": "contract-covered",
+      "contract": "chat-1516e",
+      "source": "chat-cpp/src/ChatCC1516e.cpp",
+      "fom": "chat-cpp/Chat-evolved.xml"
+    },
+    {
+      "name": "chat-java",
+      "language": "Java",
+      "hla_standard": "IEEE 1516-2010",
+      "status": "contract-covered",
+      "contract": "chat-1516e",
+      "source": "chat-java/src/se/pitch/chat1516e/Chat.java",
+      "fom": "chat-java/Chat-evolved.xml"
+    },
+    {
+      "name": "chat-cpp-1516-2000",
+      "language": "C++",
+      "hla_standard": "IEEE 1516-2000",
+      "status": "unsupported-standard",
+      "reason": "gorti targets IEEE 1516-2010 APIs and semantics"
+    },
+    {
+      "name": "chat-cpp-1516-dlc",
+      "language": "C++",
+      "hla_standard": "IEEE 1516-2000 DLC",
+      "status": "unsupported-standard",
+      "reason": "gorti targets IEEE 1516-2010 APIs and semantics"
+    },
+    {
+      "name": "chat-cpp-hla13",
+      "language": "C++",
+      "hla_standard": "HLA 1.3",
+      "status": "unsupported-standard",
+      "reason": "gorti targets IEEE 1516-2010 APIs and semantics"
+    },
+    {
+      "name": "chat-java-1516-2000",
+      "language": "Java",
+      "hla_standard": "IEEE 1516-2000",
+      "status": "unsupported-standard",
+      "reason": "gorti targets IEEE 1516-2010 APIs and semantics"
+    },
+    {
+      "name": "chat-java-hla13",
+      "language": "Java",
+      "hla_standard": "HLA 1.3",
+      "status": "unsupported-standard",
+      "reason": "gorti targets IEEE 1516-2010 APIs and semantics"
+    }
+  ]
+}

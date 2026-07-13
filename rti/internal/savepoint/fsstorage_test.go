@@ -103,6 +103,118 @@ func TestFSStorage_FilenameEscape(t *testing.T) {
 	}
 }
 
+func TestFSStorage_GenerationPathAndRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewFSStorage(dir)
+	if err != nil {
+		t.Fatalf("NewFSStorage: %v", err)
+	}
+	key := StorageKey{Federation: "fed", Generation: 42, Label: "lbl"}
+	w, err := store.WriterFor(key)
+	if err != nil {
+		t.Fatalf("WriterFor: %v", err)
+	}
+	if _, err := w.Write([]byte("v2-data")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if store.ExistsFor(key) {
+		t.Fatal("bundle became visible before Close")
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	wantPath := filepath.Join(dir, "v2", "666564", "000000000000002a", "6c626c.bundle")
+	if got := store.bundlePathFor(key); got != wantPath {
+		t.Fatalf("bundlePathFor = %q, want %q", got, wantPath)
+	}
+	r, err := store.ReaderFor(key)
+	if err != nil {
+		t.Fatalf("ReaderFor: %v", err)
+	}
+	got, err := io.ReadAll(r)
+	_ = r.Close()
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != "v2-data" {
+		t.Fatalf("data = %q, want v2-data", got)
+	}
+}
+
+func TestFSStorage_SameLabelCoexistsAcrossGenerations(t *testing.T) {
+	store, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFSStorage: %v", err)
+	}
+	for generation, data := range map[uint64]string{1: "one", 2: "two"} {
+		key := StorageKey{Federation: "fed", Generation: generation, Label: "same"}
+		w, err := store.WriterFor(key)
+		if err != nil {
+			t.Fatalf("WriterFor generation %d: %v", generation, err)
+		}
+		_, _ = w.Write([]byte(data))
+		if err := w.Close(); err != nil {
+			t.Fatalf("Close generation %d: %v", generation, err)
+		}
+	}
+	for generation, want := range map[uint64]string{1: "one", 2: "two"} {
+		r, err := store.ReaderFor(StorageKey{Federation: "fed", Generation: generation, Label: "same"})
+		if err != nil {
+			t.Fatalf("ReaderFor generation %d: %v", generation, err)
+		}
+		got, _ := io.ReadAll(r)
+		_ = r.Close()
+		if string(got) != want {
+			t.Fatalf("generation %d data = %q, want %q", generation, got, want)
+		}
+	}
+}
+
+func TestFSStorage_EscapingIsInjective(t *testing.T) {
+	if filenameEscape("/") == filenameEscape("%2F") {
+		t.Fatal("legacy escaping aliases slash with literal percent escape")
+	}
+	if hexComponent("/") == hexComponent("%2F") {
+		t.Fatal("v2 encoding aliases distinct labels")
+	}
+	store, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFSStorage: %v", err)
+	}
+	left := store.bundlePathFor(StorageKey{Federation: "a/b", Generation: 1, Label: "c"})
+	right := store.bundlePathFor(StorageKey{Federation: "a", Generation: 1, Label: "b/c"})
+	if left == right {
+		t.Fatalf("v2 paths alias distinct federation/label pairs: %q", left)
+	}
+}
+
+func TestFSStorage_FailedPublicationIsInvisible(t *testing.T) {
+	store, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFSStorage: %v", err)
+	}
+	key := StorageKey{Federation: "fed", Generation: 5, Label: "failed"}
+	w, err := store.WriterFor(key)
+	if err != nil {
+		t.Fatalf("WriterFor: %v", err)
+	}
+	_, _ = w.Write([]byte("partial"))
+	fsWriter := w.(*fsBundleWriter)
+	if err := fsWriter.file.Close(); err != nil {
+		t.Fatalf("force-close temp file: %v", err)
+	}
+	if err := w.Close(); err == nil {
+		t.Fatal("Close succeeded after forced sync failure")
+	}
+	if store.ExistsFor(key) {
+		t.Fatal("failed publication left a visible final bundle")
+	}
+	if _, err := store.ReaderFor(key); !errors.Is(err, ErrSaveBundleNotFound) {
+		t.Fatalf("ReaderFor failed bundle error = %v, want ErrSaveBundleNotFound", err)
+	}
+}
+
 func TestFSStorage_EmptyDir(t *testing.T) {
 	_, err := NewFSStorage("")
 	if err == nil {

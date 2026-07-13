@@ -23,8 +23,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,6 +35,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -40,13 +43,13 @@ import (
 
 	"github.com/cbchoi/gorti/rti/internal/auth/oidc"
 	"github.com/cbchoi/gorti/rti/internal/buildinfo"
+	"github.com/cbchoi/gorti/rti/internal/cluster"
 	"github.com/cbchoi/gorti/rti/internal/core"
 	"github.com/cbchoi/gorti/rti/internal/ddm"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
 	"github.com/cbchoi/gorti/rti/internal/eventlog"
 	"github.com/cbchoi/gorti/rti/internal/federation"
 	"github.com/cbchoi/gorti/rti/internal/mom"
-	"github.com/cbchoi/gorti/rti/internal/cluster"
 	"github.com/cbchoi/gorti/rti/internal/object"
 	"github.com/cbchoi/gorti/rti/internal/ownership"
 	"github.com/cbchoi/gorti/rti/internal/research"
@@ -63,6 +66,8 @@ func main() {
 	showVersion := flag.Bool("version", false, "print rtid version and exit")
 	listen := flag.String("listen", ":8442", "gRPC listen address")
 	metricsListen := flag.String("metrics-listen", ":9090", "Prometheus HTTP listen")
+	outboxBatchSize := flag.Int("outbox-batch-size", defaultMultiBatchSize, "outbound event batch size (1..1024)")
+	outboxFlushInterval := flag.Duration("outbox-flush-interval", defaultMultiFlushInterval, "maximum delay before flushing a partial outbound event batch (>0)")
 	// M15 cut-2 demo flags. --cluster-peers is a comma-separated
 	// list of node_id=host:port pairs identifying the other rtid
 	// nodes in the cluster. --node-id is this node's stable ID; if
@@ -188,6 +193,8 @@ func main() {
 			NodeID:                        *nodeID,
 			ClusterPeers:                  *clusterPeers,
 			ClusterAdvertise:              *clusterAdvertise,
+			OutboxBatchSize:               *outboxBatchSize,
+			OutboxFlushInterval:           *outboxFlushInterval,
 		})
 	default:
 		logger.Error("unknown --mode", "mode", *mode)
@@ -237,19 +244,19 @@ func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
 // the call site stays one-line per flag and a future flag can land
 // without churning the function signature.
 type serverMainArgs struct {
-	Listen                        string
-	AdminListen                   string
-	MetricsListen                 string
-	LogDir                        string
-	TLSCert                       string
-	TLSKey                        string
+	Listen        string
+	AdminListen   string
+	MetricsListen string
+	LogDir        string
+	TLSCert       string
+	TLSKey        string
 	// M14 W1 — mTLS.
 	TLSClientCA      string
 	TLSClientCNAllow string
 	// M14 W4 — OIDC.
-	OIDCIssuer   string
-	OIDCAudience string
-	OIDCJWKSPem  string
+	OIDCIssuer                    string
+	OIDCAudience                  string
+	OIDCJWKSPem                   string
 	SaveDir                       string
 	ResearchConfigPath            string
 	AdminMutating                 bool
@@ -261,14 +268,30 @@ type serverMainArgs struct {
 	EnableDDS   bool
 	DDSDomainID int32
 	// M15 cut-2 demo cluster flags.
-	NodeID           string
-	ClusterPeers     string // comma-separated node_id=host:port
-	ClusterAdvertise string // host:port advertised to peers
+	NodeID              string
+	ClusterPeers        string // comma-separated node_id=host:port
+	ClusterAdvertise    string // host:port advertised to peers
+	OutboxBatchSize     int
+	OutboxFlushInterval time.Duration
+}
+
+func validateOutboxCLIConfig(batchSize int, flushInterval time.Duration) error {
+	if batchSize < 1 || batchSize > maxMultiBatchSize {
+		return fmt.Errorf("--outbox-batch-size must be between 1 and %d (got %d)", maxMultiBatchSize, batchSize)
+	}
+	if flushInterval <= 0 {
+		return fmt.Errorf("--outbox-flush-interval must be greater than zero (got %s)", flushInterval)
+	}
+	return nil
 }
 
 // runServerMain boots the gRPC server + metrics endpoint and blocks until
 // SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
 func runServerMain(logger *slog.Logger, args serverMainArgs) {
+	if err := validateOutboxCLIConfig(args.OutboxBatchSize, args.OutboxFlushInterval); err != nil {
+		logger.Error("rtid outbox configuration failed", "err", err)
+		os.Exit(2)
+	}
 	if args.LogDir == "" {
 		logger.Warn("--log-dir not set; event logs will not be persisted")
 	}
@@ -334,6 +357,11 @@ func runServerMain(logger *slog.Logger, args serverMainArgs) {
 		)
 	}
 
+	generationEpoch, err := nextFederationGenerationEpoch(args.LogDir)
+	if err != nil {
+		logger.Error("rtid: federation generation epoch initialization failed", "err", err)
+		os.Exit(1)
+	}
 	srv, err := newRTID(rtidConfig{
 		ListenAddr:                    args.Listen,
 		AdminListenAddr:               args.AdminListen,
@@ -351,6 +379,10 @@ func runServerMain(logger *slog.Logger, args serverMainArgs) {
 		NodeID:                        args.NodeID,
 		ClusterPeers:                  args.ClusterPeers,
 		ClusterAdvertise:              args.ClusterAdvertise,
+		OutboxBatchSize:               args.OutboxBatchSize,
+		OutboxFlushInterval:           args.OutboxFlushInterval,
+		GenerationEpoch:               generationEpoch,
+		GenerationSpan:                generationReservationSpan,
 	})
 	if err != nil {
 		logger.Error("rtid initialization failed", "err", err)
@@ -393,6 +425,77 @@ func isLoopbackBind(addr string) bool {
 	}
 	return false
 }
+
+const federationGenerationEpochFilename = ".federation-generation-epoch"
+
+func nextFederationGenerationEpoch(logDir string) (epoch uint32, err error) {
+	if logDir == "" {
+		var raw [4]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			return 0, err
+		}
+		maxBase := ^uint32(0) - generationReservationSpan + 1
+		epoch := 1 + binary.LittleEndian.Uint32(raw[:])%maxBase
+		return epoch, nil
+	}
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return 0, err
+	}
+	path := filepath.Join(logDir, federationGenerationEpochFilename)
+	release, err := lockFederationGenerationEpoch(path + ".lock")
+	if err != nil {
+		return 0, fmt.Errorf("lock %s: %w", path, err)
+	}
+	defer func() {
+		if releaseErr := release(); releaseErr != nil {
+			epoch = 0
+			err = errors.Join(err, fmt.Errorf("unlock %s: %w", path, releaseErr))
+		}
+	}()
+
+	var previous uint64
+	contents, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		previous, err = strconv.ParseUint(strings.TrimSpace(string(contents)), 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("parse %s: %w", path, err)
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return 0, err
+	}
+	if previous > uint64(^uint32(0)-generationReservationSpan) {
+		return 0, errors.New("federation generation epoch exhausted")
+	}
+	epoch = uint32(previous + 1)
+	highWater := uint32(previous) + generationReservationSpan
+	tmp, err := os.CreateTemp(logDir, ".federation-generation-epoch-*")
+	if err != nil {
+		return 0, err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := fmt.Fprintf(tmp, "%d\n", highWater); err != nil {
+		_ = tmp.Close()
+		return 0, err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return 0, err
+	}
+	if err := tmp.Close(); err != nil {
+		return 0, err
+	}
+	if err := replaceFederationGenerationEpoch(tmpPath, path, logDir); err != nil {
+		return 0, err
+	}
+	return epoch, nil
+}
+
+// Each persistent RTI process reserves a disjoint generation block before it
+// starts. Crashes may leave gaps, but a later process cannot reuse a generation
+// already published by an earlier process.
+const generationReservationSpan uint32 = 1 << 16
 
 // timedRunArgs bundles the flags for runTimedMain. Extracted so flags
 // stay grouped at the call site and a future "stall" mode can add
@@ -574,6 +677,12 @@ type rtidConfig struct {
 	MetricsListenAddr string
 	LogDir            string
 	Logger            *slog.Logger
+	// Zero values retain the production defaults for tests and internal
+	// callers that predate these settings.
+	OutboxBatchSize     int
+	OutboxFlushInterval time.Duration
+	GenerationEpoch     uint32
+	GenerationSpan      uint32
 
 	// AdminListenAddr is the bind address for the read-only
 	// AdminService gRPC server (rtid-TUI Phase 1 — docs/rtid-tui.md
@@ -700,16 +809,30 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	batchSize, flushInterval, err := resolveMultiOutboxConfig(cfg.OutboxBatchSize, cfg.OutboxFlushInterval)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: invalid outbox configuration: %w", err)
+	}
 	clock := core.NewRealClock()
 
-	multi, err := newMultiplexLog(cfg.LogDir, clock)
+	// The event log is constructed before the federation manager, but each
+	// writer must resolve metadata from the live federation execution. The
+	// closure is first invoked lazily on Append, after fedMgr is assigned.
+	var fedMgr *federation.Manager
+	eventLogMetadata := func(fed core.FederationName) (uint64, core.Mode, uint64, bool) {
+		if fedMgr == nil {
+			return 0, core.ModeUnspecified, 0, false
+		}
+		return fedMgr.EventLogMetadataFor(fed)
+	}
+	multi, err := newMultiplexLog(cfg.LogDir, clock, eventLogMetadata)
 	if err != nil {
 		return nil, err
 	}
 
 	foms := newFOMRepository()
 	declMgr := declaration.New()
-	outbox := newMultiOutbox(1024)
+	outbox := newMultiOutboxWithBatch(1024, batchSize, flushInterval)
 	// M37 Agent EA — §5.10-§5.13 registration / interaction advisories
 	// flow through the shared outbox.
 	declMgr.SetAdvisoryOutbox(outbox)
@@ -762,13 +885,16 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 	// so dispatch resolves at runtime, after the dependencies are wired in.
 	var ownResignHook func(context.Context, core.FederationName, core.FederateHandle)
 	var resigningDispatch func(context.Context, core.FederationName, core.FederateHandle, core.ResignAction)
+	var destroyingDispatch func(context.Context, core.FederationName) error
 	// M26 Phase F — same indirection pattern for the object registry's
 	// reservation-cleanup hook (objReg is constructed below).
 	var reservationResignHook func(core.FederationName, core.FederateHandle)
-	fedMgr, err := federation.New(federation.Options{
-		Clock:              clock,
-		EventLog:           multi,
-		FOMs:               foms,
+	fedMgr, err = federation.New(federation.Options{
+		Clock:           clock,
+		EventLog:        multi,
+		FOMs:            foms,
+		GenerationEpoch: cfg.GenerationEpoch,
+		GenerationSpan:  cfg.GenerationSpan,
 		OnFederateJoined: chainOnFederateJoined(
 			// M27 Phase A — pre-bind the outbox channel for the
 			// federate so events emitted by a service-group RPC fired
@@ -782,6 +908,9 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		),
 		OnFederateResigned: chainOnFederateResigned(
 			momFederateResignedHook(momMgr, cfg.Logger),
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+				declMgr.OnFederateResign(fed, h)
+			},
 			// M27 Phase A — drop the outbox state if the federate
 			// resigned without ever opening its Events stream. The
 			// stream subscribe path's cancel func handles the case
@@ -818,6 +947,12 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			if resigningDispatch != nil {
 				resigningDispatch(ctx, fed, h, action)
 			}
+		},
+		OnFederationDestroying: func(ctx context.Context, fed core.FederationName) error {
+			if destroyingDispatch != nil {
+				return destroyingDispatch(ctx, fed)
+			}
+			return nil
 		},
 	})
 	if err != nil {
@@ -911,6 +1046,10 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		Outbox:   outbox,
 		EventLog: multi,
 		FOMs:     foms,
+		FederationExists: func(fed core.FederationName) bool {
+			_, ok := fedMgr.GenerationFor(fed)
+			return ok
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -950,7 +1089,9 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 			// — a participant that resigned and rejoined under a
 			// new handle still receives the initiate and its
 			// federateRestoreComplete is accepted.
-			Roster: fedMgr.ListMembers,
+			Roster:     fedMgr.ListMembers,
+			Generation: fedMgr.GenerationFor,
+			FOMSHA256:  foms.DigestFor,
 			// M13 thread C (docs/srs.md §10.4): wire the four
 			// service-group managers as snapshot participants. On
 			// save, each Marshal(fed) result is bundled into the
@@ -1118,14 +1259,42 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		clusterMgr.RegisterPeer(nodeID, address)
 	}
 	clusterSvc := grpcsvc.NewClusterService(clusterMgr, nil)
+	clusterSvc.SetGenerationResolver(fedMgr.GenerationFor)
+	destroyingDispatch = func(ctx context.Context, fed core.FederationName) error {
+		var cleanupErrors []error
+		if err := momMgr.FederationDestroyed(ctx, fed); err != nil {
+			cfg.Logger.Error("rtid: MOM federation cleanup failed", "federation", fed, "error", err)
+			cleanupErrors = append(cleanupErrors, err)
+		}
+		declMgr.OnFederationDestroyed(fed)
+		objReg.OnFederationDestroyed(fed)
+		timeMgr.OnFederationDestroyed(fed)
+		syncMgr.OnFederationDestroyed(fed)
+		ownMgr.OnFederationDestroyed(fed)
+		ddmMgr.OnFederationDestroyed(fed)
+		if saveMgr != nil {
+			saveMgr.OnFederationDestroyed(fed)
+		}
+		foms.ForgetFor(fed)
+		clusterMgr.UnassignFederation(fed)
+		outbox.UnbindFederation(fed)
+		// The generation's writer closes last, after no manager or stream can
+		// create a new record for the destroyed execution.
+		if err := multi.CloseFederation(fed); err != nil {
+			cfg.Logger.Error("rtid: event-log federation cleanup failed", "federation", fed, "error", err)
+			cleanupErrors = append(cleanupErrors, err)
+		}
+		return errors.Join(cleanupErrors...)
+	}
 
 	grpcSrv, err := grpcsvc.NewServer(grpcsvc.Options{
-		Federations:                fedMgr,
-		Declarations:               declMgr,
-		Objects:                    objReg,
-		Outbox:                     outbox,
-		OnCreateFederationSuccess:  createFederationHook(foms, momMgr, clusterMgr, clusterSvc, cfg.Logger),
-		OnDestroyFederationSuccess: destroyFederationHook(momMgr, cfg.Logger),
+		Federations:               fedMgr,
+		Membership:                fedMgr,
+		Declarations:              declMgr,
+		Objects:                   objReg,
+		Outbox:                    outbox,
+		EnableInteractionStream:   cfg.OIDCVerifier == nil,
+		OnCreateFederationSuccess: createFederationHook(foms, momMgr, clusterMgr, clusterSvc, cfg.Logger),
 		// M21 TASK-204: TimeService gRPC. Composed unconditionally
 		// in server mode (vs cut-1's nil placeholder) so federates
 		// can drive HLA time advance cross-process.
@@ -1168,16 +1337,20 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		// is built from --tls-cert/--tls-key and not reloaded.
 		serverOpts = append(serverOpts, stdgrpc.Creds(credentials.NewTLS(cfg.TLSConfig)))
 	}
+	unaryInterceptors := []stdgrpc.UnaryServerInterceptor{grpcSrv.UnaryMembershipInterceptor()}
+	streamInterceptors := []stdgrpc.StreamServerInterceptor{grpcSrv.StreamMembershipInterceptor()}
 	if cfg.OIDCVerifier != nil {
 		// M14 W4 — OIDC bearer-token interceptor. Validates the
 		// `authorization: Bearer <jwt>` metadata before any service
 		// handler runs. Stackable with mTLS: a deployment configured
 		// with both must satisfy both.
-		serverOpts = append(serverOpts,
-			stdgrpc.UnaryInterceptor(oidc.UnaryServerInterceptor(cfg.OIDCVerifier)),
-			stdgrpc.StreamInterceptor(oidc.StreamServerInterceptor(cfg.OIDCVerifier)),
-		)
+		unaryInterceptors = append([]stdgrpc.UnaryServerInterceptor{oidc.UnaryServerInterceptor(cfg.OIDCVerifier)}, unaryInterceptors...)
+		streamInterceptors = append([]stdgrpc.StreamServerInterceptor{oidc.StreamServerInterceptor(cfg.OIDCVerifier)}, streamInterceptors...)
 	}
+	serverOpts = append(serverOpts,
+		stdgrpc.ChainUnaryInterceptor(unaryInterceptors...),
+		stdgrpc.ChainStreamInterceptor(streamInterceptors...),
+	)
 	gs := stdgrpc.NewServer(serverOpts...)
 	if err := grpcSrv.Register(gs); err != nil {
 		return nil, err
@@ -1228,6 +1401,7 @@ func newRTID(cfg rtidConfig) (*rtid, error) {
 		if cfg.AdminMutating {
 			if err := grpcsvc.RegisterMutatingService(adminGS, grpcsvc.MutatingOptions{
 				Federations:  fedMgr,
+				Membership:   fedMgr,
 				Version:      rtidVersion(),
 				Cluster:      clusterMgr,
 				ClusterPeers: clusterSvc,
@@ -1437,18 +1611,25 @@ func (r *rtid) Serve(ctx context.Context) error {
 // or an in-memory factory when logDir is empty. The in-memory factory
 // drops bytes (no observable file) but keeps the writer happy so the
 // rest of the pipeline runs.
-func newMultiplexLog(logDir string, clock core.Clock) (*eventlog.MultiplexWriter, error) {
+
+func newMultiplexLog(logDir string, clock core.Clock, metadata ...eventlog.MetadataResolver) (*eventlog.MultiplexWriter, error) {
+	var resolver eventlog.MetadataResolver
+	if len(metadata) > 0 {
+		resolver = metadata[0]
+	}
 	if logDir == "" {
 		return eventlog.NewMultiplexWriter(eventlog.MultiplexOptions{
-			Clock:   clock,
-			Mode:    core.ModeVerbose,
-			Factory: discardWriterFactory(clock),
+			Clock:    clock,
+			Mode:     core.ModeVerbose,
+			Metadata: resolver,
+			Factory:  discardWriterFactory(clock),
 		})
 	}
 	return eventlog.NewMultiplexWriter(eventlog.MultiplexOptions{
-		Clock: clock,
-		Mode:  core.ModeVerbose,
-		Dir:   logDir,
+		Clock:    clock,
+		Mode:     core.ModeVerbose,
+		Metadata: resolver,
+		Dir:      logDir,
 	})
 }
 
@@ -1781,11 +1962,13 @@ func createFederationHook(foms *fomRepository, momMgr core.ManagementObjectModel
 		}
 		// M15 cut-2 — claim the federation locally and tell peers.
 		if clusterMgr != nil {
-			clusterMgr.AssignFederation(name)
 			if clusterSvc != nil {
+				clusterSvc.AssignLocalFederation(name)
 				clusterSvc.BroadcastAssignment(
 					ctx, name, clusterMgr.SelfID(), clusterMgr.SelfAddress(),
 				)
+			} else {
+				clusterMgr.AssignFederation(name)
 			}
 		}
 	}

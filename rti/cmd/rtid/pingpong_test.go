@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/cbchoi/gorti/rti/internal/eventlog"
 )
 
 // TestPingpongDemo_RunsToCompletion: a small in-process run completes
@@ -39,7 +41,7 @@ func TestPingpongDemo_WritesLogFile(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("runPingpongDemo: %v", err)
 	}
-	logPath := filepath.Join(dir, "demo-log.log")
+	logPath := eventlog.GenerationLogPath(dir, "demo-log", 0)
 	rdr, err := openTestReader(t, logPath)
 	if err != nil {
 		t.Fatalf("open log: %v", err)
@@ -87,12 +89,12 @@ func TestRunReplayFromFile_ReproducesSourceBytes(t *testing.T) {
 		t.Fatalf("source run: %v", err)
 	}
 
-	srcPath := filepath.Join(srcDir, "replay-unit.log")
+	srcPath := eventlog.GenerationLogPath(srcDir, "replay-unit", 0)
 	if err := runReplayFromFile(ctx, srcPath, dstDir); err != nil {
 		t.Fatalf("runReplayFromFile: %v", err)
 	}
 
-	dstPath := filepath.Join(dstDir, "replay-unit.log")
+	dstPath := eventlog.GenerationLogPath(dstDir, "replay-unit", 0)
 	srcBody, err := readFileBytes(srcPath)
 	if err != nil {
 		t.Fatalf("read source: %v", err)

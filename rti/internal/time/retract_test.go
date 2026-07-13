@@ -91,12 +91,12 @@ func TestRetractMessage_NonMatchingSenderLeavesBuffer(t *testing.T) {
 	fed := core.FederationName("test")
 	if err := mgr.BufferTSOWithRetraction(
 		ctx, fed, 2, core.LogicalTime(5.0),
-		&fakeRetractEvent{}, /*sender=*/ 7, /*handle=*/ 42,
+		&fakeRetractEvent{} /*sender=*/, 7 /*handle=*/, 42,
 	); err != nil {
 		t.Fatalf("BufferTSOWithRetraction: %v", err)
 	}
 	// Wrong sender → no removal.
-	if got := mgr.RetractMessage(fed, /*sender=*/ 99, 42); got != 0 {
+	if got := mgr.RetractMessage(fed /*sender=*/, 99, 42); got != 0 {
 		t.Errorf("RetractMessage(wrong sender) removed %d, want 0", got)
 	}
 	// Right sender → removed.

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 )
 
 // fakeOutboundEvent satisfies core.OutboundEvent without requiring a real
@@ -16,6 +18,34 @@ import (
 type fakeOutboundEvent struct{ seq uint64 }
 
 func (e *fakeOutboundEvent) Seq() uint64 { return e.seq }
+
+func TestResolveMultiOutboxConfig(t *testing.T) {
+	t.Run("zero values use production defaults", func(t *testing.T) {
+		batchSize, flushInterval, err := resolveMultiOutboxConfig(0, 0)
+		if err != nil {
+			t.Fatalf("resolveMultiOutboxConfig: %v", err)
+		}
+		if batchSize != defaultMultiBatchSize || flushInterval != defaultMultiFlushInterval {
+			t.Errorf("resolved config = (%d, %s), want (%d, %s)", batchSize, flushInterval, defaultMultiBatchSize, defaultMultiFlushInterval)
+		}
+	})
+
+	for _, tc := range []struct {
+		name          string
+		batchSize     int
+		flushInterval time.Duration
+	}{
+		{name: "negative batch size", batchSize: -1, flushInterval: time.Millisecond},
+		{name: "batch size above maximum", batchSize: maxMultiBatchSize + 1, flushInterval: time.Millisecond},
+		{name: "negative flush interval", batchSize: 1, flushInterval: -time.Nanosecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := resolveMultiOutboxConfig(tc.batchSize, tc.flushInterval); err == nil {
+				t.Fatal("resolveMultiOutboxConfig returned nil error")
+			}
+		})
+	}
+}
 
 // TestMultiOutbox_SendDeliversToSubscriber: a Send to (fed, h) appears on
 // the channel returned by Subscribe(fed, h).
@@ -41,15 +71,38 @@ func TestMultiOutbox_SendDeliversToSubscriber(t *testing.T) {
 	}
 }
 
-// TestMultiOutbox_SendNoSubscriber_NoError: with no subscriber registered
-// for (fed, h), Send drops the event silently. Per docs/agent-a-rti-core.md
-// the bounded-channel contract handles overflow as a federate-level crash;
-// "no subscriber" is a separate condition (federate hasn't started its
-// stream yet) that must NOT crash the federation.
-func TestMultiOutbox_SendNoSubscriber_NoError(t *testing.T) {
+func TestMultiOutbox_TimeAdvanceGrantFlushesPrecedingEvents(t *testing.T) {
+	mo := newMultiOutboxWithBatch(32, 32, time.Hour)
+	ch, cancel, err := mo.Subscribe(context.Background(), "alpha", core.FederateHandle(7))
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer func() { _ = cancel() }()
+
+	first := &fakeOutboundEvent{seq: 1}
+	second := &fakeOutboundEvent{seq: 2}
+	grant := &timepkg.TimeAdvanceGrant{Time: 3}
+	for _, event := range []core.OutboundEvent{first, second, grant} {
+		if err := mo.Send(context.Background(), "alpha", core.FederateHandle(7), event); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+	}
+
+	select {
+	case batch := <-ch:
+		if len(batch) != 3 || batch[0] != first || batch[1] != second || batch[2] != grant {
+			t.Fatalf("delivered batch = %v, want preceding events followed by grant", batch)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("time advance grant did not flush the recipient batch")
+	}
+}
+
+func TestMultiOutbox_SendNoSubscriber_ReturnsUnavailable(t *testing.T) {
 	mo := newMultiOutboxWithBatch(4, 1, 0)
-	if err := mo.Send(context.Background(), "alpha", core.FederateHandle(99), &fakeOutboundEvent{seq: 1}); err != nil {
-		t.Errorf("Send to absent subscriber: err = %v, want nil (drop silently)", err)
+	err := mo.Send(context.Background(), "alpha", core.FederateHandle(99), &fakeOutboundEvent{seq: 1})
+	if !errors.Is(err, core.ErrOutboxUnavailable) {
+		t.Errorf("Send to absent subscriber: err = %v, want ErrOutboxUnavailable", err)
 	}
 }
 
@@ -273,10 +326,167 @@ func TestMultiOutbox_UnbindDropsBufferedEvents(t *testing.T) {
 	_ = mo.Send(context.Background(), fed, h, &fakeOutboundEvent{seq: 99})
 	mo.Unbind(fed, h)
 
-	// After Unbind, a Send for the same (fed, h) drops silently
-	// (back to pre-Bind behaviour).
-	if err := mo.Send(context.Background(), fed, h, &fakeOutboundEvent{seq: 100}); err != nil {
-		t.Errorf("Send after Unbind: err=%v, want nil (silent drop)", err)
+	if err := mo.Send(context.Background(), fed, h, &fakeOutboundEvent{seq: 100}); !errors.Is(err, core.ErrOutboxUnavailable) {
+		t.Errorf("Send after Unbind: err=%v, want ErrOutboxUnavailable", err)
+	}
+}
+
+func TestMultiOutbox_TimerFlushRetriesWithoutDrop(t *testing.T) {
+	mo := newMultiOutboxWithBatch(2, 2, 5*time.Millisecond)
+	ch, cancel, err := mo.Subscribe(context.Background(), "alpha", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cancel() }()
+
+	for _, seq := range []uint64{1, 2, 3} {
+		if err := mo.Send(context.Background(), "alpha", 1, &fakeOutboundEvent{seq: seq}); err != nil {
+			t.Fatalf("Send(%d): %v", seq, err)
+		}
+	}
+	time.Sleep(20 * time.Millisecond) // timer observes a full channel and retries
+
+	first := <-ch
+	if len(first) != 2 || first[0].Seq() != 1 || first[1].Seq() != 2 {
+		t.Fatalf("first batch = %v, want seq 1,2", first)
+	}
+	select {
+	case second := <-ch:
+		if len(second) != 1 || second[0].Seq() != 3 {
+			t.Fatalf("retried batch = %v, want seq 3", second)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timer-flushed batch was not retried")
+	}
+	state := (*mo.subs.Load())[fedHandleKey{fed: "alpha", h: 1}]
+	if got := atomic.LoadUint64(&state.dropsTotal); got != 0 {
+		t.Fatalf("dropsTotal = %d, want 0", got)
+	}
+}
+
+func TestMultiOutbox_ConcurrentTimerFlushAndCancel(t *testing.T) {
+	for iteration := 0; iteration < 100; iteration++ {
+		mo := newMultiOutboxWithBatch(2, 2, time.Microsecond)
+		_, cancel, err := mo.Subscribe(context.Background(), "alpha", 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := mo.Send(context.Background(), "alpha", 1, &fakeOutboundEvent{seq: 1}); err != nil {
+			t.Fatal(err)
+		}
+		if err := mo.Send(context.Background(), "alpha", 1, &fakeOutboundEvent{seq: 2}); err != nil {
+			t.Fatal(err)
+		}
+		if err := mo.Send(context.Background(), "alpha", 1, &fakeOutboundEvent{seq: 3}); err != nil {
+			t.Fatal(err)
+		}
+
+		done := make(chan struct{})
+		go func() {
+			_ = cancel()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("cancel deadlocked with timer flush")
+		}
+		if err := mo.Send(context.Background(), "alpha", 1, &fakeOutboundEvent{seq: 4}); !errors.Is(err, core.ErrOutboxUnavailable) {
+			t.Fatalf("Send after cancel = %v, want ErrOutboxUnavailable", err)
+		}
+	}
+}
+
+func TestMultiOutbox_ReservationRejectsAllRecipientsAtomically(t *testing.T) {
+	mo := newMultiOutboxWithBatch(2, 1, 0)
+	ch1, cancel1, err := mo.Subscribe(context.Background(), "alpha", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cancel1() }()
+	_, cancel2, err := mo.Subscribe(context.Background(), "alpha", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cancel2() }()
+	for seq := uint64(1); seq <= 2; seq++ {
+		if err := mo.Send(context.Background(), "alpha", 2, &fakeOutboundEvent{seq: seq}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := mo.Reserve(context.Background(), "alpha", []core.OutboxDelivery{
+		{Recipient: 1, Event: &fakeOutboundEvent{seq: 8}},
+		{Recipient: 2, Event: &fakeOutboundEvent{seq: 8}},
+	}); !errors.Is(err, core.ErrFederateOverflow) {
+		t.Fatalf("Reserve = %v, want ErrFederateOverflow", err)
+	}
+	if err := mo.Send(context.Background(), "alpha", 1, &fakeOutboundEvent{seq: 9}); err != nil {
+		t.Fatalf("recipient 1 capacity leaked after failed reservation: %v", err)
+	}
+	select {
+	case batch := <-ch1:
+		if len(batch) != 1 || batch[0].Seq() != 9 {
+			t.Fatalf("recipient 1 batch = %v, want seq 9 only", batch)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("recipient 1 send did not arrive")
+	}
+}
+
+func TestMultiOutbox_ReservationCommitsRepeatedRecipientsInOrder(t *testing.T) {
+	mo := newMultiOutboxWithBatch(8, 1, 0)
+	ch1, cancel1, err := mo.Subscribe(context.Background(), "alpha", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cancel1() }()
+	ch2, cancel2, err := mo.Subscribe(context.Background(), "alpha", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cancel2() }()
+
+	reservation, err := mo.Reserve(context.Background(), "alpha", []core.OutboxDelivery{
+		{Recipient: 1, Event: &fakeOutboundEvent{seq: 10}},
+		{Recipient: 1, Event: &fakeOutboundEvent{seq: 11}},
+		{Recipient: 2, Event: &fakeOutboundEvent{seq: 20}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reservation.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []uint64{10, 11} {
+		batch := <-ch1
+		if len(batch) != 1 || batch[0].Seq() != want {
+			t.Fatalf("recipient 1 batch = %v, want seq %d", batch, want)
+		}
+	}
+	batch := <-ch2
+	if len(batch) != 1 || batch[0].Seq() != 20 {
+		t.Fatalf("recipient 2 batch = %v, want seq 20", batch)
+	}
+}
+
+func TestMultiOutbox_ReservationAccountsForGrantForcedFlush(t *testing.T) {
+	mo := newMultiOutboxWithBatch(4, 4, 0)
+	_, cancel, err := mo.Subscribe(context.Background(), "alpha", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cancel() }()
+	deliveries := make([]core.OutboxDelivery, 0, 7)
+	for seq := uint64(1); seq <= 6; seq++ {
+		deliveries = append(deliveries, core.OutboxDelivery{Recipient: 1, Event: &fakeOutboundEvent{seq: seq}})
+	}
+	deliveries = append(deliveries, core.OutboxDelivery{Recipient: 1, Event: &timepkg.TimeAdvanceGrant{Time: 7}})
+	if _, err := mo.Reserve(context.Background(), "alpha", deliveries); !errors.Is(err, core.ErrFederateOverflow) {
+		t.Fatalf("Reserve = %v, want ErrFederateOverflow before WAL", err)
+	}
+	if err := mo.Send(context.Background(), "alpha", 1, &fakeOutboundEvent{seq: 9}); err != nil {
+		t.Fatalf("failed reservation mutated recipient capacity: %v", err)
 	}
 }
 

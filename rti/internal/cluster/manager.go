@@ -42,6 +42,7 @@ type LookupResult struct {
 	Status      Status
 	HostAddress string // populated on Redirect
 	HostNodeID  string // populated on Current + Redirect
+	Generation  uint64
 }
 
 // Node bundles the public-facing cluster membership entry.
@@ -58,8 +59,9 @@ type Manager struct {
 	selfAddr string
 
 	mu          sync.RWMutex
+	generations map[core.FederationName]uint64
 	assignments map[core.FederationName]string // federation → node_id
-	nodes       map[string]string               // node_id → address (always includes self)
+	nodes       map[string]string              // node_id → address (always includes self)
 }
 
 // New constructs a single-node cluster manager. selfAddr is the
@@ -75,6 +77,7 @@ func New(selfID, selfAddr string) *Manager {
 		selfID:      selfID,
 		selfAddr:    selfAddr,
 		assignments: map[core.FederationName]string{},
+		generations: map[core.FederationName]uint64{},
 		nodes:       map[string]string{selfID: selfAddr},
 	}
 	return m
@@ -84,9 +87,14 @@ func New(selfID, selfAddr string) *Manager {
 // always assigns to self; cut-2 (deferred) consults the replicated
 // assignment table.
 func (m *Manager) AssignFederation(name core.FederationName) {
+	m.AssignFederationGeneration(name, 0)
+}
+
+func (m *Manager) AssignFederationGeneration(name core.FederationName, generation uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.assignments[name] = m.selfID
+	m.generations[name] = generation
 }
 
 // UnassignFederation removes a federation from the assignment table.
@@ -96,6 +104,7 @@ func (m *Manager) UnassignFederation(name core.FederationName) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.assignments, name)
+	delete(m.generations, name)
 }
 
 // Lookup returns the host of the given federation. Returns
@@ -111,12 +120,14 @@ func (m *Manager) Lookup(name core.FederationName) LookupResult {
 		return LookupResult{
 			Status:     StatusCurrent,
 			HostNodeID: m.selfID,
+			Generation: m.generations[name],
 		}
 	}
 	return LookupResult{
 		Status:      StatusRedirect,
 		HostAddress: m.nodes[hostID],
 		HostNodeID:  hostID,
+		Generation:  m.generations[name],
 	}
 }
 
@@ -166,12 +177,30 @@ func (m *Manager) RegisterPeer(nodeID, address string) {
 // the local node didn't make (last-writer-wins gossip; M15 cut-3
 // will replace with Raft-replicated state).
 func (m *Manager) RecordAssignment(name core.FederationName, hostNodeID string) {
+	m.RecordAssignmentGeneration(name, hostNodeID, 0)
+}
+
+// RecordAssignmentGeneration rejects gossip from an older execution while
+// allowing a host change within the same generation.
+func (m *Manager) RecordAssignmentGeneration(name core.FederationName, hostNodeID string, generation uint64) bool {
 	if hostNodeID == "" {
-		return
+		return false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if current, ok := m.generations[name]; ok && generation < current {
+		return false
+	}
 	m.assignments[name] = hostNodeID
+	m.generations[name] = generation
+	return true
+}
+
+func (m *Manager) AssignmentGeneration(name core.FederationName) (uint64, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	generation, ok := m.generations[name]
+	return generation, ok
 }
 
 // AssignmentsSnapshot returns a defensive copy of the current
@@ -196,13 +225,13 @@ func (m *Manager) HostsLocally(name core.FederationName) bool {
 	return r.Status == StatusCurrent
 }
 
-// PromoteFederation reassigns a federation to ``targetNodeID`` and
+// PromoteFederation reassigns a federation to “targetNodeID“ and
 // returns the prior host's node_id (empty when newly assigned).
 // M16.1 demo — used for operator-driven failover. The caller is
 // responsible for broadcasting the new assignment to peers; this
 // method only mutates the local table.
 //
-// Returns an error when ``targetNodeID`` is empty or not in the
+// Returns an error when “targetNodeID“ is empty or not in the
 // membership table — promoting to an unknown node would silently
 // orphan the federation.
 func (m *Manager) PromoteFederation(name core.FederationName, targetNodeID string) (string, error) {

@@ -27,28 +27,22 @@ jobs:
         run: buf generate
 
       - name: gofmt check
-        run: |
-          OUT=$(gofmt -l -s .)
-          if [[ -n "$OUT" ]]; then
-            echo "::error ::files need gofmt:"
-            echo "$OUT"
-            exit 1
-          fi
+        run: make go-fmt-check
+
+      - name: install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.61.0
-          args: --config .golangci.yml ./...
+        run: make go-lint
 
       - name: go test
-        run: go test -race -timeout 60s -coverprofile=coverage.out -covermode=atomic ./...
+        run: make go-test-coverage
 
       - name: coverage report
-        run: go tool cover -func=coverage.out
+        run: make go-coverage-report
 
       - name: determinism harness
-        run: go test -tags=determinism -count=10 -race -run=Determinism ./... || echo "no determinism tests yet (M0)"
+        run: make determinism
 
   python:
     name: Python (ruff + mypy + pytest)
@@ -59,19 +53,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: bufbuild/buf-setup-action@v1
+      - name: generate protocol bindings
+        run: buf generate
       - name: install
         working-directory: pysdk
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[dev]' || pip install ruff mypy pytest pytest-asyncio
+          pip install -e '.[dev]'
       - name: ruff
         run: ruff check pysdk/
+      - name: release metadata
+        run: python scripts/check_release_metadata.py
       - name: mypy
         working-directory: pysdk
-        run: mypy --strict . || true   # M0: no Python code yet
+        run: mypy --strict .
       - name: pytest
         working-directory: pysdk
-        run: pytest --maxfail=1 || true # M0: no tests yet
+        run: pytest --maxfail=1
 
   proto:
     name: Proto lint + breaking check
@@ -84,7 +83,7 @@ jobs:
       - name: buf lint
         run: buf lint
       - name: buf breaking
-        run: buf breaking --against ".git#branch=main" || echo "no main yet (M0)"
+        run: buf breaking --against ".git#branch=main"
 
   frozen-paths:
     name: Frozen-paths check (agent branches only)

@@ -19,9 +19,8 @@ var ErrReplayDivergence = errors.New("eventlog: replay diverged from source")
 
 // Replayer drives a fresh RTI through events from a source log and
 // produces a new log; the new log MUST be body-byte-identical to the
-// source. (Header bytes — magic, version, federation, mode, seed — must
-// also match by construction; the timestamp field CreatedAtNs is the
-// only header value the determinism contract treats as informational.)
+// source. Header metadata is validated independently by Reader and is
+// excluded from this body-level determinism comparison.
 //
 // Replayer is a verification harness, not a runtime component. It exists
 // so the determinism contract (NFR-DET-2) can be tested mechanically.
@@ -114,15 +113,11 @@ func NewReplayer(opts ReplayerOptions) (*Replayer, error) {
 //
 // # Header-byte caveat
 //
-// The W1B Writer's header includes a CreatedAtNs field stamped from
-// Clock.Now() at NewWriter time. For byte-identical replay, the source
-// and captured headers would have to share the same Clock — which is
-// not generally possible (the captured Writer is constructed by the
-// replay harness at a different wall time). The M2 cut-1 stance is to
-// compare bytes from offset HeaderSize onward only. Magic/version/
-// federation/mode/seed are by-construction equal because the replay
-// harness wires the same federation+mode+seed into the captured
-// Writer. The header timestamp is informational and excluded.
+// Version 1 used the metadata slot for a wall-clock CreatedAtNs value;
+// version 2 uses it for federation Generation. Replayer keeps the original
+// body-only comparison so legacy captures and independently constructed
+// destinations follow the same contract. Callers that require matching
+// generation provenance validate Header() before replay.
 func (r *Replayer) Replay(ctx context.Context) error {
 	// Snapshot the captured-sink position at the start so divergence
 	// detection is relative to what THIS Replay run wrote, not whatever

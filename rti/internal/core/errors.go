@@ -14,6 +14,7 @@ var (
 	ErrFederateAlreadyJoined        = errors.New("federate already joined")
 	ErrFederationHalted             = errors.New("federation halted")
 	ErrFederationInvalidName        = errors.New("federation name is invalid")
+	ErrFederationGenerationMismatch = errors.New("federation generation does not match")
 
 	// Object
 	ErrObjectNotFound               = errors.New("object not found")
@@ -21,6 +22,8 @@ var (
 	ErrAttributeNotOwned            = errors.New("attribute not owned by federate")
 	ErrObjectHandleInvalid          = errors.New("object handle is invalid")
 	ErrInteractionClassNotPublished = errors.New("interaction class not published")
+	ErrInteractionClassNotFound     = errors.New("interaction class not found in FOM")
+	ErrInteractionParameterNotFound = errors.New("interaction parameter not found in FOM")
 	ErrObjectClassNotFound          = errors.New("object class not found in FOM")
 	ErrAttributeNotFound            = errors.New("attribute not found in FOM")
 
@@ -57,8 +60,8 @@ var (
 	ErrRestoreNotInProgress    = errors.New("no restore in progress to abort")
 
 	// M26 Phase F — object instance name reservation per IEEE 1516.1 §6.1-6.5.
-	ErrObjectInstanceNameInUse       = errors.New("object instance name already reserved or in use")
-	ErrObjectInstanceNameNotReserved = errors.New("object instance name has not been reserved")
+	ErrObjectInstanceNameInUse           = errors.New("object instance name already reserved or in use")
+	ErrObjectInstanceNameNotReserved     = errors.New("object instance name has not been reserved")
 	ErrObjectInstanceNameReservedByOther = errors.New("object instance name is reserved by another federate")
 
 	// Encoding

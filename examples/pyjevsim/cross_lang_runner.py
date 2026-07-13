@@ -257,6 +257,8 @@ async def _drain_subscriber(
     async for event in sub_fed.events():
         if isinstance(event, ReceiveInteraction):
             payload = event.parameters.get("_payload")
+            if payload is None and len(event.parameters) == 1:
+                payload = next(iter(event.parameters.values()))
             if isinstance(payload, bytes | bytearray):
                 sink.append(bytes(payload))
             else:

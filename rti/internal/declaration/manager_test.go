@@ -229,6 +229,13 @@ func TestManager_InteractionPubSub_DeterministicSortedOrder(t *testing.T) {
 	if !reflect.DeepEqual(pubs, []core.FederateHandle{4}) {
 		t.Errorf("InteractionPublishersFor = %v, want [4]", pubs)
 	}
+	if !mgr.PublishesInteraction(ctx, "fed", 11, 4) {
+		t.Error("PublishesInteraction did not find publisher 4")
+	}
+	if mgr.PublishesInteraction(ctx, "fed", 11, 99) ||
+		mgr.PublishesInteraction(ctx, "missing", 11, 4) {
+		t.Error("PublishesInteraction reported an unknown publisher or federation")
+	}
 
 	subs := mgr.InteractionSubscribersFor(ctx, "fed", 11)
 	want := []core.FederateHandle{1, 2, 6, 8, 14}

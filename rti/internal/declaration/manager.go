@@ -114,6 +114,45 @@ func New() *Manager {
 	}
 }
 
+// OnFederateResign removes every publication and subscription owned by h.
+func (m *Manager) OnFederateResign(fed core.FederationName, h core.FederateHandle) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := m.fed[fed]
+	if st == nil {
+		return
+	}
+	removeInteractions := func(sets map[core.InteractionClassHandle]map[core.FederateHandle]struct{}) {
+		for key, set := range sets {
+			delete(set, h)
+			if len(set) == 0 {
+				delete(sets, key)
+			}
+		}
+	}
+	removeInteractions(st.intPubs)
+	removeInteractions(st.intSubs)
+	for key, set := range st.objPubs {
+		delete(set, h)
+		if len(set) == 0 {
+			delete(st.objPubs, key)
+		}
+	}
+	for key, set := range st.objSubs {
+		delete(set, h)
+		if len(set) == 0 {
+			delete(st.objSubs, key)
+		}
+	}
+}
+
+// OnFederationDestroyed removes all declaration state for fed.
+func (m *Manager) OnFederationDestroyed(fed core.FederationName) {
+	m.mu.Lock()
+	delete(m.fed, fed)
+	m.mu.Unlock()
+}
+
 // stateLocked returns the federationState for fed, creating it if missing.
 // Caller MUST hold m.mu (write lock).
 func (m *Manager) stateLocked(fed core.FederationName) *federationState {
@@ -469,6 +508,25 @@ func (m *Manager) InteractionPublishersFor(
 		return []core.FederateHandle{}
 	}
 	return sortedHandles(st.intPubs[cls])
+}
+
+// PublishesInteraction reports whether one federate publishes cls without
+// allocating and sorting the full publisher set. ObjectRegistry uses this on
+// the interaction hot path; InteractionPublishersFor remains the snapshot API.
+func (m *Manager) PublishesInteraction(
+	_ context.Context,
+	fed core.FederationName,
+	cls core.InteractionClassHandle,
+	publisher core.FederateHandle,
+) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	st, ok := m.fed[fed]
+	if !ok {
+		return false
+	}
+	_, ok = st.intPubs[cls][publisher]
+	return ok
 }
 
 // Snapshot returns a point-in-time read of the per-federation pub/sub

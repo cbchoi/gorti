@@ -76,6 +76,8 @@ var specExceptionTable = []struct {
 	{core.ErrObjectHandleInvalid, "ObjectInstanceNotKnown"},
 	{core.ErrObjectClassNotFound, "ObjectClassNotDefined"},
 	{core.ErrAttributeNotFound, "AttributeNotDefined"},
+	{core.ErrInteractionClassNotFound, "InteractionClassNotDefined"},
+	{core.ErrInteractionParameterNotFound, "InteractionParameterNotDefined"},
 	{core.ErrObjectClassNotPublished, "ObjectClassNotPublished"},
 	{core.ErrInteractionClassNotPublished, "InteractionClassNotPublished"},
 	{core.ErrAttributeNotOwned, "AttributeNotOwned"},

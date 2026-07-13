@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gorti.verification/v1",
+  "title": "gorti verification NDJSON record",
+  "oneOf": [
+    {"$ref": "#/$defs/event"},
+    {"$ref": "#/$defs/performance"}
+  ],
+  "$defs": {
+    "common": {
+      "type": "object",
+      "required": ["schema", "record_type", "sequence"],
+      "properties": {
+        "schema": {"const": "gorti.verification/v1"},
+        "record_type": {"enum": ["event", "performance"]},
+        "sequence": {"type": "integer", "minimum": 0},
+        "runtime": {"type": "object"},
+        "timing": {"type": "object"}
+      }
+    },
+    "event": {
+      "allOf": [
+        {"$ref": "#/$defs/common"},
+        {
+          "type": "object",
+          "required": ["service", "event", "payload"],
+          "properties": {
+            "schema": {},
+            "record_type": {"const": "event"},
+            "sequence": {},
+            "service": {"enum": ["FM", "DM", "OM", "TM"]},
+            "event": {"type": "string", "minLength": 1},
+            "payload": {"type": "object"},
+            "runtime": {},
+            "timing": {}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "performance": {
+      "allOf": [
+        {"$ref": "#/$defs/common"},
+        {
+          "type": "object",
+          "required": ["metric", "value", "unit", "direction", "dimensions"],
+          "properties": {
+            "schema": {},
+            "record_type": {"const": "performance"},
+            "sequence": {},
+            "metric": {"type": "string", "minLength": 1},
+            "value": {"type": "number"},
+            "unit": {"type": "string", "minLength": 1},
+            "direction": {"enum": ["higher", "lower", "exact"]},
+            "dimensions": {
+              "type": "object",
+              "additionalProperties": {"type": ["null", "boolean", "integer", "number", "string"]}
+            },
+            "runtime": {},
+            "timing": {}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

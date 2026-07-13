@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible defect in gorti or its SDKs.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for providing enough detail to reproduce the problem.
+  - type: input
+    id: version
+    attributes:
+      label: gorti version
+      description: Release tag or commit SHA.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - rtid
+        - Go federate SDK
+        - Python SDK
+        - C++ SDK
+        - verification harness
+        - documentation
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Commands, minimal FOM, federate choreography, and logs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, Go/Python/Java version, and RTI configuration.
+    validations:
+      required: true
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow the project's Code of Conduct.
+          required: true

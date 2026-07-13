@@ -29,16 +29,16 @@ func main() {
 }
 
 type mainArgs struct {
-	url        string
-	federation string
-	name       string
-	lookahead  float64
-	primitive  string // "NER" or "TAR"
+	url         string
+	federation  string
+	name        string
+	lookahead   float64
+	primitive   string // "NER" or "TAR"
 	constrained bool
-	cycles     int
-	tickStep   float64 // logical time advance per cycle
-	resultPath string
-	fomPath    string
+	cycles      int
+	tickStep    float64 // logical time advance per cycle
+	resultPath  string
+	fomPath     string
 }
 
 func mainErr() error {
@@ -94,7 +94,7 @@ func mainErr() error {
 	// Cycle loop. Each iteration issues an advance primitive, waits
 	// for a *full* grant (M22 W3 — see waitForFullGrant for why
 	// forced grants don't end the cycle), then emits a Tick at the
-	// granted time.
+	// earliest valid TSO time after the grant.
 	for i := 1; i <= args.cycles; i++ {
 		t := float64(i) * args.tickStep
 		switch args.primitive {
@@ -121,10 +121,11 @@ func mainErr() error {
 		}
 		r.grants = append(r.grants, grantT)
 
-		// Emit a Tick on the grant.
+		// Emit a Tick at the earliest TSO time allowed after the grant.
 		payload := r.nextTickPayload()
+		sendT := r.tickTimestamp(grantT)
 		if err := fed.SendInteraction(ctx, "Tick",
-			map[string][]byte{"seq": payload}, &grantT); err != nil {
+			map[string][]byte{"seq": payload}, &sendT); err != nil {
 			return fmt.Errorf("cycle %d send Tick: %w", i, err)
 		}
 	}
@@ -178,12 +179,12 @@ func writeResult(path string, r *regulator, args mainArgs) error {
 		return err
 	}
 	payload := map[string]any{
-		"name":       r.name,
-		"lookahead":  r.lookahead,
-		"primitive":  args.primitive,
+		"name":        r.name,
+		"lookahead":   r.lookahead,
+		"primitive":   args.primitive,
 		"constrained": args.constrained,
-		"grants":     r.grants,
-		"ticks_sent": r.tickSeq,
+		"grants":      r.grants,
+		"ticks_sent":  r.tickSeq,
 	}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {

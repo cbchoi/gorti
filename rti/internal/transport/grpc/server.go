@@ -33,17 +33,19 @@ var (
 // this struct; tests construct a Server with stub implementations of
 // each interface.
 type Server struct {
-	fedService       *federationService
-	declService      *declarationService
-	objService       *objectService
-	streamService    *streamService
-	timeService      rtiv1.TimeServiceServer
-	syncService      *syncService
-	ownershipService *ownershipService
-	ddmService       *ddmService
-	savepointService *savepointService
-	momService       *momService
-	supportService   *supportService
+	fedService               *federationService
+	declService              *declarationService
+	objService               *objectService
+	streamService            *streamService
+	timeService              rtiv1.TimeServiceServer
+	syncService              *syncService
+	ownershipService         *ownershipService
+	ddmService               *ddmService
+	savepointService         *savepointService
+	momService               *momService
+	supportService           *supportService
+	interactionStreamEnabled bool
+	membership               core.FederationMembershipValidator
 }
 
 // Options bundles Server dependencies. All MUST be non-nil except Time
@@ -51,6 +53,11 @@ type Server struct {
 type Options struct {
 	// Federations handles FederationService RPCs.
 	Federations core.FederationStore
+
+	// Membership validates every request carrying a federation name and
+	// federate handle against the current federation generation. Optional for
+	// embedded legacy fixtures; production must wire federation.Manager.
+	Membership core.FederationMembershipValidator
 
 	// Declarations handles DeclarationService RPCs.
 	//
@@ -71,6 +78,10 @@ type Options struct {
 	// Outbox is referenced by the StreamService to register per-federate
 	// outbound channels.
 	Outbox core.Outbox
+
+	// EnableInteractionStream enables the internal persistent interaction
+	// transport. Leave false for embedded servers with unary-only interceptors.
+	EnableInteractionStream bool
 
 	// OnCreateFederationSuccess, when non-nil, is invoked after every
 	// successful CreateFederation gRPC call with the federation name
@@ -170,18 +181,28 @@ func NewServer(opts Options) (*Server, error) {
 	if opts.Outbox == nil {
 		return nil, ErrOutboxRequired
 	}
+	membership := opts.Membership
+	if membership == nil {
+		// The production federation manager implements membership fencing.
+		// Adopt it automatically so embedded servers cannot accidentally emit
+		// generation zero while the underlying store has advanced.
+		membership, _ = opts.Federations.(core.FederationMembershipValidator)
+	}
 	fedSvc := newFederationService(opts.Federations)
+	fedSvc.membership = membership
 	fedSvc.onCreateFederationSuccess = opts.OnCreateFederationSuccess
 	fedSvc.onDestroyFederationSuccess = opts.OnDestroyFederationSuccess
 	fedSvc.ddsEnabled = opts.DDSEnabled
 	fedSvc.ddsDefaultDomainID = opts.DDSDefaultDomainID
 	fedSvc.transportLookup = opts.TransportLookup
 	srv := &Server{
-		fedService:    fedSvc,
-		declService:   newDeclarationService(opts.Declarations),
-		objService:    newObjectService(opts.Objects),
-		streamService: newStreamService(opts.Outbox),
-		timeService:   nil, // composed below when opts.Time != nil (M21 TASK-204).
+		fedService:               fedSvc,
+		declService:              newDeclarationService(opts.Declarations),
+		objService:               newObjectService(opts.Objects),
+		streamService:            newStreamService(opts.Outbox),
+		timeService:              nil, // composed below when opts.Time != nil (M21 TASK-204).
+		interactionStreamEnabled: opts.EnableInteractionStream,
+		membership:               membership,
 	}
 	// M21 TASK-204: TimeService is wired the same way as the cut-3
 	// service-group entries below — register only when composed.
@@ -222,6 +243,128 @@ func NewServer(opts Options) (*Server, error) {
 	return srv, nil
 }
 
+type federateScopedRequest interface {
+	GetFederationName() string
+	GetFederateHandle() uint64
+}
+
+func (s *Server) validateMembership(ctx context.Context, request any) error {
+	if s.membership == nil {
+		return nil
+	}
+	scoped, ok := request.(federateScopedRequest)
+	if !ok {
+		return nil
+	}
+	return errToStatus(ctx, s.membership.ValidateMember(
+		core.FederationName(scoped.GetFederationName()),
+		core.FederateHandle(scoped.GetFederateHandle()),
+	))
+}
+
+func (s *Server) acquireMembership(ctx context.Context, request any) (func(), error) {
+	if s.membership == nil {
+		return nil, nil
+	}
+	scoped, ok := request.(federateScopedRequest)
+	if !ok {
+		return nil, nil
+	}
+	if guard, ok := s.membership.(core.FederationMembershipGuard); ok {
+		release, err := guard.AcquireMember(
+			core.FederationName(scoped.GetFederationName()),
+			core.FederateHandle(scoped.GetFederateHandle()),
+		)
+		return release, errToStatus(ctx, err)
+	}
+	return nil, s.validateMembership(ctx, request)
+}
+
+// UnaryMembershipInterceptor rejects stale, forged, and resigned handles
+// before any service manager can create or mutate federation-scoped state.
+func (s *Server) UnaryMembershipInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		// Resign takes the exclusive side of the same operation gate inside the
+		// federation manager after validating the action and membership.
+		if info.FullMethod == "/rti.v1.FederationService/ResignFederation" ||
+			// This MOM field is the lookup target, not the calling federate. The
+			// request has no caller handle and is read-only.
+			info.FullMethod == "/rti.v1.MomService/QueryFederateAttributes" {
+			return handler(ctx, req)
+		}
+		release, err := s.acquireMembership(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if release != nil {
+			defer release()
+		}
+		return handler(ctx, req)
+	}
+}
+
+type membershipServerStream struct {
+	grpc.ServerStream
+	server          *Server
+	interaction     bool
+	handshakePassed bool
+	currentRelease  func()
+}
+
+func (s *membershipServerStream) releaseCurrent() {
+	if s.currentRelease != nil {
+		s.currentRelease()
+		s.currentRelease = nil
+	}
+}
+
+func (s *membershipServerStream) RecvMsg(message any) error {
+	// A protocol handler normally releases on its ACK SendMsg. If it advances
+	// without one, the previous mutation is nevertheless complete at this next
+	// receive boundary.
+	s.releaseCurrent()
+	if err := s.ServerStream.RecvMsg(message); err != nil {
+		return err
+	}
+	if s.interaction && !s.handshakePassed {
+		s.handshakePassed = true
+		if scoped, ok := message.(federateScopedRequest); ok &&
+			scoped.GetFederationName() == "" && scoped.GetFederateHandle() == 0 {
+			return nil
+		}
+	}
+	if !s.interaction {
+		return s.server.validateMembership(s.Context(), message)
+	}
+	release, err := s.server.acquireMembership(s.Context(), message)
+	if err != nil {
+		return err
+	}
+	s.currentRelease = release
+	return nil
+}
+
+func (s *membershipServerStream) SendMsg(message any) error {
+	err := s.ServerStream.SendMsg(message)
+	s.releaseCurrent()
+	return err
+}
+
+// StreamMembershipInterceptor validates the initial Events request and every
+// persistent interaction message. Only the protocol's empty capability
+// handshake is exempt.
+func (s *Server) StreamMembershipInterceptor() grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		wrapped := &membershipServerStream{
+			ServerStream: stream,
+			server:       s,
+			interaction:  info.FullMethod == interactionStreamMethod,
+		}
+		defer wrapped.releaseCurrent()
+		return handler(srv, wrapped)
+	}
+}
+
 // Register attaches the service handlers to the given gRPC server. The
 // argument is typed as `any` at the contract layer (matches doc.go
 // frozen-shape) and asserted to grpc.ServiceRegistrar at runtime.
@@ -249,6 +392,9 @@ func (s *Server) Register(grpcServer any) error {
 	}
 	if impl, ok := any(s.objService).(rtiv1.ObjectServiceServer); ok && impl != nil {
 		rtiv1.RegisterObjectServiceServer(gs, impl)
+		if s.interactionStreamEnabled {
+			gs.RegisterService(&interactionStreamServiceDescription, &interactionStreamHandler{objects: s.objService})
+		}
 	}
 	if impl, ok := any(s.streamService).(rtiv1.StreamServiceServer); ok && impl != nil {
 		rtiv1.RegisterStreamServiceServer(gs, impl)

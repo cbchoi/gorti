@@ -144,6 +144,20 @@ class SavepointClient:
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 
+    async def abort_federation_save(self) -> None:
+        """Abort the active federation save as this joined federate."""
+        from rti.v1 import common_pb2, savepoint_pb2
+
+        req = savepoint_pb2.AbortFederationSaveRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+        )
+        try:
+            await self._stub.AbortFederationSave(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
     async def query_save_state(self, label: str) -> SaveState:
         """§4.11 — return the current save state for (federation, label)."""
         from rti.v1 import common_pb2, savepoint_pb2
@@ -187,6 +201,20 @@ class SavepointClient:
         )
         try:
             await self._stub.FederateRestoreComplete(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+
+    async def abort_federation_restore(self) -> None:
+        """Abort the active federation restore as this joined federate."""
+        from rti.v1 import common_pb2, savepoint_pb2
+
+        req = savepoint_pb2.AbortFederationRestoreRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+        )
+        try:
+            await self._stub.AbortFederationRestore(req)
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 

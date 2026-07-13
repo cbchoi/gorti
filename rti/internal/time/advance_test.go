@@ -71,13 +71,11 @@ func TestDecideGrant_TAR_HoldsBelowRequested_GrantsAtRequested(t *testing.T) {
 	if d.fire {
 		t.Errorf("TAR LBTS<req: fired %+v, want hold (§8.10 grant only at requested time)", d)
 	}
-	// LBTS == req: inclusive full grant at the requested time. The
-	// inclusive boundary preserves the zero-lookahead peer lockstep
-	// (two la=0 federates both TAR(t) → LBTS == t → both grant); see
-	// AdvanceMode.inclusiveLBTS.
+	// LBTS == req: TAR holds because a regulating peer at the boundary
+	// may still send a timestamp-equal message. TARA is inclusive.
 	d = decideGrant(ModeTAR, 0, 5, 5, false, 0, false)
-	if !d.fire || d.time != core.LogicalTime(5) || !d.clearPending {
-		t.Errorf("TAR LBTS==req: %+v, want fire@5 clear (inclusive full grant)", d)
+	if d.fire {
+		t.Errorf("TAR LBTS==req: %+v, want hold (strict boundary)", d)
 	}
 }
 

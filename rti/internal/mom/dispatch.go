@@ -35,12 +35,12 @@ import (
 const HLAmanagerPrefix = "HLAmanager."
 
 // Handler is the per-class entry point for an HLAmanager interaction.
-// ``params`` is the federate-supplied (parameter handle → encoded bytes)
+// “params“ is the federate-supplied (parameter handle → encoded bytes)
 // map, identical to what fanoutReceive would pass to subscribers.
 //
 // Handlers are responsible for ACK / response: most HLArequest*
 // interactions emit an HLAreport* response back to the sender via the
-// returned ``response`` slice. Empty response is OK — fire-and-forget
+// returned “response“ slice. Empty response is OK — fire-and-forget
 // HLAadjust.* interactions (HLAsetSwitches) return nil.
 type Handler func(
 	ctx context.Context,
@@ -62,7 +62,7 @@ type DispatchContext struct {
 
 // ResponseInteraction is one HLAreport* response the handler wants
 // the dispatcher to emit back to the sender. The dispatcher resolves
-// the FOM handle of ``ClassName`` and produces an outbound interaction
+// the FOM handle of “ClassName“ and produces an outbound interaction
 // that fanoutReceive would have delivered.
 type ResponseInteraction struct {
 	ClassName string
@@ -78,7 +78,7 @@ type ResponseInteraction struct {
 // response actually reaches the wire. Nil emitter discards
 // responses (M20.3 default behavior).
 //
-// ``fom`` and ``fomNames`` are forwarded so the emitter can resolve
+// “fom“ and “fomNames“ are forwarded so the emitter can resolve
 // the response class name + parameter names to handles before
 // building the wire proto. Production wires this via cmd/rtid; the
 // recording emitter in tests just captures the name-keyed form.
@@ -101,7 +101,7 @@ type Dispatcher struct {
 }
 
 // NewDispatcher wires the default M20.3+ handler catalog.
-// ``mom`` is captured so handlers can mutate MOM state (switch
+// “mom“ is captured so handlers can mutate MOM state (switch
 // updates, etc.). Wave-by-wave handlers are registered in the M20
 // sub-milestones.
 func NewDispatcher(mom *Manager) *Dispatcher {
@@ -133,7 +133,7 @@ func (d *Dispatcher) Register(className string, h Handler) {
 	d.handlers[className] = h
 }
 
-// Lookup returns the handler for ``className`` and whether one is
+// Lookup returns the handler for “className“ and whether one is
 // registered. Used by object.Registry's send path to decide between
 // dispatch and fallback fanout.
 func (d *Dispatcher) Lookup(className string) (Handler, bool) {
@@ -143,7 +143,7 @@ func (d *Dispatcher) Lookup(className string) (Handler, bool) {
 	return h, ok
 }
 
-// IsManagerClass reports whether ``className`` is in the HLAmanager
+// IsManagerClass reports whether “className“ is in the HLAmanager
 // subtree. Cheap prefix check; callers gate the handler lookup
 // behind this to avoid touching the map on every interaction.
 func (d *Dispatcher) IsManagerClass(className string) bool {

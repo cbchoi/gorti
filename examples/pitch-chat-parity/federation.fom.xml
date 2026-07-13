@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>gorti Pitch Chat Parity FOM</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <description>Independent FOM for the observable Pitch Chat contract.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Participant</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>Name</name>
+          <dataType>HLAunicodeString</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>PublishSubscribe</sharing>
+      <interactionClass>
+        <name>Communication</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>Receive</order>
+        <parameter>
+          <name>Message</name>
+          <dataType>HLAunicodeString</dataType>
+        </parameter>
+        <parameter>
+          <name>Sender</name>
+          <dataType>HLAunicodeString</dataType>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+</objectModel>

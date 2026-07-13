@@ -51,10 +51,13 @@ type EventLogReader interface {
 
 // EventLogHeader summarizes file-level metadata.
 type EventLogHeader struct {
-	Magic       [8]byte
-	Version     uint32
-	Federation  FederationName
+	Magic      [8]byte
+	Version    uint32
+	Federation FederationName
+	// CreatedAtNs is populated only when decoding legacy version-1 logs.
 	CreatedAtNs uint64
-	Seed        uint64
-	Mode        Mode
+	// Generation identifies the federation execution in version-2 logs.
+	Generation uint64
+	Seed       uint64
+	Mode       Mode
 }

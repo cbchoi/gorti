@@ -111,22 +111,12 @@ func (m AdvanceMode) allowsIncrementalGrant() bool {
 
 // inclusiveLBTS reports whether the mode's full-grant predicate is
 // `LBTS >= requestedTime` (true) versus `LBTS > requestedTime` (false).
-// The "Available" variants and FQR (cut-1 simplification) use inclusive;
-// NER uses exclusive.
-//
-// M37 EB-5 — TAR moved from exclusive to inclusive when its
-// incremental-grant-at-LBTS path was removed (see
-// allowsIncrementalGrant): §8.10 grants must land at EXACTLY the
-// requested time, and the inclusive boundary preserves the
-// zero-lookahead peer lockstep (two la=0 federates both TAR(t) →
-// LBTS == t → both grant) that the incremental path used to service.
-// Cut-3 simplification: this collapses the TAR/TARA grant-boundary
-// distinction; distinguishing them properly needs open/closed LBTS
-// bounds (a message at exactly LBTS from a nonzero-lookahead pending
-// peer remains possible), tracked as a follow-up alongside the
-// zero-lookahead strictly-greater send rule.
+// The Available variants and FQR use the inclusive boundary. NER and
+// TAR are strict because a regulating peer whose lower bound equals the
+// request may still legally send a timestamp-equal message; granting at
+// equality can overtake that message.
 func (m AdvanceMode) inclusiveLBTS() bool {
-	return m == ModeNMRA || m == ModeTAR || m == ModeTARA || m == ModeFQR
+	return m == ModeNMRA || m == ModeTARA || m == ModeFQR
 }
 
 // grantDecision is the outcome of evaluating one pending request against

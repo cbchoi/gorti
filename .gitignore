@@ -14,6 +14,8 @@ cppsdk/_generated/
 # C++ SDK build artifacts (CMake out-of-source builds)
 cppsdk/build/
 cppsdk/build-*/
+cppsdk/CMakeUserPresets.json
+cppsdk/*.cmake
 
 # Python
 __pycache__/
@@ -42,9 +44,14 @@ Thumbs.db
 # Project-local
 eventlogs/
 *.local.yaml
+.env
+.env.*
+*.pem
+*.key
 
-# Local toolchain + scratch caches. Never commit — they balloon the repo and
+# Local toolchain + scratch caches. Never commit; they balloon the repo and
 # are reproducible from CI.
+.cache/
 .tools/
 .tmp/
 
@@ -57,6 +64,13 @@ docs/reports/perf/*.prof
 
 # MkDocs build output (Read the Docs builds remotely; locally `mkdocs serve` is preferred).
 /site/
+/.docs-venv/
 
-# Local sandbox tooling — Dockerfile.codex etc. Per-machine; never committed.
+# Local verification and runtime state.
+/$coverage
+/Testing/
+/gorti-saves/
+/verification/fair-comparison/launchers.local.json
+
+# Local sandbox tooling (Dockerfile.codex, etc.). Per-machine; never committed.
 docker/

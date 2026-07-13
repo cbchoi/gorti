@@ -20,6 +20,56 @@ implementation.
 - `tests/spec/m4/` — orchestrator-frozen specification tests
 - `tests/test_*.py` — agent-owned unit tests
 
+## Asynchronous OM extension
+
+`Rti1516eAmbassador` keeps its synchronous IEEE-shaped methods unchanged and
+also exposes an opt-in gorti extension for pipelined object management:
+
+```python
+amb.setAsyncOperationLimit(16)
+update = amb.updateAttributeValuesAsync(object_handle, attributes, timestamp=t)
+interaction = amb.sendInteractionAsync(interaction_class, parameters, timestamp=t)
+amb.flushAsyncOperations()
+
+update.result()
+interaction.result()
+amb.timeAdvanceRequest(t)
+```
+
+Paired federates can opt into non-blocking TAR transport admission:
+
+```python
+producer_tar = producer.timeAdvanceRequestAsync(t)
+consumer_tar = consumer.timeAdvanceRequestAsync(t)
+producer_tar.result()
+consumer_tar.result()
+producer.flushAsyncOperations()
+consumer.flushAsyncOperations()
+```
+
+This only overlaps transport admission. The normal `timeAdvanceGrant` callback
+still determines when logical-time advance completes. Repeated A/B measurements
+showed lower TAR admission latency but no material end-to-end grant improvement,
+so the synchronous IEEE-shaped method remains the default.
+
+The limit bounds accepted but unfinished RPCs. `flushAsyncOperations()` is a
+submission barrier: it waits for every operation in order, observes all
+results, and raises the first translated exception. Canceling the returned
+observer Future does not cancel a mutating RPC whose commit status may be
+unknown.
+
+All time-advance primitives and synchronous OM lifecycle operations flush the
+current generation before issuing their dependent request. Separate unary
+RPCs may still complete in a different order, so use a limit of `1` for
+repeated updates to the same object, update/delete dependencies, or
+byte-deterministic event-log ordering.
+
+For immediate-callback workloads, call `setDirectCallbackDelivery(True)`
+before joining to bypass the intermediate asyncio queue and pump task. Stream
+order and callback enable/disable semantics are preserved; unsupported
+transports retain queued delivery. Because a slow callback then directly
+backpressures stream reads, queued delivery remains the default.
+
 ## Pre-dispatch state
 
 This is the orchestrator-frozen pre-work. All public-API stubs raise

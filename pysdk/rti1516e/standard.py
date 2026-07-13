@@ -19,9 +19,11 @@ the event-pump task that drains ``Federate.events()``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import threading
-from concurrent.futures import Future
+from collections.abc import Callable, Coroutine
+from concurrent.futures import Future, InvalidStateError
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from rti1516e import _transport
@@ -152,11 +154,25 @@ class Rti1516eAmbassador:
         self._federate_cm: _FederateContextManager | None = None
         self._federate: Federate | None = None
         self._event_pump_task: Future[None] | None = None
+        self._direct_callback_delivery = False
+        self._direct_event_sink_installed = False
+        self._async_operations_lock = threading.Lock()
+        self._async_operations_changed = threading.Condition(self._async_operations_lock)
+        self._async_submission_gate = threading.RLock()
+        self._async_operations: list[Future[Any]] = []
+        self._async_inflight_count = 0
+        self._async_operation_limit = 64
+        self._async_ordering_barrier_pending = False
+        self._async_closing = False
         self._callback_target: Rti1516eAmbassador = self
         # M26 Phase E — evokeCallback callback-fired counter. Bumped
         # exactly once per dispatched event by _pump_events; read by
         # evokeCallback to compute its bool return.
         self._callback_fired_count: int = 0
+        # HLA_IMMEDIATE callbacks can land just before an evoke call samples
+        # the counter. Retain the last reported count so that race is observed
+        # once by the next evoke call instead of being lost.
+        self._callback_observed_count: int = 0
         # M27 Phase C — §10.4 callback enable/disable. When False,
         # _dispatch_event buffers events to self._callback_buffer
         # instead of firing override slots; enableCallbacks drains
@@ -190,6 +206,8 @@ class Rti1516eAmbassador:
         # asyncio work runs there; the caller stays sync.
         self._callback_target = callback_target if callback_target is not None else self
         self._url = url
+        with self._async_operations_changed:
+            self._async_closing = False
         self._start_loop()
         connection = RtiConnection.connect(url)
         self._connection = self._run(connection.__aenter__())
@@ -197,11 +215,22 @@ class Rti1516eAmbassador:
 
     def disconnect(self) -> None:
         """Tear down the connection. Idempotent."""
-        if self._connection is not None and self._connection_cm_open:
-            self._run(self._connection.__aexit__(None, None, None))
-            self._connection_cm_open = False
-        self._connection = None
-        self._stop_loop()
+        pending_error: BaseException | None = None
+        with self._async_submission_gate:
+            with self._async_operations_changed:
+                self._async_closing = True
+                self._async_operations_changed.notify_all()
+            try:
+                self._flush_async_operations_locked()
+            except BaseException as exc:  # cleanup must still close the channel
+                pending_error = exc
+            if self._connection is not None and self._connection_cm_open:
+                self._run(self._connection.__aexit__(None, None, None))
+                self._connection_cm_open = False
+            self._connection = None
+            self._stop_loop()
+        if pending_error is not None:
+            raise pending_error
 
     def createFederationExecution(self, name: str, fom_modules: list[str]) -> None:  # noqa: N802
         """§4.5 — create the federation execution.
@@ -278,10 +307,28 @@ class Rti1516eAmbassador:
         cm = self._connection.join_federation(spec, federate_name=federate_name)
         self._federate_cm = cm
         self._federate = self._run(cm.__aenter__())
-        # Start draining events into the user's callbacks.
-        self._event_pump_task = asyncio.run_coroutine_threadsafe(
-            self._pump_events(), self._loop_required()
-        )
+        if self._direct_callback_delivery and self._run(
+            self._federate.set_event_sink(self._dispatch_event)
+        ):
+            self._direct_event_sink_installed = True
+        else:
+            # Start draining events into the user's callbacks.
+            self._event_pump_task = asyncio.run_coroutine_threadsafe(
+                self._pump_events(), self._loop_required()
+            )
+
+    def setDirectCallbackDelivery(self, enabled: bool) -> None:  # noqa: N802
+        """Select direct stream-to-callback delivery before joining.
+
+        Direct delivery removes the intermediate asyncio queue and pump task.
+        The callback still runs on the ambassador loop and preserves stream
+        order. Transports without sink support retain the queue fallback.
+        """
+        if not isinstance(enabled, bool):
+            raise TypeError("direct callback delivery requires a bool")
+        if self._federate is not None:
+            raise RuntimeError("direct callback delivery must be set before joining")
+        self._direct_callback_delivery = enabled
 
     def resignFederationExecution(  # noqa: N802
         self, action: str = "UNCONDITIONALLY_DIVEST_ATTRIBUTES"
@@ -300,14 +347,25 @@ class Rti1516eAmbassador:
             raise ValueError(
                 f"invalid resign action {action!r}; expected one of: {valid}"
             )
-        if self._event_pump_task is not None:
-            self._event_pump_task.cancel()
-            self._event_pump_task = None
-        if self._federate_cm is not None:
-            self._federate_cm.resign_action = action
-            self._run(self._federate_cm.__aexit__(None, None, None))
-            self._federate_cm = None
-        self._federate = None
+        pending_error: BaseException | None = None
+        with self._async_submission_gate:
+            try:
+                self._flush_async_operations_locked()
+            except BaseException as exc:
+                pending_error = exc
+            if self._event_pump_task is not None:
+                self._event_pump_task.cancel()
+                self._event_pump_task = None
+            if self._direct_event_sink_installed and self._federate is not None:
+                self._run(self._federate.set_event_sink(None))
+                self._direct_event_sink_installed = False
+            if self._federate_cm is not None:
+                self._federate_cm.resign_action = action
+                self._run(self._federate_cm.__aexit__(None, None, None))
+                self._federate_cm = None
+            self._federate = None
+        if pending_error is not None:
+            raise pending_error
 
     # --- Declaration management ---
 
@@ -342,8 +400,10 @@ class Rti1516eAmbassador:
         """M27 Phase B: ``class_name`` accepts ``int`` (Pitch-style FOM
         handle) or ``str`` (FOM name). The parameter is still named
         ``class_name`` for source-compat with pre-M27 callers."""
-        result = self._run(
-            self._fed().register_object_instance(class_name, instance_name=instance_name)
+        result = self._run_after_async_barrier(
+            lambda: self._fed().register_object_instance(
+                class_name, instance_name=instance_name
+            )
         )
         return ObjectInstanceHandle(result)
 
@@ -355,8 +415,33 @@ class Rti1516eAmbassador:
     ) -> None:
         """M27 Phase B: ``values`` dict keys accept ``int`` (Pitch-style
         attribute handle) or ``str`` (FOM attribute name)."""
-        self._run(
-            self._fed().update_attributes(object_handle, dict(values), timestamp=timestamp)
+        copied_values = dict(values)
+        self._run_after_async_barrier(
+            lambda: self._fed().update_attributes(
+                object_handle, copied_values, timestamp=timestamp
+            )
+        )
+
+    def updateAttributeValuesAsync(  # noqa: N802
+        self,
+        object_handle: ObjectInstanceRef,
+        values: AttributeValueDict,
+        timestamp: float | None = None,
+    ) -> Future[None]:
+        """Submit an attribute update without blocking the calling thread.
+
+        This is a gorti extension, not an IEEE 1516.1 method. Submitted
+        operations are bounded by ``setAsyncOperationLimit`` and must be
+        observed through the returned Future or ``flushAsyncOperations``.
+        """
+        copied_values = dict(values)
+        return cast(
+            "Future[None]",
+            self._submit_async_operation(
+                lambda: self._fed().update_attributes(
+                    object_handle, copied_values, timestamp=timestamp
+                )
+            ),
         )
 
     def sendInteraction(  # noqa: N802
@@ -367,8 +452,33 @@ class Rti1516eAmbassador:
     ) -> None:
         """M27 Phase B: ``class_name`` and ``parameters`` dict keys
         accept ``int`` (handle) or ``str`` (FOM name)."""
-        self._run(
-            self._fed().send_interaction(class_name, dict(parameters), timestamp=timestamp)
+        copied_parameters = dict(parameters)
+        self._run_after_async_barrier(
+            lambda: self._fed().send_interaction(
+                class_name, copied_parameters, timestamp=timestamp
+            )
+        )
+
+    def sendInteractionAsync(  # noqa: N802
+        self,
+        class_name: InteractionClassRef,
+        parameters: ParameterValueDict,
+        timestamp: float | None = None,
+    ) -> Future[None]:
+        """Submit an interaction without blocking the calling thread.
+
+        Operations submitted on one ambassador may execute concurrently. Use
+        ``flushAsyncOperations`` before a dependent call when cross-operation
+        completion order matters.
+        """
+        copied_parameters = dict(parameters)
+        return cast(
+            "Future[None]",
+            self._submit_async_operation(
+                lambda: self._fed().send_interaction(
+                    class_name, copied_parameters, timestamp=timestamp
+                )
+            ),
         )
 
     # --- Time management ---
@@ -389,19 +499,76 @@ class Rti1516eAmbassador:
         self._run(self._fed().modify_lookahead(lookahead))
 
     def nextMessageRequest(self, time: float) -> None:  # noqa: N802
-        self._run(self._fed().next_message_request(time))
+        self._run_after_async_barrier(lambda: self._fed().next_message_request(time))
 
     def nextMessageRequestAvailable(self, time: float) -> None:  # noqa: N802
-        self._run(self._fed().next_message_request_available(time))
+        self._run_after_async_barrier(
+            lambda: self._fed().next_message_request_available(time)
+        )
 
     def timeAdvanceRequest(self, time: float) -> None:  # noqa: N802
-        self._run(self._fed().time_advance_request(time))
+        self._run_after_async_barrier(lambda: self._fed().time_advance_request(time))
+
+    def timeAdvanceRequestAsync(self, time: float) -> Future[Any]:  # noqa: N802
+        """Submit TAR without blocking the caller on the transport round trip.
+
+        This extension preserves call ordering by draining earlier asynchronous
+        OM work before TAR is submitted. Later asynchronous work waits for TAR
+        acceptance, and dependent synchronous calls retain their existing
+        implicit flush barrier.
+        """
+        with self._async_submission_gate:
+            self._flush_async_operations_locked()
+            future = self._submit_async_operation(
+                lambda: self._fed().time_advance_request(time)
+            )
+            self._async_ordering_barrier_pending = True
+            return future
+
+    def setAsyncOperationLimit(self, limit: int) -> None:  # noqa: N802
+        """Set the maximum number of unflushed asynchronous operations."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError("async operation limit must be a positive integer")
+        with self._async_submission_gate, self._async_operations_changed:
+            if self._async_inflight_count or self._async_operations:
+                raise RuntimeError("async operation limit requires an empty generation")
+            self._async_operation_limit = limit
+
+    def flushAsyncOperations(self) -> None:  # noqa: N802
+        """Wait for all submitted extension operations and raise their first error.
+
+        Every operation is observed before the first exception is re-raised, so
+        a failed update cannot leave later submitted work silently abandoned.
+        """
+        with self._async_submission_gate:
+            self._flush_async_operations_locked()
+
+    def _flush_async_operations_locked(self) -> None:
+        with self._async_operations_changed:
+            pending = self._async_operations
+            self._async_operations = []
+        if pending and threading.current_thread() is self._loop_thread:
+            with self._async_operations_changed:
+                self._async_operations = pending + self._async_operations
+            raise RuntimeError("cannot flush async operations from the ambassador loop")
+        self._async_ordering_barrier_pending = False
+        first_error: BaseException | None = None
+        for future in pending:
+            try:
+                future.result()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
     def timeAdvanceRequestAvailable(self, time: float) -> None:  # noqa: N802
-        self._run(self._fed().time_advance_request_available(time))
+        self._run_after_async_barrier(
+            lambda: self._fed().time_advance_request_available(time)
+        )
 
     def flushQueueRequest(self, time: float) -> None:  # noqa: N802
-        self._run(self._fed().flush_queue_request(time))
+        self._run_after_async_barrier(lambda: self._fed().flush_queue_request(time))
 
     def queryLogicalTime(self) -> float:  # noqa: N802
         return float(self._run(self._fed().query_logical_time()))
@@ -426,10 +593,14 @@ class Rti1516eAmbassador:
         tag: bytes = b"",
         timestamp: float | None = None,
     ) -> None:
-        self._run(self._fed().delete_object_instance(object_handle, tag, timestamp))
+        self._run_after_async_barrier(
+            lambda: self._fed().delete_object_instance(object_handle, tag, timestamp)
+        )
 
     def localDeleteObjectInstance(self, object_handle: ObjectInstanceRef) -> None:  # noqa: N802
-        self._run(self._fed().local_delete_object_instance(object_handle))
+        self._run_after_async_barrier(
+            lambda: self._fed().local_delete_object_instance(object_handle)
+        )
 
     def requestAttributeValueUpdate(  # noqa: N802
         self,
@@ -998,7 +1169,8 @@ class Rti1516eAmbassador:
     # HLA_EVOKED-style `evokeCallback` API. Cheap implementation: yield
     # to the asyncio loop for approxMinTime seconds (up to approxMaxTime
     # if no callback has fired by then), and report whether any callback
-    # was dispatched in the window. This is observable parity for
+    # was dispatched since the previous evoke or in the current window.
+    # This is observable parity for
     # federate ports that drive their main loop via evoke, even though
     # the strict §10.4 HLA_EVOKED semantics (buffered drain, no
     # immediate dispatch) are not enforced. See docs/PITCH_PARITY.md.
@@ -1008,7 +1180,8 @@ class Rti1516eAmbassador:
     ) -> bool:
         """§10.4 — yield to the callback pump for ≥ approx_min_time seconds.
 
-        Returns True if any callback fired during the window. If
+        Returns True if an unreported callback fired before or during the
+        window. If
         approx_max_time is None, the wait is exactly approx_min_time
         and the return value reflects whether a callback fired in
         that interval.
@@ -1017,7 +1190,7 @@ class Rti1516eAmbassador:
         gorti is HLA_IMMEDIATE-flavored. This method observes
         firings within the window for spec-test compatibility.
         """
-        start_count = self._callback_fired_count
+        observed_count = self._callback_observed_count
         deadline_min = approx_min_time
         deadline_max = approx_max_time if approx_max_time is not None else approx_min_time
         if deadline_max < deadline_min:
@@ -1029,7 +1202,8 @@ class Rti1516eAmbassador:
             # elapsed (matches Pitch's "deliver promptly but respect
             # the floor" intent).
             await asyncio.sleep(deadline_min)
-            if self._callback_fired_count != start_count:
+            if self._callback_fired_count != observed_count:
+                self._callback_observed_count = self._callback_fired_count
                 return True
             # No callback yet — wait up to approx_max_time for one.
             remaining = deadline_max - deadline_min
@@ -1042,7 +1216,8 @@ class Rti1516eAmbassador:
             tick = min(0.005, remaining)
             while slept < remaining:
                 await asyncio.sleep(tick)
-                if self._callback_fired_count != start_count:
+                if self._callback_fired_count != observed_count:
+                    self._callback_observed_count = self._callback_fired_count
                     return True
                 slept += tick
             return False
@@ -1306,6 +1481,64 @@ class Rti1516eAmbassador:
         loop = self._loop_required()
         future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop)
         return future.result()
+
+    def _run_after_async_barrier(
+        self, factory: Callable[[], Coroutine[Any, Any, Any]]
+    ) -> Any:
+        with self._async_submission_gate:
+            self._flush_async_operations_locked()
+            return self._run(factory())
+
+    def _submit_async_operation(
+        self, factory: Callable[[], Coroutine[Any, Any, Any]]
+    ) -> Future[Any]:
+        """Submit one extension operation with bounded caller backpressure."""
+        with self._async_submission_gate:
+            if self._async_ordering_barrier_pending:
+                self._flush_async_operations_locked()
+            loop = self._loop_required()
+            with self._async_operations_changed:
+                while self._async_inflight_count >= self._async_operation_limit:
+                    if self._async_closing:
+                        raise RuntimeError("ambassador is disconnecting")
+                    if threading.current_thread() is self._loop_thread:
+                        raise RuntimeError(
+                            "async backpressure cannot block the ambassador loop"
+                        )
+                    self._async_operations_changed.wait()
+                if self._async_closing:
+                    raise RuntimeError("ambassador is disconnecting")
+                coroutine = factory()
+                try:
+                    internal = asyncio.run_coroutine_threadsafe(coroutine, loop)
+                except BaseException:
+                    coroutine.close()
+                    raise
+                proxy: Future[Any] = Future()
+                self._async_operations.append(internal)
+                self._async_inflight_count += 1
+            internal.add_done_callback(
+                lambda completed: self._async_operation_finished(completed, proxy)
+            )
+            return proxy
+
+    def _async_operation_finished(
+        self, internal: Future[Any], proxy: Future[Any]
+    ) -> None:
+        try:
+            result = internal.result()
+        except BaseException as exc:
+            if not proxy.cancelled():
+                with contextlib.suppress(InvalidStateError):
+                    proxy.set_exception(exc)
+        else:
+            if not proxy.cancelled():
+                with contextlib.suppress(InvalidStateError):
+                    proxy.set_result(result)
+        finally:
+            with self._async_operations_changed:
+                self._async_inflight_count -= 1
+                self._async_operations_changed.notify_all()
 
     def _fed(self) -> Federate:
         if self._federate is None:

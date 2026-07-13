@@ -133,6 +133,13 @@ func (m *Manager) stateForLocked(fed core.FederationName) *federationState {
 	return st
 }
 
+// OnFederationDestroyed drops all synchronization points for fed.
+func (m *Manager) OnFederationDestroyed(fed core.FederationName) {
+	m.mu.Lock()
+	delete(m.fed, fed)
+	m.mu.Unlock()
+}
+
 // Register implements IEEE 1516.1-2010 §4.6 — registerFederationSynchronizationPoint.
 //
 // label is the sync-point identifier. tag is opaque user data echoed in

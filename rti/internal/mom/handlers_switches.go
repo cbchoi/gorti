@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	ClassFederationSetSwitches      = "HLAmanager.HLAfederation.HLAadjust.HLAsetSwitches"
-	ClassFederateSetSwitches        = "HLAmanager.HLAfederate.HLAadjust.HLAsetSwitches"
-	ClassSetServiceReporting        = "HLAmanager.HLAfederate.HLAadjust.HLAsetServiceReporting"
-	ClassSetExceptionReporting      = "HLAmanager.HLAfederate.HLAadjust.HLAsetExceptionReporting"
+	ClassFederationSetSwitches = "HLAmanager.HLAfederation.HLAadjust.HLAsetSwitches"
+	ClassFederateSetSwitches   = "HLAmanager.HLAfederate.HLAadjust.HLAsetSwitches"
+	ClassSetServiceReporting   = "HLAmanager.HLAfederate.HLAadjust.HLAsetServiceReporting"
+	ClassSetExceptionReporting = "HLAmanager.HLAfederate.HLAadjust.HLAsetExceptionReporting"
 )
 
 func registerSwitchHandlers(d *Dispatcher) {
@@ -162,4 +162,3 @@ func handleSetExceptionReporting(
 	}
 	return nil, nil
 }
-

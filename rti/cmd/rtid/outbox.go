@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
 	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
 )
 
@@ -18,7 +20,10 @@ import (
 // in-process harness; the production gRPC streaming loop is the
 // downstream consumer and benefits identically from amortized
 // channel ops.
-const defaultMultiBatchSize = 32
+const (
+	defaultMultiBatchSize = 32
+	maxMultiBatchSize     = 1024
+)
 
 // defaultMultiFlushInterval bounds the time an event may sit in a
 // per-recipient scratch slice before being flushed to the channel.
@@ -27,6 +32,26 @@ const defaultMultiBatchSize = 32
 // short enough that the wire-visible latency is dominated by the
 // channel send + gRPC frame cost, not the batching delay.
 const defaultMultiFlushInterval = 1 * time.Millisecond
+
+// resolveMultiOutboxConfig applies production defaults to zero-valued
+// internal configuration and rejects values that cannot be used safely.
+// The explicit constructor remains permissive because tests use a zero
+// flush interval to disable its timer.
+func resolveMultiOutboxConfig(batchSize int, flushInterval time.Duration) (int, time.Duration, error) {
+	if batchSize == 0 {
+		batchSize = defaultMultiBatchSize
+	}
+	if flushInterval == 0 {
+		flushInterval = defaultMultiFlushInterval
+	}
+	if batchSize < 1 || batchSize > maxMultiBatchSize {
+		return 0, 0, fmt.Errorf("outbox batch size must be between 1 and %d (got %d)", maxMultiBatchSize, batchSize)
+	}
+	if flushInterval <= 0 {
+		return 0, 0, fmt.Errorf("outbox flush interval must be greater than zero (got %s)", flushInterval)
+	}
+	return batchSize, flushInterval, nil
+}
 
 // multiOutbox is the production implementation of both core.Outbox and
 // grpc.SubscribableOutbox. It maintains one bounded channel per
@@ -66,14 +91,14 @@ type multiRecipientState struct {
 	ch      chan []core.OutboundEvent
 	mu      sync.Mutex
 	scratch []core.OutboundEvent
+	closed  bool
 	// flushTimer schedules a deferred flush so events do not sit in
 	// scratch indefinitely under low-rate workloads. nil means no
 	// flush is pending; the first Send into an empty scratch arms it.
-	flushTimer *time.Timer
-	// dropsTotal counts events dropped because the batch channel was
-	// full at the moment Send / flushScratch tried to enqueue. Read by
-	// the AdminService Snapshot RPC; mutated only via atomic.AddUint64
-	// to avoid acquiring the recipient mutex on the overflow path.
+	flushTimer *flushTimerToken
+	// dropsTotal counts pending events that cannot be flushed during
+	// recipient shutdown. Live channel saturation is backpressured or
+	// explicitly rejected; timer flush does not discard accepted events.
 	// Phase 1 of the rtid-TUI plan (docs/rtid-tui.md): exposed as
 	// FederateSnapshot.drops_total. The accumulator is the count of
 	// batched events lost (each batch may carry up to batchSize
@@ -89,6 +114,10 @@ type multiRecipientState struct {
 	readerAttached bool
 }
 
+type flushTimerToken struct {
+	timer *time.Timer
+}
+
 // newMultiOutbox constructs an outbox where the per-federate batch
 // channel can buffer (eventCapacity / batchSize) batches. The argument
 // is named in event units so existing callers continue to document
@@ -102,8 +131,8 @@ func newMultiOutbox(eventCapacity int) *multiOutbox {
 // newMultiOutboxWithBatch is the explicit-knobs constructor. Tests use
 // it with batchSize=1 (no accumulation) and flushInterval=0 (no
 // deferred flush) to keep their per-event channel semantics identical
-// to the pre-batching design; production callers use newMultiOutbox
-// with the defaults.
+// to the pre-batching design; production callers pass values resolved
+// and validated by resolveMultiOutboxConfig.
 func newMultiOutboxWithBatch(eventCapacity, batchSize int, flushInterval time.Duration) *multiOutbox {
 	if batchSize < 1 {
 		batchSize = 1
@@ -126,73 +155,253 @@ func newMultiOutboxWithBatch(eventCapacity, batchSize int, flushInterval time.Du
 // on a full channel Send returns core.ErrFederateOverflow per the cut-1
 // contract.
 //
-// "No subscriber" is silently dropped — the federate may not have
-// established its outbound stream yet, which is a normal startup window
-// rather than a crash condition.
+// A missing or closed recipient returns ErrOutboxUnavailable. Bind is called
+// during join so the normal pre-stream startup window has bounded state.
 func (m *multiOutbox) Send(_ context.Context, fed core.FederationName, h core.FederateHandle, evt core.OutboundEvent) error {
 	subs := *m.subs.Load()
 	state, ok := subs[fedHandleKey{fed: fed, h: h}]
 	if !ok {
-		return nil
+		return fmt.Errorf("%w: federation %q federate %d", core.ErrOutboxUnavailable, fed, h)
 	}
 	state.mu.Lock()
+	if state.closed {
+		state.mu.Unlock()
+		return fmt.Errorf("%w: federation %q federate %d", core.ErrOutboxUnavailable, fed, h)
+	}
+	if m.availableLocked(state) < 1 {
+		state.mu.Unlock()
+		return fmt.Errorf("%w: federation %q federate %d", core.ErrFederateOverflow, fed, h)
+	}
 	wasEmpty := len(state.scratch) == 0
 	state.scratch = append(state.scratch, evt)
-	if len(state.scratch) < m.batchSize {
+	_, isTimeAdvanceGrant := evt.(*timepkg.TimeAdvanceGrant)
+	if len(state.scratch) < m.batchSize && !isTimeAdvanceGrant {
 		// Arm the deferred-flush timer when the first event lands in
 		// an empty scratch. It fires after flushInterval to bound the
 		// time low-rate events spend waiting for batchSize to fill.
-		if wasEmpty && m.flushInterval > 0 && state.flushTimer == nil {
-			state.flushTimer = time.AfterFunc(m.flushInterval, func() {
-				m.flushScratch(state)
-			})
+		if wasEmpty {
+			m.armFlushLocked(state)
 		}
 		state.mu.Unlock()
 		return nil
 	}
-	batch := state.scratch
-	state.scratch = make([]core.OutboundEvent, 0, m.batchSize)
-	if state.flushTimer != nil {
-		state.flushTimer.Stop()
-		state.flushTimer = nil
-	}
-	state.mu.Unlock()
 	select {
-	case state.ch <- batch:
+	case state.ch <- state.scratch:
+		state.scratch = make([]core.OutboundEvent, 0, m.batchSize)
+		if state.flushTimer != nil {
+			state.flushTimer.timer.Stop()
+			state.flushTimer = nil
+		}
+		state.mu.Unlock()
 		return nil
 	default:
-		// Per-recipient drop counter — atomic so we don't reacquire
-		// state.mu on the overflow path. The counter is in-event
-		// units (batched events lost), matching what the TUI's
-		// "drops_total" column reports.
-		atomic.AddUint64(&state.dropsTotal, uint64(len(batch)))
+		// The final element belongs to the current call and is rejected.
+		// Earlier elements were accepted by previous calls and remain owned.
+		state.scratch = state.scratch[:len(state.scratch)-1]
+		m.armFlushLocked(state)
+		state.mu.Unlock()
 		return fmt.Errorf("%w: federation %q federate %d", core.ErrFederateOverflow, fed, h)
 	}
 }
 
-// flushScratch is invoked by the deferred-flush timer. It hands any
-// pending scratch events to the recipient's channel. On a full
-// channel the batch is dropped silently — the production overflow
-// path is exercised only by Send (the synchronous path that returns
-// ErrFederateOverflow); a backlog in the timer-driven path means the
-// receiver is genuinely overwhelmed, and we'd rather lose a low-rate
-// flush than block the timer goroutine pool.
-func (m *multiOutbox) flushScratch(state *multiRecipientState) {
+// availableLocked returns conservative capacity in event units. Every queued
+// channel batch is charged as a full batch, so a short timer/grant batch can
+// reduce utilization but can never cause reservation overcommit.
+func (m *multiOutbox) availableLocked(state *multiRecipientState) int {
+	capacity := cap(state.ch)*m.batchSize + (m.batchSize - 1)
+	used := len(state.ch)*m.batchSize + len(state.scratch)
+	return capacity - used
+}
+
+type multiOutboxReservation struct {
+	mu         sync.Mutex
+	m          *multiOutbox
+	deliveries []core.OutboxDelivery
+	states     []*multiRecipientState
+	unique     []*multiRecipientState
+	done       bool
+}
+
+// Reserve locks recipient states in handle order and holds those locks until
+// Commit or Release. This is deliberately a short transaction spanning the
+// caller's write-ahead append: cancel/unbind and unrelated sends cannot consume
+// or invalidate capacity after admission succeeds.
+func (m *multiOutbox) Reserve(_ context.Context, fed core.FederationName, deliveries []core.OutboxDelivery) (core.OutboxReservation, error) {
+	if len(deliveries) == 0 {
+		return &multiOutboxReservation{m: m}, nil
+	}
+	recipients := make(map[core.FederateHandle]struct{}, len(deliveries))
+	for _, delivery := range deliveries {
+		recipients[delivery.Recipient] = struct{}{}
+	}
+	handles := make([]core.FederateHandle, 0, len(recipients))
+	for h := range recipients {
+		handles = append(handles, h)
+	}
+	sort.Slice(handles, func(i, j int) bool { return handles[i] < handles[j] })
+
+	subs := *m.subs.Load()
+	byHandle := make(map[core.FederateHandle]*multiRecipientState, len(handles))
+	unique := make([]*multiRecipientState, 0, len(handles))
+	for _, h := range handles {
+		state, ok := subs[fedHandleKey{fed: fed, h: h}]
+		if !ok {
+			for i := len(unique) - 1; i >= 0; i-- {
+				unique[i].mu.Unlock()
+			}
+			return nil, fmt.Errorf("%w: federation %q federate %d", core.ErrOutboxUnavailable, fed, h)
+		}
+		state.mu.Lock()
+		unique = append(unique, state)
+		byHandle[h] = state
+		if state.closed {
+			for i := len(unique) - 1; i >= 0; i-- {
+				unique[i].mu.Unlock()
+			}
+			return nil, fmt.Errorf("%w: federation %q federate %d", core.ErrOutboxUnavailable, fed, h)
+		}
+	}
+
+	// Simulate exact batching while the recipient locks exclude sends and
+	// timer flushes. Grants force short batches, so event-count arithmetic is
+	// insufficient for proving that Commit cannot overflow.
+	states := make([]*multiRecipientState, len(deliveries))
+	queued := make(map[*multiRecipientState]int, len(unique))
+	scratch := make(map[*multiRecipientState]int, len(unique))
+	for _, state := range unique {
+		queued[state] = len(state.ch)
+		scratch[state] = len(state.scratch)
+	}
+	for i, delivery := range deliveries {
+		state := byHandle[delivery.Recipient]
+		states[i] = state
+		scratch[state]++
+		_, isGrant := delivery.Event.(*timepkg.TimeAdvanceGrant)
+		if scratch[state] < m.batchSize && !isGrant {
+			continue
+		}
+		if queued[state] >= cap(state.ch) {
+			for j := len(unique) - 1; j >= 0; j-- {
+				unique[j].mu.Unlock()
+			}
+			return nil, fmt.Errorf("%w: federation %q federate %d", core.ErrFederateOverflow, fed, delivery.Recipient)
+		}
+		queued[state]++
+		scratch[state] = 0
+	}
+	owned := append([]core.OutboxDelivery(nil), deliveries...)
+	return &multiOutboxReservation{m: m, deliveries: owned, states: states, unique: unique}, nil
+}
+
+func (r *multiOutboxReservation) Commit() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.done {
+		return nil
+	}
+	for i, delivery := range r.deliveries {
+		state := r.states[i]
+		wasEmpty := len(state.scratch) == 0
+		state.scratch = append(state.scratch, delivery.Event)
+		_, isGrant := delivery.Event.(*timepkg.TimeAdvanceGrant)
+		if len(state.scratch) < r.m.batchSize && !isGrant {
+			if wasEmpty {
+				r.m.armFlushLocked(state)
+			}
+			continue
+		}
+		select {
+		case state.ch <- state.scratch:
+			state.scratch = make([]core.OutboundEvent, 0, r.m.batchSize)
+			if state.flushTimer != nil {
+				state.flushTimer.timer.Stop()
+				state.flushTimer = nil
+			}
+		default:
+			// Reserve's capacity calculation makes this unreachable unless an
+			// implementation invariant is broken. Keep the event owned in
+			// scratch and report the invariant failure without dropping it.
+			r.finishLocked()
+			return fmt.Errorf("outbox reservation commit: %w", core.ErrFederateOverflow)
+		}
+	}
+	r.finishLocked()
+	return nil
+}
+
+func (r *multiOutboxReservation) Release() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.done {
+		r.finishLocked()
+	}
+}
+
+func (r *multiOutboxReservation) finishLocked() {
+	if r.done {
+		return
+	}
+	for i := len(r.unique) - 1; i >= 0; i-- {
+		r.unique[i].mu.Unlock()
+	}
+	r.done = true
+}
+
+// armFlushLocked and flushScratch retain accepted events in scratch while the
+// bounded recipient channel is full. The timer retries without blocking its
+// goroutine or detaching the batch from recipient ordering.
+func (m *multiOutbox) armFlushLocked(state *multiRecipientState) {
+	if state.closed || len(state.scratch) == 0 || m.flushInterval <= 0 || state.flushTimer != nil {
+		return
+	}
+	token := &flushTimerToken{}
+	token.timer = time.AfterFunc(m.flushInterval, func() {
+		m.flushScratch(state, token)
+	})
+	state.flushTimer = token
+}
+
+func (m *multiOutbox) flushScratch(state *multiRecipientState, timer *flushTimerToken) {
 	state.mu.Lock()
+	if state.closed || state.flushTimer != timer {
+		state.mu.Unlock()
+		return
+	}
 	state.flushTimer = nil
 	if len(state.scratch) == 0 {
 		state.mu.Unlock()
 		return
 	}
-	batch := state.scratch
-	state.scratch = make([]core.OutboundEvent, 0, m.batchSize)
-	state.mu.Unlock()
 	select {
-	case state.ch <- batch:
+	case state.ch <- state.scratch:
+		state.scratch = make([]core.OutboundEvent, 0, m.batchSize)
 	default:
-		// Same counter as Send's overflow path.
-		atomic.AddUint64(&state.dropsTotal, uint64(len(batch)))
+		m.armFlushLocked(state)
 	}
+	state.mu.Unlock()
+}
+
+func (m *multiOutbox) closeRecipientState(state *multiRecipientState, flush bool) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.closed {
+		return
+	}
+	state.closed = true
+	state.readerAttached = false
+	if state.flushTimer != nil {
+		state.flushTimer.timer.Stop()
+		state.flushTimer = nil
+	}
+	if flush && len(state.scratch) > 0 {
+		select {
+		case state.ch <- state.scratch:
+		default:
+			atomic.AddUint64(&state.dropsTotal, uint64(len(state.scratch)))
+		}
+	}
+	state.scratch = nil
+	close(state.ch)
 }
 
 // Bind pre-creates the per-(fed, h) recipient state so events sent
@@ -236,18 +445,16 @@ func (m *multiOutbox) Bind(fed core.FederationName, h core.FederateHandle) {
 // manager's OnFederateResigned hook so a federate that joined but
 // never opened its Events stream still has its state cleaned up.
 //
-// Idempotent. Safe even when a Subscribe is currently active — the
-// cancel func from Subscribe stays in scope via the streamService
-// loop and runs its own cleanup; this Unbind just unmaps the state
-// from the table so a subsequent Bind for the same (fed, h) won't
-// collide. The buffered channel is left to be garbage-collected by
-// the still-running reader.
+// Idempotent. Safe when Subscribe is active: the state is unmapped and its
+// channel is closed under the recipient lock, terminating the reader. The
+// stream's later cancel call sees that the table entry is already gone.
 func (m *multiOutbox) Unbind(fed core.FederationName, h core.FederateHandle) {
 	key := fedHandleKey{fed: fed, h: h}
 	m.writeMu.Lock()
 	defer m.writeMu.Unlock()
 	current := *m.subs.Load()
-	if _, exists := current[key]; !exists {
+	state, exists := current[key]
+	if !exists {
 		return
 	}
 	next := make(map[fedHandleKey]*multiRecipientState, len(current)-1)
@@ -257,6 +464,28 @@ func (m *multiOutbox) Unbind(fed core.FederationName, h core.FederateHandle) {
 		}
 	}
 	m.subs.Store(&next)
+	m.closeRecipientState(state, false)
+}
+
+// UnbindFederation removes every recipient binding owned by fed, stops pending
+// timers, and closes active recipient channels.
+func (m *multiOutbox) UnbindFederation(fed core.FederationName) {
+	m.writeMu.Lock()
+	current := *m.subs.Load()
+	next := make(map[fedHandleKey]*multiRecipientState, len(current))
+	removed := make([]*multiRecipientState, 0)
+	for key, state := range current {
+		if key.fed == fed {
+			removed = append(removed, state)
+			continue
+		}
+		next[key] = state
+	}
+	m.subs.Store(&next)
+	m.writeMu.Unlock()
+	for _, state := range removed {
+		m.closeRecipientState(state, false)
+	}
 }
 
 // Subscribe implements grpc.SubscribableOutbox. Returns the read-side
@@ -331,24 +560,7 @@ func (m *multiOutbox) Subscribe(_ context.Context, fed core.FederationName, h co
 			// Final flush of any remaining scratch, then close. Done
 			// after the table mutation so the table is unblocked even
 			// if a slow receiver still holds the channel full.
-			state.mu.Lock()
-			state.readerAttached = false
-			if state.flushTimer != nil {
-				state.flushTimer.Stop()
-				state.flushTimer = nil
-			}
-			if len(state.scratch) > 0 {
-				final := state.scratch
-				state.scratch = nil
-				state.mu.Unlock()
-				select {
-				case state.ch <- final:
-				default:
-				}
-			} else {
-				state.mu.Unlock()
-			}
-			close(state.ch)
+			m.closeRecipientState(state, true)
 		})
 		return nil
 	}
@@ -387,3 +599,4 @@ func (m *multiOutbox) OutboxStats() []grpcsvc.OutboxStat {
 // without an import cycle (cmd/rtid imports transport/grpc to wire the
 // composed Server, and SubscribableOutbox lives in that package).
 var _ core.Outbox = (*multiOutbox)(nil)
+var _ core.ReservableOutbox = (*multiOutbox)(nil)

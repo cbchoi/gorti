@@ -81,6 +81,8 @@ async def run(
         if not isinstance(params, dict):
             continue
         wire = params.get("_payload")
+        if wire is None and len(params) == 1:
+            wire = next(iter(params.values()))
         if isinstance(wire, (bytes, bytearray)) and len(wire) == 4:
             received_seqs.append(int.from_bytes(wire, "big"))
 

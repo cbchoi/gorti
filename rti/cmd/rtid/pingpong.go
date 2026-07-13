@@ -280,10 +280,15 @@ func pingpongEventLog(cfg pingpongConfig, clock core.Clock) (core.EventLog, bool
 	if cfg.EventLog != nil {
 		return cfg.EventLog, false, nil
 	}
+	mode := cfg.FederationMode
+	if mode == core.ModeUnspecified {
+		mode = core.ModeVerbose
+	}
 	if cfg.LogDir != "" {
 		mw, err := eventlog.NewMultiplexWriter(eventlog.MultiplexOptions{
 			Clock: clock,
-			Mode:  core.ModeVerbose,
+			Mode:  mode,
+			Seed:  1,
 			Dir:   cfg.LogDir,
 		})
 		if err != nil {
@@ -293,7 +298,8 @@ func pingpongEventLog(cfg pingpongConfig, clock core.Clock) (core.EventLog, bool
 	}
 	mw, err := eventlog.NewMultiplexWriter(eventlog.MultiplexOptions{
 		Clock:   clock,
-		Mode:    core.ModeVerbose,
+		Mode:    mode,
+		Seed:    1,
 		Factory: pingpongDiscardFactory(clock),
 	})
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	gosync "sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
@@ -133,6 +134,13 @@ type Options struct {
 	// Production wires federation.Manager.ListMembers via cmd/rtid.
 	Roster func(core.FederationName) []core.FederationMember
 
+	// Generation and FOMSHA256 provide durable save-bundle provenance.
+	// Generation enables strict v2 storage and exact-generation restore.
+	// FOMSHA256 supplements that identity when available; restore validates it
+	// before applying any manager snapshot.
+	Generation func(core.FederationName) (uint64, bool)
+	FOMSHA256  func(core.FederationName) (string, bool)
+
 	// ManagerSnapshots is the keyed set of per-manager Marshalers /
 	// Unmarshalers (M13 thread C). Production cmd/rtid wires the
 	// four cut-2 service-group managers (sync, ownership, mom, ddm)
@@ -156,11 +164,37 @@ type Storage interface {
 	Exists(fed core.FederationName, label string) bool
 }
 
+// StorageKey is the durable identity of a generation-aware save bundle.
+// Generation zero is valid and remains distinct from legacy storage, which
+// continues to use Storage's (federation, label) methods.
+type StorageKey struct {
+	Federation core.FederationName
+	Generation uint64
+	Label      string
+}
+
+// BundleWriter publishes a completed bundle on Close. Abort discards an
+// incomplete write without making it visible to readers.
+type BundleWriter interface {
+	io.WriteCloser
+	Abort() error
+}
+
+// GenerationStorage isolates bundles by exact federation generation. A
+// Manager with Options.Generation configured requires this interface; legacy
+// Storage methods are used only when no generation resolver is configured.
+type GenerationStorage interface {
+	WriterFor(key StorageKey) (BundleWriter, error)
+	ReaderFor(key StorageKey) (io.ReadCloser, error)
+	ExistsFor(key StorageKey) bool
+}
+
 // ErrSaveBundleExists / ErrSaveBundleNotFound are storage-layer
 // sentinels separate from the M8/M11 core errors.
 var (
-	ErrSaveBundleExists   = errors.New("save bundle already exists for this label")
-	ErrSaveBundleNotFound = errors.New("save bundle not found")
+	ErrSaveBundleExists       = errors.New("save bundle already exists for this label")
+	ErrSaveBundleNotFound     = errors.New("save bundle not found")
+	ErrSaveBundleIncompatible = errors.New("save bundle is incompatible with the live federation")
 )
 
 // Manager orchestrates the save/restore protocol per federation.
@@ -195,13 +229,15 @@ type saveKey struct {
 
 // activeSave is the per-federation in-flight save state.
 type activeSave struct {
-	label    string
-	saveTime *core.LogicalTime
-	state    SaveState
-	required map[core.FederateHandle]struct{}
-	complete map[core.FederateHandle]struct{}
-	notComp  map[core.FederateHandle]struct{}
-	dynamic  bool
+	label      string
+	saveTime   *core.LogicalTime
+	state      SaveState
+	required   map[core.FederateHandle]struct{}
+	complete   map[core.FederateHandle]struct{}
+	notComp    map[core.FederateHandle]struct{}
+	dynamic    bool
+	generation *uint64
+	fomSHA256  string
 	// manifest snapshot taken at request-time — federate list captured
 	// for deterministic restore ordering.
 	federates []core.FederateHandle
@@ -225,6 +261,11 @@ func New(opts Options) (*Manager, error) {
 	if opts.BundleStore == nil {
 		return nil, errors.New("savepoint.New: Options.BundleStore is required")
 	}
+	if opts.Generation != nil {
+		if _, ok := opts.BundleStore.(GenerationStorage); !ok {
+			return nil, errors.New("savepoint.New: generation resolver requires generation-aware BundleStore")
+		}
+	}
 	return &Manager{
 		opts:             opts,
 		saves:            map[core.FederationName]*activeSave{},
@@ -232,6 +273,25 @@ func New(opts Options) (*Manager, error) {
 		completed:        map[saveKey]SaveState{},
 		completedRestore: map[saveKey]RestoreState{},
 	}, nil
+}
+
+// OnFederationDestroyed drops active and completed save/restore protocol
+// state. Persisted bundles remain owned by BundleStore and are not deleted.
+func (m *Manager) OnFederationDestroyed(fed core.FederationName) {
+	m.mu.Lock()
+	delete(m.saves, fed)
+	delete(m.restore, fed)
+	for key := range m.completed {
+		if key.fed == fed {
+			delete(m.completed, key)
+		}
+	}
+	for key := range m.completedRestore {
+		if key.fed == fed {
+			delete(m.completedRestore, key)
+		}
+	}
+	m.mu.Unlock()
 }
 
 // --- Save protocol (FR-SR-1, FR-SR-2) -------------------------------------
@@ -254,6 +314,11 @@ func (m *Manager) RequestFederationSave(
 ) error {
 	if m.opts.Halted != nil && m.opts.Halted(fed) {
 		return core.ErrFederationHalted
+	}
+
+	generation, fomSHA256, err := m.resolveProvenance(fed, false)
+	if err != nil {
+		return err
 	}
 
 	m.mu.Lock()
@@ -284,14 +349,16 @@ func (m *Manager) RequestFederationSave(
 
 	federates := sortedHandles(required)
 	as := &activeSave{
-		label:     label,
-		saveTime:  stCopy,
-		state:     StateInitiated,
-		required:  required,
-		complete:  map[core.FederateHandle]struct{}{},
-		notComp:   map[core.FederateHandle]struct{}{},
-		dynamic:   dynamic,
-		federates: federates,
+		label:      label,
+		saveTime:   stCopy,
+		state:      StateInitiated,
+		required:   required,
+		complete:   map[core.FederateHandle]struct{}{},
+		notComp:    map[core.FederateHandle]struct{}{},
+		dynamic:    dynamic,
+		generation: generation,
+		fomSHA256:  fomSHA256,
+		federates:  federates,
 	}
 	m.saves[fed] = as
 	m.completed[saveKey{fed, label}] = StateInitiated
@@ -360,7 +427,7 @@ func (m *Manager) recordFederateSave(
 	h core.FederateHandle,
 	ok bool,
 ) error {
-	closedOut, failed, label, saveTime, feds, err := m.markFederateAndAggregate(fed, h, ok)
+	closedOut, failed, label, saveTime, feds, generation, fomSHA256, err := m.markFederateAndAggregate(fed, h, ok)
 	if err != nil {
 		return err
 	}
@@ -383,14 +450,17 @@ func (m *Manager) recordFederateSave(
 		}
 		if !failed {
 			manifest := Manifest{
-				Federation:       fed,
-				Label:            label,
-				SaveTime:         saveTime,
-				Federates:        feds,
-				FederateNames:    m.federateNamesFor(fed, feds),
-				ManagerSnapshots: snapshots,
+				Version:              manifestVersion(generation),
+				Federation:           fed,
+				FederationGeneration: generation,
+				FOMSHA256:            fomSHA256,
+				Label:                label,
+				SaveTime:             saveTime,
+				Federates:            feds,
+				FederateNames:        m.federateNamesFor(fed, feds),
+				ManagerSnapshots:     snapshots,
 			}
-			if err := m.writeBundle(ctx, fed, label, manifest); err != nil {
+			if err := m.writeBundle(ctx, fed, label, generation, manifest); err != nil {
 				// Persistence failure flips the outcome to failed so
 				// federates see federationNotSaved instead of a phantom
 				// saved-state with no bundle on disk.
@@ -418,18 +488,18 @@ func (m *Manager) markFederateAndAggregate(
 	fed core.FederationName,
 	h core.FederateHandle,
 	ok bool,
-) (closedOut, failed bool, label string, saveTime *core.LogicalTime, feds []core.FederateHandle, err error) {
+) (closedOut, failed bool, label string, saveTime *core.LogicalTime, feds []core.FederateHandle, generation *uint64, fomSHA256 string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	as, busy := m.saves[fed]
 	if !busy {
-		return false, false, "", nil, nil, core.ErrFederateNotInSave
+		return false, false, "", nil, nil, nil, "", core.ErrFederateNotInSave
 	}
 	if as.dynamic {
 		as.required[h] = struct{}{}
 		as.federates = sortedHandles(as.required)
 	} else if _, member := as.required[h]; !member {
-		return false, false, "", nil, nil, core.ErrFederateNotInSave
+		return false, false, "", nil, nil, nil, "", core.ErrFederateNotInSave
 	}
 	if ok {
 		as.complete[h] = struct{}{}
@@ -437,7 +507,7 @@ func (m *Manager) markFederateAndAggregate(
 		as.notComp[h] = struct{}{}
 	}
 	if !allRequiredResponded(as) {
-		return false, false, "", nil, nil, nil
+		return false, false, "", nil, nil, nil, "", nil
 	}
 	failed = len(as.notComp) > 0
 	if failed {
@@ -446,7 +516,7 @@ func (m *Manager) markFederateAndAggregate(
 		as.state = StateSaved
 	}
 	feds = append([]core.FederateHandle(nil), as.federates...)
-	return true, failed, as.label, as.saveTime, feds, nil
+	return true, failed, as.label, as.saveTime, feds, cloneGeneration(as.generation), as.fomSHA256, nil
 }
 
 // federateNamesFor resolves the federate name for each handle in feds
@@ -648,13 +718,13 @@ func (m *Manager) writeBundle(
 	ctx context.Context,
 	fed core.FederationName,
 	label string,
+	generation *uint64,
 	manifest Manifest,
 ) error {
-	w, err := m.opts.BundleStore.Writer(fed, label)
+	w, err := m.bundleWriter(fed, label, generation)
 	if err != nil {
 		return fmt.Errorf("savepoint: open bundle writer (%s/%s): %w", fed, label, err)
 	}
-	defer func() { _ = w.Close() }()
 
 	// Capture the event-log slice if EventLog supports OpenReader. The
 	// MultiplexWriter implementation interprets the path argument as a
@@ -680,7 +750,11 @@ func (m *Manager) writeBundle(
 
 	manifest.EventLogBytes = uint64(len(eventLogBytes))
 	if err := WriteBundle(w, manifest, eventLogBytes); err != nil {
+		abortBundleWriter(w)
 		return fmt.Errorf("savepoint: write bundle (%s/%s): %w", fed, label, err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("savepoint: publish bundle (%s/%s): %w", fed, label, err)
 	}
 	return nil
 }
@@ -753,7 +827,11 @@ func (m *Manager) requestFederationRestore(
 	label string,
 	requester *core.FederateHandle,
 ) error {
-	if !m.opts.BundleStore.Exists(fed, label) {
+	generation, fomSHA256, err := m.resolveProvenance(fed, true)
+	if err != nil {
+		return m.requestRestoreFailed(ctx, fed, requester, label, err)
+	}
+	if !m.bundleExists(fed, label, generation) {
 		return m.requestRestoreFailed(ctx, fed, requester, label, ErrSaveBundleNotFound)
 	}
 
@@ -764,7 +842,7 @@ func (m *Manager) requestFederationRestore(
 	}
 	m.mu.Unlock()
 
-	rdr, err := m.opts.BundleStore.Reader(fed, label)
+	rdr, err := m.bundleReader(fed, label, generation)
 	if err != nil {
 		return m.requestRestoreFailed(ctx, fed, requester, label, err)
 	}
@@ -773,6 +851,9 @@ func (m *Manager) requestFederationRestore(
 	if err != nil {
 		return m.requestRestoreFailed(ctx, fed, requester, label,
 			fmt.Errorf("savepoint: read bundle (%s/%s): %w", fed, label, err))
+	}
+	if err := m.validateRestoreProvenance(fed, label, generation, fomSHA256, manifest); err != nil {
+		return m.requestRestoreFailed(ctx, fed, requester, label, err)
 	}
 
 	// M13 thread C: apply the per-manager state snapshots from the
@@ -859,6 +940,128 @@ func (m *Manager) requestFederationRestore(
 		}
 		evt := initiateFederateRestoreEvent(label, manifest.Federates[i], name)
 		_ = m.opts.Outbox.Send(ctx, fed, dst, evt)
+	}
+	return nil
+}
+
+// resolveProvenance snapshots the live generation and FOM identity once for a
+// save or restore request. A nil generation marks the legacy storage mode.
+func (m *Manager) resolveProvenance(
+	fed core.FederationName,
+	requireFOM bool,
+) (*uint64, string, error) {
+	if m.opts.Generation == nil {
+		return nil, "", nil
+	}
+	generation, ok := m.opts.Generation(fed)
+	if !ok {
+		return nil, "", core.ErrFederationNotFound
+	}
+	var fomSHA256 string
+	if m.opts.FOMSHA256 != nil {
+		var ok bool
+		fomSHA256, ok = m.opts.FOMSHA256(fed)
+		if !ok && requireFOM {
+			return nil, "", core.ErrFederationNotFound
+		}
+	}
+	return &generation, fomSHA256, nil
+}
+
+func cloneGeneration(generation *uint64) *uint64 {
+	if generation == nil {
+		return nil
+	}
+	value := *generation
+	return &value
+}
+
+func (m *Manager) bundleWriter(
+	fed core.FederationName,
+	label string,
+	generation *uint64,
+) (io.WriteCloser, error) {
+	if generation == nil {
+		return m.opts.BundleStore.Writer(fed, label)
+	}
+	return m.opts.BundleStore.(GenerationStorage).WriterFor(StorageKey{
+		Federation: fed,
+		Generation: *generation,
+		Label:      label,
+	})
+}
+
+func (m *Manager) bundleReader(
+	fed core.FederationName,
+	label string,
+	generation *uint64,
+) (io.ReadCloser, error) {
+	if generation == nil {
+		return m.opts.BundleStore.Reader(fed, label)
+	}
+	return m.opts.BundleStore.(GenerationStorage).ReaderFor(StorageKey{
+		Federation: fed,
+		Generation: *generation,
+		Label:      label,
+	})
+}
+
+func (m *Manager) bundleExists(fed core.FederationName, label string, generation *uint64) bool {
+	if generation == nil {
+		return m.opts.BundleStore.Exists(fed, label)
+	}
+	return m.opts.BundleStore.(GenerationStorage).ExistsFor(StorageKey{
+		Federation: fed,
+		Generation: *generation,
+		Label:      label,
+	})
+}
+
+func abortBundleWriter(w io.WriteCloser) {
+	if atomic, ok := w.(interface{ Abort() error }); ok {
+		_ = atomic.Abort()
+		return
+	}
+	_ = w.Close()
+}
+
+// validateRestoreProvenance runs before snapshot application. Generation-aware
+// restores require a v2 manifest from the exact live generation. Matching FOM
+// bytes never permit a cross-generation restore. Resolver-free configurations
+// retain the legacy v1 behavior.
+func (m *Manager) validateRestoreProvenance(
+	fed core.FederationName,
+	label string,
+	generation *uint64,
+	fomSHA256 string,
+	manifest Manifest,
+) error {
+	if manifest.Federation != fed || manifest.Label != label {
+		return fmt.Errorf("%w: requested %q/%q, bundle records %q/%q",
+			ErrSaveBundleIncompatible, fed, label, manifest.Federation, manifest.Label)
+	}
+	if generation == nil {
+		return nil
+	}
+	if manifest.Version != bundleFormatVersionV2 {
+		return fmt.Errorf("%w: bundle format version %d is not generation-aware",
+			ErrSaveBundleIncompatible, manifest.Version)
+	}
+	if manifest.FederationGeneration == nil {
+		return fmt.Errorf("%w: bundle has no federation generation", ErrSaveBundleIncompatible)
+	}
+	if *manifest.FederationGeneration != *generation {
+		return fmt.Errorf("%w: bundle generation %d != live generation %d",
+			ErrSaveBundleIncompatible, *manifest.FederationGeneration, *generation)
+	}
+	if m.opts.FOMSHA256 != nil {
+		if manifest.FOMSHA256 == "" {
+			return fmt.Errorf("%w: bundle has no FOM digest", ErrSaveBundleIncompatible)
+		}
+		if !strings.EqualFold(manifest.FOMSHA256, fomSHA256) {
+			return fmt.Errorf("%w: bundle FOM sha256 %s != live %s",
+				ErrSaveBundleIncompatible, manifest.FOMSHA256, fomSHA256)
+		}
 	}
 	return nil
 }
@@ -987,7 +1190,11 @@ func (m *Manager) Snapshot(fed core.FederationName) core.SavepointSnapshot {
 // Used by tests + introspection tooling that needs to inspect the
 // federate list / save-time without paying for a full event-log replay.
 func (m *Manager) LoadManifest(fed core.FederationName, label string) (Manifest, error) {
-	rdr, err := m.opts.BundleStore.Reader(fed, label)
+	generation, _, err := m.resolveProvenance(fed, false)
+	if err != nil {
+		return Manifest{}, err
+	}
+	rdr, err := m.bundleReader(fed, label, generation)
 	if err != nil {
 		return Manifest{}, err
 	}

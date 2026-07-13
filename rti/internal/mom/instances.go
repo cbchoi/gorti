@@ -43,11 +43,11 @@ const momProducer = ^core.FederateHandle(0)
 
 // Standard MOM attribute names this cut maintains on the wire.
 const (
-	attrNameFederationName          = "HLAfederationName"
-	attrNameFederatesInFederation   = "HLAfederatesInFederation"
-	attrNameFederateHandle          = "HLAfederateHandle"
-	attrNameFederateName            = "HLAfederateName"
-	attrNameFederateType            = "HLAfederateType"
+	attrNameFederationName        = "HLAfederationName"
+	attrNameFederatesInFederation = "HLAfederatesInFederation"
+	attrNameFederateHandle        = "HLAfederateHandle"
+	attrNameFederateName          = "HLAfederateName"
+	attrNameFederateType          = "HLAfederateType"
 )
 
 // instanceFanoutDeps bundles the composition-time dependencies for the

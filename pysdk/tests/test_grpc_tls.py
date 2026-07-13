@@ -56,8 +56,8 @@ def _generate_self_signed(tmp_path: Path) -> tuple[Path, Path, bytes]:
 
     Returns ``(cert_path, key_path, cert_pem_bytes)``. The cert is valid
     for 127.0.0.1 + localhost and expires in 1 hour. ``cryptography`` is
-    a transitive dep of ``grpcio``; if it's missing the test is skipped
-    (rather than failing) so the broader suite stays green.
+    part of the SDK development extra; if a minimal runtime environment omits
+    it, this test is skipped rather than failing unrelated transport tests.
     """
     cryptography = pytest.importorskip(
         "cryptography",
