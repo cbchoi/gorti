@@ -101,7 +101,6 @@ nav:
       - Known DLC Divergences: DLC_DIVERGENCE_CATALOGUE.md
       - Pitch Golden Licensing: PITCH_GOLDEN_LICENSING.md
   - Research:
-      - SoftwareX Submission: softwarex.md
       - Citation: citation.md
       - Roadmap: roadmap.md
   - Architecture & Development:

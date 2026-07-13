@@ -8,7 +8,7 @@
 
 Open-source [IEEE 1516-2010 (HLA Evolved)](https://standards.ieee.org/ieee/1516/4118/) Run-Time Infrastructure in Go, with a spec-strict IEEE 1516.1-2010 DLC C++ federate SDK, a Python federate SDK, and a [pyjevsim](https://github.com/cbchoi/pyjevsim) DEVS bridge.
 
-**Development status (v0.9.0 submission candidate; latest public release
+**Development status (v0.9.0 development version; latest public release
 v0.1.0)**: full HLA Evolved service surface with a CI-enforced
 conformance program — 27/27 conformance fixtures at FULL/SPEC-FULL
 (canonicalized event sequences byte-identical to their goldens; the 3
@@ -55,11 +55,11 @@ supported mode), or legacy HLA 1.3 / 1516-2000 interfaces.
 
 ## Quickstart
 
-### Build the submission candidate
+### Build the development version
 
-The current v0.9 submission candidate is installed from source. Public v0.9
-release archives and the PyPI wheel are release gates and are not advertised as
-available until their tagged artifacts are published and verified.
+The current v0.9 development version is installed from source. Public v0.9
+release archives and the PyPI wheel are not advertised as available until their
+tagged artifacts are published and verified.
 
 ```bash
 git clone https://github.com/cbchoi/gorti.git
@@ -189,7 +189,7 @@ logical-time critical path.
 ### Python (idiomatic, supported)
 
 `rti1516e` is the supported Python federate SDK (Linux, Windows, macOS;
-Python 3.11+). Install the submission candidate from the source tree:
+Python 3.11+). Install the development version from the source tree:
 
 ```bash
 cd pysdk && pip install -e '.[dev]' pyjevsim==2.0.1
@@ -299,7 +299,6 @@ This is a controlled-machine result, not a general vendor ranking. See
 | `tests/spec/M1/`, `rti/spec/M{2,3,5}/`, `pysdk/tests/spec/m{4,5}/` | Per-milestone specification tests (orchestrator-frozen) |
 | `verification/` | Cross-RTI semantic and fair-performance harnesses |
 | `docs/` | User, operations, verification, architecture, and API documentation |
-| `paper/` | SoftwareX manuscript source and submission checklist |
 | `CHANGELOG-MASTERPLAN.md` | Full milestone-by-milestone history |
 
 ## Standards conformance
@@ -331,8 +330,7 @@ gates. Start with the [installation guide](docs/installation.md),
 
 Research users should cite the exact release and commit. Machine-readable
 metadata is provided in [`CITATION.cff`](CITATION.cff) and
-[`codemeta.json`](codemeta.json). The SoftwareX draft and pre-submission
-checklist are under [`paper/`](paper/).
+[`codemeta.json`](codemeta.json).
 
 ## For contributors
 

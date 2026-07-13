@@ -6,8 +6,8 @@ The repository includes machine-readable citation metadata in
 GitHub renders `CITATION.cff` through the repository's **Cite this repository**
 action.
 
-Until a SoftwareX article DOI and a release archive DOI are assigned, cite the
-software using the repository URL, version, and commit used in the experiment:
+Until a release archive DOI is assigned, cite the software using the repository
+URL, version, and commit used in the experiment:
 
 ```text
 Changbeom Choi. gorti: An open-source IEEE 1516-2010 Run-Time

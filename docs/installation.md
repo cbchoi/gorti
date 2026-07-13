@@ -8,7 +8,7 @@
 
 ## Build from source
 
-The v0.9 submission candidate is currently installed from source:
+The v0.9 development version is currently installed from source:
 
 ```bash
 git clone https://github.com/cbchoi/gorti.git
@@ -18,9 +18,8 @@ go build -o bin/rti-top ./rti/cmd/rti-top
 go test ./...
 ```
 
-On Windows, use `.exe` output names. This source-build path is the only
-installation path claimed for the submission candidate until the v0.9 release
-assets are published and verified.
+On Windows, use `.exe` output names. This source-build path is the documented
+installation path until the v0.9 release assets are published and verified.
 
 ## Release binaries
 

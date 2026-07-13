@@ -1,5 +1,0 @@
-- Open IEEE 1516-2010 Run-Time Infrastructure implemented in Go.
-- Go, Python, and C++ paths share deterministic HLA semantics.
-- Canonical logs compare FM, DM, OM, and TM behavior across RTIs.
-- A fail-closed AB/BA harness gates every performance result.
-- Deterministic logs support repeatable distributed simulation research.

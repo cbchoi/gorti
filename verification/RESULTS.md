@@ -120,6 +120,6 @@ machine and workload, not a general vendor ranking.
 The local evidence is under
 `verification/out/fair-comparison/claim-persistent-1516-v14-20260713/`. That
 directory is intentionally ignored because it contains large raw logs and
-machine-specific manifests. Before SoftwareX submission, publish the
+machine-specific manifests. Before publishing performance claims, archive the
 permissible logs, manifests, checksums, and `analysis.json` in an immutable
-research archive and add its DOI to the manuscript and citation metadata.
+research repository and add its DOI to the citation metadata.

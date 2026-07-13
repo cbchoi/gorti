@@ -1313,8 +1313,8 @@ semantically unfair.
   acceptance gates;
 - excluded machine-local launcher paths and generated benchmark/runtime output
   from the public source tree; and
-- added the SoftwareX manuscript, reproducibility documentation, and citation
-  metadata without inventing a DOI, certification, or acceptance status.
+- added reproducibility documentation and citation metadata without inventing
+  a DOI, certification, or acceptance status.
 
 ### Review
 

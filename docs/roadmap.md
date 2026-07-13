@@ -6,7 +6,7 @@
 - Expand Linux, macOS, and Windows SDK integration coverage.
 - Keep conformance fixtures and canonical logs versioned with behavioral
   changes.
-- Complete publication metadata and archive a SoftwareX reproduction bundle.
+- Complete publication metadata and archive a reproducibility bundle.
 
 ## Future performance track
 

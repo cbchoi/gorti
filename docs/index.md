@@ -41,4 +41,3 @@ logging, warmups, measurements, and AB/BA order. See
 - Releases: <https://github.com/cbchoi/gorti/releases>
 - License: MIT
 - Citation: [citation metadata](citation.md)
-- SoftwareX: [submission package](softwarex.md)
