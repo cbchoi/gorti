@@ -31,6 +31,22 @@ python -m pip install -r docs/requirements.txt
 python -m mkdocs build --strict
 ```
 
+GitHub Actions automatically checks only whether the documentation can be
+built and packaged as a GitHub Pages artifact. Run code and conformance checks
+locally before opening a pull request:
+
+```bash
+buf generate
+go test ./...
+ruff check pysdk
+cd pysdk && mypy --strict . && pytest --maxfail=1
+cd ..
+bash scripts/ci-gates.sh
+```
+
+The complete conformance gate requires the C++ toolchain and Conan described in
+the SDK documentation. On Windows, run the shell gate from WSL or Git Bash.
+
 ## Pull requests
 
 - Add focused tests for behavioral changes.

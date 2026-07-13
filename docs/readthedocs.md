@@ -23,6 +23,7 @@ python -m mkdocs build --strict
 `.readthedocs.yaml` selects Ubuntu 22.04, Python 3.11, `mkdocs.yml`, and the
 pinned requirements in `docs/requirements.txt`.
 
-The `Docs` GitHub Actions workflow validates the same strict build on pull
-requests and pushes. Read the Docs owns publication; GitHub Actions does not
-deploy a second copy of the site.
+The `GitHub Pages readiness` Actions workflow validates the same strict build,
+checks the generated entry point, and packages a Pages-compatible artifact.
+It does not configure or deploy a Pages site. Read the Docs owns publication;
+all code and conformance checks run locally.

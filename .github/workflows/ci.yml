@@ -1,10 +1,6 @@
-name: CI
+name: Manual validation
 
-on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+on: workflow_dispatch
 
 permissions:
   contents: read
