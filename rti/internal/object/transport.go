@@ -51,6 +51,21 @@ func newTransportStore() *transportStore {
 	}
 }
 
+func (s *transportStore) removeFederation(fed core.FederationName) {
+	s.mu.Lock()
+	for key := range s.attr {
+		if key.fed == fed {
+			delete(s.attr, key)
+		}
+	}
+	for key := range s.inter {
+		if key.fed == fed {
+			delete(s.inter, key)
+		}
+	}
+	s.mu.Unlock()
+}
+
 // ChangeAttributeTransportType records a per-instance, per-attribute
 // transport override. Owner-only: returns ErrObjectNotOwned for
 // non-owners.

@@ -3,12 +3,18 @@ package eventlog
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // newMultiplexForTest builds a MultiplexWriter whose factory routes each
@@ -123,6 +129,26 @@ func TestMultiplexWriter_CloseFlushesAll(t *testing.T) {
 	}
 }
 
+func TestP0MultiplexWriter_CloseFederationKeepsOthersAvailable(t *testing.T) {
+	mux, _ := newMultiplexForTest(t)
+	defer func() { _ = mux.Close() }()
+	if err := mux.Append(context.Background(), "alpha", &writerEvent{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mux.Append(context.Background(), "beta", &writerEvent{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mux.CloseFederation("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mux.Sync(context.Background(), "alpha"); !errors.Is(err, core.ErrFederationNotFound) {
+		t.Fatalf("Sync closed federation = %v", err)
+	}
+	if err := mux.Append(context.Background(), "beta", &writerEvent{}); err != nil {
+		t.Fatalf("other federation unavailable after close: %v", err)
+	}
+}
+
 // TestMultiplexWriter_RejectsMissingClock: NewMultiplexWriter requires Clock.
 func TestMultiplexWriter_RejectsMissingClock(t *testing.T) {
 	_, err := NewMultiplexWriter(MultiplexOptions{
@@ -148,8 +174,8 @@ func TestMultiplexWriter_DefaultFactory_RequiresDir(t *testing.T) {
 }
 
 // TestMultiplexWriter_DefaultFactoryFiles: when Dir is supplied and no
-// Factory, the multiplexer writes one .log file per federation, each with
-// the standard header.
+// Factory, the multiplexer writes one generation-qualified .log file per
+// federation, each with the standard header.
 func TestMultiplexWriter_DefaultFactoryFiles(t *testing.T) {
 	dir := t.TempDir()
 	mux, err := NewMultiplexWriter(MultiplexOptions{
@@ -194,3 +220,99 @@ type writerEvent struct {
 }
 
 func (e *writerEvent) Seq() uint64 { return e.seq }
+
+type directProtoEvent struct {
+	pb       *rtiv1.Event
+	setCalls int
+}
+
+func (e *directProtoEvent) Seq() uint64 { return e.pb.GetSeq() }
+func (e *directProtoEvent) SetSeq(seq uint64) {
+	e.setCalls++
+	e.pb.Seq = seq
+}
+func (e *directProtoEvent) Reset()                             { e.pb.Reset() }
+func (e *directProtoEvent) String() string                     { return e.pb.String() }
+func (e *directProtoEvent) ProtoReflect() protoreflect.Message { return e.pb.ProtoReflect() }
+
+func TestMultiplexWriter_AppendUsesDirectSeqAdapter(t *testing.T) {
+	mux, bufs := newMultiplexForTest(t)
+	defer func() { _ = mux.Close() }()
+	evt := &directProtoEvent{pb: &rtiv1.Event{WallNs: 99}}
+
+	if got := ensurePointerRecord(evt); got != evt {
+		t.Fatal("ensurePointerRecord replaced a direct seq adapter")
+	}
+	if err := mux.Append(context.Background(), "alpha", evt); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if evt.Seq() != 1 || evt.setCalls != 1 {
+		t.Fatalf("direct adapter seq/calls = %d/%d, want 1/1", evt.Seq(), evt.setCalls)
+	}
+
+	body, err := proto.Marshal(&rtiv1.Event{Seq: 1, WallNs: 99})
+	if err != nil {
+		t.Fatalf("proto.Marshal: %v", err)
+	}
+	want := make([]byte, 4+len(body))
+	binary.LittleEndian.PutUint32(want[:4], uint32(len(body)))
+	copy(want[4:], body)
+	got := bufs["alpha"].Bytes()[HeaderSize:]
+	if !bytes.Equal(got, want) {
+		t.Errorf("logged frame = %x, want %x", got, want)
+	}
+}
+
+func BenchmarkMultiplexWriter_AppendDirectSeqAdapter(b *testing.B) {
+	mux, err := NewMultiplexWriter(MultiplexOptions{
+		Clock: core.NewFakeClock(time.Unix(0, 0)),
+		Mode:  core.ModeVerbose,
+		Factory: func(opts WriterOptions) (*Writer, error) {
+			opts.Sink = io.Discard
+			return NewWriter(opts)
+		},
+	})
+	if err != nil {
+		b.Fatalf("NewMultiplexWriter: %v", err)
+	}
+	b.Cleanup(func() { _ = mux.Close() })
+	ctx := context.Background()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		evt := &directProtoEvent{pb: &rtiv1.Event{WallNs: uint64(i)}}
+		if err := mux.Append(ctx, "bench", evt); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkMultiplexWriter_AppendFileSeqAdapter(b *testing.B) {
+	path := filepath.Join(b.TempDir(), "benchmark.log")
+	file, err := os.Create(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = file.Close() })
+	mux, err := NewMultiplexWriter(MultiplexOptions{
+		Clock: core.NewFakeClock(time.Unix(0, 0)),
+		Mode:  core.ModeVerbose,
+		Factory: func(opts WriterOptions) (*Writer, error) {
+			opts.Sink = file
+			return NewWriter(opts)
+		},
+	})
+	if err != nil {
+		b.Fatalf("NewMultiplexWriter: %v", err)
+	}
+	b.Cleanup(func() { _ = mux.Close() })
+	ctx := context.Background()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		evt := &directProtoEvent{pb: &rtiv1.Event{WallNs: uint64(i)}}
+		if err := mux.Append(ctx, "bench", evt); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

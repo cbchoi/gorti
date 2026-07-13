@@ -15,9 +15,70 @@ package time
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 )
+
+type tsoBufferReservation struct {
+	mu        sync.Mutex
+	manager   *Manager
+	fed       core.FederationName
+	evalLock  *sync.Mutex
+	buffered  []core.TSOBufferedDelivery
+	immediate []core.TSOBufferedDelivery
+	done      bool
+}
+
+func (r *tsoBufferReservation) Immediate() []core.TSOBufferedDelivery {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]core.TSOBufferedDelivery(nil), r.immediate...)
+}
+
+func (r *tsoBufferReservation) Buffered() []core.TSOBufferedDelivery {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]core.TSOBufferedDelivery(nil), r.buffered...)
+}
+
+func (r *tsoBufferReservation) Commit(ctx context.Context) {
+	r.mu.Lock()
+	if r.done {
+		r.mu.Unlock()
+		return
+	}
+	ext := extOf(r.manager)
+	ext.mu.Lock()
+	poke := false
+	for _, delivery := range r.buffered {
+		ns := ext.getOrCreateLocked(r.fed, delivery.Recipient)
+		ns.tsoBuffer = append(ns.tsoBuffer, bufferedTSOEvent{
+			timestamp:        delivery.Timestamp,
+			event:            delivery.Event,
+			sender:           delivery.Sender,
+			retractionHandle: delivery.RetractionHandle,
+		})
+		poke = poke || (ns.pendingNER && ns.mode.usesNextMessageTarget())
+	}
+	ext.mu.Unlock()
+	r.done = true
+	r.evalLock.Unlock()
+	r.mu.Unlock()
+	if poke {
+		_ = r.manager.tryGrantPending(ctx, r.fed)
+	}
+}
+
+func (r *tsoBufferReservation) Release() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.done {
+		return
+	}
+	r.done = true
+	r.evalLock.Unlock()
+}
 
 // bufferedTSOEvent holds one TSO event awaiting release. arrival order
 // in the slice IS delivery order — when releaseBufferedTSO drains, it
@@ -76,6 +137,59 @@ func (m *Manager) ShouldDeliverNow(fed core.FederationName, h core.FederateHandl
 	return float64(ts) <= float64(ns.currentTime)
 }
 
+// ReserveTSO takes the same per-federation evaluation boundary used by grant
+// emission, then repeats delivery classification against the latest logical
+// time. The lease remains held through the caller's WAL and outbox admission.
+func (m *Manager) ReserveTSO(fed core.FederationName, deliveries []core.TSOBufferedDelivery) core.TSOBufferReservation {
+	return m.reserveTSO(fed, deliveries, true)
+}
+
+func (m *Manager) reserveTSO(
+	fed core.FederationName,
+	deliveries []core.TSOBufferedDelivery,
+	classifyTimeEngagement bool,
+) core.TSOBufferReservation {
+	ext := extOf(m)
+	evalLock := ext.evaluatorLock(fed)
+	evalLock.Lock()
+	reservation := &tsoBufferReservation{manager: m, fed: fed, evalLock: evalLock}
+	// Match ShouldDeliverNow for every recipient while the evaluator lease
+	// prevents a grant from overtaking this classification. Non-time-engaged
+	// federates receive TSO immediately; time-engaged federates use their
+	// asynchronous-delivery flag and current logical time.
+	if classifyTimeEngagement {
+		m.states.mu.Lock()
+	}
+	for _, delivery := range deliveries {
+		timeEngaged := true
+		if classifyTimeEngagement {
+			fs := m.states.getLocked(fed, delivery.Recipient)
+			timeEngaged = fs != nil && (fs.regulating || fs.constrained)
+		}
+		ext.mu.Lock()
+		ns := ext.getLocked(fed, delivery.Recipient)
+		current := core.LogicalTime(0)
+		deliverNow := !timeEngaged
+		if ns != nil {
+			current = ns.currentTime
+			deliverNow = deliverNow || ns.asyncDelivery
+		}
+		if timeEngaged {
+			deliverNow = deliverNow || float64(delivery.Timestamp) <= float64(current)
+		}
+		ext.mu.Unlock()
+		if deliverNow {
+			reservation.immediate = append(reservation.immediate, delivery)
+		} else {
+			reservation.buffered = append(reservation.buffered, delivery)
+		}
+	}
+	if classifyTimeEngagement {
+		m.states.mu.Unlock()
+	}
+	return reservation
+}
+
 // BufferTSO implements core.TSODeliveryGate. Enqueues an event whose
 // ShouldDeliverNow returned false. The buffer is per-federate, FIFO,
 // unbounded (M22 ships without a cap; bound is an M23 follow-up).
@@ -92,15 +206,18 @@ func (m *Manager) ShouldDeliverNow(fed core.FederationName, h core.FederateHandl
 // M36 DB-2 resign re-run: the buffering itself already succeeded, and
 // grant-emission failures surface through the stream layer.
 func (m *Manager) BufferTSO(ctx context.Context, fed core.FederationName, h core.FederateHandle, ts core.LogicalTime, evt core.OutboundEvent) error {
-	ext := extOf(m)
-	ext.mu.Lock()
-	ns := ext.getOrCreateLocked(fed, h)
-	ns.tsoBuffer = append(ns.tsoBuffer, bufferedTSOEvent{timestamp: ts, event: evt})
-	poke := ns.pendingNER && ns.mode.usesNextMessageTarget()
-	ext.mu.Unlock()
-	if poke {
-		_ = m.tryGrantPending(ctx, fed)
+	reservation := m.reserveTSO(
+		fed,
+		[]core.TSOBufferedDelivery{{Recipient: h, Timestamp: ts, Event: evt}},
+		false,
+	)
+	if len(reservation.Immediate()) > 0 {
+		if err := m.opts.Outbox.Send(ctx, fed, h, evt); err != nil {
+			reservation.Release()
+			return err
+		}
 	}
+	reservation.Commit(ctx)
 	return nil
 }
 
@@ -116,20 +233,20 @@ func (m *Manager) BufferTSOWithRetraction(
 	sender core.FederateHandle,
 	retractionHandle uint64,
 ) error {
-	ext := extOf(m)
-	ext.mu.Lock()
-	ns := ext.getOrCreateLocked(fed, h)
-	ns.tsoBuffer = append(ns.tsoBuffer, bufferedTSOEvent{
-		timestamp:        ts,
-		event:            evt,
-		sender:           sender,
-		retractionHandle: retractionHandle,
-	})
-	poke := ns.pendingNER && ns.mode.usesNextMessageTarget()
-	ext.mu.Unlock()
-	if poke {
-		_ = m.tryGrantPending(ctx, fed)
+	reservation := m.reserveTSO(
+		fed,
+		[]core.TSOBufferedDelivery{{
+			Recipient: h, Timestamp: ts, Event: evt, Sender: sender, RetractionHandle: retractionHandle,
+		}},
+		false,
+	)
+	if len(reservation.Immediate()) > 0 {
+		if err := m.opts.Outbox.Send(ctx, fed, h, evt); err != nil {
+			reservation.Release()
+			return err
+		}
 	}
+	reservation.Commit(ctx)
 	return nil
 }
 
@@ -182,19 +299,19 @@ func (m *Manager) RetractMessage(
 // federate's stream is gone, so retrying would just block. The discard
 // is silent (no error returned) because emitGrant cannot meaningfully
 // recover from a stream-side failure either.
-func (m *Manager) releaseBufferedTSO(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) {
+func (m *Manager) takeBufferedTSO(fed core.FederationName, h core.FederateHandle, t *core.LogicalTime) []bufferedTSOEvent {
 	ext := extOf(m)
 	ext.mu.Lock()
 	ns := ext.getLocked(fed, h)
 	if ns == nil || len(ns.tsoBuffer) == 0 {
 		ext.mu.Unlock()
-		return
+		return nil
 	}
-	// Partition: events with ts <= t get released; the rest stay.
+	// Partition eligible events in FIFO order. A nil bound drains all.
 	keep := ns.tsoBuffer[:0]
 	var release []bufferedTSOEvent
 	for _, b := range ns.tsoBuffer {
-		if float64(b.timestamp) <= float64(t) {
+		if t == nil || float64(b.timestamp) <= float64(*t) {
 			release = append(release, b)
 		} else {
 			keep = append(keep, b)
@@ -203,31 +320,47 @@ func (m *Manager) releaseBufferedTSO(ctx context.Context, fed core.FederationNam
 	// keep aliased ns.tsoBuffer's backing array; reassign explicitly.
 	ns.tsoBuffer = append([]bufferedTSOEvent(nil), keep...)
 	ext.mu.Unlock()
+	return release
+}
 
-	for _, b := range release {
-		_ = m.opts.Outbox.Send(ctx, fed, h, b.event)
+func (m *Manager) restoreBufferedTSO(fed core.FederationName, h core.FederateHandle, events []bufferedTSOEvent) {
+	if len(events) == 0 {
+		return
 	}
+	ext := extOf(m)
+	ext.mu.Lock()
+	ns := ext.getOrCreateLocked(fed, h)
+	restored := make([]bufferedTSOEvent, 0, len(events)+len(ns.tsoBuffer))
+	restored = append(restored, events...)
+	restored = append(restored, ns.tsoBuffer...)
+	ns.tsoBuffer = restored
+	ext.mu.Unlock()
+}
+
+func (m *Manager) releaseBufferedTSO(ctx context.Context, fed core.FederationName, h core.FederateHandle, t core.LogicalTime) error {
+	release := m.takeBufferedTSO(fed, h, &t)
+	for i, b := range release {
+		if err := m.opts.Outbox.Send(ctx, fed, h, b.event); err != nil {
+			m.restoreBufferedTSO(fed, h, release[i:])
+			return err
+		}
+	}
+	return nil
 }
 
 // drainAllBufferedTSO releases EVERY buffered TSO event for the
 // federate, regardless of timestamp. Called from EnableAsynchronousDelivery
 // to satisfy the spec's "async-on becomes observable as soon as the
 // call returns" requirement.
-func (m *Manager) drainAllBufferedTSO(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
-	ext := extOf(m)
-	ext.mu.Lock()
-	ns := ext.getLocked(fed, h)
-	if ns == nil || len(ns.tsoBuffer) == 0 {
-		ext.mu.Unlock()
-		return
+func (m *Manager) drainAllBufferedTSO(ctx context.Context, fed core.FederationName, h core.FederateHandle) error {
+	release := m.takeBufferedTSO(fed, h, nil)
+	for i, b := range release {
+		if err := m.opts.Outbox.Send(ctx, fed, h, b.event); err != nil {
+			m.restoreBufferedTSO(fed, h, release[i:])
+			return err
+		}
 	}
-	release := ns.tsoBuffer
-	ns.tsoBuffer = nil
-	ext.mu.Unlock()
-
-	for _, b := range release {
-		_ = m.opts.Outbox.Send(ctx, fed, h, b.event)
-	}
+	return nil
 }
 
 // EnableAsynchronousDelivery implements core.TimeManager (M22).
@@ -245,6 +378,9 @@ func (m *Manager) EnableAsynchronousDelivery(ctx context.Context, fed core.Feder
 		return core.ErrFederationHalted
 	}
 	ext := extOf(m)
+	evalLock := ext.evaluatorLock(fed)
+	evalLock.Lock()
+	defer evalLock.Unlock()
 	ext.mu.Lock()
 	ns := ext.getOrCreateLocked(fed, h)
 	if ns.asyncDelivery {
@@ -255,7 +391,13 @@ func (m *Manager) EnableAsynchronousDelivery(ctx context.Context, fed core.Feder
 	ext.mu.Unlock()
 
 	// Drain everything regardless of timestamp.
-	m.drainAllBufferedTSO(ctx, fed, h)
+	if err := m.drainAllBufferedTSO(ctx, fed, h); err != nil {
+		ext.mu.Lock()
+		ns := ext.getOrCreateLocked(fed, h)
+		ns.asyncDelivery = false
+		ext.mu.Unlock()
+		return err
+	}
 	return nil
 }
 
@@ -273,6 +415,9 @@ func (m *Manager) DisableAsynchronousDelivery(_ context.Context, fed core.Federa
 		return core.ErrFederationHalted
 	}
 	ext := extOf(m)
+	evalLock := ext.evaluatorLock(fed)
+	evalLock.Lock()
+	defer evalLock.Unlock()
 	ext.mu.Lock()
 	defer ext.mu.Unlock()
 	ns := ext.getOrCreateLocked(fed, h)

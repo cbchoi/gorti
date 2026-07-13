@@ -84,17 +84,13 @@ func TestAdminListener_StatusE2E(t *testing.T) {
 		}
 	}()
 
-	// Wait for the admin listener to bind. Up to 2s, polling every
-	// 25ms.
-	deadline := time.Now().Add(2 * time.Second)
-	var conn *grpc.ClientConn
-	for time.Now().Before(deadline) {
-		conn, err = grpc.NewClient(adminAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err == nil {
-			break
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
+	// NewClient is lazy and does not prove that Serve has bound the port. Use
+	// one bounded blocking dial so the first Status call cannot race startup.
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer dialCancel()
+	conn, err := grpc.DialContext(
+		dialCtx, adminAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
+	)
 	if err != nil {
 		t.Skipf("admin port %s not reachable (likely in use): %v", adminAddr, err)
 	}

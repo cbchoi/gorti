@@ -50,8 +50,8 @@ func (o *recordingOutbox) snapshot() []recordedEvent {
 // tests use the same pattern (rti/internal/object/registry_test.go).
 type stubFOMHandle struct{}
 
-func (*stubFOMHandle) IsValid() bool                                                 { return true }
-func (*stubFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool)       { return 1, true }
+func (*stubFOMHandle) IsValid() bool                                           { return true }
+func (*stubFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool) { return 1, true }
 func (*stubFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool) {
 	return 1, true
 }

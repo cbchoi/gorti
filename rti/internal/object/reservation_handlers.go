@@ -124,6 +124,10 @@ func (r *Registry) OnFederateResign(fed core.FederationName, h core.FederateHand
 // destroy-federation hook. Idempotent.
 func (r *Registry) OnFederationDestroyed(fed core.FederationName) {
 	r.reservations.OnFederationDestroyed(fed)
+	r.transports.removeFederation(fed)
+	r.mu.Lock()
+	delete(r.federations, fed)
+	r.mu.Unlock()
 }
 
 // LookupObjectInstanceByName implements core.ObjectInstanceQuery

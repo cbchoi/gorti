@@ -51,8 +51,8 @@ var (
 	ErrTimeNotAsynchronous = errors.New("federate: asynchronous delivery is not enabled")
 
 	// M23 — object-management additions.
-	ErrObjectNotOwned        = errors.New("federate: object not owned by this federate")
-	ErrObjectAlreadyDeleted  = errors.New("federate: object instance already deleted")
+	ErrObjectNotOwned       = errors.New("federate: object not owned by this federate")
+	ErrObjectAlreadyDeleted = errors.New("federate: object instance already deleted")
 )
 
 // SDK-foundation errors (not from TimeService).

@@ -28,9 +28,9 @@ type ResignAction uint8
 const (
 	ResignActionUnspecified ResignAction = iota
 	ResignActionUnconditionallyDivestAttributes
-	ResignActionDeleteThenDivest          // M24
-	ResignActionCancelThenDelete          // M24
-	ResignActionCancelPendingOwnership    // M24
-	ResignActionNoAction                  // M24
-	ResignActionDeleteObjects             // M24
+	ResignActionDeleteThenDivest       // M24
+	ResignActionCancelThenDelete       // M24
+	ResignActionCancelPendingOwnership // M24
+	ResignActionNoAction               // M24
+	ResignActionDeleteObjects          // M24
 )

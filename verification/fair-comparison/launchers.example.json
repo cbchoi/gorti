@@ -1,0 +1,59 @@
+{
+  "schema": "gorti.fair-comparison/launcher-config-v1",
+  "launchers": {
+    "pitch": {
+      "executable": "powershell.exe",
+      "arguments": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "{repo}\\verification\\fair-comparison\\adapters\\pitch.ps1",
+        "-Fom",
+        "{fom}",
+        "-Seed",
+        "{seed}",
+        "-Count",
+        "{count}",
+        "-ServerEventLog",
+        "{server_event_log}",
+        "-OutputDirectory",
+        "{output}",
+        "-RunId",
+        "{run_id}",
+        "-WorkloadContract",
+        "{workload_file}"
+      ],
+      "result_file": "result.json",
+      "working_directory": "{repo}",
+      "environment": {}
+    },
+    "go": {
+      "executable": "powershell.exe",
+      "arguments": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "{repo}\\verification\\fair-comparison\\adapters\\go.ps1",
+        "-Fom",
+        "{fom}",
+        "-Seed",
+        "{seed}",
+        "-Count",
+        "{count}",
+        "-ServerEventLog",
+        "{server_event_log}",
+        "-OutputDirectory",
+        "{output}",
+        "-RunId",
+        "{run_id}",
+        "-WorkloadContract",
+        "{workload_file}"
+      ],
+      "result_file": "result.json",
+      "working_directory": "{repo}",
+      "environment": {}
+    }
+  }
+}

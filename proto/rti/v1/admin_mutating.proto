@@ -88,6 +88,9 @@ message AdminDestroyFederationRequest {
   WireVersion wire_version = 1;
   // federation_name is the federation to destroy.
   string federation_name = 2;
+
+  // Fences a delayed administrative command from a replacement execution.
+  optional uint64 expected_federation_generation = 4;
   // evict_joined_federates is true when the operator asked the
   // handler to first force-resign every joined federate before
   // destroying. False (the default) instructs the handler to refuse
@@ -112,6 +115,7 @@ message AdminDestroyFederationResponse {
 message PromoteFederationRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
+  optional uint64 expected_federation_generation = 4;
   string target_node_id = 3;
 }
 

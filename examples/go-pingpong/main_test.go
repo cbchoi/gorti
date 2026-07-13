@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +38,11 @@ func TestPingpong_Smoke(t *testing.T) {
 	if stats.Rounds != 50 {
 		t.Errorf("rounds = %d, want 50", stats.Rounds)
 	}
-	logPath := filepath.Join(dir, "pingpong-smoke.log")
+	logPath := filepath.Join(
+		dir,
+		hex.EncodeToString([]byte("pingpong-smoke")),
+		fmt.Sprintf("%016x.log", uint64(0)),
+	)
 	st, err := os.Stat(logPath)
 	if err != nil {
 		t.Fatalf("stat log file: %v", err)

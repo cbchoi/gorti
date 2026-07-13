@@ -659,6 +659,419 @@ func TestDestroyFederation_AfterAllResigned_Succeeds(t *testing.T) {
 	}
 }
 
+func TestP0DestroySerializesConcurrentJoin(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	opts := validOptions()
+	opts.OnFederationDestroying = func(context.Context, core.FederationName) error {
+		close(entered)
+		<-release
+		return nil
+	}
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	destroyed := make(chan error, 1)
+	go func() { destroyed <- mgr.DestroyFederation(context.Background(), "x") }()
+	<-entered
+	joined := make(chan error, 1)
+	go func() {
+		_, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{Federation: "x", FederateName: "late"})
+		joined <- err
+	}()
+	select {
+	case err := <-joined:
+		t.Fatalf("join escaped destroy serialization: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(release)
+	if err := <-destroyed; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-joined; !errors.Is(err, core.ErrFederationNotFound) {
+		t.Fatalf("join after destroy = %v, want ErrFederationNotFound", err)
+	}
+}
+
+func TestP0DestroyHoldsOperationGateThroughCleanup(t *testing.T) {
+	entered := make(chan struct{})
+	releaseCleanup := make(chan struct{})
+	opts := validOptions()
+	opts.OnFederationDestroying = func(context.Context, core.FederationName) error {
+		close(entered)
+		<-releaseCleanup
+		return nil
+	}
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	destroyed := make(chan error, 1)
+	go func() { destroyed <- mgr.DestroyFederation(context.Background(), "x") }()
+	<-entered
+
+	admitted := make(chan error, 1)
+	go func() {
+		release, err := mgr.AcquireGeneration("x", 0)
+		if release != nil {
+			release()
+		}
+		admitted <- err
+	}()
+	select {
+	case err := <-admitted:
+		t.Fatalf("operation crossed destroy cleanup boundary: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(releaseCleanup)
+	if err := <-destroyed; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-admitted; !errors.Is(err, core.ErrFederationNotFound) {
+		t.Fatalf("operation after destroy = %v, want ErrFederationNotFound", err)
+	}
+}
+
+func TestP0SameNameRecreationRejectsStaleGenerationHandle(t *testing.T) {
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	create := func() {
+		t.Helper()
+		if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "x"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create()
+	oldHandle, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: "x", FederateName: "old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.ResignFederation(ctx, "x", oldHandle, core.ResignActionNoAction); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.DestroyFederation(ctx, "x"); err != nil {
+		t.Fatal(err)
+	}
+	create()
+	newHandle, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: "x", FederateName: "new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newHandle == oldHandle {
+		t.Fatalf("recreated federation reused stale handle %d", oldHandle)
+	}
+	if err := mgr.ValidateMember("x", oldHandle); !errors.Is(err, core.ErrFederateNotJoined) {
+		t.Fatalf("ValidateMember(old) = %v, want ErrFederateNotJoined", err)
+	}
+	if err := mgr.ValidateMember("x", newHandle); err != nil {
+		t.Fatalf("ValidateMember(new) = %v", err)
+	}
+	if generation, ok := mgr.GenerationFor("x"); !ok || generation != 1 {
+		t.Fatalf("GenerationFor = (%d, %v), want (1, true)", generation, ok)
+	}
+}
+
+func TestP0JoinAndDestroyRejectStaleExpectedGeneration(t *testing.T) {
+	opts := validOptions()
+	opts.GenerationEpoch = 40
+	opts.GenerationSpan = 8
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	stale := uint64(39)
+	if _, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{
+		Federation: "x", FederateName: "stale", ExpectedGeneration: &stale,
+	}); !errors.Is(err, core.ErrFederationGenerationMismatch) {
+		t.Fatalf("stale join = %v, want generation mismatch", err)
+	}
+	if err := mgr.DestroyFederationGeneration(ctx, "x", stale); !errors.Is(err, core.ErrFederationGenerationMismatch) {
+		t.Fatalf("stale destroy = %v, want generation mismatch", err)
+	}
+	current := uint64(40)
+	h, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{
+		Federation: "x", FederateName: "current", ExpectedGeneration: &current,
+	})
+	if err != nil {
+		t.Fatalf("current join: %v", err)
+	}
+	if err := mgr.ResignFederation(ctx, "x", h, core.ResignActionNoAction); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.DestroyFederationGeneration(ctx, "x", current); err != nil {
+		t.Fatalf("current destroy: %v", err)
+	}
+}
+
+func TestP0ReservedGenerationBlockExhaustion(t *testing.T) {
+	opts := validOptions()
+	opts.GenerationEpoch = 100
+	opts.GenerationSpan = 2
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "x"}); err != nil {
+			t.Fatalf("create %d: %v", i, err)
+		}
+		if err := mgr.DestroyFederation(ctx, "x"); err != nil {
+			t.Fatalf("destroy %d: %v", i, err)
+		}
+	}
+	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "x"}); err == nil {
+		t.Fatal("create beyond reserved generation block succeeded")
+	}
+}
+
+func TestP0DestroyCleanupFailureLeavesFederationAbsent(t *testing.T) {
+	want := errors.New("cleanup failed")
+	opts := validOptions()
+	opts.OnFederationDestroying = func(context.Context, core.FederationName) error {
+		return want
+	}
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.DestroyFederation(context.Background(), "x"); !errors.Is(err, want) {
+		t.Fatalf("DestroyFederation = %v, want cleanup error", err)
+	}
+	if _, ok := mgr.GenerationFor("x"); ok {
+		t.Fatal("partially cleaned federation became active again")
+	}
+	if err := mgr.DestroyFederation(context.Background(), "x"); !errors.Is(err, core.ErrFederationNotFound) {
+		t.Fatalf("retry destroy = %v, want ErrFederationNotFound", err)
+	}
+	if err := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatalf("fresh generation after failed cleanup: %v", err)
+	}
+}
+
+func TestP0CreateSetupBlocksJoinUntilReady(t *testing.T) {
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupEntered := make(chan struct{})
+	releaseSetup := make(chan struct{})
+	created := make(chan error, 1)
+	go func() {
+		created <- mgr.CreateFederationWithSetup(
+			context.Background(),
+			core.CreateFederationRequest{Name: "x"},
+			func(uint64) {
+				close(setupEntered)
+				<-releaseSetup
+			},
+		)
+	}()
+	<-setupEntered
+	joined := make(chan error, 1)
+	go func() {
+		_, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+			Federation: "x", FederateName: "member",
+		})
+		joined <- err
+	}()
+	select {
+	case err := <-joined:
+		t.Fatalf("join crossed create setup boundary: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(releaseSetup)
+	if err := <-created; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-joined; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestP0JoinHoldsOperationGateThroughReadyHook(t *testing.T) {
+	hookHandle := make(chan core.FederateHandle, 1)
+	releaseHook := make(chan struct{})
+	opts := validOptions()
+	opts.OnFederateJoined = func(_ context.Context, _ core.FederationName, h core.FederateHandle, _, _ string) {
+		hookHandle <- h
+		<-releaseHook
+	}
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	joined := make(chan error, 1)
+	go func() {
+		_, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{
+			Federation: "x", FederateName: "member",
+		})
+		joined <- err
+	}()
+	h := <-hookHandle
+	admitted := make(chan error, 1)
+	go func() {
+		release, err := mgr.AcquireMember("x", h)
+		if release != nil {
+			release()
+		}
+		admitted <- err
+	}()
+	select {
+	case err := <-admitted:
+		t.Fatalf("operation crossed join hook boundary: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(releaseHook)
+	if err := <-joined; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-admitted; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestP0PreResignHookObservesJoinedMember(t *testing.T) {
+	var mgr *federation.Manager
+	var observed bool
+	opts := validOptions()
+	opts.OnFederateResigning = func(_ context.Context, fed core.FederationName, h core.FederateHandle, _ core.ResignAction) {
+		for _, current := range mgr.MembersOf(fed) {
+			observed = observed || current == h
+		}
+	}
+	var err error
+	mgr, err = federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.CreateFederation(context.Background(), core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	h, err := mgr.JoinFederation(context.Background(), core.JoinFederationRequest{Federation: "x", FederateName: "member"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.ResignFederation(context.Background(), "x", h, core.ResignActionNoAction); err != nil {
+		t.Fatal(err)
+	}
+	if !observed {
+		t.Fatal("pre-resign hook observed member after roster removal")
+	}
+}
+
+func TestP0ResignWaitsForAdmittedOperationLease(t *testing.T) {
+	mgr, err := federation.New(validOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	const fed = core.FederationName("operation-gate")
+	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: fed}); err != nil {
+		t.Fatal(err)
+	}
+	h, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: fed, FederateName: "member"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := mgr.AcquireMember(fed, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		done <- mgr.ResignFederation(ctx, fed, h, core.ResignActionNoAction)
+	}()
+	<-started
+	select {
+	case err := <-done:
+		t.Fatalf("resign crossed active operation lease: %v", err)
+	default:
+	}
+	release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("resign did not continue after operation lease release")
+	}
+}
+
+func TestP0ResignHoldsOperationGateThroughCleanupHooks(t *testing.T) {
+	hookEntered := make(chan struct{})
+	releaseHook := make(chan struct{})
+	opts := validOptions()
+	opts.OnFederateResigned = func(context.Context, core.FederationName, core.FederateHandle) {
+		close(hookEntered)
+		<-releaseHook
+	}
+	mgr, err := federation.New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := mgr.CreateFederation(ctx, core.CreateFederationRequest{Name: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	leaving, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: "x", FederateName: "leaving"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	survivor, err := mgr.JoinFederation(ctx, core.JoinFederationRequest{Federation: "x", FederateName: "survivor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resigned := make(chan error, 1)
+	go func() {
+		resigned <- mgr.ResignFederation(ctx, "x", leaving, core.ResignActionNoAction)
+	}()
+	<-hookEntered
+	admitted := make(chan error, 1)
+	go func() {
+		release, err := mgr.AcquireMember("x", survivor)
+		if release != nil {
+			release()
+		}
+		admitted <- err
+	}()
+	select {
+	case err := <-admitted:
+		t.Fatalf("survivor admitted before resign cleanup finished: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(releaseHook)
+	if err := <-resigned; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-admitted; err != nil {
+		t.Fatalf("survivor admission after cleanup: %v", err)
+	}
+}
+
 // TestList_ReturnsNameSortedSummaries verifies that List returns all
 // federations in name-sorted order with accurate FederatesJoined count.
 func TestList_ReturnsNameSortedSummaries(t *testing.T) {

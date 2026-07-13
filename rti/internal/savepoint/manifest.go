@@ -34,12 +34,23 @@ import (
 // available pre-M13). New bundles can therefore restore on a
 // pre-M13 reader without crashing on the new field.
 type Manifest struct {
-	// Version is the bundle format version. Bumped when the on-disk
-	// layout changes incompatibly. Cut-1 = 1.
+	// Version is the bundle format version. Version 1 is the legacy
+	// (federation, label) format; version 2 adds generation provenance and is
+	// stored under a generation-keyed path.
 	Version uint32 `json:"version"`
 
 	// Federation is the federation name the bundle was saved against.
 	Federation core.FederationName `json:"federation"`
+
+	// FederationGeneration identifies the exact source federation execution. A
+	// pointer distinguishes a generation-zero save from a legacy bundle that
+	// predates provenance. Version 2 restores require exact equality.
+	FederationGeneration *uint64 `json:"federation_generation,omitempty"`
+
+	// FOMSHA256 is the lowercase SHA-256 of the exact, ordered FOM module XML
+	// byte slices. Generation-aware production restores fail closed when this
+	// field is absent or differs from the live federation.
+	FOMSHA256 string `json:"fom_sha256,omitempty"`
 
 	// Label is the user-supplied save label (FR-SR-1).
 	Label string `json:"label"`
@@ -105,7 +116,17 @@ const (
 // manager nevertheless emits the framing so a future W2 patch can fill
 // in the slice without changing the bundle layout.
 
-const bundleFormatVersion uint32 = 1
+const (
+	bundleFormatVersionV1 uint32 = 1
+	bundleFormatVersionV2 uint32 = 2
+)
+
+func manifestVersion(generation *uint64) uint32 {
+	if generation == nil {
+		return bundleFormatVersionV1
+	}
+	return bundleFormatVersionV2
+}
 
 // ErrBundleCorrupt indicates the on-disk bundle could not be parsed.
 // Wraps core.ErrSaveBundleCorrupt for callers that want sentinel
@@ -117,7 +138,7 @@ var ErrBundleCorrupt = fmt.Errorf("%w: invalid bundle layout", core.ErrSaveBundl
 // before serialization.
 func WriteBundle(w io.Writer, manifest Manifest, eventLog []byte) error {
 	if manifest.Version == 0 {
-		manifest.Version = bundleFormatVersion
+		manifest.Version = bundleFormatVersionV1
 	}
 	manifest.EventLogBytes = uint64(len(eventLog))
 
@@ -183,9 +204,9 @@ func readManifest(r io.Reader) (Manifest, error) {
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return Manifest{}, fmt.Errorf("%w: manifest unmarshal: %v", ErrBundleCorrupt, err)
 	}
-	if manifest.Version != bundleFormatVersion {
-		return Manifest{}, fmt.Errorf("%w: manifest version %d != supported %d",
-			ErrBundleCorrupt, manifest.Version, bundleFormatVersion)
+	if manifest.Version != bundleFormatVersionV1 && manifest.Version != bundleFormatVersionV2 {
+		return Manifest{}, fmt.Errorf("%w: unsupported manifest version %d",
+			ErrBundleCorrupt, manifest.Version)
 	}
 	return manifest, nil
 }

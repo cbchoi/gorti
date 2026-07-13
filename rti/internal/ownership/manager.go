@@ -91,6 +91,13 @@ func newFederationState() *federationState {
 	}
 }
 
+// OnFederationDestroyed drops ownership and pending transfer state for fed.
+func (m *Manager) OnFederationDestroyed(fed core.FederationName) {
+	m.mu.Lock()
+	delete(m.fed, fed)
+	m.mu.Unlock()
+}
+
 // ownershipKey identifies an (object, attribute) pair within a federation.
 type ownershipKey struct {
 	obj  core.ObjectHandle

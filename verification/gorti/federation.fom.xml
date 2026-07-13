@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>Python Pitch-Parity Verifier FOM</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <description>Pitch-aligned deterministic FM, DM, OM, and TM verifier.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>VerifierEntity</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>Sequence</name>
+          <dataType>HLAinteger32BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+        </attribute>
+        <attribute>
+          <name>Payload</name>
+          <dataType>HLAASCIIstring</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>PublishSubscribe</sharing>
+      <interactionClass>
+        <name>VerifierMessage</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <parameter>
+          <name>Sequence</name>
+          <dataType>HLAinteger32BE</dataType>
+        </parameter>
+        <parameter>
+          <name>Payload</name>
+          <dataType>HLAASCIIstring</dataType>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <dimensions/>
+</objectModel>

@@ -53,11 +53,16 @@ enum TransportMode {
 message CreateFederationResponse {
   // Echo of the seed actually applied (useful when client supplied 0).
   uint64 effective_seed = 1;
+  // Generation assigned to this concrete federation execution.
+  uint64 federation_generation = 2;
 }
 
 message DestroyFederationRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
+  // Required by generation-aware servers; presence distinguishes generation
+  // zero from a legacy client that omitted the fencing token.
+  optional uint64 expected_federation_generation = 3;
 }
 
 message JoinFederationRequest {
@@ -71,6 +76,8 @@ message JoinFederationRequest {
   // unset / empty field is treated as "no type declared" (preserving
   // the cut-1 default behavior).
   string federate_type = 4;
+  // Fences a delayed join from entering a same-name replacement execution.
+  optional uint64 expected_federation_generation = 5;
 }
 
 message JoinFederationResponse {
@@ -109,6 +116,7 @@ message FederationSummary {
   string name = 1;
   Mode mode = 2;
   uint32 federates_joined = 3;
+  uint64 federation_generation = 4;
 }
 
 // ListFederationMembers — IEEE 1516.1-2010 §4.8 listFederationExecutionMembers.

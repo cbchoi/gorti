@@ -1,6 +1,12 @@
-.PHONY: verify fmt lint typecheck test determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps clean ci-all help build build-dds test-dds rti-top
+.PHONY: verify fmt go-fmt-check lint go-lint typecheck test go-test go-test-coverage go-coverage-report determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps clean ci-all help build build-dds test-dds rti-top
 
-GO_PKGS := ./...
+GO_PKGS := \
+	./examples/... \
+	./rti/... \
+	./tests/... \
+	./verification/gorti-go/... \
+	./verification/gorti-go-fair/...
+GO_ROOTS := $(GO_PKGS:/...=)
 PY_DIR := pysdk
 
 help:
@@ -43,11 +49,21 @@ fmt:
 	@if command -v black >/dev/null && [ -d "$(PY_DIR)" ]; then black $(PY_DIR); fi
 	@if command -v ruff   >/dev/null && [ -d "$(PY_DIR)" ]; then ruff check --fix $(PY_DIR); fi
 
-lint:
-	@if ! command -v golangci-lint >/dev/null; then echo "ERROR: golangci-lint not installed"; exit 1; fi
-	golangci-lint run --config .golangci.yml ./...
+go-fmt-check:
+	@OUT="$$(find $(GO_ROOTS) -type f -name '*.go' -exec gofmt -l -s {} +)" || exit $$?; \
+	if [ -n "$$OUT" ]; then \
+		echo "::error ::files need gofmt:"; \
+		echo "$$OUT"; \
+		exit 1; \
+	fi
+
+lint: go-lint
 	@if command -v ruff >/dev/null && [ -d "$(PY_DIR)" ]; then ruff check $(PY_DIR); fi
 	@if command -v buf  >/dev/null; then buf lint; fi
+
+go-lint:
+	@if ! command -v golangci-lint >/dev/null; then echo "ERROR: golangci-lint not installed"; exit 1; fi
+	golangci-lint run --config .golangci.yml $(GO_PKGS)
 
 typecheck:
 	@if command -v mypy >/dev/null && [ -d "$(PY_DIR)" ]; then \
@@ -56,13 +72,21 @@ typecheck:
 		echo "mypy or $(PY_DIR) not present; skipping"; \
 	fi
 
-test:
-	go test -race -timeout 60s $(GO_PKGS)
+test: go-test
 	@if command -v pytest >/dev/null && [ -d "$(PY_DIR)" ]; then \
 		cd $(PY_DIR) && pytest --maxfail=1; \
 	else \
 		echo "pytest or $(PY_DIR) not present; skipping"; \
 	fi
+
+go-test:
+	go test -race -timeout 60s $(GO_PKGS)
+
+go-test-coverage:
+	go test -race -timeout 60s -coverprofile=coverage.out -covermode=atomic $(GO_PKGS)
+
+go-coverage-report:
+	go tool cover -func=coverage.out
 
 # build is the default deployment artifact set — CGo-free, DDS-free.
 # bin/rtid is identical to every cut-2 release; the M19 work does not

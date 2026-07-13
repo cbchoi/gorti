@@ -25,8 +25,8 @@ type momOutboundEvent struct {
 	pb *rtiv1.FederateEvent
 }
 
-func (e *momOutboundEvent) Seq() uint64                  { return e.pb.GetSeq() }
-func (e *momOutboundEvent) Inner() *rtiv1.FederateEvent  { return e.pb }
+func (e *momOutboundEvent) Seq() uint64                 { return e.pb.GetSeq() }
+func (e *momOutboundEvent) Inner() *rtiv1.FederateEvent { return e.pb }
 
 // momSeq is a global counter for the seq field on emitted MOM
 // response events. Distinct from the per-federation outbound seq
@@ -36,7 +36,7 @@ var momSeq uint64
 
 // NewProductionEmitter returns a ResponseEmitter that resolves
 // names to handles via the FOM lookup and forwards the resulting
-// proto event through ``outbox``. M20.6 wires this in cmd/rtid.
+// proto event through “outbox“. M20.6 wires this in cmd/rtid.
 func NewProductionEmitter(outbox core.Outbox) ResponseEmitter {
 	return func(
 		ctx context.Context,

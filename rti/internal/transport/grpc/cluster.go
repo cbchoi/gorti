@@ -41,8 +41,9 @@ func defaultPeerDialer(address string) (*grpc.ClientConn, error) {
 // over the wire. M15 cut-2 demo. Construct via NewClusterService.
 type ClusterService struct {
 	rtiv1.UnimplementedClusterServiceServer
-	mgr    *cluster.Manager
-	dialer PeerDialer
+	mgr           *cluster.Manager
+	dialer        PeerDialer
+	generationFor func(core.FederationName) (uint64, bool)
 
 	// Lazy peer-connection cache. Connections stay open across
 	// requests; the rtid lifecycle owns teardown via Close().
@@ -50,7 +51,19 @@ type ClusterService struct {
 	conns  map[string]*grpc.ClientConn
 }
 
-// NewClusterService constructs the gRPC adapter. ``dialer`` may be
+func (s *ClusterService) SetGenerationResolver(resolver func(core.FederationName) (uint64, bool)) {
+	s.generationFor = resolver
+}
+
+func (s *ClusterService) AssignLocalFederation(fed core.FederationName) {
+	var generation uint64
+	if s.generationFor != nil {
+		generation, _ = s.generationFor(fed)
+	}
+	s.mgr.AssignFederationGeneration(fed, generation)
+}
+
+// NewClusterService constructs the gRPC adapter. “dialer“ may be
 // nil to use the default insecure dialer.
 func NewClusterService(mgr *cluster.Manager, dialer PeerDialer) *ClusterService {
 	if dialer == nil {
@@ -139,7 +152,7 @@ func (s *ClusterService) ReportNodeHealth(
 }
 
 func (s *ClusterService) NotifyAssignment(
-	_ context.Context, req *rtiv1.NotifyAssignmentRequest,
+	ctx context.Context, req *rtiv1.NotifyAssignmentRequest,
 ) (*rtiv1.Empty, error) {
 	if err := validateWireVersion(req.GetWireVersion()); err != nil {
 		return nil, err
@@ -148,15 +161,28 @@ func (s *ClusterService) NotifyAssignment(
 		return nil, status.Error(codes.InvalidArgument,
 			"federation_name + host_node_id are required")
 	}
+	fed := core.FederationName(req.GetFederationName())
+	if s.generationFor != nil && req.ExpectedFederationGeneration == nil {
+		return nil, status.Error(codes.FailedPrecondition,
+			"expected_federation_generation is required")
+	}
+	generation := req.GetExpectedFederationGeneration()
+	if s.generationFor != nil {
+		if local, ok := s.generationFor(fed); ok && local != generation {
+			return nil, errToStatus(ctx, core.ErrFederationGenerationMismatch)
+		}
+	}
+	if current, ok := s.mgr.AssignmentGeneration(fed); ok && generation < current {
+		return nil, errToStatus(ctx, core.ErrFederationGenerationMismatch)
+	}
 	// Update peer membership first so subsequent Lookup returns the
 	// REDIRECT with a non-empty address.
 	if req.GetHostAddress() != "" {
 		s.mgr.RegisterPeer(req.GetHostNodeId(), req.GetHostAddress())
 	}
-	s.mgr.RecordAssignment(
-		core.FederationName(req.GetFederationName()),
-		req.GetHostNodeId(),
-	)
+	if !s.mgr.RecordAssignmentGeneration(fed, req.GetHostNodeId(), generation) {
+		return nil, errToStatus(ctx, core.ErrFederationGenerationMismatch)
+	}
 	return &rtiv1.Empty{}, nil
 }
 
@@ -176,6 +202,11 @@ func (s *ClusterService) BroadcastAssignment(
 		FederationName: string(federation),
 		HostNodeId:     hostNodeID,
 		HostAddress:    hostAddress,
+	}
+	if s.generationFor != nil {
+		if generation, ok := s.generationFor(federation); ok {
+			req.ExpectedFederationGeneration = &generation
+		}
 	}
 	selfID := s.mgr.SelfID()
 	for _, n := range s.mgr.Nodes() {

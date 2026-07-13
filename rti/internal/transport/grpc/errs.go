@@ -42,6 +42,8 @@ func errToStatus(ctx context.Context, err error) error {
 	// NotFound — entity (federation / class / attribute / region / etc) does not exist.
 	case errors.Is(err, core.ErrFederationNotFound),
 		errors.Is(err, core.ErrObjectNotFound),
+		errors.Is(err, core.ErrInteractionClassNotFound),
+		errors.Is(err, core.ErrInteractionParameterNotFound),
 		errors.Is(err, core.ErrObjectClassNotFound),
 		errors.Is(err, core.ErrAttributeNotFound),
 		errors.Is(err, core.ErrSyncPointNotRegistered),
@@ -64,12 +66,13 @@ func errToStatus(ctx context.Context, err error) error {
 	// itself is unauthorized regardless of state.
 	case errors.Is(err, core.ErrAttributeNotOwned),
 		errors.Is(err, core.ErrRegionNotOwnedByFederate),
-		errors.Is(err, core.ErrObjectNotOwned), // M23
+		errors.Is(err, core.ErrObjectNotOwned),                    // M23
 		errors.Is(err, core.ErrObjectInstanceNameReservedByOther): // M26
 		return status.Error(codes.PermissionDenied, err.Error())
 
 	// FailedPrecondition — entity exists but state forbids the action.
 	case errors.Is(err, core.ErrFederateNotJoined),
+		errors.Is(err, core.ErrFederationGenerationMismatch),
 		errors.Is(err, core.ErrFederationHasFederatesJoined),
 		errors.Is(err, core.ErrFederationHalted),
 		errors.Is(err, core.ErrObjectClassNotPublished),
@@ -78,9 +81,9 @@ func errToStatus(ctx context.Context, err error) error {
 		errors.Is(err, core.ErrTimeNotConstrained),
 		errors.Is(err, core.ErrTimeAlreadyRegulating),
 		errors.Is(err, core.ErrTimeAlreadyConstrained),
-		errors.Is(err, core.ErrTimeAdvancingState), // M21 TASK-202c: re-export of time.ErrDuplicateNER
-		errors.Is(err, core.ErrTimeAlreadyAsynchronous),         // M22 TASK-235
-		errors.Is(err, core.ErrTimeNotAsynchronous),             // M22 TASK-235
+		errors.Is(err, core.ErrTimeAdvancingState),                // M21 TASK-202c: re-export of time.ErrDuplicateNER
+		errors.Is(err, core.ErrTimeAlreadyAsynchronous),           // M22 TASK-235
+		errors.Is(err, core.ErrTimeNotAsynchronous),               // M22 TASK-235
 		errors.Is(err, core.ErrAttributeNotPublishedByFederation), // M23
 		errors.Is(err, core.ErrWireVersionMismatch),
 		errors.Is(err, core.ErrSyncPointAlreadyAchieved),
@@ -91,8 +94,8 @@ func errToStatus(ctx context.Context, err error) error {
 		errors.Is(err, core.ErrSaveAlreadyInProgress),
 		errors.Is(err, core.ErrRestoreAlreadyInProgress),
 		errors.Is(err, core.ErrSaveBundleCorrupt),
-		errors.Is(err, core.ErrSaveNotInProgress),    // M24
-		errors.Is(err, core.ErrRestoreNotInProgress), // M24
+		errors.Is(err, core.ErrSaveNotInProgress),             // M24
+		errors.Is(err, core.ErrRestoreNotInProgress),          // M24
 		errors.Is(err, core.ErrObjectInstanceNameInUse),       // M26
 		errors.Is(err, core.ErrObjectInstanceNameNotReserved): // M26
 		return status.Error(codes.FailedPrecondition, err.Error())

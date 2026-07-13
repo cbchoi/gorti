@@ -26,3 +26,9 @@ func (r *regulator) nextTickPayload() []byte {
 	binary.BigEndian.PutUint32(b, r.tickSeq)
 	return b
 }
+
+// tickTimestamp returns the earliest valid TSO timestamp after a grant.
+// A regulating federate may not send before current time + lookahead.
+func (r *regulator) tickTimestamp(grantTime float64) float64 {
+	return grantTime + r.lookahead
+}

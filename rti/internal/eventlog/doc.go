@@ -27,6 +27,8 @@
 //	    Federation: "demo",
 //	    Mode: core.ModeVerbose,
 //	    Seed: 42,
+//	    Generation: 1,
+//	    Clock: core.NewFakeClock(time.Unix(0, 0)),
 //	})
 //
 // Reader takes io.Reader; replay tests construct Reader directly off the
@@ -35,8 +37,8 @@
 // # Determinism
 //
 // Sequence numbers are gapless and monotonic per federation. Writer assigns
-// them at Append time. Wall-clock fields (CreatedAtNs in header, wall_ns in
-// each Event) are INFORMATIONAL ONLY and never used for ordering or replay
-// equality — replay byte-equality compares the seq + body, not the wall
-// stamp. See spec test tests/spec/M2/replay_test.go for the contract.
+// them at Append time. Version-2 headers identify the federation generation;
+// version-1 CreatedAtNs and per-event wall_ns fields remain informational.
+// Replay byte-equality compares the seq + body, not wall-clock stamps. See
+// spec test tests/spec/M2/replay_test.go for the contract.
 package eventlog

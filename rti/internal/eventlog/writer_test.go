@@ -3,11 +3,15 @@ package eventlog
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/cbchoi/gorti/rti/internal/core"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // (No exported-field record type: Go prohibits a method and a field
@@ -358,6 +362,27 @@ func TestWriter_Close_DelegatesToCloser(t *testing.T) {
 	}
 }
 
+func TestP0Writer_CloseFailureRemainsRetryable(t *testing.T) {
+	sink := &closableSink{closeErr: errors.New("transient close failure")}
+	w, err := NewWriter(WriterOptions{
+		Sink: sink, Federation: "demo", Mode: core.ModeVerbose,
+		Clock: core.NewFakeClock(time.Unix(0, 0)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err == nil {
+		t.Fatal("first Close succeeded, want injected failure")
+	}
+	sink.closeErr = nil
+	if err := w.Close(); err != nil {
+		t.Fatalf("retry Close: %v", err)
+	}
+	if sink.closeCount != 2 {
+		t.Fatalf("sink close attempts = %d, want 2", sink.closeCount)
+	}
+}
+
 // failingSink returns an error on every Write call.
 type failingSink struct {
 	headerWritten bool
@@ -384,6 +409,102 @@ func TestWriter_Append_PropagatesWriteError(t *testing.T) {
 	}
 	if err := w.Append(context.Background(), "demo", &unexportedSeqRecord{}); err == nil {
 		t.Errorf("Append on failing sink returned nil error")
+	}
+}
+
+type recordingSink struct {
+	bytes.Buffer
+	writes int
+	last   []byte
+}
+
+func (s *recordingSink) Write(p []byte) (int, error) {
+	s.writes++
+	s.last = append(s.last[:0], p...)
+	return s.Buffer.Write(p)
+}
+
+func TestWriter_AppendWritesByteIdenticalSingleFrame(t *testing.T) {
+	sink := &recordingSink{}
+	w, err := NewWriter(WriterOptions{
+		Sink: sink, Federation: "demo", Mode: core.ModeVerbose,
+		Clock: core.NewFakeClock(time.Unix(0, 0)),
+	})
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	defer w.Close()
+	sink.writes = 0
+	sink.last = nil
+
+	if err := w.Append(context.Background(), "demo", &unexportedSeqRecord{}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	body, err := proto.Marshal(&rtiv1.Event{Seq: 1})
+	if err != nil {
+		t.Fatalf("proto.Marshal: %v", err)
+	}
+	want := make([]byte, 4+len(body))
+	binary.LittleEndian.PutUint32(want[:4], uint32(len(body)))
+	copy(want[4:], body)
+
+	if sink.writes != 1 {
+		t.Fatalf("Append Write calls = %d, want 1", sink.writes)
+	}
+	if !bytes.Equal(sink.last, want) {
+		t.Errorf("Append frame = %x, want %x", sink.last, want)
+	}
+}
+
+type shortAppendSink struct {
+	headerWritten bool
+	appendErr     error
+	appendWrites  int
+}
+
+func (s *shortAppendSink) Write(p []byte) (int, error) {
+	if !s.headerWritten {
+		s.headerWritten = true
+		return len(p), nil
+	}
+	s.appendWrites++
+	return len(p) - 1, s.appendErr
+}
+
+func TestWriter_AppendRejectsShortFrameWrite(t *testing.T) {
+	diskErr := errors.New("disk full")
+	tests := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "nil error", want: io.ErrShortWrite},
+		{name: "underlying error", err: diskErr, want: diskErr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sink := &shortAppendSink{appendErr: tt.err}
+			w, err := NewWriter(WriterOptions{
+				Sink: sink, Federation: "demo", Mode: core.ModeVerbose,
+				Clock: core.NewFakeClock(time.Unix(0, 0)),
+			})
+			if err != nil {
+				t.Fatalf("NewWriter: %v", err)
+			}
+			defer w.Close()
+
+			evt := &unexportedSeqRecord{}
+			err = w.Append(context.Background(), "demo", evt)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("Append error = %v, want errors.Is(%v)", err, tt.want)
+			}
+			if sink.appendWrites != 1 {
+				t.Errorf("Append Write calls = %d, want 1", sink.appendWrites)
+			}
+			if evt.Seq() != 1 {
+				t.Errorf("event seq = %d, want 1", evt.Seq())
+			}
+		})
 	}
 }
 

@@ -42,6 +42,70 @@ func TestNewRTID_NilLoggerDefaults(t *testing.T) {
 	}
 }
 
+func TestNewRTID_OutboxConfig(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	t.Run("zero values preserve defaults", func(t *testing.T) {
+		srv, err := newRTID(rtidConfig{Logger: logger})
+		if err != nil {
+			t.Fatalf("newRTID: %v", err)
+		}
+		if srv.outbox.batchSize != defaultMultiBatchSize || srv.outbox.flushInterval != defaultMultiFlushInterval {
+			t.Errorf("outbox config = (%d, %s), want (%d, %s)", srv.outbox.batchSize, srv.outbox.flushInterval, defaultMultiBatchSize, defaultMultiFlushInterval)
+		}
+	})
+
+	t.Run("custom values are wired", func(t *testing.T) {
+		const batchSize = 128
+		const flushInterval = 5 * time.Millisecond
+		srv, err := newRTID(rtidConfig{
+			Logger:              logger,
+			OutboxBatchSize:     batchSize,
+			OutboxFlushInterval: flushInterval,
+		})
+		if err != nil {
+			t.Fatalf("newRTID: %v", err)
+		}
+		if srv.outbox.batchSize != batchSize || srv.outbox.flushInterval != flushInterval {
+			t.Errorf("outbox config = (%d, %s), want (%d, %s)", srv.outbox.batchSize, srv.outbox.flushInterval, batchSize, flushInterval)
+		}
+	})
+}
+
+func TestNewRTID_RejectsInvalidOutboxConfig(t *testing.T) {
+	for _, cfg := range []rtidConfig{
+		{OutboxBatchSize: maxMultiBatchSize + 1},
+		{OutboxFlushInterval: -time.Nanosecond},
+	} {
+		if _, err := newRTID(cfg); err == nil {
+			t.Errorf("newRTID(%+v) returned nil error", cfg)
+		}
+	}
+}
+
+func TestValidateOutboxCLIConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		batchSize     int
+		flushInterval time.Duration
+		wantErr       bool
+	}{
+		{name: "minimum batch size", batchSize: 1, flushInterval: time.Nanosecond},
+		{name: "maximum batch size", batchSize: maxMultiBatchSize, flushInterval: time.Second},
+		{name: "zero batch size", batchSize: 0, flushInterval: time.Millisecond, wantErr: true},
+		{name: "batch size above maximum", batchSize: maxMultiBatchSize + 1, flushInterval: time.Millisecond, wantErr: true},
+		{name: "zero flush interval", batchSize: 1, flushInterval: 0, wantErr: true},
+		{name: "negative flush interval", batchSize: 1, flushInterval: -time.Nanosecond, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateOutboxCLIConfig(tc.batchSize, tc.flushInterval)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("validateOutboxCLIConfig() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 // TestRTIDServe_StartsAndShutsDownCleanly: Serve listens, then exits
 // when ctx is canceled.
 func TestRTIDServe_StartsAndShutsDownCleanly(t *testing.T) {

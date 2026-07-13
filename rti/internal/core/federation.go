@@ -98,9 +98,10 @@ func itoa32(v int32) string {
 // declared at join-time. Empty FederateType preserves the cut-1
 // default behavior.
 type JoinFederationRequest struct {
-	Federation   FederationName
-	FederateName string
-	FederateType string
+	Federation         FederationName
+	FederateName       string
+	FederateType       string
+	ExpectedGeneration *uint64
 }
 
 // FederationSummary is what ListFederations returns per federation.
@@ -108,6 +109,7 @@ type FederationSummary struct {
 	Name            FederationName
 	Mode            Mode
 	FederatesJoined uint32
+	Generation      uint64
 }
 
 // FederationStore is the entry point for federation lifecycle services.
@@ -135,6 +137,32 @@ type FederationStore interface {
 	// is sorted by handle. Returns an empty slice when no federations
 	// are active.
 	Snapshot() []FederationRoster
+}
+
+// FederationMembershipValidator is the transport-facing authoritative roster
+// check. A handle is valid only for the current generation of the named
+// federation; stale handles from a destroyed and recreated federation fail.
+type FederationMembershipValidator interface {
+	ValidateMember(fed FederationName, h FederateHandle) error
+	GenerationFor(fed FederationName) (uint64, bool)
+}
+
+// FederationMembershipGuard holds a federation operation lease from
+// validation through the protected service mutation. Destroy and resign wait
+// for all leases before cleanup, closing validation/check-use races.
+type FederationMembershipGuard interface {
+	FederationMembershipValidator
+	AcquireMember(fed FederationName, h FederateHandle) (release func(), err error)
+}
+
+// FederationGenerationGuard protects mutations that have no federate identity,
+// such as joining or destroying an execution. The generation check shares the
+// mutation's lifecycle boundary so a delayed name-only request cannot target a
+// same-name replacement.
+type FederationGenerationGuard interface {
+	FederationMembershipValidator
+	AcquireGeneration(fed FederationName, expected uint64) (release func(), err error)
+	DestroyFederationGeneration(ctx context.Context, fed FederationName, expected uint64) error
 }
 
 // FederationMember is one entry on the IEEE 1516.1-2010 §4.8

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any, Self, TypeAlias, cast
@@ -949,6 +949,14 @@ class Federate:
         production, drained from the server-streaming RPC).
         """
         return self._iter_events()
+
+    async def set_event_sink(self, sink: Callable[[Any], object] | None) -> bool:
+        """Select direct same-loop delivery when the transport supports it."""
+        setter = getattr(self._transport, "set_event_sink", None)
+        if not callable(setter):
+            return False
+        setter(self.handle, sink)
+        return True
 
     async def _iter_events(self) -> AsyncIterator[Any]:
         queue = self._transport.events_for(self.handle)

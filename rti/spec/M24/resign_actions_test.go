@@ -49,9 +49,11 @@ func (*nopFOMRepo) Get(_ context.Context, _ core.FederationName) (core.FOMHandle
 
 type nopFOMHandle struct{}
 
-func (*nopFOMHandle) IsValid() bool                                                       { return true }
-func (*nopFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool)             { return 1, true }
-func (*nopFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool)   { return 1, true }
+func (*nopFOMHandle) IsValid() bool                                           { return true }
+func (*nopFOMHandle) LookupObjectClass(string) (core.ObjectClassHandle, bool) { return 1, true }
+func (*nopFOMHandle) LookupInteractionClass(string) (core.InteractionClassHandle, bool) {
+	return 1, true
+}
 func (*nopFOMHandle) LookupAttribute(core.ObjectClassHandle, string) (core.AttributeHandle, bool) {
 	return 1, true
 }

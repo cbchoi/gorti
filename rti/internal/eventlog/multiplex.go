@@ -2,6 +2,7 @@ package eventlog
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -21,19 +22,25 @@ import (
 // disk I/O. The factory MUST set opts.Sink before returning.
 type WriterFactory func(opts WriterOptions) (*Writer, error)
 
+// MetadataResolver returns immutable event-log metadata for the current
+// execution of a federation. ok is false when the federation does not exist.
+type MetadataResolver func(fed core.FederationName) (generation uint64, mode core.Mode, seed uint64, ok bool)
+
 // MultiplexOptions configures NewMultiplexWriter.
 type MultiplexOptions struct {
-	// Clock is forwarded into per-federation WriterOptions for header
-	// CreatedAtNs stamping. MUST NOT be nil.
+	// Clock is forwarded into per-federation WriterOptions. MUST NOT be nil.
 	Clock core.Clock
 
-	// Mode is forwarded into per-federation WriterOptions.
+	// Mode is forwarded into per-federation WriterOptions when Metadata is nil.
 	Mode core.Mode
 
-	// Seed is forwarded into per-federation WriterOptions. Per-federation
-	// seeds (one-per-federation seeding) are wired separately in cut-1;
-	// MultiplexWriter applies the same seed to every per-federation writer.
+	// Seed is forwarded into per-federation WriterOptions when Metadata is nil.
 	Seed uint64
+
+	// Metadata resolves generation, mode, and seed when a writer is opened and
+	// when OpenReader selects the current generation. When nil, generation zero
+	// and the static Mode/Seed fields above are used.
+	Metadata MetadataResolver
 
 	// Dir is the directory where the default file-backed factory writes
 	// per-federation .log files. Required only when Factory is nil.
@@ -49,8 +56,8 @@ type MultiplexOptions struct {
 // the configured WriterFactory; subsequent calls reuse the same Writer.
 //
 // Per-federation seq counters are independent (each Writer tracks its
-// own monotonic seq), which matches the on-disk file-per-federation
-// layout: one .log file per federation, each starting at seq 1.
+// own monotonic seq), which matches the on-disk file-per-generation
+// layout: each federation generation starts at seq 1.
 //
 // Concurrency: a single mutex serializes table mutations (lazy writer
 // creation in writerFor and the close walk in Close) so the
@@ -121,6 +128,9 @@ func (m *MultiplexWriter) Append(ctx context.Context, fed core.FederationName, e
 // will return its own descriptive error).
 func ensurePointerRecord(evt core.EventRecord) core.EventRecord {
 	if evt == nil {
+		return evt
+	}
+	if _, ok := evt.(interface{ SetSeq(uint64) }); ok {
 		return evt
 	}
 	if pb := extractProtoEvent(evt); pb != nil {
@@ -195,13 +205,18 @@ func (m *MultiplexWriter) Sync(ctx context.Context, fed core.FederationName) err
 // OpenReader implements core.EventLog. The path argument is interpreted
 // as a federation name (the multiplexer's natural identifier), not a raw
 // filesystem path. For the default file-backed factory, this opens the
-// per-federation log file under Dir; for a custom factory, the
+// current generation's log file under Dir; for a custom factory, the
 // multiplexer cannot recover the source bytes and returns an error.
 func (m *MultiplexWriter) OpenReader(_ context.Context, path string) (core.EventLogReader, error) {
 	if m.opts.Dir == "" {
 		return nil, errors.New("eventlog: MultiplexWriter.OpenReader requires Dir (no file backing)")
 	}
-	logPath := filepath.Join(m.opts.Dir, path+".log")
+	fed := core.FederationName(path)
+	generation, _, _, err := m.metadataFor(fed)
+	if err != nil {
+		return nil, err
+	}
+	logPath := GenerationLogPath(m.opts.Dir, fed, generation)
 	f, err := os.Open(logPath) //nolint:gosec // path is composed from caller-supplied federation name + Dir
 	if err != nil {
 		return nil, fmt.Errorf("eventlog: open %s: %w", logPath, err)
@@ -243,6 +258,29 @@ func (m *MultiplexWriter) Close() error {
 	return firstErr
 }
 
+// CloseFederation flushes and closes one writer while keeping the multiplexer
+// available for other federations and later generations.
+func (m *MultiplexWriter) CloseFederation(fed core.FederationName) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return errMultiplexClosed
+	}
+	w, ok := m.writers[fed]
+	if !ok {
+		return nil
+	}
+	err := w.Close()
+	// Never let a failed close leave this generation addressable by a later
+	// same-name execution. Writer.Close permanently closes the writer even
+	// when its sink reports an error.
+	delete(m.writers, fed)
+	if err != nil {
+		return fmt.Errorf("eventlog: close federation %q: %w", fed, err)
+	}
+	return nil
+}
+
 // writerFor returns the federation's Writer, creating it on first use.
 func (m *MultiplexWriter) writerFor(fed core.FederationName) (*Writer, error) {
 	m.mu.Lock()
@@ -253,10 +291,15 @@ func (m *MultiplexWriter) writerFor(fed core.FederationName) (*Writer, error) {
 	if w, ok := m.writers[fed]; ok {
 		return w, nil
 	}
+	generation, mode, seed, err := m.metadataFor(fed)
+	if err != nil {
+		return nil, err
+	}
 	w, err := m.opts.Factory(WriterOptions{
 		Federation: fed,
-		Mode:       m.opts.Mode,
-		Seed:       m.opts.Seed,
+		Generation: generation,
+		Mode:       mode,
+		Seed:       seed,
 		Clock:      m.opts.Clock,
 	})
 	if err != nil {
@@ -269,17 +312,37 @@ func (m *MultiplexWriter) writerFor(fed core.FederationName) (*Writer, error) {
 // errMultiplexClosed is returned by Append/Sync after Close.
 var errMultiplexClosed = errors.New("eventlog: MultiplexWriter is closed")
 
-// newFileFactory returns a WriterFactory that creates one .log file per
-// federation under dir. The file is opened with O_CREATE|O_TRUNC|O_WRONLY
-// — production callers control the lifecycle (one rtid run per federation
-// log file), so truncation is acceptable on open.
+func (m *MultiplexWriter) metadataFor(fed core.FederationName) (uint64, core.Mode, uint64, error) {
+	if m.opts.Metadata == nil {
+		return 0, m.opts.Mode, m.opts.Seed, nil
+	}
+	generation, mode, seed, ok := m.opts.Metadata(fed)
+	if !ok {
+		return 0, core.ModeUnspecified, 0, fmt.Errorf("%w: federation %q has no event-log metadata", core.ErrFederationNotFound, fed)
+	}
+	return generation, mode, seed, nil
+}
+
+// GenerationLogPath returns the canonical v2 path for one federation
+// execution. Federation bytes are encoded injectively and generation is fixed
+// width so callers can attest the exact file selected for replay or analysis.
+func GenerationLogPath(dir string, fed core.FederationName, generation uint64) string {
+	federationDir := hex.EncodeToString([]byte(fed))
+	return filepath.Join(dir, federationDir, fmt.Sprintf("%016x.log", generation))
+}
+
+// newFileFactory creates one exclusive file per federation generation under
+// hex(federation)/%016x.log. Existing generations are never overwritten.
 func newFileFactory(dir string) WriterFactory {
 	return func(opts WriterOptions) (*Writer, error) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("eventlog: mkdir %s: %w", dir, err)
+		if len(opts.Federation) > MaxFederationNameBytes {
+			return nil, errFederationNameTooLong
 		}
-		path := filepath.Join(dir, string(opts.Federation)+".log")
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644) //nolint:gosec // composed from caller-supplied federation name + Dir
+		path := GenerationLogPath(dir, opts.Federation, opts.Generation)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, fmt.Errorf("eventlog: mkdir %s: %w", filepath.Dir(path), err)
+		}
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644) //nolint:gosec // federation is hex-encoded and generation is fixed-width hex
 		if err != nil {
 			return nil, fmt.Errorf("eventlog: open %s: %w", path, err)
 		}
@@ -287,6 +350,7 @@ func newFileFactory(dir string) WriterFactory {
 		w, err := NewWriter(opts)
 		if err != nil {
 			_ = f.Close()
+			_ = os.Remove(path)
 			return nil, err
 		}
 		return w, nil

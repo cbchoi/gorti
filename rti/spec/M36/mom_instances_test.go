@@ -7,9 +7,9 @@ import (
 
 	"github.com/cbchoi/gorti/rti/internal/core"
 	"github.com/cbchoi/gorti/rti/internal/declaration"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 	"github.com/cbchoi/gorti/rti/internal/mom"
 	"github.com/cbchoi/gorti/rti/internal/object"
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
 const fedName = core.FederationName("mom_federation_lifecycle")

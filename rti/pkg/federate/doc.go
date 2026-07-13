@@ -30,27 +30,24 @@
 //
 // # Scope
 //
-// Cut-3 scope: interactions only — Publish/Subscribe interaction class,
-// SendInteraction, ReceiveInteraction event delivery via the Events
-// channel. Object-class operations (RegisterObjectInstance,
-// UpdateAttributeValues), time management (NER/TAR), sync points,
-// ownership, save/restore, DDM, and MOM are all reachable from the
-// underlying genproto stubs but not yet wrapped here. Add as needed.
+// The SDK wraps interaction and object-class declaration, object instance
+// registration and updates, typed interaction/object callbacks, time
+// management, and selected DDM and lifecycle services. Other service groups
+// continue to be added without exposing generated protobuf types.
 //
 // # FOM-driven handles
 //
-// The wire surface refers to interaction classes and parameters by
-// integer handles, not strings. JoinFederation parses the FOM modules
-// supplied in FederationSpec and builds local name→handle tables that
-// mirror the Go-side rtid scheme: 1-based handles, sorted by name.
-// All public methods take string class / parameter names; handle
-// resolution happens internally.
+// The wire surface refers to object and interaction classes, attributes, and
+// parameters by integer handles, not strings. JoinFederation parses the FOM
+// modules supplied in FederationSpec and builds local name→handle tables that
+// mirror the Go-side rtid scheme. Public declaration and update methods take
+// FOM names; handle resolution happens internally.
 //
 // # Time management
 //
-// Cut-3 rtid does not yet wire TimeService (timeService=nil in the
-// gRPC server). Cross-process Time RPCs return Unimplemented. This
-// SDK therefore exposes no NER/TAR/grant API yet; the SendInteraction
-// call accepts an optional timestamp that flows through to the wire
-// but federates can't currently coordinate via LBTS cross-process.
+// The SDK exposes time regulation, time-constrained delivery, lookahead
+// changes, TAR/TARA/NER/NERA/NMRA/NMRAA/FQR requests, and typed
+// TimeAdvanceGrant callbacks. Timestamped interactions are delivered before
+// the grant that makes their logical time reachable. The go-tar-wait example
+// demonstrates a request that remains pending until a peer federate advances.
 package federate

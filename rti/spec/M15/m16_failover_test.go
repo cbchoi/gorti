@@ -23,11 +23,11 @@ import (
 // TestSpec_M16_3_PromoteThenResolveRedirectsFederate is the
 // headline M16 demo AC. Demonstrates the operator-triggered
 // failover path:
-//   1. node-A hosts federation "fed".
-//   2. Operator calls cluster.PromoteFederation("fed", "node-b") on
-//      node-A. The assignment flips locally + broadcasts to node-B.
-//   3. A federate calling node-A's ResolveFederationHost("fed")
-//      now sees REDIRECT and follows it to node-B.
+//  1. node-A hosts federation "fed".
+//  2. Operator calls cluster.PromoteFederation("fed", "node-b") on
+//     node-A. The assignment flips locally + broadcasts to node-B.
+//  3. A federate calling node-A's ResolveFederationHost("fed")
+//     now sees REDIRECT and follows it to node-B.
 func TestSpec_M16_3_PromoteThenResolveRedirectsFederate(t *testing.T) {
 	const (
 		nodeAID, nodeAAddr = "node-a", "passthrough:///bufnet-a"
@@ -150,7 +150,7 @@ func errIsTooManyRedirects(err error) bool {
 }
 
 // bufconnOptsFor builds ConnectOptions with a ContextDialer that
-// routes by the host_address key in ``listeners``. The dialer
+// routes by the host_address key in “listeners“. The dialer
 // reconstructs the "passthrough:///" prefix before lookup so the
 // listeners map key matches what newBufNode's PeerDialer uses for
 // the same listener.

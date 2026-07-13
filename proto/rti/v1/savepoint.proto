@@ -26,12 +26,14 @@ service SavepointService {
 message AbortFederationSaveRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
+  optional uint64 federate_handle = 3;
 }
 
 // AbortFederationRestore — §4.30 (M24).
 message AbortFederationRestoreRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
+  optional uint64 federate_handle = 3;
 }
 
 message RequestFederationSaveRequest {

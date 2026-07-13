@@ -19,6 +19,35 @@ import (
 	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
 )
 
+type fixedGenerationMembership struct {
+	generation uint64
+	exists     bool
+}
+
+func (m fixedGenerationMembership) ValidateMember(core.FederationName, core.FederateHandle) error {
+	return nil
+}
+
+func (m fixedGenerationMembership) GenerationFor(core.FederationName) (uint64, bool) {
+	return m.generation, m.exists
+}
+
+func TestP0AdministrativeGenerationIsRequiredAndCompared(t *testing.T) {
+	membership := fixedGenerationMembership{generation: 9, exists: true}
+	if _, err := requireAdministrativeGeneration(context.Background(), membership, "fed", nil); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("missing generation status = %v", status.Code(err))
+	}
+	stale := uint64(8)
+	if _, err := requireAdministrativeGeneration(context.Background(), membership, "fed", &stale); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("stale generation status = %v", status.Code(err))
+	}
+	current := uint64(9)
+	got, err := requireAdministrativeGeneration(context.Background(), membership, "fed", &current)
+	if err != nil || got == nil || *got != current {
+		t.Fatalf("current generation = (%v, %v)", got, err)
+	}
+}
+
 // recordingFedStore captures the calls the mutating handler makes so
 // tests can assert the manager primitives were exercised in the
 // expected order. It satisfies core.FederationStore enough for the

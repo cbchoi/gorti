@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://www.sisostds.org/schemas/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://www.sisostds.org/schemas/IEEE1516-2010 http://www.sisostds.org/schemas/IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>Verification.xml</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-07-12</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <purpose>Independent FOM for deterministic IEEE 1516-2010 verification.</purpose>
+    <applicationDomain>RTI verification</applicationDomain>
+    <description>Object updates and interactions carrying deterministic sequence and payload values.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>VerifierEntity</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>Sequence</name>
+          <dataType>HLAinteger32BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>Zero-based deterministic item index.</semantics>
+        </attribute>
+        <attribute>
+          <name>Payload</name>
+          <dataType>HLAASCIIstring</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>First 16 lowercase hexadecimal characters of a seeded SHA-256 digest.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>VerifierMessage</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <semantics>Deterministic verification message.</semantics>
+        <parameter>
+          <name>Sequence</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>Zero-based deterministic item index.</semantics>
+        </parameter>
+        <parameter>
+          <name>Payload</name>
+          <dataType>HLAASCIIstring</dataType>
+          <semantics>First 16 lowercase hexadecimal characters of a seeded SHA-256 digest.</semantics>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <dimensions/>
+  <tags>
+    <updateReflectTag>
+      <dataType>HLAopaqueData</dataType>
+      <semantics>Unused.</semantics>
+    </updateReflectTag>
+    <sendReceiveTag>
+      <dataType>HLAopaqueData</dataType>
+      <semantics>Unused.</semantics>
+    </sendReceiveTag>
+    <deleteRemoveTag>
+      <dataType>HLAopaqueData</dataType>
+      <semantics>Unused.</semantics>
+    </deleteRemoveTag>
+    <divestitureRequestTag>
+      <dataType>HLAopaqueData</dataType>
+      <semantics>Unused.</semantics>
+    </divestitureRequestTag>
+    <divestitureCompletionTag>
+      <dataType>HLAopaqueData</dataType>
+      <semantics>Unused.</semantics>
+    </divestitureCompletionTag>
+    <acquisitionRequestTag>
+      <dataType>HLAopaqueData</dataType>
+      <semantics>Unused.</semantics>
+    </acquisitionRequestTag>
+    <requestUpdateTag>
+      <dataType>HLAopaqueData</dataType>
+      <semantics>Unused.</semantics>
+    </requestUpdateTag>
+  </tags>
+  <synchronizations/>
+  <transportations/>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+  <dataTypes>
+    <basicDataRepresentations/>
+    <simpleDataTypes/>
+    <enumeratedDataTypes/>
+    <arrayDataTypes/>
+    <fixedRecordDataTypes/>
+    <variantRecordDataTypes/>
+  </dataTypes>
+</objectModel>

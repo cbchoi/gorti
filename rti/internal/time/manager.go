@@ -209,6 +209,32 @@ func (m *Manager) OnFederateResign(ctx context.Context, fed core.FederationName,
 	_ = m.tryGrantPending(ctx, fed)
 }
 
+// OnFederationDestroyed removes all time, halt, buffer, and evaluator state
+// owned by a federation. It is idempotent and runs after the roster is empty.
+func (m *Manager) OnFederationDestroyed(fed core.FederationName) {
+	ext := extOf(m)
+	ext.mu.Lock()
+	for key := range ext.states {
+		if key.fed == fed {
+			delete(ext.states, key)
+		}
+	}
+	ext.mu.Unlock()
+	m.states.mu.Lock()
+	for key := range m.states.states {
+		if key.fed == fed {
+			delete(m.states.states, key)
+		}
+	}
+	m.states.mu.Unlock()
+	ext.haltedMu.Lock()
+	delete(ext.halted, fed)
+	ext.haltedMu.Unlock()
+	ext.evalMu.Lock()
+	delete(ext.evalLocks, fed)
+	ext.evalMu.Unlock()
+}
+
 // ModifyLookahead updates the lookahead of an already-regulating federate
 // in place, without round-tripping through Disable + Enable.
 // M21 TASK-202b — see docs/M21_DISPATCH_PLAN.md §1 (non-goals exception)

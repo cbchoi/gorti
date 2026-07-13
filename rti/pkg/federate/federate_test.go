@@ -76,10 +76,11 @@ func newTestRtidShared(t *testing.T, withTime bool) *testRtid {
 		t.Fatalf("federation.New: %v", err)
 	}
 	opts := grpcsvc.Options{
-		Federations:  fedMgr,
-		Declarations: declMgr,
-		Objects:      objReg,
-		Outbox:       outbox,
+		Federations:             fedMgr,
+		Declarations:            declMgr,
+		Objects:                 objReg,
+		Outbox:                  outbox,
+		EnableInteractionStream: true,
 	}
 	if withTime {
 		mgr, mErr := timepkg.New(timepkg.Options{Clock: clock, Outbox: outbox})

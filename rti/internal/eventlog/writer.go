@@ -41,7 +41,11 @@ type WriterOptions struct {
 	// Seed is recorded in the header for deterministic replay seeding.
 	Seed uint64
 
-	// Clock provides CreatedAtNs at file open. MUST NOT be nil.
+	// Generation identifies this federation execution in the v2 header.
+	Generation uint64
+
+	// Clock remains required for deterministic writer construction. Version 2
+	// no longer persists wall-clock creation time in the fixed-width header.
 	Clock core.Clock
 }
 
@@ -84,12 +88,12 @@ func NewWriter(opts WriterOptions) (*Writer, error) {
 	}
 
 	hdr := core.EventLogHeader{
-		Magic:       Magic,
-		Version:     Version,
-		Federation:  opts.Federation,
-		CreatedAtNs: uint64(opts.Clock.Now().UnixNano()),
-		Seed:        opts.Seed,
-		Mode:        opts.Mode,
+		Magic:      Magic,
+		Version:    Version,
+		Federation: opts.Federation,
+		Generation: opts.Generation,
+		Seed:       opts.Seed,
+		Mode:       opts.Mode,
 	}
 	var headerBuf [HeaderSize]byte
 	if err := EncodeHeader(headerBuf[:], hdr); err != nil {
@@ -165,32 +169,27 @@ func (w *Writer) Append(ctx context.Context, fed core.FederationName, evt core.E
 	// adapter), marshal it directly. Otherwise synthesize a minimal
 	// *rtiv1.Event so the wire stays well-formed; the fixture's body
 	// content is not part of the determinism contract.
-	var body []byte
-	if msg, ok := evt.(proto.Message); ok {
-		var err error
-		if body, err = proto.Marshal(msg); err != nil {
-			w.nextSeq--
-			return fmt.Errorf("eventlog: marshal event: %w", err)
-		}
-	} else {
-		var err error
-		if body, err = proto.Marshal(&rtiv1.Event{Seq: w.nextSeq}); err != nil {
-			w.nextSeq--
-			return fmt.Errorf("eventlog: marshal synthetic event: %w", err)
-		}
+	msg, ok := evt.(proto.Message)
+	if !ok {
+		msg = &rtiv1.Event{Seq: w.nextSeq}
 	}
+	frame, err := proto.MarshalOptions{}.MarshalAppend(
+		make([]byte, 4, 4+proto.Size(msg)),
+		msg,
+	)
+	if err != nil {
+		w.nextSeq--
+		return fmt.Errorf("eventlog: marshal event: %w", err)
+	}
+	binary.LittleEndian.PutUint32(frame[:4], uint32(len(frame)-4))
 
-	var lenBuf [4]byte
-	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(body)))
-	if _, err := w.opts.Sink.Write(lenBuf[:]); err != nil {
-		// State is now inconsistent (length prefix may be partially
-		// written); the writer is unusable but we don't roll back the
-		// counter because the log file may have observed the partial
-		// write. Caller should treat this as a fatal I/O failure.
-		return fmt.Errorf("eventlog: write length prefix: %w", err)
+	n, err := w.opts.Sink.Write(frame)
+	if err != nil {
+		// The frame may be partially written, so the seq cannot be reused.
+		return fmt.Errorf("eventlog: write event frame: %w", err)
 	}
-	if _, err := w.opts.Sink.Write(body); err != nil {
-		return fmt.Errorf("eventlog: write event body: %w", err)
+	if n != len(frame) {
+		return fmt.Errorf("eventlog: write event frame: wrote %d of %d bytes: %w", n, len(frame), io.ErrShortWrite)
 	}
 	return nil
 }
@@ -203,6 +202,13 @@ func (w *Writer) Append(ctx context.Context, fed core.FederationName, evt core.E
 //     rti/spec/M2.fakeEventRecord which lives in another package).
 func assignSeq(evt core.EventRecord, seq uint64) error {
 	v := reflect.ValueOf(evt)
+	if setter, ok := evt.(interface{ SetSeq(uint64) }); ok {
+		if v.Kind() == reflect.Pointer && v.IsNil() {
+			return fmt.Errorf("eventlog: cannot assign seq: record is not a non-nil pointer (kind=%s)", v.Kind())
+		}
+		setter.SetSeq(seq)
+		return nil
+	}
 	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return fmt.Errorf("eventlog: cannot assign seq: record is not a non-nil pointer (kind=%s)", v.Kind())
 	}
@@ -273,10 +279,12 @@ func (w *Writer) Close() error {
 	if w.closed {
 		return nil
 	}
-	w.closed = true
 	if c, ok := w.opts.Sink.(io.Closer); ok {
-		return c.Close()
+		if err := c.Close(); err != nil {
+			return err
+		}
 	}
+	w.closed = true
 	return nil
 }
 

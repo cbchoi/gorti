@@ -148,13 +148,16 @@ func TestAdminMutating_Registered(t *testing.T) {
 // dependency on TestAdminListener_StatusE2E running first.
 func dialAdminWithRetry(t *testing.T, addr string, total time.Duration) (*grpc.ClientConn, bool) {
 	t.Helper()
-	deadline := time.Now().Add(total)
-	for time.Now().Before(deadline) {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err == nil {
-			return conn, true
-		}
-		time.Sleep(25 * time.Millisecond)
+	dialCtx, cancel := context.WithTimeout(context.Background(), total)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		dialCtx,
+		addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return nil, false
 	}
-	return nil, false
+	return conn, true
 }

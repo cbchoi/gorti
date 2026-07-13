@@ -15,6 +15,8 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -29,14 +31,19 @@ import (
 // One Connection MAY host multiple federates; the cut-3 / M21 happy
 // path is one Federate per Connection.
 type Connection struct {
-	cc      *grpc.ClientConn
-	fed     rtiv1.FederationServiceClient
-	decl    rtiv1.DeclarationServiceClient
-	obj     rtiv1.ObjectServiceClient
-	stream  rtiv1.StreamServiceClient
-	tm      rtiv1.TimeServiceClient // wired here so time.go (TASK-206) can use it
-	ddm     rtiv1.DDMServiceClient  // M23 W4 — Go SDK DDM coverage
-	cluster rtiv1.ClusterServiceClient // M15.2 + M16.2 — cross-node redirect / reconnect
+	generationMu sync.RWMutex
+	generations  map[string]uint64
+
+	cc                       *grpc.ClientConn
+	fed                      rtiv1.FederationServiceClient
+	decl                     rtiv1.DeclarationServiceClient
+	obj                      rtiv1.ObjectServiceClient
+	stream                   rtiv1.StreamServiceClient
+	sync                     rtiv1.SyncServiceClient
+	interactionStreamEnabled bool
+	tm                       rtiv1.TimeServiceClient    // wired here so time.go (TASK-206) can use it
+	ddm                      rtiv1.DDMServiceClient     // M23 W4 — Go SDK DDM coverage
+	cluster                  rtiv1.ClusterServiceClient // M15.2 + M16.2 — cross-node redirect / reconnect
 }
 
 // FederationSpec describes a federation to create-or-join.
@@ -79,7 +86,45 @@ type Federate struct {
 	// resignOnce gates Resign so a second call is a no-op.
 	resignOnce sync.Once
 
-	mu sync.Mutex // protects future state mutators added in W3A
+	mu            sync.Mutex
+	objectClasses map[uint64]uint64 // object handle -> object class handle
+
+	interactionStreamMu          sync.Mutex
+	interactionStream            *interactionRPCStream
+	interactionStreamUnsupported bool
+	interactionContext           context.Context
+	interactionCancel            context.CancelFunc
+	interactionClosing           atomic.Bool
+	interactionStats             interactionTransportCounters
+}
+
+type interactionTransportCounters struct {
+	total, streamSent, streamAcked, unarySent, unaryAcked   atomic.Uint64
+	openAttempts, openSuccesses, resets, indeterminate      atomic.Uint64
+	fallbackDisabled, fallbackMetadata, fallbackUnsupported atomic.Uint64
+}
+
+// InteractionTransportStats attests which transport handled interaction
+// calls without exposing mutable counters.
+type InteractionTransportStats struct {
+	Total, StreamSent, StreamAcked, UnarySent, UnaryAcked   uint64
+	OpenAttempts, OpenSuccesses, Resets, Indeterminate      uint64
+	FallbackDisabled, FallbackMetadata, FallbackUnsupported uint64
+}
+
+func (f *Federate) InteractionTransportStats() InteractionTransportStats {
+	if f == nil {
+		return InteractionTransportStats{}
+	}
+	s := &f.interactionStats
+	return InteractionTransportStats{
+		Total: s.total.Load(), StreamSent: s.streamSent.Load(), StreamAcked: s.streamAcked.Load(),
+		UnarySent: s.unarySent.Load(), UnaryAcked: s.unaryAcked.Load(),
+		OpenAttempts: s.openAttempts.Load(), OpenSuccesses: s.openSuccesses.Load(),
+		Resets: s.resets.Load(), Indeterminate: s.indeterminate.Load(),
+		FallbackDisabled: s.fallbackDisabled.Load(), FallbackMetadata: s.fallbackMetadata.Load(),
+		FallbackUnsupported: s.fallbackUnsupported.Load(),
+	}
 }
 
 // ConnectOptions — M14 W2. Per-connection auth + transport tuning.
@@ -122,14 +167,16 @@ func Connect(ctx context.Context, addr string) (*Connection, error) {
 // Connection releases the underlying *grpc.ClientConn.
 func WrapGRPCClientConn(cc *grpc.ClientConn) *Connection {
 	return &Connection{
-		cc:      cc,
-		fed:     rtiv1.NewFederationServiceClient(cc),
-		decl:    rtiv1.NewDeclarationServiceClient(cc),
-		obj:     rtiv1.NewObjectServiceClient(cc),
-		stream:  rtiv1.NewStreamServiceClient(cc),
-		tm:      rtiv1.NewTimeServiceClient(cc),
-		ddm:     rtiv1.NewDDMServiceClient(cc),
-		cluster: rtiv1.NewClusterServiceClient(cc),
+		generations: make(map[string]uint64),
+		cc:          cc,
+		fed:         rtiv1.NewFederationServiceClient(cc),
+		decl:        rtiv1.NewDeclarationServiceClient(cc),
+		obj:         rtiv1.NewObjectServiceClient(cc),
+		stream:      rtiv1.NewStreamServiceClient(cc),
+		sync:        rtiv1.NewSyncServiceClient(cc),
+		tm:          rtiv1.NewTimeServiceClient(cc),
+		ddm:         rtiv1.NewDDMServiceClient(cc),
+		cluster:     rtiv1.NewClusterServiceClient(cc),
 	}
 }
 
@@ -165,11 +212,15 @@ func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (
 	}
 	_ = ctx
 	return &Connection{
-		cc:      cc,
-		fed:     rtiv1.NewFederationServiceClient(cc),
-		decl:    rtiv1.NewDeclarationServiceClient(cc),
-		obj:     rtiv1.NewObjectServiceClient(cc),
+		generations: make(map[string]uint64),
+		cc:          cc,
+		fed:         rtiv1.NewFederationServiceClient(cc),
+		decl:        rtiv1.NewDeclarationServiceClient(cc),
+		obj:         rtiv1.NewObjectServiceClient(cc),
+		interactionStreamEnabled: opts.BearerToken == "" &&
+			opts.BearerTokenProvider == nil && len(opts.ExtraDialOptions) == 0,
 		stream:  rtiv1.NewStreamServiceClient(cc),
+		sync:    rtiv1.NewSyncServiceClient(cc),
 		tm:      rtiv1.NewTimeServiceClient(cc),
 		ddm:     rtiv1.NewDDMServiceClient(cc),
 		cluster: rtiv1.NewClusterServiceClient(cc),
@@ -211,6 +262,58 @@ func (c *Connection) Close() error {
 	return c.cc.Close()
 }
 
+// DestroyFederation destroys an empty federation execution. It is deliberately
+// non-idempotent: a second call returns the server's not-found error.
+func (c *Connection) DestroyFederation(ctx context.Context, federationName string) error {
+	if c == nil || c.cc == nil || c.fed == nil {
+		return errors.New("federate: Connection is closed")
+	}
+	generation, err := c.resolveFederationGeneration(ctx, federationName)
+	if err != nil {
+		return err
+	}
+	_, err = c.fed.DestroyFederation(ctx, &rtiv1.DestroyFederationRequest{
+		WireVersion:                  rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:               federationName,
+		ExpectedFederationGeneration: &generation,
+	})
+	if err == nil {
+		c.generationMu.Lock()
+		delete(c.generations, federationName)
+		c.generationMu.Unlock()
+	}
+	return wrapStatusErr(err)
+}
+
+func (c *Connection) resolveFederationGeneration(ctx context.Context, federationName string) (uint64, error) {
+	c.generationMu.RLock()
+	generation, ok := c.generations[federationName]
+	c.generationMu.RUnlock()
+	if ok {
+		return generation, nil
+	}
+	resp, err := c.fed.ListFederations(ctx, &rtiv1.ListFederationsRequest{
+		WireVersion: rtiv1.WireVersion_WIRE_VERSION_V1,
+	})
+	if err != nil {
+		return 0, wrapStatusErr(err)
+	}
+	for _, summary := range resp.GetFederations() {
+		if summary.GetName() != federationName {
+			continue
+		}
+		generation = summary.GetFederationGeneration()
+		c.generationMu.Lock()
+		if c.generations == nil {
+			c.generations = make(map[string]uint64)
+		}
+		c.generations[federationName] = generation
+		c.generationMu.Unlock()
+		return generation, nil
+	}
+	return 0, fmt.Errorf("federate: federation %q does not exist", federationName)
+}
+
 // JoinFederation creates the federation if it does not exist
 // (idempotent — ALREADY_EXISTS swallowed) and joins it under the
 // given federate name.
@@ -247,17 +350,32 @@ func (c *Connection) JoinFederation(
 		Seed:                spec.Seed,
 		StallTimeoutSeconds: spec.StallTimeoutSeconds,
 	}
-	if _, cErr := c.fed.CreateFederation(ctx, createReq); cErr != nil {
+	createResp, cErr := c.fed.CreateFederation(ctx, createReq)
+	var generation uint64
+	if cErr != nil {
 		if status.Code(cErr) != codes.AlreadyExists {
 			return nil, fmt.Errorf("federate: CreateFederation: %w", cErr)
 		}
+		generation, err = c.resolveFederationGeneration(ctx, spec.Name)
+		if err != nil {
+			return nil, fmt.Errorf("federate: resolve federation generation: %w", err)
+		}
+	} else {
+		generation = createResp.GetFederationGeneration()
+		c.generationMu.Lock()
+		if c.generations == nil {
+			c.generations = make(map[string]uint64)
+		}
+		c.generations[spec.Name] = generation
+		c.generationMu.Unlock()
 	}
 
 	// 2. Join.
 	joinResp, err := c.fed.JoinFederation(ctx, &rtiv1.JoinFederationRequest{
-		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName: spec.Name,
-		FederateName:   federateName,
+		WireVersion:                  rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:               spec.Name,
+		FederateName:                 federateName,
+		ExpectedFederationGeneration: &generation,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("federate: JoinFederation: %w", err)
@@ -275,15 +393,19 @@ func (c *Connection) JoinFederation(
 		return nil, fmt.Errorf("federate: Events stream open: %w", err)
 	}
 
+	interactionContext, interactionCancel := context.WithCancel(context.Background())
 	f := &Federate{
-		conn:           c,
-		federationName: spec.Name,
-		federateName:   federateName,
-		federateHandle: joinResp.GetFederateHandle(),
-		handles:        tables,
-		eventCh:        make(chan Event, 256),
-		streamCancel:   streamCancel,
-		drainDone:      make(chan struct{}),
+		conn:               c,
+		federationName:     spec.Name,
+		federateName:       federateName,
+		federateHandle:     joinResp.GetFederateHandle(),
+		handles:            tables,
+		eventCh:            make(chan Event, 256),
+		streamCancel:       streamCancel,
+		drainDone:          make(chan struct{}),
+		objectClasses:      make(map[uint64]uint64),
+		interactionContext: interactionContext,
+		interactionCancel:  interactionCancel,
 	}
 	go f.drainEvents(stream)
 	return f, nil
@@ -373,18 +495,33 @@ func (f *Federate) ListFederationMembers(ctx context.Context) ([]FederationMembe
 func (f *Federate) ResignWithAction(ctx context.Context, action ResignAction) error {
 	var resignErr error
 	f.resignOnce.Do(func() {
+		// Stop new admission first. An already-transmitted request is allowed to
+		// reach its ACK boundary; only the resign deadline forces cancellation.
+		f.interactionClosing.Store(true)
+		if err := f.drainAndCloseInteractionStream(ctx); err != nil {
+			resignErr = err
+		}
+		if f.interactionCancel != nil {
+			f.interactionCancel()
+		}
 		// Best-effort wire-level resign. We tolerate failure here
 		// because the server may have already torn down (federation
 		// halted, stream dropped, etc.) — we still want to release
 		// our local goroutine + channel.
-		_, err := f.conn.fed.ResignFederation(ctx, &rtiv1.ResignFederationRequest{
+		rpcCtx := ctx
+		cancelRPC := func() {}
+		if ctx.Err() != nil {
+			rpcCtx, cancelRPC = context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		}
+		_, err := f.conn.fed.ResignFederation(rpcCtx, &rtiv1.ResignFederationRequest{
 			WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 			FederationName: f.federationName,
 			FederateHandle: f.federateHandle,
 			Action:         action.wire(),
 		})
+		cancelRPC()
 		// NotFound is fine — federation may have been destroyed by a peer.
-		if err != nil && status.Code(err) != codes.NotFound {
+		if err != nil && status.Code(err) != codes.NotFound && resignErr == nil {
 			resignErr = err
 		}
 		f.streamCancel()
@@ -394,9 +531,9 @@ func (f *Federate) ResignWithAction(ctx context.Context, action ResignAction) er
 }
 
 // drainEvents pumps the gRPC stream into f.eventCh. Translates each
-// proto FederateEvent into a typed Event (ReceiveInteraction with
-// parameter NAMES, TimeAdvanceGrant, FederationHalted). Exits when
-// the stream returns io.EOF, is cancelled, or rtid drops it.
+// proto FederateEvent into a typed Event with FOM names resolved where
+// applicable. Exits when the stream returns io.EOF, is cancelled, or rtid
+// drops it.
 func (f *Federate) drainEvents(stream grpc.ServerStreamingClient[rtiv1.FederateEvent]) {
 	defer close(f.eventCh)
 	defer close(f.drainDone)
@@ -420,7 +557,11 @@ func (f *Federate) drainEvents(stream grpc.ServerStreamingClient[rtiv1.FederateE
 		// surfaces as a slow drainer (the server-side outbox already
 		// has its own queue limit). Block here so the federate's
 		// internal queue can serialize consumption.
-		f.eventCh <- typed
+		select {
+		case f.eventCh <- typed:
+		case <-stream.Context().Done():
+			return
+		}
 	}
 }
 
@@ -430,18 +571,61 @@ func isCanceledOrUnavailable(err error) bool {
 }
 
 // translate maps a proto FederateEvent oneof variant to a typed
-// public Event. Returns nil for variants the SDK does not yet
-// surface (object-class events, sync, ownership, etc.).
+// public Event. Returns nil for variants the SDK does not yet surface.
 //
-// Cut-1 + M21 surface: ReceiveInteraction (with parameter names
-// resolved via fomTables), TimeAdvanceGrant, FederationHalted.
-// Other oneof variants are silently dropped — they belong to
-// follow-up SDK extensions.
+// Known object and interaction handles are resolved through fomTables. Other
+// oneof variants are silently dropped until their SDK types are added.
 func (f *Federate) translate(evt *rtiv1.FederateEvent) Event {
 	if evt == nil {
 		return nil
 	}
 	switch v := evt.GetEvent().(type) {
+	case *rtiv1.FederateEvent_Discover:
+		discover := v.Discover
+		if discover == nil {
+			return nil
+		}
+		classHandle := discover.GetObjectClassHandle()
+		className, ok := f.handles.objectClassName(classHandle)
+		if !ok {
+			return nil
+		}
+		f.rememberObjectClass(discover.GetObjectHandle(), classHandle)
+		return DiscoverObjectInstance{
+			ObjectHandle: discover.GetObjectHandle(),
+			ClassName:    className,
+			ObjectName:   discover.GetObjectName(),
+		}
+	case *rtiv1.FederateEvent_Reflect:
+		reflect := v.Reflect
+		if reflect == nil {
+			return nil
+		}
+		classHandle := reflect.GetObjectClassHandle()
+		className, ok := f.handles.objectClassName(classHandle)
+		if !ok {
+			return nil
+		}
+		attributes := make(map[string][]byte, len(reflect.GetAttributes()))
+		for attributeHandle, payload := range reflect.GetAttributes() {
+			name, found := f.handles.attributeName(classHandle, attributeHandle)
+			if !found {
+				continue
+			}
+			attributes[name] = append([]byte(nil), payload...)
+		}
+		var timestamp *float64
+		if reflect.LogicalTime != nil {
+			value := reflect.GetLogicalTime()
+			timestamp = &value
+		}
+		f.rememberObjectClass(reflect.GetObjectHandle(), classHandle)
+		return ReflectAttributeValues{
+			ObjectHandle: reflect.GetObjectHandle(),
+			ClassName:    className,
+			Attributes:   attributes,
+			Timestamp:    timestamp,
+		}
 	case *rtiv1.FederateEvent_Receive:
 		ri := v.Receive
 		if ri == nil {
@@ -474,6 +658,37 @@ func (f *Federate) translate(evt *rtiv1.FederateEvent) Event {
 		}
 	case *rtiv1.FederateEvent_Grant:
 		return TimeAdvanceGrant{Time: v.Grant.GetLogicalTime()}
+	case *rtiv1.FederateEvent_SyncAnnounced:
+		if v.SyncAnnounced == nil {
+			return nil
+		}
+		return SynchronizationPointAnnounced{
+			Label:             v.SyncAnnounced.GetLabel(),
+			Tag:               append([]byte(nil), v.SyncAnnounced.GetTag()...),
+			RequiredFederates: append([]uint64(nil), v.SyncAnnounced.GetRequiredFederates()...),
+		}
+	case *rtiv1.FederateEvent_SyncSynchronized:
+		if v.SyncSynchronized == nil {
+			return nil
+		}
+		return FederationSynchronized{
+			Label:        v.SyncSynchronized.GetLabel(),
+			FailedToSync: append([]uint64(nil), v.SyncSynchronized.GetFailedToSync()...),
+		}
+	case *rtiv1.FederateEvent_ReservationSucceeded:
+		if v.ReservationSucceeded == nil {
+			return nil
+		}
+		return ObjectInstanceNameReservationSucceeded{
+			ObjectName: v.ReservationSucceeded.GetObjectName(),
+		}
+	case *rtiv1.FederateEvent_ReservationFailed:
+		if v.ReservationFailed == nil {
+			return nil
+		}
+		return ObjectInstanceNameReservationFailed{
+			ObjectName: v.ReservationFailed.GetObjectName(),
+		}
 	case *rtiv1.FederateEvent_Halted:
 		return FederationHalted{Reason: v.Halted.GetCause()}
 	case *rtiv1.FederateEvent_Remove:
@@ -489,6 +704,7 @@ func (f *Federate) translate(evt *rtiv1.FederateEvent) Event {
 		}
 		// Defensive copy on the tag bytes.
 		tag := append([]byte(nil), rm.GetUserSuppliedTag()...)
+		f.forgetObjectClass(rm.GetObjectHandle())
 		return RemoveObjectInstance{
 			ObjectHandle: rm.GetObjectHandle(),
 			Tag:          tag,
@@ -543,7 +759,7 @@ const MaxRedirectFollow = 3
 var ErrTooManyRedirects = errors.New("federate: too many redirects")
 
 // ResolveFederationHost asks the rtid at the current connection
-// which node hosts ``federationName``, following REDIRECT responses
+// which node hosts `federationName`, following REDIRECT responses
 // transparently. Returns:
 //   - the original Connection unchanged when the rtid hosts the
 //     federation (Status=CURRENT) OR the federation is unknown

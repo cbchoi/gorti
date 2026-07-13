@@ -59,13 +59,19 @@ type memStoreKey struct {
 }
 
 type memStore struct {
-	mu      gosync.Mutex
-	bundles map[memStoreKey][]byte
+	mu                gosync.Mutex
+	bundles           map[memStoreKey][]byte
+	generationBundles map[StorageKey][]byte
 	// failOnWrite, when true, makes the next Writer call return io.ErrClosedPipe.
 	failOnWrite bool
 }
 
-func newMemStore() *memStore { return &memStore{bundles: map[memStoreKey][]byte{}} }
+func newMemStore() *memStore {
+	return &memStore{
+		bundles:           map[memStoreKey][]byte{},
+		generationBundles: map[StorageKey][]byte{},
+	}
+}
 
 func (s *memStore) Writer(fed core.FederationName, label string) (io.WriteCloser, error) {
 	s.mu.Lock()
@@ -79,10 +85,32 @@ func (s *memStore) Writer(fed core.FederationName, label string) (io.WriteCloser
 	return &memBundleWriter{store: s, key: memStoreKey{fed, label}}, nil
 }
 
+func (s *memStore) WriterFor(key StorageKey) (BundleWriter, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failOnWrite {
+		return nil, io.ErrClosedPipe
+	}
+	if _, exists := s.generationBundles[key]; exists {
+		return nil, ErrSaveBundleExists
+	}
+	return &memBundleWriter{store: s, generationKey: &key}, nil
+}
+
 func (s *memStore) Reader(fed core.FederationName, label string) (io.ReadCloser, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, ok := s.bundles[memStoreKey{fed, label}]
+	if !ok {
+		return nil, ErrSaveBundleNotFound
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+func (s *memStore) ReaderFor(key StorageKey) (io.ReadCloser, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, ok := s.generationBundles[key]
 	if !ok {
 		return nil, ErrSaveBundleNotFound
 	}
@@ -96,17 +124,44 @@ func (s *memStore) Exists(fed core.FederationName, label string) bool {
 	return ok
 }
 
+func (s *memStore) ExistsFor(key StorageKey) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.generationBundles[key]
+	return ok
+}
+
 type memBundleWriter struct {
-	store *memStore
-	key   memStoreKey
-	buf   bytes.Buffer
+	store         *memStore
+	key           memStoreKey
+	generationKey *StorageKey
+	buf           bytes.Buffer
+	aborted       bool
 }
 
 func (w *memBundleWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
 func (w *memBundleWriter) Close() error {
+	if w.aborted {
+		return nil
+	}
 	w.store.mu.Lock()
 	defer w.store.mu.Unlock()
-	w.store.bundles[w.key] = append([]byte(nil), w.buf.Bytes()...)
+	if w.generationKey != nil {
+		if _, exists := w.store.generationBundles[*w.generationKey]; exists {
+			return ErrSaveBundleExists
+		}
+		w.store.generationBundles[*w.generationKey] = append([]byte(nil), w.buf.Bytes()...)
+	} else {
+		if _, exists := w.store.bundles[w.key]; exists {
+			return ErrSaveBundleExists
+		}
+		w.store.bundles[w.key] = append([]byte(nil), w.buf.Bytes()...)
+	}
+	return nil
+}
+
+func (w *memBundleWriter) Abort() error {
+	w.aborted = true
 	return nil
 }
 

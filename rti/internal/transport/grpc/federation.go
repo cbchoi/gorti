@@ -42,6 +42,15 @@ type federationService struct {
 	ddsEnabled                 bool
 	ddsDefaultDomainID         int32
 	transportLookup            func(core.FederationName) (core.TransportMode, int32, bool)
+	membership                 core.FederationMembershipValidator
+}
+
+type federationSetupCreator interface {
+	CreateFederationWithSetup(
+		context.Context,
+		core.CreateFederationRequest,
+		func(generation uint64),
+	) error
 }
 
 func newFederationService(fed core.FederationStore) *federationService {
@@ -80,14 +89,36 @@ func (s *federationService) CreateFederation(ctx context.Context, req *rtiv1.Cre
 		TransportMode: tm,
 		DDSDomainID:   domainID,
 	}
-	if err := s.fed.CreateFederation(ctx, coreReq); err != nil {
-		return nil, errToStatus(ctx, err)
+	var generation uint64
+	setup := func(current uint64) {
+		generation = current
+		if s.onCreateFederationSuccess != nil {
+			s.onCreateFederationSuccess(ctx, coreReq.Name, coreReq.FOMModules)
+		}
 	}
-	if s.onCreateFederationSuccess != nil {
-		s.onCreateFederationSuccess(ctx, coreReq.Name, coreReq.FOMModules)
+	if creator, ok := s.fed.(federationSetupCreator); ok {
+		if err := creator.CreateFederationWithSetup(ctx, coreReq, setup); err != nil {
+			return nil, errToStatus(ctx, err)
+		}
+	} else {
+		if err := s.fed.CreateFederation(ctx, coreReq); err != nil {
+			return nil, errToStatus(ctx, err)
+		}
+		if s.membership != nil {
+			generation, _ = s.membership.GenerationFor(coreReq.Name)
+			if guard, ok := s.membership.(core.FederationGenerationGuard); ok {
+				release, leaseErr := guard.AcquireGeneration(coreReq.Name, generation)
+				if leaseErr != nil {
+					return nil, errToStatus(ctx, leaseErr)
+				}
+				defer release()
+			}
+		}
+		setup(generation)
 	}
 	return &rtiv1.CreateFederationResponse{
-		EffectiveSeed: req.GetSeed(),
+		EffectiveSeed:        req.GetSeed(),
+		FederationGeneration: generation,
 	}, nil
 }
 
@@ -100,7 +131,16 @@ func (s *federationService) DestroyFederation(ctx context.Context, req *rtiv1.De
 		return nil, err
 	}
 	name := core.FederationName(req.GetFederationName())
-	if err := s.fed.DestroyFederation(ctx, name); err != nil {
+	expected, err := s.expectedGeneration(name, req.ExpectedFederationGeneration)
+	if err != nil {
+		return nil, err
+	}
+	if guard, ok := s.fed.(core.FederationGenerationGuard); ok && expected != nil {
+		err = guard.DestroyFederationGeneration(ctx, name, *expected)
+	} else {
+		err = s.fed.DestroyFederation(ctx, name)
+	}
+	if err != nil {
 		return nil, errToStatus(ctx, err)
 	}
 	if s.onDestroyFederationSuccess != nil {
@@ -118,9 +158,14 @@ func (s *federationService) JoinFederation(ctx context.Context, req *rtiv1.JoinF
 		return nil, err
 	}
 	fedName := core.FederationName(req.GetFederationName())
+	expected, err := s.expectedGeneration(fedName, req.ExpectedFederationGeneration)
+	if err != nil {
+		return nil, err
+	}
 	h, err := s.fed.JoinFederation(ctx, core.JoinFederationRequest{
-		Federation:   fedName,
-		FederateName: req.GetFederateName(),
+		Federation:         fedName,
+		FederateName:       req.GetFederateName(),
+		ExpectedGeneration: expected,
 		// M13 thread B (docs/srs.md §10.4): forward the optional
 		// federate type from the wire. Old clients that omit the
 		// field arrive with the empty string, which the federation
@@ -143,6 +188,30 @@ func (s *federationService) JoinFederation(ctx context.Context, req *rtiv1.JoinF
 		}
 	}
 	return resp, nil
+}
+
+func (s *federationService) expectedGeneration(
+	fed core.FederationName,
+	provided *uint64,
+) (*uint64, error) {
+	if s.membership == nil {
+		return provided, nil
+	}
+	current, ok := s.membership.GenerationFor(fed)
+	if !ok {
+		return nil, errToStatus(context.Background(), core.ErrFederationNotFound)
+	}
+	if provided == nil {
+		// Generation zero is retained only for embedded legacy fixtures. Every
+		// production server starts from a nonzero, restart-fenced generation.
+		if current == 0 {
+			value := uint64(0)
+			return &value, nil
+		}
+		return nil, status.Error(codes.FailedPrecondition,
+			"expected_federation_generation is required")
+	}
+	return provided, nil
 }
 
 // ResignFederation implements rti.v1.FederationService.ResignFederation.
@@ -179,9 +248,10 @@ func (s *federationService) ListFederations(ctx context.Context, req *rtiv1.List
 	out := make([]*rtiv1.FederationSummary, 0, len(summaries))
 	for _, sum := range summaries {
 		out = append(out, &rtiv1.FederationSummary{
-			Name:            string(sum.Name),
-			Mode:            coreModeToProto(sum.Mode),
-			FederatesJoined: sum.FederatesJoined,
+			Name:                 string(sum.Name),
+			Mode:                 coreModeToProto(sum.Mode),
+			FederatesJoined:      sum.FederatesJoined,
+			FederationGeneration: sum.Generation,
 		})
 	}
 	return &rtiv1.ListFederationsResponse{Federations: out}, nil

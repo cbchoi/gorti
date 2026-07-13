@@ -70,6 +70,11 @@ type Options struct {
 	// FOMs is consulted to resolve routing-space declarations + their
 	// dimensions. MUST NOT be nil.
 	FOMs core.FOMRepository
+
+	// FederationExists fences name-only lookup helpers from recreating state
+	// after teardown. Production wires federation.Manager.GenerationFor;
+	// embedded fixtures may leave it nil for legacy permissive behavior.
+	FederationExists func(core.FederationName) bool
 }
 
 // DimensionEnumerator is an OPTIONAL extra capability on a FOMHandle:
@@ -116,6 +121,14 @@ func New(opts Options) (*Manager, error) {
 		opts: opts,
 		fed:  map[core.FederationName]*federationDDMState{},
 	}, nil
+}
+
+// OnFederationDestroyed drops routing spaces, regions, and scoped
+// subscriptions belonging to fed.
+func (m *Manager) OnFederationDestroyed(fed core.FederationName) {
+	m.mu.Lock()
+	delete(m.fed, fed)
+	m.mu.Unlock()
 }
 
 // isNilInterface reports whether v is a true nil interface or a typed-
@@ -167,6 +180,9 @@ func (m *Manager) LookupRoutingSpace(fed core.FederationName, name string) (Rout
 	if name == "" {
 		return 0, false
 	}
+	if m.opts.FederationExists != nil && !m.opts.FederationExists(fed) {
+		return 0, false
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	st := m.stateForLocked(context.Background(), fed)
@@ -191,6 +207,9 @@ func (m *Manager) LookupRoutingSpace(fed core.FederationName, name string) (Rout
 // routing space. Returns 0 + false if not declared.
 func (m *Manager) LookupDimension(fed core.FederationName, space RoutingSpaceHandle, name string) (DimensionHandle, bool) {
 	if name == "" || space == 0 {
+		return 0, false
+	}
+	if m.opts.FederationExists != nil && !m.opts.FederationExists(fed) {
 		return 0, false
 	}
 	m.mu.Lock()

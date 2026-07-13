@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -131,9 +132,7 @@ def resign_action_to_proto(action: int | str | None) -> int:
     from rti.v1 import common_pb2
 
     if action is None:
-        return int(
-            common_pb2.ResignAction.RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES
-        )
+        return int(common_pb2.ResignAction.RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES)
     if isinstance(action, int):
         return action
     wire_name = _RESIGN_ACTION_WIRE_NAMES.get(action)
@@ -190,6 +189,7 @@ class GrpcTransport:
         # ``create_federation`` for a given federation name parses the
         # FOM and caches name→handle maps; later RPCs reuse them.
         self._federation_name: str | None = None
+        self._generation_by_federation: dict[str, int] = {}
         self._interaction_handles: dict[str, int] = {}
         self._object_class_handles: dict[str, int] = {}
         self._inverse_interaction_handles: dict[int, str] = {}
@@ -204,6 +204,7 @@ class GrpcTransport:
         self._fom_cache: Any | None = None
         # Per-federate event queues + the background draining tasks.
         self._event_queues: dict[int, asyncio.Queue[Any]] = {}
+        self._event_sinks: dict[int, Callable[[Any], object]] = {}
         self._stream_tasks: dict[int, asyncio.Task[None]] = {}
         # Object handle allocator (used only as a local fallback; the
         # registry response carries the canonical handle when present).
@@ -227,6 +228,20 @@ class GrpcTransport:
         """
         return self._event_queues.setdefault(federate_handle, asyncio.Queue())
 
+    def set_event_sink(self, federate_handle: int, sink: Callable[[Any], object] | None) -> None:
+        """Install a same-loop event sink, or restore queue delivery."""
+        if sink is None:
+            self._event_sinks.pop(federate_handle, None)
+        else:
+            self._event_sinks[federate_handle] = sink
+
+    def _deliver_event(self, federate_handle: int, event: Any) -> None:
+        sink = self._event_sinks.get(federate_handle)
+        if sink is None:
+            self.events_for(federate_handle).put_nowait(event)
+        else:
+            sink(event)
+
     async def close(self) -> None:
         """Tear down: cancel every stream task, then close the channel."""
         for task in list(self._stream_tasks.values()):
@@ -234,6 +249,7 @@ class GrpcTransport:
             with contextlib.suppress(BaseException):
                 await task
         self._stream_tasks.clear()
+        self._event_sinks.clear()
         with contextlib.suppress(BaseException):
             await self.channel.close()
 
@@ -248,7 +264,8 @@ class GrpcTransport:
         """
         if method == "create_federation":
             return await self._create_federation(
-                kwargs["spec"], exist_ok=kwargs.get("exist_ok", True),
+                kwargs["spec"],
+                exist_ok=kwargs.get("exist_ok", True),
             )
         if method == "destroy_federation":
             return await self._destroy_federation(kwargs["federation_name"])
@@ -260,12 +277,11 @@ class GrpcTransport:
             )
         if method == "resign_federation":
             return await self._resign_federation(
-                kwargs["federate_handle"], kwargs.get("action"),
+                kwargs["federate_handle"],
+                kwargs.get("action"),
             )
         if method == "publish_interaction_class":
-            return await self._publish_interaction(
-                kwargs["federate_handle"], kwargs["class_name"]
-            )
+            return await self._publish_interaction(kwargs["federate_handle"], kwargs["class_name"])
         if method == "subscribe_interaction_class":
             return await self._subscribe_interaction(
                 kwargs["federate_handle"], kwargs["class_name"]
@@ -304,7 +320,8 @@ class GrpcTransport:
             )
         if method == "enable_time_regulation":
             return await self._enable_time_regulation(
-                kwargs["federate_handle"], kwargs["lookahead"],
+                kwargs["federate_handle"],
+                kwargs["lookahead"],
             )
         if method == "enable_time_constrained":
             return await self._enable_time_constrained(
@@ -312,7 +329,8 @@ class GrpcTransport:
             )
         if method == "next_message_request":
             return await self._next_message_request(
-                kwargs["federate_handle"], kwargs["time"],
+                kwargs["federate_handle"],
+                kwargs["time"],
             )
         if method == "disable_time_regulation":
             return await self._disable_time_regulation(kwargs["federate_handle"])
@@ -320,23 +338,28 @@ class GrpcTransport:
             return await self._disable_time_constrained(kwargs["federate_handle"])
         if method == "modify_lookahead":
             return await self._modify_lookahead(
-                kwargs["federate_handle"], kwargs["lookahead"],
+                kwargs["federate_handle"],
+                kwargs["lookahead"],
             )
         if method == "next_message_request_available":
             return await self._next_message_request_available(
-                kwargs["federate_handle"], kwargs["time"],
+                kwargs["federate_handle"],
+                kwargs["time"],
             )
         if method == "time_advance_request":
             return await self._time_advance_request(
-                kwargs["federate_handle"], kwargs["time"],
+                kwargs["federate_handle"],
+                kwargs["time"],
             )
         if method == "time_advance_request_available":
             return await self._time_advance_request_available(
-                kwargs["federate_handle"], kwargs["time"],
+                kwargs["federate_handle"],
+                kwargs["time"],
             )
         if method == "flush_queue_request":
             return await self._flush_queue_request(
-                kwargs["federate_handle"], kwargs["time"],
+                kwargs["federate_handle"],
+                kwargs["time"],
             )
         if method == "query_logical_time":
             return await self._query_logical_time(kwargs["federate_handle"])
@@ -357,7 +380,8 @@ class GrpcTransport:
             )
         if method == "local_delete_object_instance":
             return await self._local_delete_object_instance(
-                kwargs["federate_handle"], kwargs["object_handle"],
+                kwargs["federate_handle"],
+                kwargs["object_handle"],
             )
         if method == "request_attribute_value_update":
             return await self._request_attribute_value_update(
@@ -394,6 +418,26 @@ class GrpcTransport:
 
     # --- Per-RPC dispatch helpers ------------------------------------------
 
+    async def _resolve_federation_generation(self, federation_name: str) -> int:
+        cached = self._generation_by_federation.get(federation_name)
+        if cached is not None:
+            return cached
+        from rti.v1 import common_pb2, federation_pb2
+
+        response = await self.federation.ListFederations(
+            federation_pb2.ListFederationsRequest(
+                wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            )
+        )
+        for summary in response.federations:
+            if summary.name == federation_name:
+                generation = int(summary.federation_generation)
+                self._generation_by_federation[federation_name] = generation
+                return generation
+        from .errors import FederationExecutionDoesNotExist
+
+        raise FederationExecutionDoesNotExist(f"federation {federation_name!r} does not exist")
+
     async def _create_federation(self, spec: Any, *, exist_ok: bool = True) -> None:
         """CreateFederation. ``exist_ok=True`` (the rolled create-on-join
         path) swallows FederationAlreadyExists so the second federate to
@@ -427,14 +471,16 @@ class GrpcTransport:
             seed=spec.seed,
         )
         try:
-            await self.federation.CreateFederation(req)
+            response = await self.federation.CreateFederation(req)
         except Exception as exc:  # noqa: BLE001 — translate_rpc_error reraises
             # FederationAlreadyExists is benign on the rolled path — the
             # second federate to create the same federation should
             # succeed silently.
             if exist_ok and _is_already_exists(exc):
+                await self._resolve_federation_generation(spec.name)
                 return
             translate_rpc_error(exc)
+        self._generation_by_federation[spec.name] = int(response.federation_generation)
         return
 
     async def _destroy_federation(self, federation_name: str) -> None:
@@ -445,18 +491,19 @@ class GrpcTransport:
 
         from ._grpc_errors import translate_rpc_error
 
+        generation = await self._resolve_federation_generation(federation_name)
         req = federation_pb2.DestroyFederationRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=federation_name,
+            expected_federation_generation=generation,
         )
         try:
             await self.federation.DestroyFederation(req)
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
+        self._generation_by_federation.pop(federation_name, None)
 
-    async def _join_federation(
-        self, spec: Any, federate_name: str, federate_type: str = ""
-    ) -> int:
+    async def _join_federation(self, spec: Any, federate_name: str, federate_type: str = "") -> int:
         from rti.v1 import common_pb2, federation_pb2
 
         from ._grpc_errors import translate_rpc_error
@@ -471,11 +518,13 @@ class GrpcTransport:
         # federate_type. Old SDK callers that don't pass it land here
         # with an empty string — the rtid treats absent as "no type
         # declared", preserving cut-1 wire-version compatibility.
+        generation = await self._resolve_federation_generation(spec.name)
         req = federation_pb2.JoinFederationRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=spec.name,
             federate_name=federate_name,
             federate_type=federate_type,
+            expected_federation_generation=generation,
         )
         try:
             resp = await self.federation.JoinFederation(req)
@@ -490,7 +539,9 @@ class GrpcTransport:
         return federate_handle
 
     async def _resign_federation(
-        self, federate_handle: int, action: int | str | None = None,
+        self,
+        federate_handle: int,
+        action: int | str | None = None,
     ) -> None:
         from rti.v1 import common_pb2, federation_pb2
 
@@ -520,9 +571,7 @@ class GrpcTransport:
             await self.federation.ResignFederation(req)
         return
 
-    async def _publish_interaction(
-        self, federate_handle: int, class_arg: int | str
-    ) -> None:
+    async def _publish_interaction(self, federate_handle: int, class_arg: int | str) -> None:
         """M27 Phase D: ``class_arg`` accepts ``int`` (FOM handle) or
         ``str`` (FOM name). Subscriber federates that joined an
         already-created federation may have an empty local FOM cache;
@@ -545,9 +594,7 @@ class GrpcTransport:
             translate_rpc_error(exc)
         return
 
-    async def _subscribe_interaction(
-        self, federate_handle: int, class_arg: int | str
-    ) -> None:
+    async def _subscribe_interaction(self, federate_handle: int, class_arg: int | str) -> None:
         """M27 Phase D: see _publish_interaction."""
         from rti.v1 import common_pb2, declaration_pb2
 
@@ -591,6 +638,13 @@ class GrpcTransport:
                 continue  # unknown class; can't resolve names
             param_index = self._parameter_indices_for(class_name_for_index)
             if key not in param_index:
+                # The pyjevsim bridge transports an opaque value as
+                # ``_payload`` without knowing the FOM parameter name. Permit
+                # that alias only when the class has exactly one declared
+                # parameter, so multi-parameter HLA APIs remain unambiguous.
+                unique_handles = set(param_index.values())
+                if key == "_payload" and len(unique_handles) == 1:
+                    param_map[next(iter(unique_handles))] = _coerce_payload(payload)
                 continue
             param_map[param_index[key]] = _coerce_payload(payload)
         req = object_pb2.SendInteractionRequest(
@@ -613,7 +667,9 @@ class GrpcTransport:
     # --- M21 TASK-208: TimeService dispatchers ---------------------------------
 
     async def _enable_time_regulation(
-        self, federate_handle: int, lookahead: float,
+        self,
+        federate_handle: int,
+        lookahead: float,
     ) -> None:
         """Dispatch TimeService.EnableTimeRegulation (M21)."""
         from rti.v1 import common_pb2, time_pb2
@@ -648,7 +704,9 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _next_message_request(
-        self, federate_handle: int, t: float,
+        self,
+        federate_handle: int,
+        t: float,
     ) -> None:
         """Dispatch TimeService.NextMessageRequest (M21)."""
         from rti.v1 import common_pb2, time_pb2
@@ -699,7 +757,9 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _modify_lookahead(
-        self, federate_handle: int, lookahead: float,
+        self,
+        federate_handle: int,
+        lookahead: float,
     ) -> None:
         from rti.v1 import common_pb2, time_pb2
 
@@ -717,7 +777,9 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _next_message_request_available(
-        self, federate_handle: int, t: float,
+        self,
+        federate_handle: int,
+        t: float,
     ) -> None:
         from rti.v1 import common_pb2, time_pb2
 
@@ -735,7 +797,9 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _time_advance_request(
-        self, federate_handle: int, t: float,
+        self,
+        federate_handle: int,
+        t: float,
     ) -> None:
         from rti.v1 import common_pb2, time_pb2
 
@@ -753,7 +817,9 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _time_advance_request_available(
-        self, federate_handle: int, t: float,
+        self,
+        federate_handle: int,
+        t: float,
     ) -> None:
         from rti.v1 import common_pb2, time_pb2
 
@@ -771,7 +837,9 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _flush_queue_request(
-        self, federate_handle: int, t: float,
+        self,
+        federate_handle: int,
+        t: float,
     ) -> None:
         from rti.v1 import common_pb2, time_pb2
 
@@ -899,7 +967,9 @@ class GrpcTransport:
             translate_rpc_error(exc)
 
     async def _local_delete_object_instance(
-        self, federate_handle: int, object_handle: int,
+        self,
+        federate_handle: int,
+        object_handle: int,
     ) -> None:
         from rti.v1 import common_pb2, object_pb2
 
@@ -1267,9 +1337,7 @@ class GrpcTransport:
             return
         self.events_for(federate_handle)  # ensure queue exists
         loop = asyncio.get_event_loop()
-        self._stream_tasks[federate_handle] = loop.create_task(
-            self._drain_events(federate_handle)
-        )
+        self._stream_tasks[federate_handle] = loop.create_task(self._drain_events(federate_handle))
 
     async def _drain_events(self, federate_handle: int) -> None:
         """Background task: forward FederateEvent -> typed event onto the queue."""
@@ -1282,13 +1350,13 @@ class GrpcTransport:
             federation_name=self._federation_name,
             federate_handle=federate_handle,
         )
-        queue = self.events_for(federate_handle)
+        self.events_for(federate_handle)
         try:
             stream = self.streams.Events(req)
             async for fed_event in stream:
                 translated = self._translate_event(fed_event)
                 if translated is not None:
-                    queue.put_nowait(translated)
+                    self._deliver_event(federate_handle, translated)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
@@ -1332,9 +1400,7 @@ class GrpcTransport:
             for handle, payload in r.parameters.items():
                 params[inv.get(int(handle), str(handle))] = bytes(payload)
             ts = r.logical_time if r.HasField("logical_time") else None
-            return ReceiveInteraction(
-                class_name=class_name, parameters=params, timestamp=ts
-            )
+            return ReceiveInteraction(class_name=class_name, parameters=params, timestamp=ts)
         if which == "grant":
             return TimeAdvanceGrant(time=float(fed_event.grant.logical_time))
         if which == "discover":
@@ -1357,13 +1423,13 @@ class GrpcTransport:
                 values={str(k): bytes(v) for k, v in r.attributes.items()},
                 timestamp=ts,
                 attribute_values={
-                    AttributeHandle(int(k)): bytes(v)
-                    for k, v in r.attributes.items()
+                    AttributeHandle(int(k)): bytes(v) for k, v in r.attributes.items()
                 },
             )
         if which == "remove":
             # M23 — RemoveObjectInstance per IEEE 1516.1 §6.16.
             from .events import RemoveObjectInstance
+
             rm = fed_event.remove
             ts = rm.logical_time if rm.HasField("logical_time") else None
             return RemoveObjectInstance(
@@ -1374,6 +1440,7 @@ class GrpcTransport:
         if which == "provide_update":
             # M23 — ProvideAttributeValueUpdate per IEEE 1516.1 §6.26.
             from .events import ProvideAttributeValueUpdate
+
             pv = fed_event.provide_update
             return ProvideAttributeValueUpdate(
                 object_handle=int(pv.object_handle),
@@ -1398,6 +1465,7 @@ class GrpcTransport:
         # M37 §4.12 — sync registration acks (tags 22/23).
         if which == "sync_registration_succeeded":
             from .events import SynchronizationPointRegistrationSucceeded
+
             return SynchronizationPointRegistrationSucceeded(
                 label=str(fed_event.sync_registration_succeeded.label),
             )
@@ -1406,6 +1474,7 @@ class GrpcTransport:
                 SynchronizationPointFailureReason,
                 SynchronizationPointRegistrationFailed,
             )
+
             f = fed_event.sync_registration_failed
             reason_map = {
                 1: SynchronizationPointFailureReason.SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE,
@@ -1439,6 +1508,7 @@ class GrpcTransport:
         # M37 §7.11 — the current owner is asked to release (tag 33).
         if which == "ownership_release_requested":
             from .events import RequestAttributeOwnershipRelease
+
             o = fed_event.ownership_release_requested
             return RequestAttributeOwnershipRelease(
                 object_handle=int(o.object_handle),
@@ -1448,6 +1518,7 @@ class GrpcTransport:
         # M37 §7.10 — acquisition-if-available lost (tag 34).
         if which == "ownership_unavailable":
             from .events import AttributeOwnershipUnavailable
+
             o = fed_event.ownership_unavailable
             return AttributeOwnershipUnavailable(
                 object_handle=int(o.object_handle),
@@ -1465,6 +1536,7 @@ class GrpcTransport:
         # silently dropped by this switch until M39; 46-48 are M37.
         if which == "restore_initiate":
             from .events import InitiateFederateRestore
+
             r = fed_event.restore_initiate
             return InitiateFederateRestore(
                 label=str(r.label),
@@ -1473,41 +1545,46 @@ class GrpcTransport:
             )
         if which == "restore_completed":
             from .events import FederationRestored
+
             return FederationRestored(label=str(fed_event.restore_completed.label))
         if which == "restore_failed":
             from .events import FederationNotRestored
+
             return FederationNotRestored(label=str(fed_event.restore_failed.label))
         if which == "restore_request_succeeded":
             from .events import RequestFederationRestoreSucceeded
+
             return RequestFederationRestoreSucceeded(
                 label=str(fed_event.restore_request_succeeded.label),
             )
         if which == "restore_request_failed":
             from .events import RequestFederationRestoreFailed
+
             r = fed_event.restore_request_failed
             return RequestFederationRestoreFailed(
-                label=str(r.label), reason=str(r.reason),
+                label=str(r.label),
+                reason=str(r.reason),
             )
         if which == "restore_begun":
             from .events import FederationRestoreBegun
+
             return FederationRestoreBegun()
         # M37 §5.10-§5.13 — registration / interaction advisories.
         if which == "start_registration":
             from .events import StartRegistrationForObjectClass
+
             return StartRegistrationForObjectClass(
-                object_class_handle=int(
-                    fed_event.start_registration.object_class_handle
-                ),
+                object_class_handle=int(fed_event.start_registration.object_class_handle),
             )
         if which == "stop_registration":
             from .events import StopRegistrationForObjectClass
+
             return StopRegistrationForObjectClass(
-                object_class_handle=int(
-                    fed_event.stop_registration.object_class_handle
-                ),
+                object_class_handle=int(fed_event.stop_registration.object_class_handle),
             )
         if which == "turn_interactions_on":
             from .events import TurnInteractionsOn
+
             return TurnInteractionsOn(
                 interaction_class_handle=int(
                     fed_event.turn_interactions_on.interaction_class_handle
@@ -1515,6 +1592,7 @@ class GrpcTransport:
             )
         if which == "turn_interactions_off":
             from .events import TurnInteractionsOff
+
             return TurnInteractionsOff(
                 interaction_class_handle=int(
                     fed_event.turn_interactions_off.interaction_class_handle
@@ -1523,6 +1601,7 @@ class GrpcTransport:
         # M37 §6.17/§6.18 — DDM scope advisories.
         if which == "attributes_in_scope":
             from .events import AttributesInScope
+
             s = fed_event.attributes_in_scope
             return AttributesInScope(
                 object_handle=int(s.object_handle),
@@ -1530,6 +1609,7 @@ class GrpcTransport:
             )
         if which == "attributes_out_of_scope":
             from .events import AttributesOutOfScope
+
             s = fed_event.attributes_out_of_scope
             return AttributesOutOfScope(
                 object_handle=int(s.object_handle),
@@ -1538,6 +1618,7 @@ class GrpcTransport:
         # M37 §8.22 — retraction of a delivered TSO message.
         if which == "retraction_requested":
             from .events import RequestRetraction
+
             r = fed_event.retraction_requested
             return RequestRetraction(
                 sender_federate=int(r.sender_federate),
@@ -1546,16 +1627,19 @@ class GrpcTransport:
         # M26 Phase F — object instance name reservation events.
         if which == "reservation_succeeded":
             from .events import ObjectInstanceNameReservationSucceeded
+
             return ObjectInstanceNameReservationSucceeded(
                 object_name=str(fed_event.reservation_succeeded.object_name),
             )
         if which == "reservation_failed":
             from .events import ObjectInstanceNameReservationFailed
+
             return ObjectInstanceNameReservationFailed(
                 object_name=str(fed_event.reservation_failed.object_name),
             )
         if which == "reservation_multi_succeeded":
             from .events import MultipleObjectInstanceNameReservationSucceeded
+
             return MultipleObjectInstanceNameReservationSucceeded(
                 object_names=tuple(
                     str(n) for n in fed_event.reservation_multi_succeeded.object_names
@@ -1563,6 +1647,7 @@ class GrpcTransport:
             )
         if which == "reservation_multi_failed":
             from .events import MultipleObjectInstanceNameReservationFailed
+
             mf = fed_event.reservation_multi_failed
             return MultipleObjectInstanceNameReservationFailed(
                 requested_names=tuple(str(n) for n in mf.requested_names),
@@ -1653,15 +1738,20 @@ class GrpcTransport:
     def _parameter_indices_for(self, class_name: str) -> dict[str, int]:
         """Return parameter-name → 1-based index for ``class_name``.
 
-        Cached lazily off the FOM. The bridge's send_interaction passes
-        ``{"_payload": <bytes>}`` which doesn't exist in any FOM
-        parameter list; we fall back to a single synthetic parameter at
-        handle 1 so the wire payload still propagates.
+        Cached lazily off the FOM. Classes absent from the local FOM fall back
+        to a single synthetic parameter. The send path separately accepts the
+        bridge's ``_payload`` alias for a class with one declared parameter.
         """
-        # Cut-1: synthesize a single ``_payload`` -> 1 mapping so the
-        # bridge's opaque-payload convention works without re-parsing
-        # the FOM here. A future cut walks the FOM and binds real
-        # parameter handles.
+        fom_cache = getattr(self, "_fom_cache", None)
+        if fom_cache is not None:
+            for interaction in fom_cache.interaction_classes:
+                if interaction.name == class_name:
+                    return {
+                        parameter.name: index
+                        for index, parameter in enumerate(interaction.parameters, start=1)
+                    }
+        # Preserve the bridge's opaque-payload convention for classes
+        # that are intentionally absent from the FOM.
         return {"_payload": 1}
 
 
@@ -1770,9 +1860,7 @@ async def build_grpc_transport(
         if bearer_token:
             # M14 W3: composite credentials = TLS + per-call metadata.
             # Mirrors Go SDK's bearerCreds path which requires TLS too.
-            call_creds = grpc.metadata_call_credentials(
-                _bearer_token_plugin(bearer_token)
-            )
+            call_creds = grpc.metadata_call_credentials(_bearer_token_plugin(bearer_token))
             ssl_creds = grpc.composite_channel_credentials(ssl_creds, call_creds)
         channel = grpc.aio.secure_channel(target, ssl_creds)
         return GrpcTransport(channel, url=url)

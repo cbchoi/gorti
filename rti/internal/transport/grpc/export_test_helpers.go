@@ -23,4 +23,3 @@ func NewSupportServiceForTest(foms core.FOMRepository) rtiv1.SupportServiceServe
 func FederationServiceForTest(s *Server) rtiv1.FederationServiceServer {
 	return s.fedService
 }
-

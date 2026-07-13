@@ -153,10 +153,12 @@ func TestPerPrimitiveBoundaries(t *testing.T) {
 				t.Fatalf("beta join: %v", err)
 			}
 			t.Cleanup(func() { _ = b.Resign(ctx) })
-			if err := a.EnableTimeRegulation(ctx, 0); err != nil {
+			// Positive lookahead makes LBTS strictly exceed the requested
+			// time once both federates are pending, including ordinary TAR.
+			if err := a.EnableTimeRegulation(ctx, 1); err != nil {
 				t.Fatalf("a.EnableTimeRegulation: %v", err)
 			}
-			if err := b.EnableTimeRegulation(ctx, 0); err != nil {
+			if err := b.EnableTimeRegulation(ctx, 1); err != nil {
 				t.Fatalf("b.EnableTimeRegulation: %v", err)
 			}
 			if err := fn(a, ctx); err != nil {

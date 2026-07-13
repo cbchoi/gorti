@@ -72,8 +72,8 @@ def test_spec_m4_python_example_replays_byte_identical(tmp_path: Path) -> None:
 
       - Build rtid.
       - Run pingpong-demo deterministic into ``dirA/``.
-      - Replay from ``dirA/<fed>.log`` into ``dirB/`` via rtid.
-      - sha256(dirA/<fed>.log) MUST equal sha256(dirB/<fed>.log).
+        - Replay the generation-qualified source log into ``dirB/`` via rtid.
+        - The source and replay SHA-256 digests MUST match.
 
     The rtid replay path (``runReplayFromFile`` in
     ``rti/cmd/rtid/replay.go``) explicitly preserves the source
@@ -119,7 +119,8 @@ def test_spec_m4_python_example_replays_byte_identical(tmp_path: Path) -> None:
         f"rtid pingpong-demo failed: rc={proc1.returncode}\n"
         f"stdout={proc1.stdout!r}\nstderr={proc1.stderr!r}"
     )
-    src_log = dir_a / f"{FEDERATION}.log"
+    generation_path = Path(FEDERATION.encode("utf-8").hex()) / "0000000000000000.log"
+    src_log = dir_a / generation_path
     assert src_log.is_file(), f"expected source log at {src_log}"
     src_size = src_log.stat().st_size
     assert src_size > 0, "source log is empty"
@@ -145,7 +146,7 @@ def test_spec_m4_python_example_replays_byte_identical(tmp_path: Path) -> None:
         f"rtid replay-from-log failed: rc={proc2.returncode}\n"
         f"stdout={proc2.stdout!r}\nstderr={proc2.stderr!r}"
     )
-    dst_log = dir_b / f"{FEDERATION}.log"
+    dst_log = dir_b / generation_path
     assert dst_log.is_file(), f"expected captured log at {dst_log}"
 
     # Step 3: byte-identical assertion via sha256 (cheaper to display
@@ -157,5 +158,3 @@ def test_spec_m4_python_example_replays_byte_identical(tmp_path: Path) -> None:
         f"  source  ({src_log}, {src_log.stat().st_size}B): {src_sum}\n"
         f"  replay  ({dst_log}, {dst_log.stat().st_size}B): {dst_sum}"
     )
-
-
