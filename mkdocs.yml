@@ -1,6 +1,5 @@
 site_name: gorti
 site_description: Open-source IEEE 1516-2010 (HLA Evolved) RTI in Go
-site_url: https://cbchoi.github.io/gorti/
 repo_url: https://github.com/cbchoi/gorti
 repo_name: cbchoi/gorti
 edit_uri: edit/main/docs/

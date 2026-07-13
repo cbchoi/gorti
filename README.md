@@ -323,8 +323,8 @@ IEEE 1516-2010 (HLA Evolved) only — not 1516-2000, not 1.3, not HLA 4.
 ## Documentation and citation
 
 The user documentation builds strictly from `.readthedocs.yaml` and
-`mkdocs.yml`. Public Read the Docs and GitHub Pages hosting are release setup
-gates. Start with the [installation guide](docs/installation.md),
+`mkdocs.yml`. Public Read the Docs hosting must be enabled separately. Start
+with the [installation guide](docs/installation.md),
 [two-federate quickstart](docs/quickstart.md), and
 [reproducibility protocol](docs/reproducibility.md).
 

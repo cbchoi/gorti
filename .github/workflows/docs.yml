@@ -1,21 +1,10 @@
-name: Deploy docs to GitHub Pages
-
-# Builds the MkDocs Material site at docs/ and publishes it to
-# https://cbchoi.github.io/gorti/. Runs on every push to main; the
-# workflow_dispatch trigger lets you redeploy manually from the
-# Actions tab.
-#
-# Setup (one-time, in the repo Settings UI):
-#   Settings → Pages → Source = "GitHub Actions"
-#
-# After that, every push to main republishes the site.
+name: Docs
 
 on:
   pull_request:
     branches: [main]
     paths:
       - "docs/**"
-      - "paper/**"
       - "mkdocs.yml"
       - ".readthedocs.yaml"
       - "CITATION.cff"
@@ -25,7 +14,6 @@ on:
     branches: [main]
     paths:
       - "docs/**"
-      - "paper/**"
       - "mkdocs.yml"
       - ".readthedocs.yaml"
       - "CITATION.cff"
@@ -36,18 +24,10 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment; cancel runs queued after a
-# more recent push but let an in-flight deployment finish so a
-# half-deployed site isn't visible.
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
   build:
+    name: MkDocs strict build
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -60,28 +40,8 @@ jobs:
           cache: pip
           cache-dependency-path: docs/requirements.txt
 
-      - name: Install MkDocs + plugins
+      - name: Install documentation dependencies
         run: pip install -r docs/requirements.txt
 
-      - name: Build site
+      - name: Build documentation
         run: mkdocs build --strict
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-  deploy:
-    if: github.event_name != 'pull_request'
-    needs: build
-    runs-on: ubuntu-22.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
