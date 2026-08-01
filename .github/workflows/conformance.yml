@@ -77,7 +77,7 @@ jobs:
 
       - name: upload sweep logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: conformance-sweep-logs
           path: /tmp/ci-sweep-*.log
