@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// MutatingService — operator-facing control-plane RPCs that mutate
+// federation state (Phase 5 of docs/rtid-tui.md). Registered on the
+// SAME admin listener as AdminService, but ONLY when the daemon is
+// started with --admin-mutating=true. AdminService remains read-only.
+//
+// Safety contract:
+//   - Composition root REFUSES to start with --admin-mutating=true
+//     unless --admin-listen resolves to a loopback address
+//     (127.0.0.1, ::1, or localhost). The operator may override this
+//     bypass with --admin-mutating-allow-non-loopback=true if they
+//     really know what they're doing.
+//   - Both RPCs reuse the federation.Manager's existing primitives
+//     (ResignFederation, DestroyFederation) so the event-log entries
+//     and MOM hooks fire identically to the federate-initiated path.
+//     This is critical for replay determinism + observability
+//     symmetry.
+//
+// rti-top probes this service at startup to decide whether to render
+// the X / D keybindings; on Unimplemented or NotFound the keys stay
+// hidden so a read-only daemon's TUI surface is unchanged.
+service MutatingService {
+  // Probe is a lightweight liveness probe — exists so rti-top can
+  // detect whether the daemon registered MutatingService at all.
+  // Returns the same rtid_version as AdminService.Status. The reply
+  // is otherwise empty.
+  rpc Probe(MutatingProbeRequest) returns (MutatingProbeResponse);
+
+  // ForceResign forces a federate to be removed from a federation.
+  // Equivalent to the federate calling resign_federation itself, but
+  // initiated by the operator. Used when a federate is hung and
+  // can't resign cleanly.
+  rpc ForceResign(ForceResignRequest) returns (ForceResignResponse);
+
+  // DestroyFederation evicts every federate from the federation, then
+  // destroys it. Same wire semantics as a federate calling
+  // destroy_federation, but initiated by the operator.
+  rpc DestroyFederation(AdminDestroyFederationRequest) returns (AdminDestroyFederationResponse);
+
+  // PromoteFederation (M16.1 demo) reassigns a federation to a different
+  // cluster node. Used for operator-driven failover or load
+  // rebalancing. The receiving rtid:
+  //   1. Records the new federation→target_node assignment locally
+  //   2. Broadcasts NotifyAssignment to every peer
+  //   3. (Cut-2 demo) does NOT replicate federation state — the demo
+  //      assumes a fresh federation on the new primary. M16 cut-3
+  //      adds replicated event log.
+  rpc PromoteFederation(PromoteFederationRequest) returns (PromoteFederationResponse);
+}
+
+message MutatingProbeRequest {
+  WireVersion wire_version = 1;
+}
+
+message MutatingProbeResponse {
+  // rtid_version is the build identifier of the running daemon.
+  string rtid_version = 1;
+  // mutating_enabled is always true on a successful probe — the field
+  // exists for forward compatibility (a future cut may register a
+  // disabled stub that returns false instead of Unimplemented).
+  bool mutating_enabled = 2;
+}
+
+message ForceResignRequest {
+  WireVersion wire_version = 1;
+  // federation_name is the federation hosting the federate.
+  string federation_name = 2;
+  // federate_handle is the federate to evict.
+  uint64 federate_handle = 3;
+}
+
+message ForceResignResponse {
+  // already_resigned is true when the federate had already left the
+  // federation between the operator's confirmation prompt and the
+  // RPC arriving. The handler treats this as success-equivalent so
+  // rti-top can render the same "OK" status either way.
+  bool already_resigned = 1;
+}
+
+message AdminDestroyFederationRequest {
+  WireVersion wire_version = 1;
+  // federation_name is the federation to destroy.
+  string federation_name = 2;
+
+  // Fences a delayed administrative command from a replacement execution.
+  optional uint64 expected_federation_generation = 4;
+  // evict_joined_federates is true when the operator asked the
+  // handler to first force-resign every joined federate before
+  // destroying. False (the default) instructs the handler to refuse
+  // when any federate is still joined, matching the federate-facing
+  // DestroyFederation contract (FR-FM-5).
+  bool evict_joined_federates = 3;
+}
+
+message AdminDestroyFederationResponse {
+  // evicted_handles lists the federate handles the handler had to
+  // force-resign before destroying (empty when
+  // evict_joined_federates was false or the federation was already
+  // empty).
+  repeated uint64 evicted_handles = 1;
+}
+
+// PromoteFederationRequest — M16.1 demo. ``target_node_id`` is the
+// cluster node that should host the federation after the promote
+// completes. The receiving rtid validates that the target is a
+// known peer (via cluster.Manager) and rejects with InvalidArgument
+// if not.
+message PromoteFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  optional uint64 expected_federation_generation = 4;
+  string target_node_id = 3;
+}
+
+// PromoteFederationResponse carries the prior host's node_id so
+// the operator can verify the swap. Empty prior_node_id means the
+// federation had no prior assignment (newly promoted).
+message PromoteFederationResponse {
+  string prior_node_id = 1;
+}

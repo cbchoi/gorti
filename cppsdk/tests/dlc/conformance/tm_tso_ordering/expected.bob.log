@@ -1,0 +1,11 @@
+# M31 fixture tm_tso_ordering — bob publisher golden (SKELETON).
+# expected.bob.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: NOT CROSS-CHECKED — fixture uses >2 federates; exceeds the scope of the locally licensed validation environment. Independently verifiable against any DLC-conformant RTI via the external commercial-RTI harness. See docs/COMMERCIAL_RTI_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+bob: CONNECT                                                           # §4.2
+bob: JOIN federate=bob                                                 # §4.9
+bob: PUBLISH interaction=Tick                                          # §5.4
+bob: SEND interaction=Tick seq=1 source=bob time=1                     # §6.12 TSO
+bob: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                      # §4.10

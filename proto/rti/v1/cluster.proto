@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// ClusterService — distributed RTI cluster surface (M15 cut-1).
+//
+// Cut-1 (single-node): every node returns ListClusterNodes = [self];
+// LookupFederationHost returns CURRENT for known federations.
+// Cut-2 (multi-node, deferred): Raft-backed federation-to-node
+// assignments + cross-node redirect.
+service ClusterService {
+  // ListClusterNodes returns the live cluster membership view from
+  // this node's perspective.
+  rpc ListClusterNodes(ListClusterNodesRequest) returns (ListClusterNodesResponse);
+
+  // LookupFederationHost — given a federation name, returns the
+  // address of the rtid that hosts it. CURRENT means this node
+  // hosts; REDIRECT carries the host's address; NOT_FOUND when the
+  // federation does not exist anywhere in the cluster.
+  rpc LookupFederationHost(LookupFederationHostRequest) returns (LookupFederationHostResponse);
+
+  // ReportNodeHealth — peer-to-peer heartbeat (multi-node only).
+  // Cut-1 implementation rejects with FailedPrecondition.
+  rpc ReportNodeHealth(ReportNodeHealthRequest) returns (Empty);
+
+  // NotifyAssignment — peer-to-peer notification that a federation
+  // has been assigned to a specific node. The receiver updates its
+  // in-memory assignment table so subsequent LookupFederationHost
+  // calls return REDIRECT to the host. M15 cut-2 demo (best-effort
+  // gossip; production replaces with Raft).
+  rpc NotifyAssignment(NotifyAssignmentRequest) returns (Empty);
+}
+
+message ListClusterNodesRequest {
+  WireVersion wire_version = 1;
+}
+
+message ListClusterNodesResponse {
+  repeated ClusterNode nodes = 1;
+}
+
+message ClusterNode {
+  string node_id = 1;     // Stable opaque ID assigned at cluster join.
+  string address = 2;     // host:port for federate dialing.
+  bool is_self = 3;       // True for the node that served this RPC.
+}
+
+message LookupFederationHostRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+message LookupFederationHostResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    NOT_FOUND = 1;
+    CURRENT = 2;
+    REDIRECT = 3;
+  }
+  Status status = 1;
+  string host_address = 2;
+  string host_node_id = 3;
+}
+
+message ReportNodeHealthRequest {
+  WireVersion wire_version = 1;
+  string from_node_id = 2;
+}
+
+// NotifyAssignmentRequest — M15 cut-2 demo gossip payload. ``host_node_id``
+// + ``host_address`` is the rtid that hosts ``federation_name``. The
+// receiver overwrites any prior assignment for that federation; last
+// writer wins (best-effort, not consensus-backed).
+//
+// Forward-compat: production Raft cut MUST replace this RPC with
+// log-replication semantics; this message stays for the demo cut and
+// will be deprecated in M15 cut-3.
+message NotifyAssignmentRequest {
+  WireVersion wire_version = 1;
+  string from_node_id = 2;
+  string federation_name = 3;
+
+  // Generation of the federation execution whose assignment is changing.
+  optional uint64 expected_federation_generation = 6;
+  string host_node_id = 4;
+  string host_address = 5;
+}

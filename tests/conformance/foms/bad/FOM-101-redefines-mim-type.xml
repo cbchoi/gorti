@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-101 fixture: user FOM module attempts to redefine an MIM-provided type.
+  Per docs/srs.md FR-FOM-2 the MIM is baked in; user modules cannot redefine it.
+  Expected diagnostic: FOM-101.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-101-redefines-mim-type</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-28</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: user module redefines HLAfloat64BE.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+  <dataTypes>
+    <basicDataRepresentations>
+      <basicData>
+        <name>HLAfloat64BE</name>
+        <size>32</size>
+        <interpretation>Hijacked from the MIM.</interpretation>
+        <endian>Big</endian>
+        <encoding>32-bit IEEE normalized single precision</encoding>
+      </basicData>
+    </basicDataRepresentations>
+  </dataTypes>
+</objectModel>

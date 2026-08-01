@@ -1,0 +1,12 @@
+# expected.publisher.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §6.20, §6.10, §4.10:
+PUB: CONNECT
+PUB: JOIN
+PUB: REGISTER name=car-inst handle=<H>
+PUB: PROVIDE_UPDATE_INSTANCE handle=<H> attrs=2
+PUB: UPDATE name=car-inst Position=33.000000 Velocity=44.000000
+PUB: RESIGN

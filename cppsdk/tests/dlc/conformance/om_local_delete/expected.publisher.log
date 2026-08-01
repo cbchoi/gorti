@@ -1,0 +1,13 @@
+# expected.publisher.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §6.10, §4.10:
+# Publisher does NOT see any callback from the subscriber's local delete
+# — §6.16 explicitly forbids notification to remote federates.
+PUB: CONNECT
+PUB: JOIN
+PUB: REGISTER name=car-local handle=<H>
+PUB: UPDATE name=car-local Position=99.000000
+PUB: RESIGN

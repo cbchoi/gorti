@@ -1,0 +1,18 @@
+# M31 fixture ddm_region_overlap — subscriber golden (SKELETON).
+# expected.subscriber.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+SUB: CONNECT                                                       # §4.2
+SUB: JOIN federate=sub                                             # §4.9
+SUB: CREATE_REGION dims=[X,Y]                                      # §9.2 (catalogue 10.1)
+SUB: SET_RANGE region=<R> dim=X lower=250 upper=750                # §10.30
+SUB: SET_RANGE region=<R> dim=Y lower=250 upper=750                # §10.30
+SUB: COMMIT_REGION region=<R>                                      # §9.3 (catalogue 10.9)
+SUB: SUBSCRIBE_WITH_REGIONS class=Vehicle attributes=[Position] active=true  # §9.8 (catalogue 10.5 — active flag + updateRate)
+SUB: DISCOVER name=car-1                                           # §6.9 discoverObjectInstance (catalogue 4.19 — wstring name)
+SUB: REFLECT Position=150.000000                                   # §6.11 reflectAttributeValues RO (catalogue 4.20)
+SUB: REFLECT Position=200.000000                                   # §6.11
+SUB: REFLECT Position=250.000000                                   # §6.11
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

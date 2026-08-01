@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>pyjevsim-cross-process</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-05-09</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Reference FOM for the 2-federate Producer -> Consumer cross-process example. One interaction class carrying a monotonic seq number.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>ProducerOutput</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <semantics>Producer -> Consumer edge. Carries a monotonic seq number stamped by the producer on every tick.</semantics>
+        <parameter>
+          <name>seq</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>Sequence number, big-endian 4 bytes.</semantics>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+</objectModel>

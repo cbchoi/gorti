@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>pyjevsim-time-advance</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-05-09</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Reference FOM for the Python cross-process time-advance example: 3 federates emit Tick interactions per logical-time grant.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>Tick</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <semantics>Per-cycle heartbeat from each federate.</semantics>
+        <parameter>
+          <name>seq</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>Per-federate cycle counter (1-based).</semantics>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+</objectModel>

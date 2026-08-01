@@ -1,0 +1,11 @@
+# Standalone entry point for the Python protocol-buffer code generator.
+# Keep this target logically aligned with `py-codegen` in the repo-root
+# Makefile.
+#
+# Usage (from pysdk/):
+#     make -f Makefile.codegen codegen
+
+.PHONY: codegen
+
+codegen:
+	cd .. && python3 -m pysdk.rti1516e._proto

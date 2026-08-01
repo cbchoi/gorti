@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// OwnershipService — IEEE 1516.1-2010 §7. Cut-3 (M12) gRPC exposure
+// of cut-2 ownership.Manager (the negotiated divest+acquire two-phase
+// protocol + queries).
+service OwnershipService {
+  rpc UnconditionalAttributeOwnershipDivestiture(UnconditionalDivestRequest) returns (Empty);
+  rpc NegotiatedAttributeOwnershipDivestiture(NegotiatedDivestRequest) returns (Empty);
+  rpc AttributeOwnershipAcquisition(AcquireRequest) returns (Empty);
+  rpc CancelNegotiatedAttributeOwnershipDivestiture(CancelDivestRequest) returns (Empty);
+  rpc CancelAttributeOwnershipAcquisition(CancelAcquireRequest) returns (Empty);
+  rpc AttributeOwnershipDivestitureIfWanted(DivestIfWantedRequest) returns (Empty);
+  // IEEE 1516.1-2010 §7.6 confirmDivestiture — completes a TWO-PHASE
+  // negotiated divestiture (NegotiatedDivestRequest.two_phase=true)
+  // after the divester received requestDivestitureConfirmation.
+  // M37.
+  rpc ConfirmDivestiture(ConfirmDivestitureRequest) returns (Empty);
+  rpc QueryAttributeOwnership(QueryOwnershipRequest) returns (QueryOwnershipResponse);
+  rpc IsAttributeOwnedByFederate(IsOwnedRequest) returns (IsOwnedResponse);
+}
+
+message UnconditionalDivestRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // current owner
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message NegotiatedDivestRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  bytes tag = 6;
+  // IEEE 1516.1-2010 §7.3/§7.6 REAL two-phase protocol (M37 ,
+  // additive tag 7). When true: an acquirer's arrival emits
+  // requestDivestitureConfirmation to the divester and the transfer
+  // completes ONLY on a subsequent ConfirmDivestiture RPC. When
+  // absent/false: the pre-M37 one-phase flow (transfer completes as
+  // soon as an acquirer engages) is preserved for old clients.
+  bool two_phase = 7;
+}
+
+// ConfirmDivestiture — IEEE 1516.1-2010 §7.6 (M37). The
+// divesting federate (federate_handle) confirms; the RTI transfers the
+// listed attributes to the strategy-selected queued acquirer.
+message ConfirmDivestitureRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // divesting owner
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message AcquireRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // acquirer
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  bytes tag = 6;
+  // IEEE 1516.1-2010 §7.9 attributeOwnershipAcquisitionIfAvailable —
+  // when true, the RTI atomically grants ONLY the attributes that are
+  // currently available (unowned, or mid-divest with this acquirer
+  // selected); the rest produce an AttributeOwnershipUnavailable
+  // callback (§7.10) and NO pending acquire is queued. Absent/false
+  // (old clients) keeps plain §7.8 queueing semantics. M37.
+  // (additive, tag 7).
+  bool if_available = 7;
+}
+
+message CancelDivestRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner withdrawing
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message CancelAcquireRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // acquirer withdrawing
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message DivestIfWantedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+}
+
+message QueryOwnershipRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 object_handle = 3;
+  uint64 attribute_handle = 4;
+}
+
+message QueryOwnershipResponse {
+  uint64 owner_federate_handle = 1;  // 0 if attribute is mid-transfer / unowned
+  bool owned = 2;
+}
+
+message IsOwnedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  uint64 attribute_handle = 5;
+}
+
+message IsOwnedResponse {
+  bool owned = 1;
+}
+
+// OwnershipRecordEntry is one (object, attribute) ownership entry in
+// OwnershipManagerState.owners — captures the current owner of one
+// attribute on one object. M13 thread C (docs/srs.md §10.4).
+message OwnershipRecordEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 owner_federate = 3;
+}
+
+// PendingDivestEntry is one in-flight NegotiatedDivest entry in
+// OwnershipManagerState.pending_divests.
+message PendingDivestEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 owner_federate = 3;
+  bytes tag = 4;
+}
+
+// PendingAcquireEntry is one queued Acquire entry in
+// OwnershipManagerState.pending_acquires.
+message PendingAcquireEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 acquirer_federate = 3;
+  bytes tag = 4;
+}
+
+// OwnershipManagerState is the per-federation snapshot persisted into
+// the save manifest under key "ownership". M13 thread C
+// (docs/srs.md §10.4). On Marshal, every entry slice is sorted
+// deterministically (ObjectHandle, AttributeHandle, AcquirerHandle).
+message OwnershipManagerState {
+  repeated OwnershipRecordEntry owners = 1;
+  repeated PendingDivestEntry pending_divests = 2;
+  repeated PendingAcquireEntry pending_acquires = 3;
+}

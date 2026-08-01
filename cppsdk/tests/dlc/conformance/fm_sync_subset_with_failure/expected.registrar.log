@@ -1,0 +1,13 @@
+# expected.registrar.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: NOT CROSS-CHECKED — fixture uses >2 federates; exceeds the scope of the locally licensed validation environment. Independently verifiable against any DLC-conformant RTI via the external commercial-RTI harness. See docs/COMMERCIAL_RTI_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §4.11 (2-arg overload — catalogue
+# row 3.10), §4.12, §4.10. Alice is NOT in the sync subset; she sees
+# registration success only, no announce/synchronized callbacks.
+REG: CONNECT
+REG: JOIN federate=alice
+REG: REGISTER_SYNC_POINT_SUBSET label=checkpoint size=2
+REG: SYNC_REGISTRATION_SUCCEEDED label=checkpoint
+REG: RESIGN

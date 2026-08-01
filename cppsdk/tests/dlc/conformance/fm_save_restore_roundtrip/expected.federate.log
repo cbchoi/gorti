@@ -1,0 +1,24 @@
+# expected.federate.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §6.10, §4.16-§4.20, §4.24-§4.29:
+FED: CONNECT
+FED: JOIN federate=saver
+FED: REGISTER name=state-1 handle=<H>
+FED: UPDATE Counter=10
+FED: REQUEST_FEDERATION_SAVE label=checkpoint-1
+FED: INITIATE_FEDERATE_SAVE label=checkpoint-1
+FED: FEDERATE_SAVE_BEGUN
+FED: FEDERATE_SAVE_COMPLETE
+FED: FEDERATION_SAVED
+FED: RESIGN
+FED: REJOIN federate=saver
+FED: REQUEST_FEDERATION_RESTORE label=checkpoint-1
+FED: RESTORE_REQUEST_SUCCEEDED label=checkpoint-1
+FED: RESTORE_BEGUN
+FED: INITIATE_FEDERATE_RESTORE label=checkpoint-1 federate=saver handle=<H>
+FED: FEDERATE_RESTORE_COMPLETE
+FED: FEDERATION_RESTORED
+FED: RESIGN

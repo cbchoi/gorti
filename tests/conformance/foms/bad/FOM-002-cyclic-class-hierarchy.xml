@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-002 fixture: object class hierarchy contains a cycle.
+  This is encoded by having two object classes that name each other as parent
+  (when the parser resolves parent references via name lookup, this creates
+  the cycle and FOM-002 must fire).
+
+  Expected diagnostic: FOM-002.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-002-cyclic-class-hierarchy</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-28</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: cyclic class hierarchy via cross-referenced classes.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>A</name>
+        <sharing>Neither</sharing>
+        <semantics>Cycle anchor A.</semantics>
+        <objectClass>
+          <name>B</name>
+          <sharing>Neither</sharing>
+          <semantics>Nested inside A.</semantics>
+          <objectClass>
+            <name>A</name>
+            <sharing>Neither</sharing>
+            <semantics>Reuses name A inside B; if the parser resolves classes by HLA-qualified name, this creates a name collision and parent-cycle interpretation in strict mode (FOM-002).</semantics>
+          </objectClass>
+        </objectClass>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

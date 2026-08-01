@@ -1,0 +1,18 @@
+# expected.federate.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §5.3 (publishObjectClassAttributes),
+# §5.7 (unpublishObjectClassAttributes), §5.3 (unpublishObjectClass —
+# catalogue row 11.10), §6.8 (registerObjectInstance, raises
+# ObjectClassNotPublished per §6.8 exception set), §4.10.
+FED: CONNECT
+FED: JOIN federate=unpublisher
+FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
+FED: UNPUBLISH_ATTRS class=Vehicle attributes=[Position]
+FED: REGISTER class=Vehicle name=car-phase1 handle=<H>
+FED: PUBLISH class=Vehicle attributes=[Position,Velocity]
+FED: UNPUBLISH_CLASS class=Vehicle
+FED: REGISTER_FAILED reason=ObjectClassNotPublished
+FED: RESIGN

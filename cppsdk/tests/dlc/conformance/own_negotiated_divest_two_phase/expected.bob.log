@@ -1,0 +1,13 @@
+# expected.bob.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.9, §7.4, §7.7, §7.8, §4.10:
+BOB: CONNECT
+BOB: JOIN
+BOB: DISCOVER name=car-divest handle=<H>
+BOB: ASSUMPTION_REQUEST attrs=1
+BOB: OWNERSHIP_ACQUISITION
+BOB: ACQUISITION_NOTIFICATION attrs=1
+BOB: RESIGN

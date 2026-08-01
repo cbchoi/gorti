@@ -1,0 +1,14 @@
+# expected.registrar.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: NOT CROSS-CHECKED — fixture uses >2 federates; exceeds the scope of the locally licensed validation environment. Independently verifiable against any DLC-conformant RTI via the external commercial-RTI harness. See docs/COMMERCIAL_RTI_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §4.11, §4.12, §4.13, §4.14, §4.15, §4.10.
+REG: CONNECT
+REG: JOIN federate=registrar
+REG: REGISTER_SYNC_POINT label=checkpoint
+REG: SYNC_REGISTRATION_SUCCEEDED label=checkpoint
+REG: ANNOUNCE_SYNC label=checkpoint
+REG: ACHIEVED label=checkpoint successfully=true
+REG: FEDERATION_SYNCHRONIZED label=checkpoint failedToSyncSet.size=0
+REG: RESIGN

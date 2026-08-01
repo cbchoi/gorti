@@ -1,0 +1,16 @@
+# expected.carol.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: NOT CROSS-CHECKED — fixture uses >2 federates; exceeds the scope of the locally licensed validation environment. Independently verifiable against any DLC-conformant RTI via the external commercial-RTI harness. See docs/COMMERCIAL_RTI_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Carol loses the race — per IEEE 1516.1-2010 §7.9 + §7.10
+# (catalogue row 4.29: attributeOwnershipUnavailable — gorti M17 absent).
+CAROL: CONNECT
+CAROL: JOIN
+CAROL: DISCOVER name=car-race handle=<H>
+CAROL: ACQUIRE_IF_AVAILABLE attrs=[Position]
+CAROL: OWNERSHIP_UNAVAILABLE attrs=1
+CAROL: RESIGN
+# NOTE: the race winner is non-deterministic across runs; this golden
+# captures the "carol-loses" branch. If a reference RTI reports the other branch,
+# swap bob/carol goldens accordingly.

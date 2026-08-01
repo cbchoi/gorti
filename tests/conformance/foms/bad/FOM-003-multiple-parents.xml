@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-003 fixture: object class declared under two different parents.
+  Class "A" is nested directly under HLAobjectRoot AND nested again inside
+  class B (a sibling of A) — so the flat parent table contains two entries
+  for "A" with distinct ParentName values. That ambiguity is FOM-003.
+
+  Expected diagnostic: FOM-003.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-003-multiple-parents</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-29</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: object class with multiple parents.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>A</name>
+        <sharing>Neither</sharing>
+        <semantics>Multi-parent class.</semantics>
+      </objectClass>
+      <objectClass>
+        <name>B</name>
+        <sharing>Neither</sharing>
+        <semantics>Container that re-declares A.</semantics>
+        <objectClass>
+          <name>A</name>
+          <sharing>Neither</sharing>
+          <semantics>A re-declared under B with conflicting parent.</semantics>
+        </objectClass>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

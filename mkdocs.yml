@@ -1,0 +1,95 @@
+site_name: gorti
+site_description: Open-source IEEE 1516-2010 (HLA Evolved) RTI in Go
+site_url: !ENV READTHEDOCS_CANONICAL_URL
+repo_url: https://github.com/cbchoi/gorti
+repo_name: cbchoi/gorti
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.snippets:
+      base_path:
+        - .
+        - docs
+      check_paths: true
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+plugins:
+  - search
+  - include-markdown
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - User Guide:
+      - Runtime and SDKs: user-guide.md
+      - Time Management: time-management.md
+      - LocalLRC Fast Path: local-lrc.md
+      - Operations: operations.md
+  - Verification:
+      - Interoperability: verification.md
+      - Reproducibility: reproducibility.md
+      - Performance: performance.md
+      - DEVStone-HLA Benchmark: benchmark.md
+  - Research:
+      - Citation: citation.md
+      - Roadmap: roadmap.md
+  - v0.9 Release Candidate: releases/v0.9.0.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/cbchoi/gorti
+
+copyright: Copyright &copy; 2026 Changbeom Choi

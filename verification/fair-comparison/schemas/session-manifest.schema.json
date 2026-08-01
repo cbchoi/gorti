@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gorti.fair-comparison/session-manifest-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "session_id", "state", "created_at", "finished_at", "workload",
+    "schedule", "orchestrator_provenance", "runs"
+  ],
+  "properties": {
+    "schema": {"const": "gorti.fair-comparison/session-manifest-v1"},
+    "session_id": {"type": "string", "minLength": 1},
+    "state": {"enum": ["running", "complete", "failed"]},
+    "created_at": {"type": "string", "minLength": 1},
+    "finished_at": {"type": ["string", "null"]},
+    "workload": {"type": "object"},
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warmup_pairs", "measured_pairs", "order_seed", "pairs"],
+      "properties": {
+        "warmup_pairs": {"type": "integer", "minimum": 0},
+        "measured_pairs": {"type": "integer", "minimum": 1},
+        "order_seed": {"type": "integer", "minimum": 0},
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["phase", "pair_index", "order"],
+            "properties": {
+              "phase": {"enum": ["warmup", "measured"]},
+              "pair_index": {"type": "integer", "minimum": 1},
+              "order": {"enum": ["AB", "BA"]}
+            }
+          }
+        }
+      }
+    },
+    "orchestrator_provenance": {"type": "object"},
+    "runs": {"type": "array"},
+    "analysis_path": {"type": ["string", "null"]},
+    "failure": {"type": "string"}
+  }
+}

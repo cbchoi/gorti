@@ -1,0 +1,15 @@
+# expected.subscriber.log
+# authority: IEEE 1516.1-2010 — every event line is derived from the spec sections cited below/in README.md. Cross-checked locally against a DLC-conformant commercial RTI via the external commercial-RTI harness (byte-identical after canonicalization); that check is reproducible but is NOT the authority for this golden.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md "Spec citations per event in goldens"
+# Per IEEE 1516.1-2010 §5.6, §5.8, §6.9, §6.11, §6.13, §4.10.
+# Note: RECEIVE/REFLECT are RO events emitted in the same logical-time
+# bucket; normalize.py §5.2.1 rule 2 sorts them lexically — this is
+# RTI-defined behavior, not a spec violation (§6 only mandates causal order).
+SUB: CONNECT
+SUB: JOIN federate=subscriber
+SUB: SUBSCRIBE Vehicle Position Velocity Honk
+SUB: DISCOVER class=Vehicle name=car-1 handle=<H>
+SUB: RECEIVE class=Honk Volume=5
+SUB: REFLECT name=car-1 Position=42.000000 Velocity=7.000000
+SUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST

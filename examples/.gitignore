@@ -1,0 +1,5 @@
+# Per-run working directories created by the runners (logs, eventlog,
+# saves, result JSON). Each runner writes to <example>/.run/<timestamp>/.
+.run/
+__pycache__/
+*.pyc

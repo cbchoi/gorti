@@ -1,0 +1,14 @@
+# expected.carol.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: NOT CROSS-CHECKED — fixture uses >2 federates; exceeds the scope of the locally licensed validation environment. Independently verifiable against any DLC-conformant RTI via the external commercial-RTI harness. See docs/COMMERCIAL_RTI_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §4.13, §4.14 (successfully=false per
+# catalogue row 3.11), §4.15 (failedToSyncSet contains self per
+# catalogue row 4.7), §4.10.
+CAROL: CONNECT
+CAROL: JOIN federate=carol
+CAROL: ANNOUNCE_SYNC label=checkpoint
+CAROL: ACHIEVED label=checkpoint successfully=false
+CAROL: FEDERATION_SYNCHRONIZED label=checkpoint failedToSyncSet.size=1
+CAROL: RESIGN

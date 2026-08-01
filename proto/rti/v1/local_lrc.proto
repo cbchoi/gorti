@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// LocalLRCService is the ordered, receive-order Object Management fast path.
+// The first request must be LocalLRCOpen. Later requests carry gapless local
+// sequence numbers; each ACK commits every request through committed_through.
+service LocalLRCService {
+  rpc Exchange(stream LocalLRCRequest) returns (stream LocalLRCAck);
+}
+
+message LocalLRCRequest {
+  oneof body {
+    LocalLRCOpen open = 1;
+    LocalLRCAttributeUpdate attribute_update = 2;
+    LocalLRCInteraction interaction = 3;
+    LocalLRCFlush flush = 4;
+    LocalLRCBatch batch = 5;
+  }
+}
+
+message LocalLRCOpen {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 expected_federation_generation = 4;
+  // Requested cumulative ACK interval. The server clamps this value.
+  uint32 ack_every = 5;
+  // Requested operation count per batch. Zero preserves the legacy default.
+  // The server reports the negotiated limit in the opening ACK.
+  uint32 requested_max_batch_operations = 6;
+}
+
+// LocalLRCAttributeUpdate intentionally has no logical-time field. TSO
+// operations retain the confirmed unary path until their failure and grant
+// semantics have an equivalent pipelined contract.
+message LocalLRCAttributeUpdate {
+  uint64 sequence = 1;
+  uint64 object_handle = 2;
+  map<uint64, bytes> attributes = 3;
+}
+
+message LocalLRCInteraction {
+  uint64 sequence = 1;
+  uint64 interaction_class_handle = 2;
+  map<uint64, bytes> parameters = 3;
+}
+
+message LocalLRCOperation {
+  oneof body {
+    LocalLRCAttributeUpdate attribute_update = 1;
+    LocalLRCInteraction interaction = 2;
+  }
+}
+
+// Operations in a batch are processed in list order. A terminal service error
+// commits only the gapless prefix acknowledged by the server.
+message LocalLRCBatch {
+  repeated LocalLRCOperation operations = 1;
+}
+
+message LocalLRCFlush {
+  uint64 through_sequence = 1;
+}
+
+message LocalLRCAck {
+  // Every operation with sequence <= committed_through completed the normal
+  // server-side service path. Stream failure leaves larger sequences
+  // indeterminate and permanently fails the local queue.
+  uint64 committed_through = 1;
+  // Set on the opening ACK so the client can record the negotiated interval.
+  uint32 ack_every = 2;
+  // Set on the opening ACK. Zero means that the peer supports only one
+  // operation per request, preserving compatibility with pre-batch servers.
+  uint32 max_batch_operations = 3;
+}

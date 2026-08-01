@@ -1,0 +1,20 @@
+# M17 Cut-1 deps. Each conan recipe ships prebuilt binaries for
+# linux_x64 + gcc12/clang15 in conan-center; locally-built recipes
+# rebuild only deps that don't match the active profile (one-time).
+#
+# Versions are pinned to track stable releases. Bumping is a deliberate
+# milestone follow-up, not a Cut-1 churn.
+
+[requires]
+grpc/1.65.0
+protobuf/5.27.0
+gtest/1.15.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[options]
+# Keep grpc + protobuf as static libs so distributed cppsdk binaries
+# stay portable (no system grpc++.so dependency at runtime).
+*:shared=False

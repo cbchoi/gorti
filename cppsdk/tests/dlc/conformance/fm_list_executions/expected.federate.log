@@ -1,0 +1,19 @@
+# expected.federate.log
+# authority: IEEE 1516.1-2010 — every event line is derived from the spec sections cited below/in README.md. Cross-checked locally against a DLC-conformant commercial RTI via the external commercial-RTI harness (byte-identical after canonicalization); that check is reproducible but is NOT the authority for this golden.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.5, §4.6, §4.7, §4.8 (catalogue rows 3.7,
+# 4.4 — both absent in gorti M17).
+# Note: REPORT_FEDERATION_EXECUTIONS list order is RTI-defined per §4.8;
+# golden capture sorts the names lexically for stable diff. Production
+# federates must accept any permutation of the names.
+FED: CONNECT
+FED: CREATE federation=alpha
+FED: CREATE federation=beta
+FED: CREATE federation=gamma
+FED: LIST_FEDERATION_EXECUTIONS
+FED: REPORT_FEDERATION_EXECUTIONS count=3 alpha beta gamma
+FED: DESTROY federation=alpha
+FED: DESTROY federation=beta
+FED: DESTROY federation=gamma
+FED: DISCONNECT

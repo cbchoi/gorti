@@ -1,0 +1,411 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// StreamService — server-streamed callbacks to a joined federate.
+// One stream per federate carries Discover, Reflect, Receive, Grant, etc.
+service StreamService {
+  rpc Events(EventsRequest) returns (stream FederateEvent);
+  // EventBatches preserves the Events ordering contract while amortizing
+  // protobuf and HTTP/2 framing across each admitted outbox batch.
+  rpc EventBatches(EventsRequest) returns (stream FederateEventBatch);
+}
+
+message EventsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  // New clients fence callback subscriptions to the execution joined above.
+  // Omission remains valid for legacy clients, which are fenced by membership.
+  optional uint64 expected_federation_generation = 4;
+}
+
+// FederateEventBatch is one contiguous, ordered slice from a federate's
+// outbox. Events are never reordered across or within batches.
+message FederateEventBatch {
+  repeated FederateEvent events = 1;
+  // The server sends one empty ready batch after request validation and
+  // subscription acquisition, before consuming any callback from the outbox.
+  bool ready = 2;
+}
+
+// FederateEvent is one server-initiated callback. Per-federation monotonic seq.
+//
+// Wire-version compatibility: oneof variants are APPEND-ONLY. Existing
+// federates connecting to a newer rtid see only the variants they know
+// about; new variants ride through proto3's open-set "unknown field"
+// path and are silently ignored. NEVER renumber or reorder existing
+// tags. The 99 tag is reserved for FederationHalted (terminal).
+message FederateEvent {
+  uint64 seq = 1;
+  oneof event {
+    DiscoverObjectInstance discover = 10;
+    ReflectAttributeValues reflect = 11;
+    RemoveObjectInstance remove = 12;
+    ReceiveInteraction receive = 13;
+    TimeAdvanceGrant grant = 14;
+    ProvideAttributeValueUpdate provide_update = 15;
+    // Cut-2 service-group callbacks (M12 W2 deferral #1 close).
+    // Sync (§4.6 / §4.7).
+    SynchronizationPointAnnounced sync_announced = 20;
+    FederationSynchronized sync_synchronized = 21;
+    // Sync registration ack (§4.12) — M37.
+    SyncRegistrationSucceeded sync_registration_succeeded = 22;
+    SyncRegistrationFailed sync_registration_failed = 23;
+    // Ownership (§7.3 / §7.4).
+    RequestAttributeOwnershipAssumption ownership_assumption = 30;
+    AttributeOwnershipAcquisitionNotification ownership_acquired = 31;
+    RequestDivestitureConfirmation ownership_divest_confirmed = 32;
+    // Ownership release request (§7.11) — M37.
+    RequestAttributeOwnershipRelease ownership_release_requested = 33;
+    // Ownership unavailable (§7.10) — M37.
+    AttributeOwnershipUnavailable ownership_unavailable = 34;
+    // Save (§4.8 / §4.9).
+    InitiateFederateSave save_initiate = 40;
+    FederationSaved save_completed = 41;
+    FederationNotSaved save_failed = 42;
+    // Restore (§4.13 / §4.14) — M17.25 (Cut-4).
+    InitiateFederateRestore restore_initiate = 43;
+    FederationRestored restore_completed = 44;
+    FederationNotRestored restore_failed = 45;
+    // Restore request ack + begun (§4.25 / §4.26) — M37.
+    RequestFederationRestoreSucceeded restore_request_succeeded = 46;
+    RequestFederationRestoreFailed restore_request_failed = 47;
+    FederationRestoreBegun restore_begun = 48;
+    // Object instance name reservation (§6.1 / §6.5 — M26 Phase F).
+    ObjectInstanceNameReservationSucceeded reservation_succeeded = 50;
+    ObjectInstanceNameReservationFailed reservation_failed = 51;
+    MultipleObjectInstanceNameReservationSucceeded reservation_multi_succeeded = 52;
+    MultipleObjectInstanceNameReservationFailed reservation_multi_failed = 53;
+    // Registration / interaction advisories (§5.10-§5.13) — M37.
+    StartRegistrationForObjectClass start_registration = 60;
+    StopRegistrationForObjectClass stop_registration = 61;
+    TurnInteractionsOn turn_interactions_on = 62;
+    TurnInteractionsOff turn_interactions_off = 63;
+    // DDM scope advisories (§6.17 / §6.18) — M37.
+    AttributesInScope attributes_in_scope = 64;
+    AttributesOutOfScope attributes_out_of_scope = 65;
+    // Retraction (§8.22) — M37.
+    RequestRetraction retraction_requested = 66;
+    FederationHalted halted = 99;
+  }
+}
+
+message DiscoverObjectInstance {
+  uint64 object_handle = 1;
+  uint64 object_class_handle = 2;
+  string object_name = 3;
+}
+
+message ReflectAttributeValues {
+  uint64 object_handle = 1;
+  uint64 object_class_handle = 2;
+  map<uint64, bytes> attributes = 3;
+  optional double logical_time = 4;
+}
+
+message RemoveObjectInstance {
+  uint64 object_handle = 1;
+  optional double logical_time = 2;
+  // M23 — user-supplied tag from the deleter (IEEE 1516.1-2010 §6.16).
+  bytes user_supplied_tag = 3;
+}
+
+// ProvideAttributeValueUpdate — IEEE 1516.1-2010 §6.26 callback (M23).
+// Delivered to the owner of an object instance when a peer calls
+// RequestAttributeValueUpdate (or the class variant). The owner is
+// expected to call UpdateAttributeValues with fresh values for the
+// listed attributes.
+message ProvideAttributeValueUpdate {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  bytes user_supplied_tag = 3;
+}
+
+message ReceiveInteraction {
+  uint64 interaction_class_handle = 1;
+  map<uint64, bytes> parameters = 2;
+  optional double logical_time = 3;
+}
+
+message TimeAdvanceGrant {
+  double logical_time = 1;
+}
+
+message FederationHalted {
+  // Why the federation halted. e.g. "stall: federate=3", "fed=destroyed".
+  string cause = 1;
+}
+
+// SynchronizationPointAnnounced — IEEE 1516.1-2010 §4.6
+// announceSynchronizationPoint. Fires on every joined federate when a
+// federate registers a sync point.
+message SynchronizationPointAnnounced {
+  string label = 1;
+  bytes tag = 2;
+  // Empty when the implicit "all joined federates" set was used at
+  // Register-time; non-empty when an explicit required set was passed.
+  // The Go-side sync.Manager populates this so federates can introspect
+  // who needs to achieve.
+  repeated uint64 required_federates = 3;
+}
+
+// FederationSynchronized — IEEE 1516.1-2010 §4.7
+// federationSynchronized. Fires on every required federate once the
+// last required achieve lands.
+message FederationSynchronized {
+  string label = 1;
+  // IEEE 1516.1-2010 §4.15 federationSynchronized carries the set of
+  // federates that achieved the point with successfully=false. Empty
+  // when everyone succeeded (and for pre-M37 servers). M37.
+  // (additive, tag 2).
+  repeated uint64 failed_to_sync = 2;
+}
+
+// SyncRegistrationSucceeded — IEEE 1516.1-2010 §4.12
+// synchronizationPointRegistrationSucceeded. Fires on the REGISTERING
+// federate only, when the label was accepted (unique in the
+// federation). M37.
+message SyncRegistrationSucceeded {
+  string label = 1;
+}
+
+// SyncPointFailureReason — IEEE 1516.1-2010 SynchronizationPointFailureReason.
+enum SyncPointFailureReason {
+  SYNC_POINT_FAILURE_REASON_UNSPECIFIED = 0;
+  SYNC_POINT_FAILURE_REASON_LABEL_NOT_UNIQUE = 1;
+  SYNC_POINT_FAILURE_REASON_SET_MEMBER_NOT_JOINED = 2;
+}
+
+// SyncRegistrationFailed — IEEE 1516.1-2010 §4.12
+// synchronizationPointRegistrationFailed. Fires on the REGISTERING
+// federate only, when the register call was rejected. M37.
+message SyncRegistrationFailed {
+  string label = 1;
+  SyncPointFailureReason reason = 2;
+}
+
+// RequestAttributeOwnershipAssumption — IEEE 1516.1-2010 §7.3.
+// Fires on candidate federates (subscribers of the relevant attribute)
+// when an owner calls negotiatedAttributeOwnershipDivestiture.
+message RequestAttributeOwnershipAssumption {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  // The federate divesting these attributes; the receiving federate may
+  // call attributeOwnershipAcquisition to take over.
+  uint64 divesting_federate = 3;
+  // Opaque user data echoed from the divest call's tag.
+  bytes tag = 4;
+}
+
+// AttributeOwnershipAcquisitionNotification — IEEE 1516.1-2010 §7.4.
+// Fires on the new owner when a transfer completes.
+message AttributeOwnershipAcquisitionNotification {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  // The federate that just acquired ownership (i.e. the recipient of
+  // this callback). Echoed in the body so federates with multiple
+  // streams can correlate without consulting their own state.
+  uint64 owning_federate = 3;
+}
+
+// RequestDivestitureConfirmation — IEEE 1516.1-2010 §7.3 (divestee
+// half). Fires on the divesting federate when an acquirer takes over.
+message RequestDivestitureConfirmation {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// AttributeOwnershipUnavailable — IEEE 1516.1-2010 §7.10. Fires on the
+// federate that called attributeOwnershipAcquisitionIfAvailable (§7.9)
+// for the subset of requested attributes that were NOT available
+// (owned by another federate with no completed divest). No pending
+// acquire is queued for these. M37.
+message AttributeOwnershipUnavailable {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// RequestAttributeOwnershipRelease — IEEE 1516.1-2010 §7.11. Fires on
+// the CURRENT OWNER of the listed attributes when another federate
+// calls attributeOwnershipAcquisition against them (the acquire stays
+// queued as a pending entry; the owner may release via divestiture or
+// AttributeOwnershipDivestitureIfWanted). ``tag`` echoes the acquire
+// call's user-supplied tag. M37.
+message RequestAttributeOwnershipRelease {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  bytes tag = 3;
+}
+
+// InitiateFederateSave — IEEE 1516.1-2010 §4.8 initiateFederateSave.
+// Fires on every joined federate when the federation save starts.
+//
+// The optional save_time pin is carried as a `oneof` to preserve the
+// nullability the Go-side core.LogicalTime pointer represents; absent
+// when the caller passed a nil saveTime ("save now").
+message InitiateFederateSave {
+  string label = 1;
+  optional double save_time = 2;
+}
+
+// FederationSaved — IEEE 1516.1-2010 §4.9 federationSaved. Fires on
+// every federate when all complete.
+message FederationSaved {
+  string label = 1;
+}
+
+// FederationNotSaved — IEEE 1516.1-2010 §4.9 federationNotSaved. Fires
+// on every federate when the save aborts.
+message FederationNotSaved {
+  string label = 1;
+}
+
+// InitiateFederateRestore — IEEE 1516.1-2010 §4.13 initiateFederateRestore.
+// Fires on every joined federate when a federation restore begins. The
+// federate is expected to load its state from the named bundle and call
+// federateRestoreComplete / federateRestoreNotComplete. M17.25 (Cut-4).
+message InitiateFederateRestore {
+  string label = 1;
+  // The federate handle this federate had at save time. Federates
+  // that compute identity from their own handle use this to map
+  // back to the pre-save value; absent / zero indicates no remap.
+  uint64 federate_handle = 2;
+  // The federate's name (IEEE 1516.1-2010 §4.26 initiateFederateRestore
+  // carries the federate name alongside the handle). Empty when the
+  // manager has no name on record. M37 (additive, tag 3).
+  string federate_name = 3;
+}
+
+// RequestFederationRestoreSucceeded — IEEE 1516.1-2010 §4.25
+// requestFederationRestoreSucceeded. Fires on the REQUESTING federate
+// only, after the restore request is accepted (bundle found, no save or
+// restore already in progress). M37.
+message RequestFederationRestoreSucceeded {
+  string label = 1;
+}
+
+// RequestFederationRestoreFailed — IEEE 1516.1-2010 §4.25
+// requestFederationRestoreFailed. Fires on the REQUESTING federate only
+// when the restore request is rejected (unknown label, save/restore in
+// progress, ...). M37.
+message RequestFederationRestoreFailed {
+  string label = 1;
+  // Human-readable rejection cause (mirrors the RPC error detail).
+  string reason = 2;
+}
+
+// FederationRestoreBegun — IEEE 1516.1-2010 §4.26
+// federationRestoreBegun. Fires on EVERY joined federate when the
+// restore transitions out of idle, before the per-federate
+// InitiateFederateRestore events. M37.
+message FederationRestoreBegun {
+}
+
+// FederationRestored — IEEE 1516.1-2010 §4.14 federationRestored. Fires
+// on every federate when all restore-complete responses are in.
+// M17.25 (Cut-4).
+message FederationRestored {
+  string label = 1;
+}
+
+// FederationNotRestored — IEEE 1516.1-2010 §4.14 federationNotRestored.
+// Fires when the restore aborts (at least one federate reported
+// not-complete or the bundle couldn't be loaded). M17.25 (Cut-4).
+message FederationNotRestored {
+  string label = 1;
+}
+
+// StartRegistrationForObjectClass — IEEE 1516.1-2010 §5.10. Fires on
+// each PUBLISHER of an object class when the class gains its first
+// subscriber (registrations become relevant). M37.
+message StartRegistrationForObjectClass {
+  uint64 object_class_handle = 1;
+}
+
+// StopRegistrationForObjectClass — IEEE 1516.1-2010 §5.11. Fires on
+// each publisher when the class loses its last subscriber. M37.
+message StopRegistrationForObjectClass {
+  uint64 object_class_handle = 1;
+}
+
+// TurnInteractionsOn — IEEE 1516.1-2010 §5.12. Fires on each PUBLISHER
+// of an interaction class when the class gains its first subscriber.
+// M37.
+message TurnInteractionsOn {
+  uint64 interaction_class_handle = 1;
+}
+
+// TurnInteractionsOff — IEEE 1516.1-2010 §5.13. Fires on each publisher
+// when the interaction class loses its last subscriber. M37.
+message TurnInteractionsOff {
+  uint64 interaction_class_handle = 1;
+}
+
+// RequestRetraction — IEEE 1516.1-2010 §8.22. Fires on each federate
+// that WOULD have received the retracted TSO message (its per-federate
+// buffer held a matching entry when the sender's Retract RPC landed).
+// The (sender_federate, message_retraction_handle) pair is the
+// MessageRetractionHandle the receiver may have seen on the original
+// TSO delivery. M37.
+message RequestRetraction {
+  uint64 sender_federate = 1;
+  uint64 message_retraction_handle = 2;
+}
+
+// AttributesInScope — IEEE 1516.1-2010 §6.17. Fires on a SUBSCRIBER
+// when DDM region-overlap membership brings the listed attributes of
+// `object` into scope (evaluated on the update path where the overlap
+// is computed — a subscriber newly present in the per-attribute
+// recipient set). Precedes the corresponding Reflect. M37.
+message AttributesInScope {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// AttributesOutOfScope — IEEE 1516.1-2010 §6.18. Fires on a SUBSCRIBER
+// when the listed attributes drop out of region-overlap scope (the
+// subscriber left the per-attribute recipient set it was in on the
+// previous update). M37.
+message AttributesOutOfScope {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// ObjectInstanceNameReservationSucceeded — IEEE 1516.1-2010 §6.1 (M26
+// Phase F). Fires on the federate that called
+// ReserveObjectInstanceName when the per-federation reservation table
+// accepted the name. After this event, the federate may call
+// RegisterObjectInstance with the reserved name.
+message ObjectInstanceNameReservationSucceeded {
+  string object_name = 1;
+}
+
+// ObjectInstanceNameReservationFailed — IEEE 1516.1-2010 §6.1.
+// Fires when the name is already reserved (by this or another
+// federate) or has been registered. The federate must pick a
+// different name.
+message ObjectInstanceNameReservationFailed {
+  string object_name = 1;
+}
+
+// MultipleObjectInstanceNameReservationSucceeded — IEEE 1516.1-2010 §6.5
+// (M26 Phase F). Fires when ReserveMultipleObjectInstanceNames
+// accepted ALL names atomically.
+message MultipleObjectInstanceNameReservationSucceeded {
+  repeated string object_names = 1;
+}
+
+// MultipleObjectInstanceNameReservationFailed — IEEE 1516.1-2010 §6.5.
+// Fires when at least one of the requested names was already
+// reserved. None of the names in this batch were reserved (atomic
+// failure). The `colliding_names` field lists which specific names
+// caused the failure.
+message MultipleObjectInstanceNameReservationFailed {
+  repeated string requested_names = 1;
+  repeated string colliding_names = 2;
+}

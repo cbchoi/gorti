@@ -1,0 +1,1169 @@
+// M34 — DLCFederateAmbassadorBridge delivery tests.
+//
+// Verifies the bridge converts M17-shaped callback arguments (raw uint64
+// handles, std::string, std::optional<double> timestamps) into DLC-shaped
+// callback arguments (typed handle classes, std::wstring, LogicalTime const&)
+// and dispatches them to the user-supplied DLC federate ambassador.
+//
+// Runs GREEN with WILL_FAIL=OFF — mock-based, no RTI subprocess, no gRPC.
+// This is the safety net for the callback conversion layer that makes M34
+// conformance fixtures verify events instead of just link.
+
+#include "src/dlc/FederateAmbassadorBridge.h"
+// M37 — DLC ambassador impl for the deferred synthesized-callback
+// queue tests. Safe alongside the shim'd bridge header: this header only
+// sees the DLC dialect (<RTI/RTIambassador.h> + opaque M17Bridge fwd-decl).
+#include "src/dlc/RTIambassadorImpl.h"
+
+#include <RTI/Enums.h>
+#include <RTI/Handle.h>
+#include <RTI/NullFederateAmbassador.h>
+#include <RTI/Typedefs.h>
+#include <RTI/VariableLengthData.h>
+#include <RTI/time/HLAfloat64Time.h>
+
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+namespace {
+
+// Tracking DLC ambassador — inherits NullFederateAmbassador so we only pay
+// per-callback we care about. Every override records what the bridge
+// delivered so the test asserts on the DLC-side representation.
+class TrackingDLCFed : public rti1516e::NullFederateAmbassador {
+ public:
+  // discoverObjectInstance (2-arg) — records typed handles + wstring name.
+  struct DiscoverCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::ObjectClassHandle cls;
+    std::wstring name;
+  };
+  std::vector<DiscoverCall> discover_calls;
+
+  void discoverObjectInstance(rti1516e::ObjectInstanceHandle obj,
+                              rti1516e::ObjectClassHandle cls,
+                              std::wstring const& name)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    discover_calls.push_back({obj, cls, name});
+  }
+
+  // reflectAttributeValues — no-time overload.
+  struct ReflectNoTimeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleValueMap values;
+    rti1516e::OrderType sentOrder;
+    rti1516e::TransportationType tType;
+  };
+  std::vector<ReflectNoTimeCall> reflect_no_time_calls;
+
+  void reflectAttributeValues(rti1516e::ObjectInstanceHandle obj,
+                              rti1516e::AttributeHandleValueMap const& v,
+                              rti1516e::VariableLengthData const& /*tag*/,
+                              rti1516e::OrderType sent,
+                              rti1516e::TransportationType tt,
+                              rti1516e::SupplementalReflectInfo /*supp*/)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    reflect_no_time_calls.push_back({obj, v, sent, tt});
+  }
+
+  // reflectAttributeValues — with-time overload.
+  struct ReflectWithTimeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleValueMap values;
+    double time;
+    rti1516e::OrderType sentOrder;
+  };
+  std::vector<ReflectWithTimeCall> reflect_with_time_calls;
+
+  // M36 — the bridge delivers TSO through the 9-arg
+  // retraction-handle overload (IEEE 1516.1-2010 API shape); the mock records that form.
+  void reflectAttributeValues(rti1516e::ObjectInstanceHandle obj,
+                              rti1516e::AttributeHandleValueMap const& v,
+                              rti1516e::VariableLengthData const& /*tag*/,
+                              rti1516e::OrderType sent,
+                              rti1516e::TransportationType /*tt*/,
+                              rti1516e::LogicalTime const& t,
+                              rti1516e::OrderType /*recvOrder*/,
+                              rti1516e::MessageRetractionHandle /*retract*/,
+                              rti1516e::SupplementalReflectInfo /*supp*/)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    // Downcast to HLAfloat64Time to read the double value.
+    auto const& tf = static_cast<rti1516e::HLAfloat64Time const&>(t);
+    reflect_with_time_calls.push_back({obj, v, tf.getTime(), sent});
+  }
+
+  // receiveInteraction — no-time overload.
+  struct ReceiveInteractionCall {
+    rti1516e::InteractionClassHandle ich;
+    rti1516e::ParameterHandleValueMap params;
+  };
+  std::vector<ReceiveInteractionCall> receive_calls;
+
+  void receiveInteraction(rti1516e::InteractionClassHandle ich,
+                          rti1516e::ParameterHandleValueMap const& p,
+                          rti1516e::VariableLengthData const& /*tag*/,
+                          rti1516e::OrderType /*sent*/,
+                          rti1516e::TransportationType /*tt*/,
+                          rti1516e::SupplementalReceiveInfo /*supp*/)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    receive_calls.push_back({ich, p});
+  }
+
+  // Name reservation callbacks.
+  std::vector<std::wstring> reserv_ok;
+  std::vector<std::wstring> reserv_fail;
+  void objectInstanceNameReservationSucceeded(std::wstring const& n)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    reserv_ok.push_back(n);
+  }
+  void objectInstanceNameReservationFailed(std::wstring const& n)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    reserv_fail.push_back(n);
+  }
+
+  std::vector<std::set<std::wstring>> multi_reserv_ok;
+  std::vector<std::set<std::wstring>> multi_reserv_fail;
+  void multipleObjectInstanceNameReservationSucceeded(
+      std::set<std::wstring> const& s)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    multi_reserv_ok.push_back(s);
+  }
+  void multipleObjectInstanceNameReservationFailed(
+      std::set<std::wstring> const& s)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    multi_reserv_fail.push_back(s);
+  }
+
+  // Time advance.
+  std::vector<double> tag_grants;
+  void timeAdvanceGrant(rti1516e::LogicalTime const& t)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    auto const& tf = static_cast<rti1516e::HLAfloat64Time const&>(t);
+    tag_grants.push_back(tf.getTime());
+  }
+
+  // Sync point.
+  struct AnnounceSyncCall {
+    std::wstring label;
+    std::vector<std::uint8_t> tag_bytes;
+  };
+  std::vector<AnnounceSyncCall> sync_announces;
+  void announceSynchronizationPoint(std::wstring const& label,
+                                    rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    sync_announces.push_back({label, std::move(bytes)});
+  }
+
+  struct FedSyncCall {
+    std::wstring label;
+    std::size_t failed_set_size;
+    rti1516e::FederateHandleSet failed;
+  };
+  std::vector<FedSyncCall> fed_syncs;
+  void federationSynchronized(std::wstring const& label,
+                              rti1516e::FederateHandleSet const& failed)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    fed_syncs.push_back({label, failed.size(), failed});
+  }
+
+  // M37 — §4.12 sync-point registration acks.
+  std::vector<std::wstring> sync_reg_ok;
+  struct SyncRegFailCall {
+    std::wstring label;
+    rti1516e::SynchronizationPointFailureReason reason;
+  };
+  std::vector<SyncRegFailCall> sync_reg_fail;
+  void synchronizationPointRegistrationSucceeded(std::wstring const& label)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    sync_reg_ok.push_back(label);
+  }
+  void synchronizationPointRegistrationFailed(
+      std::wstring const& label,
+      rti1516e::SynchronizationPointFailureReason reason)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    sync_reg_fail.push_back({label, reason});
+  }
+
+  // M37 — §5.10-13 declaration advisories.
+  std::vector<rti1516e::ObjectClassHandle> start_registrations;
+  std::vector<rti1516e::ObjectClassHandle> stop_registrations;
+  std::vector<rti1516e::InteractionClassHandle> interactions_on;
+  std::vector<rti1516e::InteractionClassHandle> interactions_off;
+  void startRegistrationForObjectClass(rti1516e::ObjectClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    start_registrations.push_back(c);
+  }
+  void stopRegistrationForObjectClass(rti1516e::ObjectClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    stop_registrations.push_back(c);
+  }
+  void turnInteractionsOn(rti1516e::InteractionClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    interactions_on.push_back(c);
+  }
+  void turnInteractionsOff(rti1516e::InteractionClassHandle c)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    interactions_off.push_back(c);
+  }
+
+  // M37 — §6.17-18 scope advisories.
+  struct ScopeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+  };
+  std::vector<ScopeCall> in_scope_calls;
+  std::vector<ScopeCall> out_of_scope_calls;
+  void attributesInScope(rti1516e::ObjectInstanceHandle obj,
+                         rti1516e::AttributeHandleSet const& attrs)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    in_scope_calls.push_back({obj, attrs});
+  }
+  void attributesOutOfScope(rti1516e::ObjectInstanceHandle obj,
+                            rti1516e::AttributeHandleSet const& attrs)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    out_of_scope_calls.push_back({obj, attrs});
+  }
+
+  // M37 — §7.10 unavailable / §7.11 release request.
+  std::vector<ScopeCall> ownership_unavailable_calls;
+  void attributeOwnershipUnavailable(rti1516e::ObjectInstanceHandle obj,
+                                     rti1516e::AttributeHandleSet const& attrs)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ownership_unavailable_calls.push_back({obj, attrs});
+  }
+  struct ReleaseRequestCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::vector<std::uint8_t> tag_bytes;
+  };
+  std::vector<ReleaseRequestCall> release_requests;
+  void requestAttributeOwnershipRelease(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& attrs,
+      rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    release_requests.push_back({obj, attrs, std::move(bytes)});
+  }
+
+  // M37 — §4.25/§4.26 restore acks + begun.
+  std::vector<std::wstring> restore_req_ok;
+  std::vector<std::wstring> restore_req_fail;
+  int restore_begun_count = 0;
+  void requestFederationRestoreSucceeded(std::wstring const& label)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    restore_req_ok.push_back(label);
+  }
+  void requestFederationRestoreFailed(std::wstring const& label)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    restore_req_fail.push_back(label);
+  }
+  void federationRestoreBegun()
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++restore_begun_count;
+  }
+
+  // M37 — §8.22 requestRetraction.
+  std::vector<rti1516e::MessageRetractionHandle> retraction_requests;
+  void requestRetraction(rti1516e::MessageRetractionHandle h)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    retraction_requests.push_back(h);
+  }
+
+  // Save / restore.
+  struct SaveInitiateCall {
+    std::wstring label;
+    std::optional<double> time;
+  };
+  std::vector<SaveInitiateCall> save_initiates;
+  void initiateFederateSave(std::wstring const& label)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    save_initiates.push_back({label, std::nullopt});
+  }
+  void initiateFederateSave(std::wstring const& label,
+                            rti1516e::LogicalTime const& t)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    auto const& tf = static_cast<rti1516e::HLAfloat64Time const&>(t);
+    save_initiates.push_back({label, tf.getTime()});
+  }
+
+  int federation_saved_count = 0;
+  rti1516e::SaveFailureReason last_save_failure{
+      rti1516e::RTI_UNABLE_TO_SAVE};
+  int federation_not_saved_count = 0;
+  void federationSaved()
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++federation_saved_count;
+  }
+  void federationNotSaved(rti1516e::SaveFailureReason r)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++federation_not_saved_count;
+    last_save_failure = r;
+  }
+
+  // M36 — §7 ownership converters (own_* fixtures).
+  struct OwnershipAssumptionCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::vector<std::uint8_t> tag_bytes;
+  };
+  std::vector<OwnershipAssumptionCall> ownership_assumptions;
+  void requestAttributeOwnershipAssumption(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& offered,
+      rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    ownership_assumptions.push_back({obj, offered, std::move(bytes)});
+  }
+
+  struct AcquisitionNotificationCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::size_t tag_size;
+  };
+  std::vector<AcquisitionNotificationCall> acquisition_notifications;
+  void attributeOwnershipAcquisitionNotification(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& secured,
+      rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    acquisition_notifications.push_back({obj, secured, tag.size()});
+  }
+
+  struct DivestConfirmationCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+  };
+  std::vector<DivestConfirmationCall> divest_confirmations;
+  void requestDivestitureConfirmation(
+      rti1516e::ObjectInstanceHandle obj,
+      rti1516e::AttributeHandleSet const& released)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    divest_confirmations.push_back({obj, released});
+  }
+
+  // M36 — §4 restore converters (fm_save_restore_roundtrip).
+  struct RestoreInitiateCall {
+    std::wstring label;
+    std::wstring federate_name;
+    rti1516e::FederateHandle handle;
+  };
+  std::vector<RestoreInitiateCall> restore_initiates;
+  void initiateFederateRestore(std::wstring const& label,
+                               std::wstring const& federateName,
+                               rti1516e::FederateHandle handle)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    restore_initiates.push_back({label, federateName, handle});
+  }
+
+  int federation_restored_count = 0;
+  int federation_not_restored_count = 0;
+  rti1516e::RestoreFailureReason last_restore_failure{
+      rti1516e::RTI_UNABLE_TO_RESTORE};
+  void federationRestored()
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++federation_restored_count;
+  }
+  void federationNotRestored(rti1516e::RestoreFailureReason r)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    ++federation_not_restored_count;
+    last_restore_failure = r;
+  }
+
+  // M36 — §6.15 removeObjectInstance (RO 4-arg + TSO 6-arg).
+  struct RemoveNoTimeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    std::vector<std::uint8_t> tag_bytes;
+    rti1516e::OrderType sentOrder;
+  };
+  std::vector<RemoveNoTimeCall> remove_no_time_calls;
+  void removeObjectInstance(rti1516e::ObjectInstanceHandle obj,
+                            rti1516e::VariableLengthData const& tag,
+                            rti1516e::OrderType sent,
+                            rti1516e::SupplementalRemoveInfo /*supp*/)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    remove_no_time_calls.push_back({obj, std::move(bytes), sent});
+  }
+
+  struct RemoveWithTimeCall {
+    rti1516e::ObjectInstanceHandle obj;
+    double time;
+    rti1516e::OrderType sentOrder;
+    rti1516e::OrderType recvOrder;
+  };
+  std::vector<RemoveWithTimeCall> remove_with_time_calls;
+  void removeObjectInstance(rti1516e::ObjectInstanceHandle obj,
+                            rti1516e::VariableLengthData const& /*tag*/,
+                            rti1516e::OrderType sent,
+                            rti1516e::LogicalTime const& t,
+                            rti1516e::OrderType recv,
+                            rti1516e::MessageRetractionHandle /*retract*/,
+                            rti1516e::SupplementalRemoveInfo /*supp*/)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    auto const& tf = static_cast<rti1516e::HLAfloat64Time const&>(t);
+    remove_with_time_calls.push_back({obj, tf.getTime(), sent, recv});
+  }
+
+  // M36 — §6.20 provideAttributeValueUpdate.
+  struct ProvideUpdateCall {
+    rti1516e::ObjectInstanceHandle obj;
+    rti1516e::AttributeHandleSet attrs;
+    std::vector<std::uint8_t> tag_bytes;
+  };
+  std::vector<ProvideUpdateCall> provide_update_calls;
+  void provideAttributeValueUpdate(rti1516e::ObjectInstanceHandle obj,
+                                   rti1516e::AttributeHandleSet const& attrs,
+                                   rti1516e::VariableLengthData const& tag)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    std::vector<std::uint8_t> bytes(
+        static_cast<std::uint8_t const*>(tag.data()),
+        static_cast<std::uint8_t const*>(tag.data()) + tag.size());
+    provide_update_calls.push_back({obj, attrs, std::move(bytes)});
+  }
+};
+
+// ===== Conversion helpers unit-level tests =====
+
+TEST(BridgeConv, StringToWstringWidening) {
+  EXPECT_EQ(gorti::dlc::conv::s2ws("hello"), std::wstring(L"hello"));
+  EXPECT_EQ(gorti::dlc::conv::s2ws(""), std::wstring(L""));
+}
+
+TEST(BridgeConv, VectorStringToSetWstring) {
+  auto s = gorti::dlc::conv::s2ws_set({"a", "b", "a"});
+  ASSERT_EQ(s.size(), 2u);
+  EXPECT_EQ(s.count(L"a"), 1u);
+  EXPECT_EQ(s.count(L"b"), 1u);
+}
+
+TEST(BridgeConv, RawUint64RoundTripsThroughTypedHandle) {
+  // A non-trivial value exercises all 8 bytes of the BE encoding.
+  const std::uint64_t raw = 0xDEADBEEFCAFEBABEULL;
+  auto h1 = gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+      raw);
+  auto h2 = gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+      raw);
+  EXPECT_TRUE(h1.isValid());
+  EXPECT_EQ(h1, h2);
+
+  // A different raw value must NOT compare equal.
+  auto h3 = gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+      raw + 1);
+  EXPECT_NE(h1, h3);
+
+  // Zero -> invalid handle (matches DLC Handle semantics).
+  auto zero =
+      gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(0);
+  EXPECT_FALSE(zero.isValid());
+}
+
+TEST(BridgeConv, VldByteFidelity) {
+  std::vector<std::uint8_t> payload = {0x01, 0xFF, 0x00, 0x42};
+  auto vld = gorti::dlc::conv::to_dlc_vld(payload);
+  ASSERT_EQ(vld.size(), payload.size());
+  auto const* out = static_cast<std::uint8_t const*>(vld.data());
+  for (size_t i = 0; i < payload.size(); ++i) EXPECT_EQ(out[i], payload[i]);
+}
+
+TEST(BridgeConv, EmptyVldHasZeroSize) {
+  auto vld = gorti::dlc::conv::to_dlc_vld({});
+  EXPECT_EQ(vld.size(), 0u);
+}
+
+// ===== Bridge delivery tests =====
+
+TEST(BridgeDelivery, DiscoverObjectInstanceForwardsAndConverts) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  // Deliver an M17-style callback via the shimmed base class.
+  rti1516e_m17::ObjectInstanceHandle oh{0x11ULL};
+  rti1516e_m17::ObjectClassHandle ch{0x22ULL};
+  bridge.discoverObjectInstance(oh, ch, "car-42");
+
+  ASSERT_EQ(mock.discover_calls.size(), 1u);
+  const auto& call = mock.discover_calls.front();
+  EXPECT_TRUE(call.obj.isValid());
+  EXPECT_TRUE(call.cls.isValid());
+  // Handle equality: build an expected handle the same way the bridge did.
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x11ULL));
+  EXPECT_EQ(call.cls,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectClassHandle>(
+                0x22ULL));
+  EXPECT_EQ(call.name, std::wstring(L"car-42"));
+}
+
+TEST(BridgeDelivery, ReflectNoTimestampSelectsNoTimeOverload) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::ObjectInstanceHandle oh{7};
+  rti1516e_m17::AttributeHandleValueMap m17_map;
+  // M17 handles are StrongHandle<Tag> (public value ctor).
+  rti1516e_m17::AttributeHandle ah{101};
+  m17_map[ah] = std::vector<std::uint8_t>{0xAA, 0xBB};
+
+  bridge.reflectAttributeValues(oh, m17_map, std::nullopt);
+
+  ASSERT_EQ(mock.reflect_no_time_calls.size(), 1u);
+  ASSERT_EQ(mock.reflect_with_time_calls.size(), 0u);
+  const auto& call = mock.reflect_no_time_calls.front();
+  EXPECT_EQ(call.values.size(), 1u);
+  // Sent order = RECEIVE for no-time delivery.
+  EXPECT_EQ(call.sentOrder, rti1516e::RECEIVE);
+  // Attribute payload survives round-trip.
+  auto key = gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(101);
+  ASSERT_EQ(call.values.count(key), 1u);
+  auto const& vld = call.values.at(key);
+  ASSERT_EQ(vld.size(), 2u);
+  auto const* p = static_cast<std::uint8_t const*>(vld.data());
+  EXPECT_EQ(p[0], 0xAA);
+  EXPECT_EQ(p[1], 0xBB);
+}
+
+TEST(BridgeDelivery, ReflectWithTimestampSelectsWithTimeOverload) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::ObjectInstanceHandle oh{7};
+  rti1516e_m17::AttributeHandleValueMap m17_map;
+  bridge.reflectAttributeValues(oh, m17_map,
+                                std::optional<double>{3.14});
+
+  ASSERT_EQ(mock.reflect_no_time_calls.size(), 0u);
+  ASSERT_EQ(mock.reflect_with_time_calls.size(), 1u);
+  const auto& call = mock.reflect_with_time_calls.front();
+  EXPECT_DOUBLE_EQ(call.time, 3.14);
+  EXPECT_EQ(call.sentOrder, rti1516e::TIMESTAMP);
+}
+
+TEST(BridgeDelivery, ReceiveInteractionConvertsClassAndParams) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::InteractionClassHandle ich{0x77};
+  rti1516e_m17::ParameterHandleValueMap m17_pmap;
+  rti1516e_m17::ParameterHandle ph{0x88};
+  m17_pmap[ph] = std::vector<std::uint8_t>{0x12};
+
+  bridge.receiveInteraction(ich, m17_pmap, std::nullopt);
+
+  ASSERT_EQ(mock.receive_calls.size(), 1u);
+  const auto& call = mock.receive_calls.front();
+  EXPECT_EQ(call.ich,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
+                0x77));
+  EXPECT_EQ(call.params.size(), 1u);
+}
+
+TEST(BridgeDelivery, ObjectInstanceNameReservationSuccessWidensToWstring) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.objectInstanceNameReservationSucceeded("veh-1");
+  ASSERT_EQ(mock.reserv_ok.size(), 1u);
+  EXPECT_EQ(mock.reserv_ok.front(), std::wstring(L"veh-1"));
+}
+
+TEST(BridgeDelivery, ObjectInstanceNameReservationFailureWidensToWstring) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.objectInstanceNameReservationFailed("veh-2");
+  ASSERT_EQ(mock.reserv_fail.size(), 1u);
+  EXPECT_EQ(mock.reserv_fail.front(), std::wstring(L"veh-2"));
+}
+
+TEST(BridgeDelivery, MultipleReservationBatchConvertsToSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  std::vector<std::string> batch = {"a", "b", "c"};
+  bridge.multipleObjectInstanceNameReservationSucceeded(batch);
+  ASSERT_EQ(mock.multi_reserv_ok.size(), 1u);
+  EXPECT_EQ(mock.multi_reserv_ok.front(),
+            (std::set<std::wstring>{L"a", L"b", L"c"}));
+}
+
+TEST(BridgeDelivery, MultipleReservationFailureForwardsCollidingSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  std::vector<std::string> requested = {"a", "b"};
+  std::vector<std::string> colliding = {"b"};
+  bridge.multipleObjectInstanceNameReservationFailed(requested, colliding);
+  ASSERT_EQ(mock.multi_reserv_fail.size(), 1u);
+  EXPECT_EQ(mock.multi_reserv_fail.front(),
+            (std::set<std::wstring>{L"b"}));
+}
+
+TEST(BridgeDelivery, TimeAdvanceGrantWrapsAsHLAfloat64Time) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.timeAdvanceGrant(42.5);
+  ASSERT_EQ(mock.tag_grants.size(), 1u);
+  EXPECT_DOUBLE_EQ(mock.tag_grants.front(), 42.5);
+}
+
+TEST(BridgeDelivery, AnnounceSyncPointForwardsTagBytes) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::VariableLengthData tag = {0x01, 0x02, 0x03};
+  bridge.announceSynchronizationPoint("READY_TO_RUN", tag);
+  ASSERT_EQ(mock.sync_announces.size(), 1u);
+  EXPECT_EQ(mock.sync_announces.front().label,
+            std::wstring(L"READY_TO_RUN"));
+  EXPECT_EQ(mock.sync_announces.front().tag_bytes,
+            (std::vector<std::uint8_t>{0x01, 0x02, 0x03}));
+}
+
+TEST(BridgeDelivery, FederationSynchronizedPassesEmptyFailedSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationSynchronized("SP_A");
+  ASSERT_EQ(mock.fed_syncs.size(), 1u);
+  EXPECT_EQ(mock.fed_syncs.front().label, std::wstring(L"SP_A"));
+  // M17 does not carry a failed-to-sync set; DLC bridge passes empty.
+  EXPECT_EQ(mock.fed_syncs.front().failed_set_size, 0u);
+}
+
+TEST(BridgeDelivery, InitiateSaveNoTimeSelectsNoTimeOverload) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.initiateFederateSave("checkpoint", std::nullopt);
+  ASSERT_EQ(mock.save_initiates.size(), 1u);
+  EXPECT_EQ(mock.save_initiates.front().label,
+            std::wstring(L"checkpoint"));
+  EXPECT_FALSE(mock.save_initiates.front().time.has_value());
+}
+
+TEST(BridgeDelivery, InitiateSaveWithTimeSelectsWithTimeOverload) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.initiateFederateSave("checkpoint", std::optional<double>{9.5});
+  ASSERT_EQ(mock.save_initiates.size(), 1u);
+  ASSERT_TRUE(mock.save_initiates.front().time.has_value());
+  EXPECT_DOUBLE_EQ(*mock.save_initiates.front().time, 9.5);
+}
+
+TEST(BridgeDelivery, FederationSavedDropsLabelPerDLCSignature) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationSaved("anything");
+  EXPECT_EQ(mock.federation_saved_count, 1);
+}
+
+TEST(BridgeDelivery, FederationNotSavedSupplementsFailureReason) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationNotSaved("anything");
+  EXPECT_EQ(mock.federation_not_saved_count, 1);
+  // M17 does not carry a reason; bridge picks RTI_UNABLE_TO_SAVE per header
+  // comment.
+  EXPECT_EQ(mock.last_save_failure, rti1516e::RTI_UNABLE_TO_SAVE);
+}
+
+TEST(BridgeDelivery, NullDLCFederateSilentlyNoOps) {
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(nullptr);
+  // Should not crash.
+  bridge.discoverObjectInstance(rti1516e_m17::ObjectInstanceHandle{1},
+                                rti1516e_m17::ObjectClassHandle{2},
+                                "x");
+  bridge.timeAdvanceGrant(0.0);
+  bridge.objectInstanceNameReservationSucceeded("y");
+  bridge.federationSaved("z");
+  SUCCEED();
+}
+
+TEST(BridgeDelivery, DlcFederateAccessorReturnsBoundPointer) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  EXPECT_EQ(bridge.dlcFederate(), &mock);
+}
+
+// ===== M36 — §7 ownership converters =====
+
+TEST(BridgeDelivery, OwnershipAssumptionDropsDivestorForwardsTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{7});
+  attrs.insert(rti1516e_m17::AttributeHandle{9});
+  rti1516e_m17::VariableLengthData tag = {0xDE, 0xAD};
+  // M17 carries the divesting federate; the DLC signature drops it
+  // (catalogue row 4.27).
+  bridge.requestAttributeOwnershipAssumption(
+      rti1516e_m17::ObjectInstanceHandle{0x33}, attrs,
+      rti1516e_m17::FederateHandle{42}, tag);
+
+  ASSERT_EQ(mock.ownership_assumptions.size(), 1u);
+  auto const& call = mock.ownership_assumptions.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x33ULL));
+  EXPECT_EQ(call.attrs.size(), 2u);
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(7)),
+            1u);
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0xDE, 0xAD}));
+}
+
+TEST(BridgeDelivery, AcquisitionNotificationSupplementsEmptyTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{5});
+  // M17 carries the new owner; DLC drops it and adds a tag — the bridge
+  // supplements an empty one (catalogue row 4.28).
+  bridge.attributeOwnershipAcquisitionNotification(
+      rti1516e_m17::ObjectInstanceHandle{0x44}, attrs,
+      rti1516e_m17::FederateHandle{2});
+
+  ASSERT_EQ(mock.acquisition_notifications.size(), 1u);
+  auto const& call = mock.acquisition_notifications.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x44ULL));
+  EXPECT_EQ(call.attrs.size(), 1u);
+  EXPECT_EQ(call.tag_size, 0u);
+}
+
+TEST(BridgeDelivery, DivestitureConfirmationConvertsAttributeSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{11});
+  bridge.requestDivestitureConfirmation(
+      rti1516e_m17::ObjectInstanceHandle{0x55}, attrs);
+
+  ASSERT_EQ(mock.divest_confirmations.size(), 1u);
+  auto const& call = mock.divest_confirmations.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x55ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(11)),
+            1u);
+}
+
+// ===== M36 — §4 restore converters =====
+
+TEST(BridgeDelivery, InitiateRestoreSupplementsEmptyFederateName) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  bridge.initiateFederateRestore("checkpoint-1",
+                                 rti1516e_m17::FederateHandle{3});
+
+  ASSERT_EQ(mock.restore_initiates.size(), 1u);
+  auto const& call = mock.restore_initiates.front();
+  EXPECT_EQ(call.label, std::wstring(L"checkpoint-1"));
+  // M17 does not carry a federate name; bridge passes empty (header
+  // contract §4.27).
+  EXPECT_EQ(call.federate_name, std::wstring());
+  EXPECT_EQ(call.handle,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(3));
+}
+
+TEST(BridgeDelivery, FederationRestoredDropsLabelPerDLCSignature) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationRestored("anything");
+  EXPECT_EQ(mock.federation_restored_count, 1);
+}
+
+TEST(BridgeDelivery, FederationNotRestoredSupplementsFailureReason) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationNotRestored("anything");
+  EXPECT_EQ(mock.federation_not_restored_count, 1);
+  // M17 does not carry a reason; bridge picks RTI_UNABLE_TO_RESTORE per
+  // header comment.
+  EXPECT_EQ(mock.last_restore_failure, rti1516e::RTI_UNABLE_TO_RESTORE);
+}
+
+// ===== M36 — §6.15 remove / §6.20 provide-update converters =====
+
+TEST(BridgeDelivery, RemoveNoTimestampSelectsROOverloadForwardsTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::VariableLengthData tag = {0x5A, 0x5B};
+  bridge.removeObjectInstance(rti1516e_m17::ObjectInstanceHandle{0x66},
+                              std::nullopt, tag);
+
+  ASSERT_EQ(mock.remove_no_time_calls.size(), 1u);
+  ASSERT_EQ(mock.remove_with_time_calls.size(), 0u);
+  auto const& call = mock.remove_no_time_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x66ULL));
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0x5A, 0x5B}));
+  EXPECT_EQ(call.sentOrder, rti1516e::RECEIVE);
+}
+
+TEST(BridgeDelivery, RemoveWithTimestampSelectsTSOOverload) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  bridge.removeObjectInstance(rti1516e_m17::ObjectInstanceHandle{0x67},
+                              std::optional<double>{7.25},
+                              rti1516e_m17::VariableLengthData{});
+
+  ASSERT_EQ(mock.remove_no_time_calls.size(), 0u);
+  ASSERT_EQ(mock.remove_with_time_calls.size(), 1u);
+  auto const& call = mock.remove_with_time_calls.front();
+  EXPECT_DOUBLE_EQ(call.time, 7.25);
+  EXPECT_EQ(call.sentOrder, rti1516e::TIMESTAMP);
+  EXPECT_EQ(call.recvOrder, rti1516e::TIMESTAMP);
+}
+
+TEST(BridgeDelivery, ProvideAttributeValueUpdateConvertsSetAndTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{21});
+  attrs.insert(rti1516e_m17::AttributeHandle{22});
+  rti1516e_m17::VariableLengthData tag = {0x01};
+  bridge.provideAttributeValueUpdate(
+      rti1516e_m17::ObjectInstanceHandle{0x99}, attrs, tag);
+
+  ASSERT_EQ(mock.provide_update_calls.size(), 1u);
+  auto const& call = mock.provide_update_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0x99ULL));
+  EXPECT_EQ(call.attrs.size(), 2u);
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(21)),
+            1u);
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0x01}));
+}
+
+// ===== M37 — new M17 slot converters =====
+
+TEST(BridgeDeliveryM37, SyncPointRegistrationSucceededWidensLabel) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.synchronizationPointRegistrationSucceeded("SP_REG");
+  ASSERT_EQ(mock.sync_reg_ok.size(), 1u);
+  EXPECT_EQ(mock.sync_reg_ok.front(), std::wstring(L"SP_REG"));
+}
+
+TEST(BridgeDeliveryM37, SyncPointRegistrationFailedMapsReasonEnum) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  using M17Reason =
+      rti1516e_m17::FederateAmbassador::SyncPointFailureReason;
+  bridge.synchronizationPointRegistrationFailed(
+      "SP_DUP", M17Reason::kSynchronizationPointLabelNotUnique);
+  bridge.synchronizationPointRegistrationFailed(
+      "SP_MISSING", M17Reason::kSynchronizationSetMemberNotJoined);
+  // kUnspecified folds to LABEL_NOT_UNIQUE (documented mapping).
+  bridge.synchronizationPointRegistrationFailed("SP_UNSPEC",
+                                                M17Reason::kUnspecified);
+  ASSERT_EQ(mock.sync_reg_fail.size(), 3u);
+  EXPECT_EQ(mock.sync_reg_fail[0].label, std::wstring(L"SP_DUP"));
+  EXPECT_EQ(mock.sync_reg_fail[0].reason,
+            rti1516e::SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE);
+  EXPECT_EQ(mock.sync_reg_fail[1].reason,
+            rti1516e::SYNCHRONIZATION_SET_MEMBER_NOT_JOINED);
+  EXPECT_EQ(mock.sync_reg_fail[2].reason,
+            rti1516e::SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE);
+}
+
+TEST(BridgeDeliveryM37, FederationSynchronizedForwardsFailedSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  std::vector<rti1516e_m17::FederateHandle> failed{
+      rti1516e_m17::FederateHandle{3}, rti1516e_m17::FederateHandle{5}};
+  bridge.federationSynchronized("SP_B", failed);
+  ASSERT_EQ(mock.fed_syncs.size(), 1u);
+  auto const& call = mock.fed_syncs.front();
+  EXPECT_EQ(call.label, std::wstring(L"SP_B"));
+  EXPECT_EQ(call.failed_set_size, 2u);
+  EXPECT_EQ(call.failed.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(3)),
+            1u);
+  EXPECT_EQ(call.failed.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(5)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, StartRegistrationForObjectClassConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.startRegistrationForObjectClass(
+      rti1516e_m17::ObjectClassHandle{0xA1});
+  ASSERT_EQ(mock.start_registrations.size(), 1u);
+  EXPECT_EQ(mock.start_registrations.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectClassHandle>(
+                0xA1ULL));
+}
+
+TEST(BridgeDeliveryM37, StopRegistrationForObjectClassConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.stopRegistrationForObjectClass(
+      rti1516e_m17::ObjectClassHandle{0xA2});
+  ASSERT_EQ(mock.stop_registrations.size(), 1u);
+  EXPECT_EQ(mock.stop_registrations.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectClassHandle>(
+                0xA2ULL));
+}
+
+TEST(BridgeDeliveryM37, TurnInteractionsOnConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.turnInteractionsOn(rti1516e_m17::InteractionClassHandle{0xB1});
+  ASSERT_EQ(mock.interactions_on.size(), 1u);
+  EXPECT_EQ(mock.interactions_on.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
+                0xB1ULL));
+}
+
+TEST(BridgeDeliveryM37, TurnInteractionsOffConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.turnInteractionsOff(rti1516e_m17::InteractionClassHandle{0xB2});
+  ASSERT_EQ(mock.interactions_off.size(), 1u);
+  EXPECT_EQ(mock.interactions_off.front(),
+            gorti::dlc::conv::to_dlc_handle<rti1516e::InteractionClassHandle>(
+                0xB2ULL));
+}
+
+TEST(BridgeDeliveryM37, AttributesInScopeConvertsHandleAndSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{31});
+  attrs.insert(rti1516e_m17::AttributeHandle{32});
+  bridge.attributesInScope(rti1516e_m17::ObjectInstanceHandle{0xC1}, attrs);
+  ASSERT_EQ(mock.in_scope_calls.size(), 1u);
+  auto const& call = mock.in_scope_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xC1ULL));
+  EXPECT_EQ(call.attrs.size(), 2u);
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(31)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, AttributesOutOfScopeConvertsHandleAndSet) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{33});
+  bridge.attributesOutOfScope(rti1516e_m17::ObjectInstanceHandle{0xC2},
+                              attrs);
+  ASSERT_EQ(mock.out_of_scope_calls.size(), 1u);
+  auto const& call = mock.out_of_scope_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xC2ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(33)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, AttributeOwnershipUnavailableConverts) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{41});
+  bridge.attributeOwnershipUnavailable(
+      rti1516e_m17::ObjectInstanceHandle{0xD1}, attrs);
+  ASSERT_EQ(mock.ownership_unavailable_calls.size(), 1u);
+  auto const& call = mock.ownership_unavailable_calls.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xD1ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(41)),
+            1u);
+}
+
+TEST(BridgeDeliveryM37, RequestAttributeOwnershipReleaseForwardsTag) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  rti1516e_m17::AttributeHandleSet attrs;
+  attrs.insert(rti1516e_m17::AttributeHandle{51});
+  rti1516e_m17::VariableLengthData tag = {0xFE, 0xED};
+  bridge.requestAttributeOwnershipRelease(
+      rti1516e_m17::ObjectInstanceHandle{0xD2}, attrs, tag);
+  ASSERT_EQ(mock.release_requests.size(), 1u);
+  auto const& call = mock.release_requests.front();
+  EXPECT_EQ(call.obj,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::ObjectInstanceHandle>(
+                0xD2ULL));
+  EXPECT_EQ(call.attrs.count(
+                gorti::dlc::conv::to_dlc_handle<rti1516e::AttributeHandle>(51)),
+            1u);
+  EXPECT_EQ(call.tag_bytes, (std::vector<std::uint8_t>{0xFE, 0xED}));
+}
+
+TEST(BridgeDeliveryM37, InitiateRestoreThreeArgForwardsFederateName) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.initiateFederateRestore("checkpoint-2", "fed-alpha",
+                                 rti1516e_m17::FederateHandle{9});
+  ASSERT_EQ(mock.restore_initiates.size(), 1u);
+  auto const& call = mock.restore_initiates.front();
+  EXPECT_EQ(call.label, std::wstring(L"checkpoint-2"));
+  EXPECT_EQ(call.federate_name, std::wstring(L"fed-alpha"));
+  EXPECT_EQ(call.handle,
+            gorti::dlc::conv::to_dlc_handle<rti1516e::FederateHandle>(9));
+}
+
+TEST(BridgeDeliveryM37, RequestRestoreSucceededWidensLabel) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.requestFederationRestoreSucceeded("snap-1");
+  ASSERT_EQ(mock.restore_req_ok.size(), 1u);
+  EXPECT_EQ(mock.restore_req_ok.front(), std::wstring(L"snap-1"));
+}
+
+TEST(BridgeDeliveryM37, RequestRestoreFailedDropsReasonPerDLCSignature) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.requestFederationRestoreFailed("snap-2", "unknown label");
+  ASSERT_EQ(mock.restore_req_fail.size(), 1u);
+  EXPECT_EQ(mock.restore_req_fail.front(), std::wstring(L"snap-2"));
+}
+
+TEST(BridgeDeliveryM37, FederationRestoreBegunForwards) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.federationRestoreBegun();
+  EXPECT_EQ(mock.restore_begun_count, 1);
+}
+
+TEST(BridgeDeliveryM37, RequestRetractionDropsSenderConvertsHandle) {
+  TrackingDLCFed mock;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&mock);
+  bridge.requestRetraction(rti1516e_m17::FederateHandle{2},
+                           rti1516e_m17::MessageRetractionHandle{0xE7});
+  ASSERT_EQ(mock.retraction_requests.size(), 1u);
+  EXPECT_EQ(
+      mock.retraction_requests.front(),
+      gorti::dlc::conv::to_dlc_handle<rti1516e::MessageRetractionHandle>(
+          0xE7ULL));
+}
+
+// ===== M36 — FR-DLC-14 re-entrancy witness =====
+
+// Observer federate that samples gorti::dlc::tls_in_callback from INSIDE a
+// dispatched callback — pins that CallbackScope marks the callback context
+// for the ambassador-side requireNotInCallback() gate.
+class ReentryProbeFed : public rti1516e::NullFederateAmbassador {
+ public:
+  bool flag_inside_callback = false;
+  void discoverObjectInstance(rti1516e::ObjectInstanceHandle,
+                              rti1516e::ObjectClassHandle,
+                              std::wstring const&)
+      RTI_THROW(rti1516e::FederateInternalError) override {
+    flag_inside_callback = gorti::dlc::tls_in_callback;
+  }
+};
+
+TEST(BridgeReentrancy, TlsFlagSetDuringDispatchClearedAfter) {
+  ReentryProbeFed probe;
+  gorti::dlc::DLCFederateAmbassadorBridge bridge(&probe);
+
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+  bridge.discoverObjectInstance(rti1516e_m17::ObjectInstanceHandle{1},
+                                rti1516e_m17::ObjectClassHandle{2}, "car-1");
+  EXPECT_TRUE(probe.flag_inside_callback);
+  // RAII CallbackScope must restore the flag after dispatch returns.
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+}
+
+// ===== M37 — deferred synthesized-callback queue =====
+//
+// DLC-synthesized callbacks (regulation/constrained acks, query-ownership
+// answers, federation-execution reports) must NOT fire inside the
+// triggering call — they deliver at the next evoke, matching reference_rti's
+// async ordering. The real synthesis sites all require a live wire, so
+// these tests drive the queue through the public test seam; the enqueue
+// path is byte-identical to what the synthesis sites use.
+
+TEST(DeferredSynthesis, CallbackHeldUntilEvokeCallback) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  bool fired = false;
+  amb.testEnqueueSynthesizedCallback([&] { fired = true; });
+  // Not delivered inside the triggering call.
+  EXPECT_FALSE(fired);
+  // evokeCallback drains exactly one pending synthesized callback and
+  // reports that a callback fired.
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_TRUE(fired);
+}
+
+TEST(DeferredSynthesis, EvokeCallbackDrainsOnePerCall) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  int fired = 0;
+  amb.testEnqueueSynthesizedCallback([&] { ++fired; });
+  amb.testEnqueueSynthesizedCallback([&] { ++fired; });
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_EQ(fired, 1);
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  EXPECT_EQ(fired, 2);
+}
+
+TEST(DeferredSynthesis, EvokeMultipleDrainsAllPendingInOrder) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  std::vector<int> order;
+  amb.testEnqueueSynthesizedCallback([&] { order.push_back(1); });
+  amb.testEnqueueSynthesizedCallback([&] { order.push_back(2); });
+  EXPECT_TRUE(amb.evokeMultipleCallbacks(0.0, 0.0));
+  EXPECT_EQ(order, (std::vector<int>{1, 2}));
+}
+
+TEST(DeferredSynthesis, DispatchRunsUnderCallbackScope) {
+  rti1516e::DLCRTIambassadorImpl amb;
+  bool in_scope = false;
+  amb.testEnqueueSynthesizedCallback(
+      [&] { in_scope = gorti::dlc::tls_in_callback; });
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+  EXPECT_TRUE(amb.evokeCallback(0.0));
+  // FR-DLC-14 — the synthesized dispatch marks the callback context so
+  // re-entering the ambassador from inside it still throws.
+  EXPECT_TRUE(in_scope);
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+}
+
+TEST(BridgeReentrancy, CallbackScopeSavesAndRestoresNestedState) {
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+  {
+    gorti::dlc::CallbackScope outer;
+    EXPECT_TRUE(gorti::dlc::tls_in_callback);
+    {
+      gorti::dlc::CallbackScope inner;
+      EXPECT_TRUE(gorti::dlc::tls_in_callback);
+    }
+    // Inner scope restores the OUTER state (true), not false.
+    EXPECT_TRUE(gorti::dlc::tls_in_callback);
+  }
+  EXPECT_FALSE(gorti::dlc::tls_in_callback);
+}
+
+}  // namespace

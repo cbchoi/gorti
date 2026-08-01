@@ -1,0 +1,162 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rti1516e"
+version = "0.9.0"
+description = "Python SDK for the gorti RTI (IEEE 1516-2010 / HLA Evolved) and pyjevsim bridge."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "gorti contributors" }]
+
+# Runtime dependencies are limited to the client transport and wire format.
+dependencies = [
+    "grpcio>=1.60",
+    # Keep the runtime at least as new as the committed schema's generated
+    # bindings. The development extra pins a compatible protoc frontend.
+    "protobuf>=7.35",
+]
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools>=1.82",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "cryptography>=42",
+    "mypy>=1.8",
+    "ruff>=0.4",
+    "types-protobuf>=4.24",
+]
+# Spec tests avoid importing real pyjevsim; they consume the typing.Protocol shim in
+# pysdk/pyjevsim_bridge/_protocol.py via the StubCoupledModel fake.
+pyjevsim = [
+    # Pinned to the reviewed upstream 2.1.2 commit, the first gorti RL
+    # qualification target. 2.1.2 is not yet available from the package
+    # index, so the immutable Git revision is intentional. Upstream:
+    # https://github.com/eventsim/pyjevsim
+    #
+    # The RL adapter relies on the SysExecutor-driven HLA_TIME step body to
+    # preserve same-time Parallel-DEVS confluent transitions and zero-time
+    # cascades. pyjevsim 2.0.1 remains compatible with the legacy bridge but
+    # does not satisfy that RL semantic gate; it is therefore not accepted by
+    # the RL optional dependency profile.
+    #
+    # API note: pyjevsim exports `StructuralModel` (coupled DEVS) and
+    # `BehaviorModel` (atomic DEVS) — NOT the DEVS-canonical names
+    # `CoupledModel` / `AtomicModel`. Method names also differ:
+    # pyjevsim uses `output()` / `int_trans()` / `ext_trans()`. The
+    # bridge's `CoupledModelProtocol` in
+    # pysdk/pyjevsim_bridge/_protocol.py keeps the canonical names;
+    # `examples/pyjevsim/_real_pyjevsim_adapter.py` maps the real
+    # pyjevsim surface onto the Protocol.
+    "pyjevsim @ git+https://github.com/eventsim/pyjevsim.git@9893099b47aae89a3432c668b18ec4b6b15c043e",
+]
+
+[tool.setuptools.packages.find]
+include = ["rti1516e*", "pyjevsim_bridge*"]
+# _generated/ is NOT discovered as importable sub-packages: the buf-emitted
+# stubs are namespaced as top-level ``rti.v1.*`` and resolved via a sys.path
+# insertion in _transport.py::_ensure_generated_path (implicit namespace
+# package). They ship as *package data* of rti1516e instead — see
+# [tool.setuptools.package-data] below — so the installed wheel carries them
+# at rti1516e/_generated/rti/v1/*.py without a second import name.
+exclude = ["tests*", "**/_generated*"]
+
+[tool.setuptools.package-data]
+# Ship the buf-generated gRPC wire stubs inside the wheel. Without this the
+# installed package cannot talk to rtid (every _transport.py RPC does
+# ``from rti.v1 import ...``). The tree is gitignored and produced by
+# ``buf generate`` (or ``python -m rti1516e._proto``) *before* the wheel is
+# built — the release workflow (.github/workflows/pypi.yml) runs codegen
+# first. Files are matched at build time regardless of .gitignore.
+rti1516e = ["_generated/**/*.py", "_generated/**/*.pyi", "py.typed"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "spec: specification tests (pysdk/tests/spec/m4/)",
+    "slow: tests that take >1s",
+    "integration: cross-process / cross-language integration tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+namespace_packages = true
+explicit_package_bases = true
+# Generated protocol bindings are not strict-clean.
+exclude = [
+    "rti1516e/_generated/",
+    ".mypy_cache/",
+    ".pytest_cache/",
+    ".ruff_cache/",
+]
+
+[[tool.mypy.overrides]]
+module = "rti1516e._generated.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# The gRPC stubs in _generated/ are namespaced as "rti.v1.*"; mypy can't
+# find them because they live under rti1516e/_generated/ (the package
+# is installed via a sys.path tweak by the test scaffold + the
+# GrpcTransport's lazy imports). Treating the imports as Any keeps the
+# cross-language-smoke wiring strict-clean without weakening the rest
+# of the SDK.
+module = "rti.v1.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# grpc has incomplete public type stubs; treat as Any rather than
+# pulling types-grpcio (which lags upstream). The GrpcTransport only
+# touches grpc.aio.insecure_channel + grpc.aio.AioRpcError shapes —
+# small enough surface that runtime checking is sufficient.
+module = "grpc"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "grpc.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# pyjevsim is an optional runtime dep; spec tests use a Protocol shim instead.
+module = "pyjevsim.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The example-tree adapters under examples/pyjevsim/ are imported by
+# pysdk-side tests via a sys.path tweak; mypy can't see them as a
+# proper package. Treat as Any rather than failing the strict check.
+module = ["_real_pyjevsim_adapter", "cross_lang_runner"]
+ignore_missing_imports = true
+
+[tool.ruff]
+extend = "../ruff.toml"
+extend-exclude = ["rti1516e/_generated"]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-state the project-wide test-tree ignores (the local [tool.ruff.lint]
+# table does NOT inherit per-file-ignores from the extended ruff.toml).
+"**/tests/**" = ["S101", "S311", "SIM117"]
+"**/_generated/**" = ["E", "F", "W", "B", "C4", "I", "N", "UP", "S", "RET", "SIM", "PIE", "ASYNC"]
+# errors.py: exception classes are named after proto ErrorCode entries
+# (e.g. ERR_FED_NOT_FOUND -> FederationNotFound) so the name-to-code
+# mapping is direct. The base class is RtiError; subclasses intentionally
+# omit the -Error suffix to mirror the proto naming.
+"rti1516e/errors.py" = ["N818"]
+# _grpc_errors.py: cut-3 typed exceptions (M12 W2) follow the same
+# naming convention as errors.py — they live alongside the cut-1
+# RtiError hierarchy and the unsuffixed names match the gRPC status
+# semantics they represent (NotFound, AlreadyExists, etc.).
+"rti1516e/_grpc_errors.py" = ["N818"]

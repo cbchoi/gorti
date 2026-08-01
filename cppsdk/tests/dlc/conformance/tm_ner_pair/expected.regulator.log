@@ -1,0 +1,27 @@
+# M31 conformance fixture: tm_ner_pair — regulator golden (SKELETON).
+# expected.regulator.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Each line below cites the spec sentence its presence enforces.
+# GOLDEN AMENDED (M37, 2026-07-02): SEND now precedes the
+# GRANT of the same step. The skeleton golden encoded an illegal
+# federate (§8.1.2): it advanced to t and THEN sent stamped t —
+# ts < current+lookahead. Legal NER cycle: at t-1 send stamped t
+# (= current+lookahead boundary, legal), then NER(t) -> GRANT t.
+REG: CONNECT                                            # §4.2
+REG: JOIN federate=regulator                            # §4.9
+REG: PUBLISH interaction=Tick                           # §5.4
+REG: TIME_REGULATION_ENABLED time=0.000000              # §8.3 callback (async ack of §8.2)
+REG: SEND interaction=Tick seq=1 time=1                 # §6.12 TSO sendInteraction
+REG: GRANT time=1.000000                                # §8.13 grant for §8.8 NER(1)
+REG: SEND interaction=Tick seq=2 time=2                 # §6.12
+REG: GRANT time=2.000000                                # §8.13
+REG: SEND interaction=Tick seq=3 time=3                 # §6.12
+REG: GRANT time=3.000000                                # §8.13
+REG: SEND interaction=Tick seq=4 time=4                 # §6.12
+REG: GRANT time=4.000000                                # §8.13
+REG: SEND interaction=Tick seq=5 time=5                 # §6.12
+REG: GRANT time=5.000000                                # §8.13
+REG: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST       # §4.10

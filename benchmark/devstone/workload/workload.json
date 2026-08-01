@@ -1,0 +1,3770 @@
+{
+  "schema_version": "devstone-hla-workload/v1",
+  "generator": {
+    "name": "gorti-devstone-hla-workload",
+    "version": "1.1.0"
+  },
+  "benchmark": {
+    "requested_spelling": "DEVSOne",
+    "resolved_name": "DEVStone",
+    "topology_definition": "HI",
+    "profile": "DEVStone-HLA workload mapping",
+    "scope": "HLA application-traffic workload; not a DEVS simulator-kernel benchmark result"
+  },
+  "configuration": {
+    "topology": "HI",
+    "width": 10,
+    "depth": 10,
+    "external_event_count": 100,
+    "seed": 1516,
+    "synthetic_transition_delay": {
+      "external_seconds": 0,
+      "internal_seconds": 0
+    }
+  },
+  "hla_mapping": {
+    "profile_version": "devstone-hla/v1",
+    "delivery_plan_format": "DVSHLA1",
+    "participants": [
+      "producer",
+      "consumer"
+    ],
+    "atomic_node_mapping": "logical workload entity",
+    "delivery_mapping": "one receive-order object update and one receive-order interaction per atomic event-value delivery",
+    "projection_deliveries_per_atomic_event_value": 2,
+    "payload_bytes_per_channel": 8,
+    "object_attribute_fields": [
+      "delivery_ordinal",
+      "payload"
+    ],
+    "interaction_fields": [
+      "injected_event_id",
+      "target_atomic_node_id",
+      "delivery_ordinal",
+      "payload"
+    ],
+    "materialization_order": [
+      "injected_event.sequence",
+      "atomic_nodes document order",
+      "occurrence_ordinal"
+    ]
+  },
+  "event_semantics": {
+    "injection_interval_logical_time": 1,
+    "input_fanout": "each atomic node receives each injected event once",
+    "li_forwarding": "no internal atomic-to-atomic coupling",
+    "hi_forwarding": "each regular-level atomic forwards every received event value to its next atomic",
+    "transition_delay_seconds": 0
+  },
+  "atomic_nodes": [
+    {
+      "id": "l0000.a0001",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0002",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0003",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0004",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0005",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0006",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0007",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0008",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0000.a0009",
+      "kind": "devstone_atomic",
+      "level": 0,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0001",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0002",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0003",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0004",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0005",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0006",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0007",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0008",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0001.a0009",
+      "kind": "devstone_atomic",
+      "level": 1,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0001",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0002",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0003",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0004",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0005",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0006",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0007",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0008",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0002.a0009",
+      "kind": "devstone_atomic",
+      "level": 2,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0001",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0002",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0003",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0004",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0005",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0006",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0007",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0008",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0003.a0009",
+      "kind": "devstone_atomic",
+      "level": 3,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0001",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0002",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0003",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0004",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0005",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0006",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0007",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0008",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0004.a0009",
+      "kind": "devstone_atomic",
+      "level": 4,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0001",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0002",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0003",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0004",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0005",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0006",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0007",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0008",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0005.a0009",
+      "kind": "devstone_atomic",
+      "level": 5,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0001",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0002",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0003",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0004",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0005",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0006",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0007",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0008",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0006.a0009",
+      "kind": "devstone_atomic",
+      "level": 6,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0001",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0002",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0003",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0004",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0005",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0006",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0007",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0008",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0007.a0009",
+      "kind": "devstone_atomic",
+      "level": 7,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0001",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0002",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 2,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0003",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 3,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0004",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 4,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0005",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 5,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0006",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 6,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0007",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 7,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0008",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 8,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0008.a0009",
+      "kind": "devstone_atomic",
+      "level": 8,
+      "index": 9,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    },
+    {
+      "id": "l0009.a0001",
+      "kind": "devstone_atomic",
+      "level": 9,
+      "index": 1,
+      "ports": {
+        "input": "in",
+        "output": "out"
+      }
+    }
+  ],
+  "directed_couplings": [
+    {
+      "id": "c000001",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000002",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000003",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000004",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000005",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000006",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000007",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000008",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000009",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000010",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000011",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000012",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000013",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000014",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000015",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000016",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000017",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000018",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000019",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000020",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000021",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000022",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000023",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000024",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000025",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000026",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000027",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000028",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000029",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000030",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000031",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000032",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000033",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000034",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000035",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000036",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000037",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000038",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000039",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000040",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000041",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000042",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000043",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000044",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000045",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000046",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000047",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000048",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000049",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000050",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000051",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000052",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000053",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000054",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000055",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000056",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000057",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000058",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000059",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000060",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000061",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000062",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000063",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000064",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000065",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000066",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000067",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000068",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000069",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000070",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000071",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000072",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000073",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000074",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000075",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000076",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000077",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000078",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000079",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000080",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000081",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000082",
+      "kind": "external_input",
+      "source": {
+        "node": "__injection__",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0009.a0001",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000083",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000084",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000085",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000086",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000087",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000088",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000089",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000090",
+      "kind": "internal",
+      "source": {
+        "node": "l0000.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0000.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000091",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000092",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000093",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000094",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000095",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000096",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000097",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000098",
+      "kind": "internal",
+      "source": {
+        "node": "l0001.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0001.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000099",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000100",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000101",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000102",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000103",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000104",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000105",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000106",
+      "kind": "internal",
+      "source": {
+        "node": "l0002.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0002.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000107",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000108",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000109",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000110",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000111",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000112",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000113",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000114",
+      "kind": "internal",
+      "source": {
+        "node": "l0003.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0003.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000115",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000116",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000117",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000118",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000119",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000120",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000121",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000122",
+      "kind": "internal",
+      "source": {
+        "node": "l0004.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0004.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000123",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000124",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000125",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000126",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000127",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000128",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000129",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000130",
+      "kind": "internal",
+      "source": {
+        "node": "l0005.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0005.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000131",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000132",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000133",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000134",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000135",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000136",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000137",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000138",
+      "kind": "internal",
+      "source": {
+        "node": "l0006.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0006.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000139",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000140",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000141",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000142",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000143",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000144",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000145",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000146",
+      "kind": "internal",
+      "source": {
+        "node": "l0007.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0007.a0009",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000147",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0001",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0002",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000148",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0002",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0003",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000149",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0003",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0004",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000150",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0004",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0005",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000151",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0005",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0006",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000152",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0006",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0007",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000153",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0007",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0008",
+        "port": "in"
+      }
+    },
+    {
+      "id": "c000154",
+      "kind": "internal",
+      "source": {
+        "node": "l0008.a0008",
+        "port": "out"
+      },
+      "target": {
+        "node": "l0008.a0009",
+        "port": "in"
+      }
+    }
+  ],
+  "injected_events": [
+    {
+      "id": "inject-000001",
+      "sequence": 1,
+      "logical_time": 1,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "7365776d6ac1c79ed26093dd0f33a9e9"
+      }
+    },
+    {
+      "id": "inject-000002",
+      "sequence": 2,
+      "logical_time": 2,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "a2bb6186ad13102dc483d26a0e81b3e5"
+      }
+    },
+    {
+      "id": "inject-000003",
+      "sequence": 3,
+      "logical_time": 3,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "80abd4ba7bcf395c06dbfb6b1b2d5137"
+      }
+    },
+    {
+      "id": "inject-000004",
+      "sequence": 4,
+      "logical_time": 4,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "fe1feb2d9f9836bb50de225dda69e678"
+      }
+    },
+    {
+      "id": "inject-000005",
+      "sequence": 5,
+      "logical_time": 5,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "4861c1002d39dc35570ede7d04a90aa1"
+      }
+    },
+    {
+      "id": "inject-000006",
+      "sequence": 6,
+      "logical_time": 6,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "5972a36a75d18b214f61752e4461c744"
+      }
+    },
+    {
+      "id": "inject-000007",
+      "sequence": 7,
+      "logical_time": 7,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "dca2139f0068a46feb68bf6845f75506"
+      }
+    },
+    {
+      "id": "inject-000008",
+      "sequence": 8,
+      "logical_time": 8,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "fea3979c7256a662f5a8dcf0db4b7004"
+      }
+    },
+    {
+      "id": "inject-000009",
+      "sequence": 9,
+      "logical_time": 9,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "dde91f4043e14c8e65252738628ca83c"
+      }
+    },
+    {
+      "id": "inject-000010",
+      "sequence": 10,
+      "logical_time": 10,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "da39b452407dbd12dd9c0fe13e7328a2"
+      }
+    },
+    {
+      "id": "inject-000011",
+      "sequence": 11,
+      "logical_time": 11,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "2c098688d9bd6075b7debb602923759c"
+      }
+    },
+    {
+      "id": "inject-000012",
+      "sequence": 12,
+      "logical_time": 12,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "d42ccb49174ee4bf2d3012a4dcacfcbb"
+      }
+    },
+    {
+      "id": "inject-000013",
+      "sequence": 13,
+      "logical_time": 13,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "41dee950676f0bbe558aa42d82a57075"
+      }
+    },
+    {
+      "id": "inject-000014",
+      "sequence": 14,
+      "logical_time": 14,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "c6039fcbfa6e6e9bf7d5d820aafd979f"
+      }
+    },
+    {
+      "id": "inject-000015",
+      "sequence": 15,
+      "logical_time": 15,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "92b6a1e8c98536e49d36322bca165cb8"
+      }
+    },
+    {
+      "id": "inject-000016",
+      "sequence": 16,
+      "logical_time": 16,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "da6a48ecb7cc37b7cf1cb037eafe8038"
+      }
+    },
+    {
+      "id": "inject-000017",
+      "sequence": 17,
+      "logical_time": 17,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "74f5eb5ade618278114b0d80a457e32e"
+      }
+    },
+    {
+      "id": "inject-000018",
+      "sequence": 18,
+      "logical_time": 18,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "ab7a0e66e34712098c6e0e8471a0373e"
+      }
+    },
+    {
+      "id": "inject-000019",
+      "sequence": 19,
+      "logical_time": 19,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "42f4688abbc02cb923d93237d26d914e"
+      }
+    },
+    {
+      "id": "inject-000020",
+      "sequence": 20,
+      "logical_time": 20,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "71260d569b9f9c3a84e0b19544212781"
+      }
+    },
+    {
+      "id": "inject-000021",
+      "sequence": 21,
+      "logical_time": 21,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "249b1b4adcf037e9b85b638be9d4c22c"
+      }
+    },
+    {
+      "id": "inject-000022",
+      "sequence": 22,
+      "logical_time": 22,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "dadf86eccc54d5347a17198136c3e603"
+      }
+    },
+    {
+      "id": "inject-000023",
+      "sequence": 23,
+      "logical_time": 23,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "9d2b467185dc5ef7725239e5ee884b11"
+      }
+    },
+    {
+      "id": "inject-000024",
+      "sequence": 24,
+      "logical_time": 24,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "437a172f8fe9820ed4f17d0fffa7b652"
+      }
+    },
+    {
+      "id": "inject-000025",
+      "sequence": 25,
+      "logical_time": 25,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "142899190758353ad99740147ccf74d6"
+      }
+    },
+    {
+      "id": "inject-000026",
+      "sequence": 26,
+      "logical_time": 26,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "e7780af35c9346243408ca94eb76be67"
+      }
+    },
+    {
+      "id": "inject-000027",
+      "sequence": 27,
+      "logical_time": 27,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "8741c20b3c37292cade44c10b685ce0e"
+      }
+    },
+    {
+      "id": "inject-000028",
+      "sequence": 28,
+      "logical_time": 28,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "f787cd33b4aee817d836644bb18090b9"
+      }
+    },
+    {
+      "id": "inject-000029",
+      "sequence": 29,
+      "logical_time": 29,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "7986dc34489c4819b2cd6c8702b0843f"
+      }
+    },
+    {
+      "id": "inject-000030",
+      "sequence": 30,
+      "logical_time": 30,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "e02f800aaa2abeb388589bda2d3b1b77"
+      }
+    },
+    {
+      "id": "inject-000031",
+      "sequence": 31,
+      "logical_time": 31,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "07c8c2e888609b3735539ee6f6fc5600"
+      }
+    },
+    {
+      "id": "inject-000032",
+      "sequence": 32,
+      "logical_time": 32,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "d53e107acc8c593c04a3037f463ceb9b"
+      }
+    },
+    {
+      "id": "inject-000033",
+      "sequence": 33,
+      "logical_time": 33,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "9dd8837c7a27bab0241c67ec918624f0"
+      }
+    },
+    {
+      "id": "inject-000034",
+      "sequence": 34,
+      "logical_time": 34,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "c4dfcf11895d61952b0e370c116b3a0c"
+      }
+    },
+    {
+      "id": "inject-000035",
+      "sequence": 35,
+      "logical_time": 35,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "bf1e793cd111a691ac5bb872d4c5c5d4"
+      }
+    },
+    {
+      "id": "inject-000036",
+      "sequence": 36,
+      "logical_time": 36,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "c9f4dd65d9fb36eb4fd8b916c397ce0e"
+      }
+    },
+    {
+      "id": "inject-000037",
+      "sequence": 37,
+      "logical_time": 37,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "283e2bb2c63927f01545e96c2d7c5f32"
+      }
+    },
+    {
+      "id": "inject-000038",
+      "sequence": 38,
+      "logical_time": 38,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "83eb2d603165de39872b6dec082c5a6d"
+      }
+    },
+    {
+      "id": "inject-000039",
+      "sequence": 39,
+      "logical_time": 39,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "59ec5fc079062e3a9397e343786e7770"
+      }
+    },
+    {
+      "id": "inject-000040",
+      "sequence": 40,
+      "logical_time": 40,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "5e9c0b4504449097494456b26f7c9eb8"
+      }
+    },
+    {
+      "id": "inject-000041",
+      "sequence": 41,
+      "logical_time": 41,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "d3f519fc67ced5c2e3c146efab51a4a5"
+      }
+    },
+    {
+      "id": "inject-000042",
+      "sequence": 42,
+      "logical_time": 42,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "f1f3ed6257bccbb8cb2c6c49ebe83bf5"
+      }
+    },
+    {
+      "id": "inject-000043",
+      "sequence": 43,
+      "logical_time": 43,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "63c42103f35900485da0a45160b94c69"
+      }
+    },
+    {
+      "id": "inject-000044",
+      "sequence": 44,
+      "logical_time": 44,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "345bfd12b980917f5365ebeae7aa7f54"
+      }
+    },
+    {
+      "id": "inject-000045",
+      "sequence": 45,
+      "logical_time": 45,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "9bb1490819b9cc64c1e4e5990eb04efb"
+      }
+    },
+    {
+      "id": "inject-000046",
+      "sequence": 46,
+      "logical_time": 46,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "9265f50b1e5c3b239b864553918cab8d"
+      }
+    },
+    {
+      "id": "inject-000047",
+      "sequence": 47,
+      "logical_time": 47,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "2553d8f5519a73ea6e50bfb1783680a7"
+      }
+    },
+    {
+      "id": "inject-000048",
+      "sequence": 48,
+      "logical_time": 48,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "b97937ddf92c81f14a44209a918f4062"
+      }
+    },
+    {
+      "id": "inject-000049",
+      "sequence": 49,
+      "logical_time": 49,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "969c0ce43b063ae5244db0e457763f42"
+      }
+    },
+    {
+      "id": "inject-000050",
+      "sequence": 50,
+      "logical_time": 50,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "d993bf6a00649505466ff5b93594290a"
+      }
+    },
+    {
+      "id": "inject-000051",
+      "sequence": 51,
+      "logical_time": 51,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "45973d07448607083892c71146a92257"
+      }
+    },
+    {
+      "id": "inject-000052",
+      "sequence": 52,
+      "logical_time": 52,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "feaf670854ff8b582863b7920dc6fa23"
+      }
+    },
+    {
+      "id": "inject-000053",
+      "sequence": 53,
+      "logical_time": 53,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "53ca4ffa12f0bee99295a713cbd03a5d"
+      }
+    },
+    {
+      "id": "inject-000054",
+      "sequence": 54,
+      "logical_time": 54,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "4f487b1e35b45d3fa83bb070640f65d1"
+      }
+    },
+    {
+      "id": "inject-000055",
+      "sequence": 55,
+      "logical_time": 55,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "2d077e6dbe2e24b3bf5054e17c516c70"
+      }
+    },
+    {
+      "id": "inject-000056",
+      "sequence": 56,
+      "logical_time": 56,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "433bd9f16df22f23a87c7d48bd99b441"
+      }
+    },
+    {
+      "id": "inject-000057",
+      "sequence": 57,
+      "logical_time": 57,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "b53231fd6f7b64eab35fb10f9b1f5470"
+      }
+    },
+    {
+      "id": "inject-000058",
+      "sequence": 58,
+      "logical_time": 58,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "2d54b9c06c6bc290faa13e4a59c78914"
+      }
+    },
+    {
+      "id": "inject-000059",
+      "sequence": 59,
+      "logical_time": 59,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "064fd648053c0ed2aa62094eb79a1627"
+      }
+    },
+    {
+      "id": "inject-000060",
+      "sequence": 60,
+      "logical_time": 60,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "b7dddd77bf95394eea87960120b529c6"
+      }
+    },
+    {
+      "id": "inject-000061",
+      "sequence": 61,
+      "logical_time": 61,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "790e440e592d7d306962b599a43d141f"
+      }
+    },
+    {
+      "id": "inject-000062",
+      "sequence": 62,
+      "logical_time": 62,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "4977fb2d6c49956bd2668e0ad4722505"
+      }
+    },
+    {
+      "id": "inject-000063",
+      "sequence": 63,
+      "logical_time": 63,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "fdac049baebe27dde81258f2d4d644ec"
+      }
+    },
+    {
+      "id": "inject-000064",
+      "sequence": 64,
+      "logical_time": 64,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "9d2fd49ae3f17dda323b5f704707660f"
+      }
+    },
+    {
+      "id": "inject-000065",
+      "sequence": 65,
+      "logical_time": 65,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "b2a534a9914426cda7dccce5c614fe0f"
+      }
+    },
+    {
+      "id": "inject-000066",
+      "sequence": 66,
+      "logical_time": 66,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "51b0e31bdb223ff3718c25cc7b27475b"
+      }
+    },
+    {
+      "id": "inject-000067",
+      "sequence": 67,
+      "logical_time": 67,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "5b7cdca5f99cd5e67ec7f7f30ec2b60f"
+      }
+    },
+    {
+      "id": "inject-000068",
+      "sequence": 68,
+      "logical_time": 68,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "47ec58d007707c3f6149e54854c23d03"
+      }
+    },
+    {
+      "id": "inject-000069",
+      "sequence": 69,
+      "logical_time": 69,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "74b0b9e7702d61497f86829d55a816f4"
+      }
+    },
+    {
+      "id": "inject-000070",
+      "sequence": 70,
+      "logical_time": 70,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "5d184b8c5e43124feac384e4cb2dc010"
+      }
+    },
+    {
+      "id": "inject-000071",
+      "sequence": 71,
+      "logical_time": 71,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "db88c383b207c84d4908606140fbc237"
+      }
+    },
+    {
+      "id": "inject-000072",
+      "sequence": 72,
+      "logical_time": 72,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "2f0e1df1fcc906110a2be287f20e9e94"
+      }
+    },
+    {
+      "id": "inject-000073",
+      "sequence": 73,
+      "logical_time": 73,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "930d2f05517b0bd9e25e8ebfc62e4786"
+      }
+    },
+    {
+      "id": "inject-000074",
+      "sequence": 74,
+      "logical_time": 74,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "8f1204384f514a89e55590448be37d9e"
+      }
+    },
+    {
+      "id": "inject-000075",
+      "sequence": 75,
+      "logical_time": 75,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "6222d6adb4cf3f7e5b404519b4334b40"
+      }
+    },
+    {
+      "id": "inject-000076",
+      "sequence": 76,
+      "logical_time": 76,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "ef9481a52d1f3b7a9b0783bef48269e0"
+      }
+    },
+    {
+      "id": "inject-000077",
+      "sequence": 77,
+      "logical_time": 77,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "bc48dfcefae88d92f5ed2f55ddd6c59b"
+      }
+    },
+    {
+      "id": "inject-000078",
+      "sequence": 78,
+      "logical_time": 78,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "8f3fce95b97c1b0ede1831ccd3f90744"
+      }
+    },
+    {
+      "id": "inject-000079",
+      "sequence": 79,
+      "logical_time": 79,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "c984c6e80f2d553c06958e1e59960177"
+      }
+    },
+    {
+      "id": "inject-000080",
+      "sequence": 80,
+      "logical_time": 80,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "2c6d82a9dee8b248d584681a8be1c319"
+      }
+    },
+    {
+      "id": "inject-000081",
+      "sequence": 81,
+      "logical_time": 81,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "010273c75f994f706a277881618239cd"
+      }
+    },
+    {
+      "id": "inject-000082",
+      "sequence": 82,
+      "logical_time": 82,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "b37b343327cb115855faeb8f9f6219c0"
+      }
+    },
+    {
+      "id": "inject-000083",
+      "sequence": 83,
+      "logical_time": 83,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "a9927d85a79c18e944114fcd228f670b"
+      }
+    },
+    {
+      "id": "inject-000084",
+      "sequence": 84,
+      "logical_time": 84,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "7f01cc4eb433e4d874e7d9568211b1bd"
+      }
+    },
+    {
+      "id": "inject-000085",
+      "sequence": 85,
+      "logical_time": 85,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "7e74ea4d46d93c0912e526d82d8b7475"
+      }
+    },
+    {
+      "id": "inject-000086",
+      "sequence": 86,
+      "logical_time": 86,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "287edbcb5cdf58ac4e73cfeaad872b2f"
+      }
+    },
+    {
+      "id": "inject-000087",
+      "sequence": 87,
+      "logical_time": 87,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "39ae4ef20ebcc84e1ffc0f5effcc97e7"
+      }
+    },
+    {
+      "id": "inject-000088",
+      "sequence": 88,
+      "logical_time": 88,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "f55903926f6ac2c7f0308f22ed0b9bcf"
+      }
+    },
+    {
+      "id": "inject-000089",
+      "sequence": 89,
+      "logical_time": 89,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "0e14a1df74f235df577d082bc5834d9d"
+      }
+    },
+    {
+      "id": "inject-000090",
+      "sequence": 90,
+      "logical_time": 90,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "dff0d4a961758c46ee873243d90cab7c"
+      }
+    },
+    {
+      "id": "inject-000091",
+      "sequence": 91,
+      "logical_time": 91,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "0e37dccc81d934592fc0132e863a7f72"
+      }
+    },
+    {
+      "id": "inject-000092",
+      "sequence": 92,
+      "logical_time": 92,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "147a147459edf70ef175d6b5906ea1ee"
+      }
+    },
+    {
+      "id": "inject-000093",
+      "sequence": 93,
+      "logical_time": 93,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "10cd2568c6a06e4686ac576c263c9f58"
+      }
+    },
+    {
+      "id": "inject-000094",
+      "sequence": 94,
+      "logical_time": 94,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "22cedca8a4427f1ef9be8617e68c3702"
+      }
+    },
+    {
+      "id": "inject-000095",
+      "sequence": 95,
+      "logical_time": 95,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "098a75e64c1d6b0b613ff554b868abb1"
+      }
+    },
+    {
+      "id": "inject-000096",
+      "sequence": 96,
+      "logical_time": 96,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "b9ba9b0bd68d21c6ee67b2ce009a69a0"
+      }
+    },
+    {
+      "id": "inject-000097",
+      "sequence": 97,
+      "logical_time": 97,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "91b20865d527d0f699f79cb3f4173a8a"
+      }
+    },
+    {
+      "id": "inject-000098",
+      "sequence": 98,
+      "logical_time": 98,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "59b8c939f62d1c7466724b8dffaa0dba"
+      }
+    },
+    {
+      "id": "inject-000099",
+      "sequence": 99,
+      "logical_time": 99,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "e1859e053637646c06dceed7e40166bf"
+      }
+    },
+    {
+      "id": "inject-000100",
+      "sequence": 100,
+      "logical_time": 100,
+      "payload": {
+        "encoding": "hex",
+        "size_bytes": 16,
+        "value": "8d25593dff03ea53b0b2ccd1a3507a8f"
+      }
+    }
+  ],
+  "expected_counts": {
+    "atomic_nodes": 82,
+    "directed_couplings": 154,
+    "formula_per_injected_event": "(width * (width - 1) / 2) * (depth - 1) + 1",
+    "per_injected_event": {
+      "atomic_event_deliveries": 406,
+      "event_values": 406,
+      "external_transitions": 406,
+      "internal_transitions": 406,
+      "hla_attribute_updates": 406,
+      "hla_interactions": 406,
+      "hla_deliveries": 812
+    },
+    "total": {
+      "injected_external_events": 100,
+      "atomic_event_deliveries": 40600,
+      "event_values": 40600,
+      "external_transitions": 40600,
+      "internal_transitions": 40600,
+      "hla_attribute_updates": 40600,
+      "hla_interactions": 40600,
+      "hla_deliveries": 81200
+    }
+  },
+  "topology_identity": {
+    "algorithm": "sha256",
+    "identity_version": "devstone-hla-topology/v1",
+    "canonicalization": "sorted-key-compact-json-utf8-v1",
+    "scope": "topology, width, depth, external_event_count, ordered atomic_nodes, ordered directed_couplings, hla_mapping, and synthetic transition delays",
+    "digest": "19ea08b1caed0ed1805390f7045566c8d1dcc34426beca227fec3e09c5a04c14"
+  },
+  "identity": {
+    "algorithm": "sha256",
+    "canonicalization": "sorted-key-compact-json-utf8-v1",
+    "scope": "document excluding the identity member",
+    "digest": "889b0729a135054f754bf0fc8b3bbf7903ee4bef94f27dd614823aff76c3b990"
+  }
+}

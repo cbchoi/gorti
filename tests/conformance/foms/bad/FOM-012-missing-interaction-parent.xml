@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-012 fixture: interaction class declared at top level without
+  HLAinteractionRoot wrapping. Symmetric to FOM-011 for objects.
+
+  Expected diagnostic: FOM-012.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-012-missing-interaction-parent</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-29</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: orphan interaction.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass><name>HLAobjectRoot</name></objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>OrphanInteraction</name>
+      <sharing>PublishSubscribe</sharing>
+      <transportation>HLAreliable</transportation>
+      <order>Receive</order>
+      <semantics>Should nest under HLAinteractionRoot.</semantics>
+    </interactionClass>
+  </interactions>
+</objectModel>

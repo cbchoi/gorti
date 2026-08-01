@@ -1,0 +1,7 @@
+# Documentation build dependencies for Read the Docs.
+# Local preview: pip install -r docs/requirements.txt && mkdocs serve
+
+mkdocs==1.6.1
+mkdocs-material==9.7.6
+mkdocs-include-markdown-plugin==7.2.2
+pymdown-extensions==10.21.2

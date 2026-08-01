@@ -1,0 +1,4 @@
+.pytest-temp/
+.run-smoke-*/
+__pycache__/
+*.result.json

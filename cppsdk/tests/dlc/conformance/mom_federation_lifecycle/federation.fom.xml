@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- §11 MOM via standard pub/sub. HLAobjectRoot.HLAmanager.* is provided
+     by the RTI (MIM); this FOM only needs to reference it. -->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>mom_federation_lifecycle</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-07-01</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>M31 fixture — §11 MOM. Subscribers observe
+      HLAobjectRoot.HLAmanager.HLAfederation.HLAfederatesInFederation
+      via STANDARD subscription (catalogue 16.1 — no bespoke API). FOM
+      only declares user types; MOM types are inherited from the MIM
+      contributed by the RTI implementation.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CANCEL_THEN_DELETE_THEN_DIVEST"/>
+  </switches>
+</objectModel>

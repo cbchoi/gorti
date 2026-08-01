@@ -1,0 +1,843 @@
+{
+  "version": 1,
+  "_meta": {
+    "purpose": "Golden cross-language byte vectors for HLA Evolved encoding rules per IEEE 1516.2-2010 \u00a74.",
+    "owner": "gorti project; implementations must produce byte-identical output.",
+    "format": "Each vector has id, type (string for primitive, object for composite), value (JSON), bytes (lowercase hex, no separators), optional notes.",
+    "stability": "Vectors are additive only; do not delete or modify values that implementations rely on. New diagnostics require a contract change."
+  },
+  "vectors": [
+    {
+      "id": "int32be-zero",
+      "type": "HLAinteger32BE",
+      "value": 0,
+      "bytes": "00000000",
+      "notes": "octet boundary 4"
+    },
+    {
+      "id": "int32be-one",
+      "type": "HLAinteger32BE",
+      "value": 1,
+      "bytes": "00000001"
+    },
+    {
+      "id": "int32be-max",
+      "type": "HLAinteger32BE",
+      "value": 2147483647,
+      "bytes": "7fffffff"
+    },
+    {
+      "id": "int32be-min",
+      "type": "HLAinteger32BE",
+      "value": -2147483648,
+      "bytes": "80000000",
+      "notes": "two's complement"
+    },
+    {
+      "id": "int32be-neg-one",
+      "type": "HLAinteger32BE",
+      "value": -1,
+      "bytes": "ffffffff"
+    },
+    {
+      "id": "int64be-one",
+      "type": "HLAinteger64BE",
+      "value": 1,
+      "bytes": "0000000000000001",
+      "notes": "octet boundary 8"
+    },
+    {
+      "id": "int64be-neg-one",
+      "type": "HLAinteger64BE",
+      "value": -1,
+      "bytes": "ffffffffffffffff"
+    },
+    {
+      "id": "float32be-one",
+      "type": "HLAfloat32BE",
+      "value": 1.0,
+      "bytes": "3f800000",
+      "notes": "IEEE 754 single, BE; octet boundary 4"
+    },
+    {
+      "id": "float64be-one",
+      "type": "HLAfloat64BE",
+      "value": 1.0,
+      "bytes": "3ff0000000000000",
+      "notes": "IEEE 754 double, BE; octet boundary 8"
+    },
+    {
+      "id": "float64be-neg-two",
+      "type": "HLAfloat64BE",
+      "value": -2.0,
+      "bytes": "c000000000000000"
+    },
+    {
+      "id": "float64be-half",
+      "type": "HLAfloat64BE",
+      "value": 0.5,
+      "bytes": "3fe0000000000000",
+      "notes": "exactly representable; safe for cross-language equality"
+    },
+    {
+      "id": "float32be-zero",
+      "type": "HLAfloat32BE",
+      "value": 0.0,
+      "bytes": "00000000",
+      "notes": "TASK-011 float family begin"
+    },
+    {
+      "id": "float32be-neg-one",
+      "type": "HLAfloat32BE",
+      "value": -1.0,
+      "bytes": "bf800000"
+    },
+    {
+      "id": "float32be-half",
+      "type": "HLAfloat32BE",
+      "value": 0.5,
+      "bytes": "3f000000",
+      "notes": "exactly representable single"
+    },
+    {
+      "id": "float32be-neg-half",
+      "type": "HLAfloat32BE",
+      "value": -0.5,
+      "bytes": "bf000000"
+    },
+    {
+      "id": "float32be-two",
+      "type": "HLAfloat32BE",
+      "value": 2.0,
+      "bytes": "40000000"
+    },
+    {
+      "id": "float32be-quarter",
+      "type": "HLAfloat32BE",
+      "value": 0.25,
+      "bytes": "3e800000"
+    },
+    {
+      "id": "float32le-zero",
+      "type": "HLAfloat32LE",
+      "value": 0.0,
+      "bytes": "00000000"
+    },
+    {
+      "id": "float32le-one",
+      "type": "HLAfloat32LE",
+      "value": 1.0,
+      "bytes": "0000803f",
+      "notes": "IEEE 754 single, LE; octet boundary 4"
+    },
+    {
+      "id": "float32le-half",
+      "type": "HLAfloat32LE",
+      "value": 0.5,
+      "bytes": "0000003f"
+    },
+    {
+      "id": "float32le-neg-two",
+      "type": "HLAfloat32LE",
+      "value": -2.0,
+      "bytes": "000000c0"
+    },
+    {
+      "id": "float64be-zero",
+      "type": "HLAfloat64BE",
+      "value": 0.0,
+      "bytes": "0000000000000000"
+    },
+    {
+      "id": "float64be-neg-half",
+      "type": "HLAfloat64BE",
+      "value": -0.5,
+      "bytes": "bfe0000000000000"
+    },
+    {
+      "id": "float64be-two",
+      "type": "HLAfloat64BE",
+      "value": 2.0,
+      "bytes": "4000000000000000"
+    },
+    {
+      "id": "float64be-quarter",
+      "type": "HLAfloat64BE",
+      "value": 0.25,
+      "bytes": "3fd0000000000000"
+    },
+    {
+      "id": "float64le-zero",
+      "type": "HLAfloat64LE",
+      "value": 0.0,
+      "bytes": "0000000000000000"
+    },
+    {
+      "id": "float64le-one",
+      "type": "HLAfloat64LE",
+      "value": 1.0,
+      "bytes": "000000000000f03f",
+      "notes": "IEEE 754 double, LE; octet boundary 8"
+    },
+    {
+      "id": "float64le-half",
+      "type": "HLAfloat64LE",
+      "value": 0.5,
+      "bytes": "000000000000e03f"
+    },
+    {
+      "id": "float64le-neg-two",
+      "type": "HLAfloat64LE",
+      "value": -2.0,
+      "bytes": "00000000000000c0",
+      "notes": "TASK-011 float family end"
+    },
+    {
+      "id": "boolean-true",
+      "type": "HLAboolean",
+      "value": true,
+      "bytes": "00000001",
+      "notes": "encoded as HLAinteger32BE; octet boundary 4"
+    },
+    {
+      "id": "boolean-false",
+      "type": "HLAboolean",
+      "value": false,
+      "bytes": "00000000"
+    },
+    {
+      "id": "octet-ab",
+      "type": "HLAoctet",
+      "value": 171,
+      "bytes": "ab",
+      "notes": "single byte, value 0xAB; octet boundary 1"
+    },
+    {
+      "id": "ascii-char-A",
+      "type": "HLAASCIIchar",
+      "value": "A",
+      "bytes": "41",
+      "notes": "octet boundary 1"
+    },
+    {
+      "id": "unicode-char-A",
+      "type": "HLAunicodeChar",
+      "value": "A",
+      "bytes": "0041",
+      "notes": "UTF-16 BE; octet boundary 2"
+    },
+    {
+      "id": "int16be-zero",
+      "type": "HLAinteger16BE",
+      "value": 0,
+      "bytes": "0000",
+      "notes": "octet boundary 2"
+    },
+    {
+      "id": "int16be-one",
+      "type": "HLAinteger16BE",
+      "value": 1,
+      "bytes": "0001"
+    },
+    {
+      "id": "int16be-neg-one",
+      "type": "HLAinteger16BE",
+      "value": -1,
+      "bytes": "ffff",
+      "notes": "two's complement"
+    },
+    {
+      "id": "int16be-max",
+      "type": "HLAinteger16BE",
+      "value": 32767,
+      "bytes": "7fff"
+    },
+    {
+      "id": "int16be-min",
+      "type": "HLAinteger16BE",
+      "value": -32768,
+      "bytes": "8000",
+      "notes": "two's complement"
+    },
+    {
+      "id": "int16le-zero",
+      "type": "HLAinteger16LE",
+      "value": 0,
+      "bytes": "0000",
+      "notes": "octet boundary 2"
+    },
+    {
+      "id": "int16le-one",
+      "type": "HLAinteger16LE",
+      "value": 1,
+      "bytes": "0100"
+    },
+    {
+      "id": "int16le-neg-one",
+      "type": "HLAinteger16LE",
+      "value": -1,
+      "bytes": "ffff"
+    },
+    {
+      "id": "int16le-max",
+      "type": "HLAinteger16LE",
+      "value": 32767,
+      "bytes": "ff7f"
+    },
+    {
+      "id": "int16le-min",
+      "type": "HLAinteger16LE",
+      "value": -32768,
+      "bytes": "0080",
+      "notes": "two's complement, little-endian"
+    },
+    {
+      "id": "int32le-zero",
+      "type": "HLAinteger32LE",
+      "value": 0,
+      "bytes": "00000000",
+      "notes": "octet boundary 4"
+    },
+    {
+      "id": "int32le-one",
+      "type": "HLAinteger32LE",
+      "value": 1,
+      "bytes": "01000000"
+    },
+    {
+      "id": "int32le-neg-one",
+      "type": "HLAinteger32LE",
+      "value": -1,
+      "bytes": "ffffffff"
+    },
+    {
+      "id": "int32le-max",
+      "type": "HLAinteger32LE",
+      "value": 2147483647,
+      "bytes": "ffffff7f"
+    },
+    {
+      "id": "int32le-min",
+      "type": "HLAinteger32LE",
+      "value": -2147483648,
+      "bytes": "00000080",
+      "notes": "two's complement, little-endian"
+    },
+    {
+      "id": "int64le-zero",
+      "type": "HLAinteger64LE",
+      "value": 0,
+      "bytes": "0000000000000000",
+      "notes": "octet boundary 8"
+    },
+    {
+      "id": "int64le-one",
+      "type": "HLAinteger64LE",
+      "value": 1,
+      "bytes": "0100000000000000"
+    },
+    {
+      "id": "int64le-neg-one",
+      "type": "HLAinteger64LE",
+      "value": -1,
+      "bytes": "ffffffffffffffff"
+    },
+    {
+      "id": "int64le-large",
+      "type": "HLAinteger64LE",
+      "value": 9007199254740992,
+      "bytes": "0000000000002000",
+      "notes": "2^53; largest exact integer round-trip through JSON float64"
+    },
+    {
+      "id": "int64le-large-neg",
+      "type": "HLAinteger64LE",
+      "value": -9007199254740992,
+      "bytes": "000000000000e0ff",
+      "notes": "-2^53; exact-integer round-trip, two's complement little-endian"
+    },
+    {
+      "id": "octet-zero",
+      "type": "HLAoctet",
+      "value": 0,
+      "bytes": "00",
+      "notes": "TASK-012; min unsigned single byte"
+    },
+    {
+      "id": "octet-one",
+      "type": "HLAoctet",
+      "value": 1,
+      "bytes": "01",
+      "notes": "TASK-012"
+    },
+    {
+      "id": "octet-max",
+      "type": "HLAoctet",
+      "value": 255,
+      "bytes": "ff",
+      "notes": "TASK-012; max unsigned single byte"
+    },
+    {
+      "id": "ascii-char-tilde",
+      "type": "HLAASCIIchar",
+      "value": "~",
+      "bytes": "7e",
+      "notes": "TASK-012; high printable ASCII"
+    },
+    {
+      "id": "ascii-char-zero",
+      "type": "HLAASCIIchar",
+      "value": "0",
+      "bytes": "30",
+      "notes": "TASK-012"
+    },
+    {
+      "id": "ascii-char-space",
+      "type": "HLAASCIIchar",
+      "value": " ",
+      "bytes": "20",
+      "notes": "TASK-012"
+    },
+    {
+      "id": "unicode-char-omega",
+      "type": "HLAunicodeChar",
+      "value": "\u03a9",
+      "bytes": "03a9",
+      "notes": "TASK-012; Greek capital Omega U+03A9"
+    },
+    {
+      "id": "unicode-char-han",
+      "type": "HLAunicodeChar",
+      "value": "\u4e2d",
+      "bytes": "4e2d",
+      "notes": "TASK-012; CJK ideograph U+4E2D"
+    },
+    {
+      "id": "unicode-char-pi",
+      "type": "HLAunicodeChar",
+      "value": "\u03c0",
+      "bytes": "03c0",
+      "notes": "TASK-012; Greek small letter pi U+03C0"
+    },
+    {
+      "id": "unicode-char-bom",
+      "type": "HLAunicodeChar",
+      "value": "\ufeff",
+      "bytes": "feff",
+      "notes": "TASK-012; ZWNBSP / BOM U+FEFF"
+    },
+    {
+      "id": "ascii-string-empty",
+      "type": "HLAASCIIstring",
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-013; 4-byte BE length prefix == 0; octet boundary 4"
+    },
+    {
+      "id": "ascii-string-hello",
+      "type": "HLAASCIIstring",
+      "value": "hello",
+      "bytes": "0000000568656c6c6f",
+      "notes": "TASK-013; length 5, ASCII payload"
+    },
+    {
+      "id": "ascii-string-space",
+      "type": "HLAASCIIstring",
+      "value": " ",
+      "bytes": "0000000120",
+      "notes": "TASK-013; length 1, single space"
+    },
+    {
+      "id": "ascii-string-A",
+      "type": "HLAASCIIstring",
+      "value": "A",
+      "bytes": "0000000141",
+      "notes": "TASK-013; length 1, single ASCII letter"
+    },
+    {
+      "id": "unicode-string-empty",
+      "type": "HLAunicodeString",
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-013; 4-byte BE length prefix == 0 code units"
+    },
+    {
+      "id": "unicode-string-hello",
+      "type": "HLAunicodeString",
+      "value": "hello",
+      "bytes": "0000000500680065006c006c006f",
+      "notes": "TASK-013; length 5 code units, UTF-16BE payload (4 + 10 = 14 bytes)"
+    },
+    {
+      "id": "unicode-string-omega",
+      "type": "HLAunicodeString",
+      "value": "\u03a9",
+      "bytes": "0000000103a9",
+      "notes": "TASK-013; length 1 code unit, U+03A9 Greek capital omega"
+    },
+    {
+      "id": "octet-pair-be-zero",
+      "type": "HLAoctetPairBE",
+      "value": [
+        0,
+        0
+      ],
+      "bytes": "0000",
+      "notes": "octet boundary 2; logical [0x00, 0x00] in BE order"
+    },
+    {
+      "id": "octet-pair-be-abcd",
+      "type": "HLAoctetPairBE",
+      "value": [
+        171,
+        205
+      ],
+      "bytes": "abcd",
+      "notes": "logical [0xAB, 0xCD] in BE order"
+    },
+    {
+      "id": "octet-pair-be-max",
+      "type": "HLAoctetPairBE",
+      "value": [
+        255,
+        255
+      ],
+      "bytes": "ffff"
+    },
+    {
+      "id": "octet-pair-le-zero",
+      "type": "HLAoctetPairLE",
+      "value": [
+        0,
+        0
+      ],
+      "bytes": "0000",
+      "notes": "logical [0x00, 0x00] in LE byte order on the wire (still 0x00 0x00)"
+    },
+    {
+      "id": "octet-pair-le-abcd",
+      "type": "HLAoctetPairLE",
+      "value": [
+        171,
+        205
+      ],
+      "bytes": "cdab",
+      "notes": "logical [0xAB, 0xCD] swapped to [0xCD, 0xAB] on the wire"
+    },
+    {
+      "id": "octet-pair-le-asym",
+      "type": "HLAoctetPairLE",
+      "value": [
+        16,
+        32
+      ],
+      "bytes": "2010",
+      "notes": "logical [0x10, 0x20] swapped"
+    },
+    {
+      "id": "fixed-array-int32-3",
+      "type": {
+        "kind": "HLAfixedArray",
+        "element": "HLAinteger32BE",
+        "cardinality": 3
+      },
+      "value": [
+        1,
+        2,
+        3
+      ],
+      "bytes": "000000010000000200000003",
+      "notes": "TASK-014/015/018 composite block begin; HLAfixedArray of 3 int32BE; 4-byte boundary, no inter-element padding"
+    },
+    {
+      "id": "fixed-array-float64-2",
+      "type": {
+        "kind": "HLAfixedArray",
+        "element": "HLAfloat64BE",
+        "cardinality": 2
+      },
+      "value": [
+        1.0,
+        0.5
+      ],
+      "bytes": "3ff00000000000003fe0000000000000",
+      "notes": "TASK-014; HLAfixedArray of 2 float64BE; 8-byte boundary, no inter-element padding because each element fills its boundary"
+    },
+    {
+      "id": "fixed-array-octet-5",
+      "type": {
+        "kind": "HLAfixedArray",
+        "element": "HLAoctet",
+        "cardinality": 5
+      },
+      "value": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "bytes": "0102030405",
+      "notes": "TASK-014; HLAfixedArray of 5 HLAoctet; 1-byte boundary, no padding"
+    },
+    {
+      "id": "variable-array-int32-empty",
+      "type": {
+        "kind": "HLAvariableArray",
+        "element": "HLAinteger32BE"
+      },
+      "value": [],
+      "bytes": "00000000",
+      "notes": "TASK-015; HLAvariableArray empty: just the 4-byte zero length prefix"
+    },
+    {
+      "id": "variable-array-int32-2",
+      "type": {
+        "kind": "HLAvariableArray",
+        "element": "HLAinteger32BE"
+      },
+      "value": [
+        1,
+        2
+      ],
+      "bytes": "000000020000000100000002",
+      "notes": "TASK-015; HLAvariableArray of 2 int32BE"
+    },
+    {
+      "id": "variable-array-float64-3",
+      "type": {
+        "kind": "HLAvariableArray",
+        "element": "HLAfloat64BE"
+      },
+      "value": [
+        1.0,
+        0.5,
+        -2.0
+      ],
+      "bytes": "00000003000000003ff00000000000003fe0000000000000c000000000000000",
+      "notes": "TASK-015; HLAvariableArray of 3 float64BE; padding test: 4-byte length prefix + 4 bytes pad to reach 8-byte float64 boundary, then 3 doubles"
+    },
+    {
+      "id": "opaque-empty",
+      "type": {
+        "kind": "HLAopaqueData"
+      },
+      "value": "",
+      "bytes": "00000000",
+      "notes": "TASK-018; empty opaque blob; 4-byte zero length prefix"
+    },
+    {
+      "id": "opaque-deadbeef",
+      "type": {
+        "kind": "HLAopaqueData"
+      },
+      "value": "deadbeef",
+      "bytes": "00000004deadbeef",
+      "notes": "TASK-018; 4-byte payload (hex-encoded in value field)"
+    },
+    {
+      "id": "opaque-three-bytes",
+      "type": {
+        "kind": "HLAopaqueData"
+      },
+      "value": "010203",
+      "bytes": "00000003010203",
+      "notes": "TASK-014/015/018 composite block end; 3-byte payload (hex-encoded in value field)"
+    },
+    {
+      "id": "fixed-record-octet-float64",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {
+            "name": "a",
+            "type": "HLAoctet"
+          },
+          {
+            "name": "b",
+            "type": "HLAfloat64BE"
+          }
+        ]
+      },
+      "value": {
+        "a": 5,
+        "b": 1.0
+      },
+      "bytes": "05000000000000003ff0000000000000",
+      "notes": "Fixed-record: HLAoctet + 7 padding bytes + HLAfloat64BE; 8-byte record boundary"
+    },
+    {
+      "id": "fixed-record-int32-int32-no-padding",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {
+            "name": "x",
+            "type": "HLAinteger32BE"
+          },
+          {
+            "name": "y",
+            "type": "HLAinteger32BE"
+          }
+        ]
+      },
+      "value": {
+        "x": 1,
+        "y": -1
+      },
+      "bytes": "00000001ffffffff",
+      "notes": "TASK-016 / TASK-017 records begin: two int32 fields pack tight; no inter-field padding; record boundary 4"
+    },
+    {
+      "id": "fixed-record-int32-float64-pad4",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {
+            "name": "i",
+            "type": "HLAinteger32BE"
+          },
+          {
+            "name": "d",
+            "type": "HLAfloat64BE"
+          }
+        ]
+      },
+      "value": {
+        "i": 1,
+        "d": 0.5
+      },
+      "bytes": "00000001000000003fe0000000000000",
+      "notes": "TASK-016: 4 padding octets after int32 so float64 begins at offset 8; record boundary 8"
+    },
+    {
+      "id": "fixed-record-nested-octet-record-octet-float64",
+      "type": {
+        "kind": "HLAfixedRecord",
+        "fields": [
+          {
+            "name": "a",
+            "type": "HLAoctet"
+          },
+          {
+            "name": "inner",
+            "type": {
+              "kind": "HLAfixedRecord",
+              "fields": [
+                {
+                  "name": "x",
+                  "type": "HLAoctet"
+                },
+                {
+                  "name": "y",
+                  "type": "HLAfloat64BE"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "value": {
+        "a": 7,
+        "inner": {
+          "x": 9,
+          "y": 1.0
+        }
+      },
+      "bytes": "070000000000000009000000000000003ff0000000000000",
+      "notes": "TASK-016: nested record padding resets at inner record's start; outer pads 7 bytes after octet to align inner on 8, inner pads 7 after its octet to align float64"
+    },
+    {
+      "id": "variant-record-int32-disc-1-octet",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAfloat64BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 1,
+        "value": 171
+      },
+      "bytes": "00000001ab",
+      "notes": "TASK-017: discriminator=1 selects HLAoctet alternative; offset after int32 disc (4) is already aligned to octet boundary (1) so no inter-field padding; record OctetBoundary 8 = max(disc 4, alts {1,8})"
+    },
+    {
+      "id": "variant-record-int32-disc-2-float64",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAfloat64BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 2,
+        "value": 1.0
+      },
+      "bytes": "00000002000000003ff0000000000000",
+      "notes": "TASK-017: discriminator=2 selects HLAfloat64BE; 4 padding bytes after int32 disc so float64 begins at offset 8; record boundary 8"
+    },
+    {
+      "id": "variant-record-int32-disc-1-octet-int32-alt",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAinteger32BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 1,
+        "value": 5
+      },
+      "bytes": "0000000105",
+      "notes": "TASK-017: record OctetBoundary 4 = max(4, {1,4}); disc=1 selects HLAoctet; offset 4 aligned to boundary 1, no padding"
+    },
+    {
+      "id": "variant-record-int32-disc-2-int32-alt",
+      "type": {
+        "kind": "HLAvariantRecord",
+        "discriminator": "HLAinteger32BE",
+        "alternatives": [
+          {
+            "discriminant": 1,
+            "type": "HLAoctet"
+          },
+          {
+            "discriminant": 2,
+            "type": "HLAinteger32BE"
+          }
+        ]
+      },
+      "value": {
+        "discriminator": 2,
+        "value": 42
+      },
+      "bytes": "000000020000002a",
+      "notes": "TASK-017 / TASK-016 records end: discriminator=2 selects int32 alt; offset 4 already aligned for int32 boundary so no inter-field padding"
+    }
+  ]
+}

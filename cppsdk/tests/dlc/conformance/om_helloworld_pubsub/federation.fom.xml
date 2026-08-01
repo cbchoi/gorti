@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>DLC Conformance — om_helloworld_pubsub</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <description>
+      Vehicle + Honk pub/sub — generalized 2026-06-30 smoke. One
+      Vehicle object class with Position + Velocity attributes; one
+      Honk interaction with a Volume parameter. Exercises §6.6
+      publishObjectClassAttributes, §5.6 subscribeObjectClassAttributes,
+      §6.9 discoverObjectInstance, §6.11 reflectAttributeValues, §6.13
+      receiveInteraction per the M31 dispatch plan §2.2 fixture #8.
+    </description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>Position</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+        </attribute>
+        <attribute>
+          <name>Velocity</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>PublishSubscribe</sharing>
+      <interactionClass>
+        <name>Honk</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <parameter>
+          <name>Volume</name>
+          <dataType>HLAinteger32BE</dataType>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>

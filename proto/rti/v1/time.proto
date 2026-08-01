@@ -1,0 +1,232 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// TimeService — time management.
+//
+// M21 surface: 5 advance primitives (NER + cut-2 NMRA/TAR/TARA/FQR),
+// regulation/constrained controls, lookahead modification, and per-
+// federate / federation queries. See docs/M21_DISPATCH_PLAN.md §2.1
+// for the manager-method → RPC mapping and §2.2 for the proto deltas
+// that landed here.
+//
+// Grant callbacks (TimeAdvanceGrant) are delivered via
+// StreamService.Events (see stream.proto). Queries return synchronously.
+//
+// Wire-version compatibility: all RPCs are append-only — the cut-1
+// surface (5 RPCs) keeps its ordering and request/response shapes;
+// M21 adds new RPCs at the bottom of the service block. WIRE_VERSION_V1
+// stays.
+service TimeService {
+  // Regulation / constrained (cut-1).
+  rpc EnableTimeRegulation(EnableRegulationRequest) returns (Empty);
+  rpc DisableTimeRegulation(DisableRegulationRequest) returns (Empty);
+  rpc EnableTimeConstrained(EnableConstrainedRequest) returns (Empty);
+  rpc DisableTimeConstrained(DisableConstrainedRequest) returns (Empty);
+
+  // Advance primitives. NER (cut-1) preserves its ordering; the other
+  // four are M21 additions but share the same per-primitive shape.
+  rpc NextMessageRequest(NERRequest) returns (Empty);
+  rpc NextMessageRequestAvailable(NMRARequest) returns (Empty);
+  rpc TimeAdvanceRequest(TARRequest) returns (Empty);
+  rpc TimeAdvanceRequestAvailable(TARARequest) returns (Empty);
+  rpc FlushQueueRequest(FQRRequest) returns (Empty);
+
+  // Lookahead modification — mutates the regulating federate's
+  // lookahead without round-tripping through Disable + Enable.
+  // Backed by Manager.ModifyLookahead (M21 TASK-202b).
+  rpc ModifyLookahead(ModifyLookaheadRequest) returns (Empty);
+
+  // Queries — synchronous reads, no callback. Federates use these
+  // instead of polling AdminService.Snapshot for per-federate state.
+  rpc QueryLogicalTime(QueryFederateTimeRequest) returns (QueryFederateTimeResponse);
+  rpc QueryLookahead(QueryFederateTimeRequest) returns (QueryLookaheadResponse);
+  rpc QueryLBTS(QueryLBTSRequest) returns (QueryLBTSResponse);
+  // QueryGALT (§8.19) — Greatest Available Logical Time for the
+  // calling federate: min(currentTime + lookahead) over all OTHER
+  // regulating federates. Returns finite=false when no other
+  // federate is regulating. M20.1 (Cut-4 / compliance long-tail).
+  rpc QueryGALT(QueryFederateTimeRequest) returns (QueryGALTResponse);
+  // QueryLITS (§8.20) — Least Incoming Time Stamp: smallest
+  // timestamp of any TSO message currently buffered for this
+  // federate. Returns finite=false when nothing is buffered. Only
+  // meaningful when asynchronous-delivery is DISABLED — async-on
+  // federates dispatch TSO immediately so the buffer stays empty.
+  rpc QueryLITS(QueryFederateTimeRequest) returns (QueryLITSResponse);
+
+  // Asynchronous-delivery toggle (M22). Per IEEE 1516.1 §8.16-8.17.
+  // Default per spec is DISABLED — TSO messages with timestamp t are
+  // buffered server-side until the federate's currentTime >= t (or it
+  // has a pending advance request whose requested time covers t).
+  // RO messages are unaffected.
+  //
+  // Existing federations that produce TSO without time-advance must
+  // call EnableAsynchronousDelivery on join to preserve gorti's pre-M22
+  // "always async" behavior; see docs/M22_DISPATCH_PLAN.md §8 for the
+  // migration audit.
+  rpc EnableAsynchronousDelivery(EnableAsynchronousDeliveryRequest) returns (Empty);
+  rpc DisableAsynchronousDelivery(DisableAsynchronousDeliveryRequest) returns (Empty);
+}
+
+message EnableRegulationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  // Lookahead. Must be >= 0 and finite.
+  double lookahead = 4;
+}
+
+message DisableRegulationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message EnableConstrainedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message DisableConstrainedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message NERRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  // Time at which the federate wishes to advance to (or earlier if a message arrives).
+  double logical_time = 4;
+}
+
+// NextMessageRequestAvailable — like NER but the grant gate is
+// inclusive (LBTS >= t) rather than strict (LBTS > t), permitting
+// "available" delivery of messages timestamped exactly at t.
+// Backed by Manager.NextMessageRequestAvailable.
+message NMRARequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  double logical_time = 4;
+}
+
+// TimeAdvanceRequest — advance to t once LBTS allows; messages at
+// times <= t are delivered before the grant.
+// Backed by Manager.TimeAdvanceRequest.
+message TARRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  double logical_time = 4;
+}
+
+// TimeAdvanceRequestAvailable — TAR's "available" variant, LBTS >= t
+// gate matches NMRA's inclusivity.
+// Backed by Manager.TimeAdvanceRequestAvailable.
+message TARARequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  double logical_time = 4;
+}
+
+// FlushQueueRequest — drain queued events for this federate, then
+// grant. Cut-1 simplification: grant time equals LBTS, not the
+// requested t (see decideGrant for ModeFQR).
+// Backed by Manager.FlushQueueRequest.
+message FQRRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  double logical_time = 4;
+}
+
+// ModifyLookaheadRequest — update the regulating federate's lookahead
+// in place. Returns FailedPrecondition + time_regulation_not_enabled
+// if the federate is not regulating.
+message ModifyLookaheadRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  // New lookahead. Must be >= 0 and finite.
+  double lookahead = 4;
+}
+
+// Per-federate query addressing.
+message QueryFederateTimeRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message QueryFederateTimeResponse {
+  // Federate's current logical time.
+  double logical_time = 1;
+}
+
+message QueryLookaheadResponse {
+  // Federate's current lookahead. Only meaningful when the federate
+  // is regulating; the SDKs raise time_regulation_not_enabled when
+  // the federate is not regulating rather than returning 0.
+  double lookahead = 1;
+}
+
+// Federation-wide LBTS query.
+message QueryLBTSRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+message QueryLBTSResponse {
+  // LBTS over the regulating set. Meaningful only when finite is true.
+  double lbts = 1;
+  // false when no federate is regulating (manager returns
+  // PositiveInfinity internally; the wrapper translates so clients
+  // don't have to handle +Inf in language-specific ways).
+  bool finite = 2;
+}
+
+// QueryGALT (§8.19) — Greatest Available Logical Time. M20.1.
+// The calling federate's GALT is computed as the LBTS over the
+// regulating set EXCLUDING the caller itself (callers don't constrain
+// their own advance).
+message QueryGALTResponse {
+  double galt = 1;
+  // false when no OTHER federate is regulating (GALT is
+  // positive-infinity from the caller's perspective).
+  bool finite = 2;
+}
+
+// QueryLITS (§8.20) — Least Incoming Time Stamp. M20.1.
+// Smallest timestamp of any TSO message buffered for this federate.
+message QueryLITSResponse {
+  double lits = 1;
+  // false when no TSO messages are buffered (LITS is
+  // positive-infinity).
+  bool finite = 2;
+}
+
+// EnableAsynchronousDelivery — opt into IEEE 1516.1 §8.16 async TSO
+// delivery semantics. Idempotent: re-invoking when already async
+// returns FailedPrecondition + time_already_asynchronous.
+message EnableAsynchronousDeliveryRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+// DisableAsynchronousDelivery — opt into IEEE 1516.1 §8.17 buffered
+// TSO delivery semantics (the spec default). Idempotent: re-invoking
+// when already off returns FailedPrecondition + time_not_asynchronous.
+message DisableAsynchronousDeliveryRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}

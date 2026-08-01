@@ -1,0 +1,2206 @@
+// Command rtid runs the gorti RTI server.
+//
+// Wires the federation manager, declaration manager, object registry,
+// and gRPC service handlers into a runnable server, plus a Prometheus
+// metrics endpoint and optional runtime plugins.
+// See engineering/specifications/current/SDD.md for the runtime design.
+//
+// # Connect URL convention (M6 W1B)
+//
+// rtid speaks one wire protocol — gRPC over HTTP/2 — and accepts two
+// transport modes selected at startup:
+//
+//   - Insecure (default): no --tls-cert / --tls-key flags. Clients
+//     dial with the URL form “grpc://host:port“ (Python SDK
+//     transport strips the scheme and uses
+//     “grpc.aio.insecure_channel“).
+//   - Server-side TLS: --tls-cert + --tls-key both set. Clients dial
+//     with the URL form “grpcs://host:port“ and supply a CA bundle
+//     (or trust the system roots when the cert chains to one). mTLS
+//     and cert rotation are explicitly out of scope for this cut and
+//     are tracked as M7 follow-ups.
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/binary"
+	"errors"
+	"flag"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/cbchoi/gorti/rti/internal/auth/oidc"
+	"github.com/cbchoi/gorti/rti/internal/buildinfo"
+	"github.com/cbchoi/gorti/rti/internal/cluster"
+	"github.com/cbchoi/gorti/rti/internal/core"
+	"github.com/cbchoi/gorti/rti/internal/ddm"
+	"github.com/cbchoi/gorti/rti/internal/declaration"
+	"github.com/cbchoi/gorti/rti/internal/eventlog"
+	"github.com/cbchoi/gorti/rti/internal/federation"
+	"github.com/cbchoi/gorti/rti/internal/mom"
+	"github.com/cbchoi/gorti/rti/internal/object"
+	"github.com/cbchoi/gorti/rti/internal/ownership"
+	"github.com/cbchoi/gorti/rti/internal/research"
+	"github.com/cbchoi/gorti/rti/internal/runtimeplugin"
+	"github.com/cbchoi/gorti/rti/internal/savepoint"
+	syncpkg "github.com/cbchoi/gorti/rti/internal/sync"
+	timepkg "github.com/cbchoi/gorti/rti/internal/time"
+	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
+	"github.com/cbchoi/gorti/rti/plugins/auditreplay"
+
+	stdgrpc "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+)
+
+func main() {
+	showVersion := flag.Bool("version", false, "print rtid version and exit")
+	listen := flag.String("listen", ":8442", "gRPC listen address")
+	metricsListen := flag.String("metrics-listen", ":9090", "Prometheus HTTP listen")
+	outboxEventCapacity := flag.Int("outbox-event-capacity", defaultMultiEventCapacity, "buffered outbound events per federate (1..1048576)")
+	outboxBatchSize := flag.Int("outbox-batch-size", defaultMultiBatchSize, "outbound event batch size (1..1024)")
+	outboxFlushInterval := flag.Duration("outbox-flush-interval", defaultMultiFlushInterval, "maximum delay before flushing a partial outbound event batch (>0)")
+	// W8 — gRPC transport buffer knobs for the federate-facing listener.
+	// 0 = product default, -1 = gRPC library default (32KB), >0 = bytes.
+	grpcWriteBuffer := flag.Int("grpc-write-buffer", defaultGRPCWriteBufferSize, "per-connection gRPC write buffer in bytes (0 = product default, -1 = gRPC library default)")
+	grpcReadBuffer := flag.Int("grpc-read-buffer", defaultGRPCReadBufferSize, "per-connection gRPC read buffer in bytes (0 = product default, -1 = gRPC library default)")
+	// Round-2 — Go runtime GC tuning (goruntime.go). Precedence:
+	// explicit flag > GOGC env > product default 400. The flag default
+	// shown here (400) only applies when GOGC is NOT set; passing the
+	// flag explicitly always wins, including over a set GOGC.
+	gcPercent := flag.Int("gc-percent", defaultGCPercent, "Go GC target percentage (runtime/debug.SetGCPercent). Explicit flag beats the GOGC env var; without the flag, a set GOGC beats this default. -1 leaves the Go runtime default untouched.")
+	goMemLimit := flag.Int64("go-mem-limit", 0, "Go soft memory limit in bytes (runtime/debug.SetMemoryLimit). 0 = no limit call (Go runtime default).")
+	// M15 cut-2 demo flags. --cluster-peers is a comma-separated
+	// list of node_id=host:port pairs identifying the other rtid
+	// nodes in the cluster. --node-id is this node's stable ID; if
+	// empty, falls back to --listen value. Single-node deployments
+	// leave --cluster-peers empty and the cluster behaves
+	// identically to pre-M15 (cut-1 semantics).
+	nodeID := flag.String("node-id", "", "stable opaque ID for this node in the cluster (empty = use --listen value)")
+	clusterPeers := flag.String("cluster-peers", "", "comma-separated list of node_id=host:port entries for other rtid nodes in the cluster (M15 cut-2 demo)")
+	clusterAdvertise := flag.String("cluster-advertise", "", "host:port this node advertises to peers as its dial address (empty = use --listen value)")
+	// rtid-TUI Phase 1 (docs/rtid-tui.md §2.5 PINNED): a SEPARATE gRPC
+	// listener that serves the read-only AdminService (Snapshot /
+	// TailEvents / Status). Default localhost:8443 — admin is
+	// loopback-only by default. Empty string disables admin (no second
+	// listener constructed). TLS for admin is plaintext only in Phase
+	// 1; the existing --tls-cert / --tls-key apply only to --listen.
+	adminListen := flag.String("admin-listen", "localhost:8443", "AdminService gRPC listen address (read-only TUI / rti-top backend); empty disables")
+	// rtid-TUI Phase 5: gate the MutatingService behind --admin-mutating
+	// (default false). When true, the composition root REFUSES to start
+	// unless --admin-listen resolves to a loopback address — the
+	// operator can override with --admin-mutating-allow-non-loopback=true
+	// if they really know what they're doing.
+	//
+	// See docs/rtid-tui.md §7.5 (Phase 5 unblocked under opt-in flag).
+	adminMutating := flag.Bool("admin-mutating", false, "register MutatingService (ForceResign / DestroyFederation) on the admin port. DANGEROUS — requires loopback bind unless --admin-mutating-allow-non-loopback is also set.")
+	adminMutatingAllowNonLoopback := flag.Bool("admin-mutating-allow-non-loopback", false, "override the loopback bind requirement for --admin-mutating. Operators that enable this MUST front the admin port with their own ACL.")
+	logDir := flag.String("log-dir", "", "directory for audit/replay plugin event logs")
+	stateDir := flag.String("state-dir", "", "directory for persistent RTI core state such as federation generation fencing (empty = process-local epoch)")
+	eventLogProtobufValidation := flag.Bool("event-log-protobuf-validation", true, "audit/replay plugin: check required Protobuf fields while marshaling records")
+	auditReplayPlugin := flag.String("audit-replay-plugin", "none", "optional runtime plugin: none|event-journal")
+	logLevel := flag.String("log-level", "info", "log level: debug|info|warn|error")
+	logFormat := flag.String("log-format", "json", "log format: json|text")
+	mode := flag.String("mode", "server", "rtid mode: server|pingpong-demo|timed-demo|replay-from-log")
+	federationMode := flag.String("federation-mode", "verbose", "federation operating mode for created federations: verbose|best-effort (TASK-076)")
+	pingpongRounds := flag.Int("pingpong-rounds", 1000, "rounds for pingpong-demo mode")
+	pingpongFederation := flag.String("pingpong-federation", "pingpong", "federation name for pingpong-demo mode")
+	pingpongDeterministic := flag.Bool("pingpong-deterministic", false, "use FakeClock so the event-log body is byte-deterministic across runs")
+	timedTicks := flag.Int("timed-ticks", 100, "ticks (per-federate NER count) for timed-demo mode")
+	timedFederation := flag.String("timed-federation", "timed", "federation name for timed-demo mode")
+	timedDeterministic := flag.Bool("timed-deterministic", false, "use FakeClock so the event-log body is byte-deterministic across runs")
+	timedStallSkipFederate := flag.Int("timed-stall-skip", 0, "1-based federate index to skip NER for, provoking a stall (0 = no skip)")
+	timedStallTimeoutMs := flag.Int("timed-stall-timeout-ms", 5000, "stall timeout in milliseconds for timed-demo mode (only effective when -timed-stall-skip is set)")
+	timedStallAdvanceMs := flag.Int("timed-stall-advance-ms", 0, "fake-clock advance in milliseconds AFTER the demo loop, before CheckStalls (0 = skip stall check)")
+	replayInput := flag.String("replay-input", "", "source event-log file path for replay-from-log mode")
+	tlsCert := flag.String("tls-cert", "", "path to TLS server cert PEM (enables TLS when set; clients dial grpcs://host:port). Requires --tls-key.")
+	tlsKey := flag.String("tls-key", "", "path to TLS server key PEM. Required when --tls-cert is set.")
+	// M14 W1 — mTLS: client cert verification.
+	tlsClientCA := flag.String("tls-client-ca", "", "path to PEM bundle for verifying client certs (mTLS). When set, clients MUST present a cert signed by one of these CAs.")
+	tlsClientCNAllow := flag.String("tls-client-cn-allow", "", "comma-separated list of client cert CommonNames to allow (M14). Empty → any cert signed by --tls-client-ca passes.")
+	// M14 W4 — OIDC bearer token verification.
+	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer URL. Server fetches JWKS from <url>/.well-known/openid-configuration. Empty disables OIDC.")
+	oidcAudience := flag.String("oidc-audience", "", "Required `aud` claim on incoming JWTs.")
+	oidcJWKSPem := flag.String("oidc-jwks-pem", "", "Pre-pinned JWKS as PEM (alternative to --oidc-issuer for air-gapped deployments).")
+	saveDir := flag.String("save-dir", "./gorti-saves", "directory under which federation save bundles are written + read (M9: FR-SR-1..5)")
+	researchConfig := flag.String("research-config", "", "path to a TOML research-config file (Phase 3 of docs/research-platform.md). Server mode only; absent → default strategies + per-impl-opt-in determinism. Honors GORTI_RESEARCH_CONFIG as fallback when flag is empty; GORTI_DETERMINISM overrides the determinism field if set.")
+	// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): DDS data-plane
+	// opt-in flags. These flags exist in EVERY rtid build — both the
+	// default CGo-free build and the build-tag-gated `rtid-dds`
+	// variant — so the CLI surface stays uniform. Their EFFECTIVE
+	// behavior depends on whether the binary was built with
+	// `-tags=dds`:
+	//   - default build: --enable-dds=true is accepted by flag
+	//     parsing but the rti/internal/transport/dds package's
+	//     stubs return errors.ErrUnsupported on every primitive,
+	//     so even with the flag set, CreateFederation with
+	//     transport_mode=DDS will eventually fail when the
+	//     federation tries to instantiate a DomainParticipant.
+	//   - dds-tagged build: --enable-dds=true unlocks DDS-mode
+	//     federations end-to-end (Phase 1b).
+	// Default false keeps the cut-2 wire path untouched.
+	enableDDS := flag.Bool("enable-dds", false, "accept CreateFederation requests with transport_mode=DDS. Requires the rtid binary to have been built with -tags=dds; the default CGo-free build rejects DDS even when this flag is set. See docs/m19-dds-adapter.md.")
+	ddsDomainID := flag.Int("dds-domain-id", 0, "default DDS domain ID for federations created in DDS mode. Only meaningful when --enable-dds=true. Zero is the DDS default domain.")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("rtid", buildinfo.String())
+		return
+	}
+
+	logger := buildLogger(*logLevel, *logFormat)
+	slog.SetDefault(logger)
+
+	fedMode, err := parseFederationMode(*federationMode)
+	if err != nil {
+		logger.Error("invalid --federation-mode", "value", *federationMode, "err", err)
+		os.Exit(2)
+	}
+	pluginMode, err := parseAuditReplayPluginMode(*auditReplayPlugin)
+	if err != nil {
+		logger.Error("invalid --audit-replay-plugin", "value", *auditReplayPlugin, "err", err)
+		os.Exit(2)
+	}
+	if err := validateAuditReplayPluginConfig(*mode, pluginMode, *logDir); err != nil {
+		logger.Error("invalid audit/replay plugin configuration", "err", err)
+		os.Exit(2)
+	}
+
+	// Round-2 GC tuning: translate the flag into the rtidConfig value.
+	// flag.Visit only visits flags that were actually passed, so an
+	// absent --gc-percent maps to 0 = "product-default policy" (a set
+	// GOGC env wins; unset GOGC installs defaultGCPercent), while an
+	// explicit flag value passes through verbatim and beats GOGC.
+	// Explicit 0 is rejected up front — it is reserved for the policy
+	// sentinel, and SetGCPercent(0) is never an intentional production
+	// setting.
+	cfgGCPercent := 0
+	if flagExplicitlySet("gc-percent") {
+		if *gcPercent == 0 {
+			logger.Error("invalid --gc-percent", "value", 0,
+				"err", "must be positive or -1 (0 is reserved for the product-default policy)")
+			os.Exit(2)
+		}
+		cfgGCPercent = *gcPercent
+	}
+
+	switch *mode {
+	case "pingpong-demo":
+		runPingpongMain(logger, *pingpongFederation, *pingpongRounds, *logDir, *pingpongDeterministic, fedMode)
+		return
+	case "timed-demo":
+		runTimedMain(logger, timedRunArgs{
+			Federation:        *timedFederation,
+			Ticks:             *timedTicks,
+			LogDir:            *logDir,
+			Deterministic:     *timedDeterministic,
+			StallSkipFederate: *timedStallSkipFederate,
+			StallTimeoutMs:    *timedStallTimeoutMs,
+			StallAdvanceMs:    *timedStallAdvanceMs,
+			FederationMode:    fedMode,
+		})
+		return
+	case "replay-from-log":
+		runReplayMain(logger, *replayInput, *logDir)
+		return
+	case "server", "":
+		runServerMain(logger, serverMainArgs{
+			Listen:                        *listen,
+			AdminListen:                   *adminListen,
+			MetricsListen:                 *metricsListen,
+			LogDir:                        *logDir,
+			StateDir:                      *stateDir,
+			AllowPartialEventLogProto:     !*eventLogProtobufValidation,
+			AuditReplayPlugin:             pluginMode,
+			TLSCert:                       *tlsCert,
+			TLSKey:                        *tlsKey,
+			TLSClientCA:                   *tlsClientCA,
+			TLSClientCNAllow:              *tlsClientCNAllow,
+			OIDCIssuer:                    *oidcIssuer,
+			OIDCAudience:                  *oidcAudience,
+			OIDCJWKSPem:                   *oidcJWKSPem,
+			SaveDir:                       *saveDir,
+			ResearchConfigPath:            *researchConfig,
+			AdminMutating:                 *adminMutating,
+			AdminMutatingAllowNonLoopback: *adminMutatingAllowNonLoopback,
+			EnableDDS:                     *enableDDS,
+			DDSDomainID:                   int32(*ddsDomainID),
+			NodeID:                        *nodeID,
+			ClusterPeers:                  *clusterPeers,
+			ClusterAdvertise:              *clusterAdvertise,
+			OutboxEventCapacity:           *outboxEventCapacity,
+			OutboxBatchSize:               *outboxBatchSize,
+			OutboxFlushInterval:           *outboxFlushInterval,
+			GRPCWriteBufferSize:           *grpcWriteBuffer,
+			GRPCReadBufferSize:            *grpcReadBuffer,
+			GCPercent:                     cfgGCPercent,
+			GoMemLimitBytes:               *goMemLimit,
+		})
+	default:
+		logger.Error("unknown --mode", "mode", *mode)
+		os.Exit(2)
+	}
+}
+
+// parseFederationMode converts the --federation-mode CLI value into a
+// core.Mode. Unknown values produce an error so a typo surfaces at
+// startup rather than as a silent default. Per TASK-076: only verbose
+// and best-effort are accepted at the CLI layer.
+func parseFederationMode(s string) (core.Mode, error) {
+	switch s {
+	case "verbose", "":
+		return core.ModeVerbose, nil
+	case "best-effort":
+		return core.ModeBestEffort, nil
+	default:
+		return core.ModeUnspecified, fmt.Errorf("unknown federation mode %q (want verbose|best-effort)", s)
+	}
+}
+
+type auditReplayPluginMode uint8
+
+const (
+	auditReplayPluginNone auditReplayPluginMode = iota
+	auditReplayPluginEventJournal
+)
+
+func parseAuditReplayPluginMode(s string) (auditReplayPluginMode, error) {
+	switch s {
+	case "none", "":
+		return auditReplayPluginNone, nil
+	case "event-journal":
+		return auditReplayPluginEventJournal, nil
+	default:
+		return auditReplayPluginNone, fmt.Errorf("unknown audit/replay plugin %q (want none|event-journal)", s)
+	}
+}
+
+func (m auditReplayPluginMode) String() string {
+	switch m {
+	case auditReplayPluginNone:
+		return "none"
+	case auditReplayPluginEventJournal:
+		return "event-journal"
+	default:
+		return fmt.Sprintf("unknown(%d)", m)
+	}
+}
+
+func validateAuditReplayPluginConfig(runMode string, plugin auditReplayPluginMode, logDir string) error {
+	if plugin != auditReplayPluginNone && plugin != auditReplayPluginEventJournal {
+		return fmt.Errorf("unknown audit/replay plugin %s", plugin)
+	}
+	if plugin == auditReplayPluginEventJournal {
+		if runMode != "server" && runMode != "" {
+			return fmt.Errorf("--audit-replay-plugin=%s is supported only with --mode=server", plugin)
+		}
+		if logDir == "" {
+			return errors.New("--audit-replay-plugin=event-journal requires --log-dir")
+		}
+	}
+	if (runMode == "server" || runMode == "") && plugin == auditReplayPluginNone && logDir != "" {
+		return errors.New("--log-dir requires --audit-replay-plugin=event-journal in server mode")
+	}
+	return nil
+}
+
+func pluginFactories(mode auditReplayPluginMode, logDir string, allowPartialProto bool) []runtimeplugin.Factory {
+	if mode != auditReplayPluginEventJournal {
+		return nil
+	}
+	return []runtimeplugin.Factory{
+		auditreplay.NewFactory(auditreplay.Config{
+			Dir:               logDir,
+			AllowPartialProto: allowPartialProto,
+		}),
+	}
+}
+
+// runReplayMain invokes the audit/replay plugin's replay tool and writes the
+// captured stream into logDir. Used by the
+// examples/go-pingpong/replay_test.go harness to satisfy the M2 gate's
+// "feed log back through fresh RTI; assert byte-identical" contract.
+func runReplayMain(logger *slog.Logger, inputPath, logDir string) {
+	if inputPath == "" {
+		logger.Error("replay-from-log requires -replay-input")
+		os.Exit(2)
+	}
+	if logDir == "" {
+		logger.Error("replay-from-log requires -log-dir")
+		os.Exit(2)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	err := runReplayFromFile(ctx, inputPath, logDir)
+	cancel()
+	if err != nil {
+		logger.Error("replay failed", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("replay complete", "input", inputPath, "output_dir", logDir)
+}
+
+// serverMainArgs bundles the runServerMain CLI inputs. Extracted so
+// the call site stays one-line per flag and a future flag can land
+// without churning the function signature.
+type serverMainArgs struct {
+	Listen        string
+	AdminListen   string
+	MetricsListen string
+	LogDir        string
+	StateDir      string
+	// AllowPartialEventLogProto skips only the Protobuf required-field
+	// initialization check. Event-log encoding and writes still run.
+	AllowPartialEventLogProto bool
+	AuditReplayPlugin         auditReplayPluginMode
+	TLSCert                   string
+	TLSKey                    string
+	// M14 W1 — mTLS.
+	TLSClientCA      string
+	TLSClientCNAllow string
+	// M14 W4 — OIDC.
+	OIDCIssuer                    string
+	OIDCAudience                  string
+	OIDCJWKSPem                   string
+	SaveDir                       string
+	ResearchConfigPath            string
+	AdminMutating                 bool
+	AdminMutatingAllowNonLoopback bool
+	// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): plumbed all the
+	// way down to the transport/grpc handler so CreateFederation
+	// requests with transport_mode=DDS are accepted only when both
+	// the build tag and the operator have opted in.
+	EnableDDS   bool
+	DDSDomainID int32
+	// M15 cut-2 demo cluster flags.
+	NodeID              string
+	ClusterPeers        string // comma-separated node_id=host:port
+	ClusterAdvertise    string // host:port advertised to peers
+	OutboxEventCapacity int
+	OutboxBatchSize     int
+	OutboxFlushInterval time.Duration
+	// W8 — gRPC buffer knobs (0 = product default, -1 = library
+	// default, >0 = bytes). Validated in newRTID.
+	GRPCWriteBufferSize int
+	GRPCReadBufferSize  int
+	// Round-2 — Go runtime GC tuning, already translated by main()
+	// (0 = product-default policy, -1 = leave runtime default, >0 =
+	// explicit percentage; see goruntime.go). Validated again in
+	// newRTID for non-CLI composers.
+	GCPercent       int
+	GoMemLimitBytes int64
+}
+
+// flagExplicitlySet reports whether the named flag was actually passed
+// on the command line (flag.Visit only visits flags that were set).
+// Used by the round-2 GC tuning to distinguish "operator explicitly
+// chose --gc-percent=400" (beats a set GOGC env) from "flag left at
+// its default 400" (a set GOGC env wins).
+func flagExplicitlySet(name string) bool {
+	set := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			set = true
+		}
+	})
+	return set
+}
+
+func validateOutboxCLIConfig(eventCapacity, batchSize int, flushInterval time.Duration) error {
+	if eventCapacity < 1 || eventCapacity > maxMultiEventCapacity {
+		return fmt.Errorf("--outbox-event-capacity must be between 1 and %d (got %d)", maxMultiEventCapacity, eventCapacity)
+	}
+	if batchSize < 1 || batchSize > maxMultiBatchSize {
+		return fmt.Errorf("--outbox-batch-size must be between 1 and %d (got %d)", maxMultiBatchSize, batchSize)
+	}
+	if eventCapacity < batchSize {
+		return fmt.Errorf("--outbox-event-capacity must be at least --outbox-batch-size (got %d < %d)", eventCapacity, batchSize)
+	}
+	if flushInterval <= 0 {
+		return fmt.Errorf("--outbox-flush-interval must be greater than zero (got %s)", flushInterval)
+	}
+	return nil
+}
+
+// runServerMain boots the gRPC server + metrics endpoint and blocks until
+// SIGINT/SIGTERM. Extracted so main can dispatch on --mode.
+func runServerMain(logger *slog.Logger, args serverMainArgs) {
+	if err := validateOutboxCLIConfig(args.OutboxEventCapacity, args.OutboxBatchSize, args.OutboxFlushInterval); err != nil {
+		logger.Error("rtid outbox configuration failed", "err", err)
+		os.Exit(2)
+	}
+	if err := validateGoRuntimeCLIConfig(args.GCPercent, args.GoMemLimitBytes); err != nil {
+		logger.Error("rtid Go runtime tuning configuration failed", "err", err)
+		os.Exit(2)
+	}
+	if args.AuditReplayPlugin == auditReplayPluginNone {
+		logger.Info(
+			"rtid HLA core profile active; audit journal, replay, and AdminService.TailEvents are not loaded",
+		)
+	}
+
+	tlsConfig, err := buildServerTLSWithMTLS(args.TLSCert, args.TLSKey, args.TLSClientCA, args.TLSClientCNAllow)
+	if err != nil {
+		logger.Error("rtid TLS configuration failed", "err", err)
+		os.Exit(2)
+	}
+
+	// M14 W4 — OIDC bearer-token verifier. Built at startup; if any
+	// flag misconfigures the verifier (bad PEM, unreachable issuer),
+	// fail fast.
+	oidcVerifier, err := buildOIDCVerifier(args.OIDCJWKSPem, args.OIDCAudience, args.OIDCIssuer)
+	if err != nil {
+		logger.Error("rtid OIDC configuration failed", "err", err)
+		os.Exit(2)
+	}
+	if oidcVerifier != nil {
+		logger.Info("rtid: OIDC bearer-token authentication enabled",
+			"audience", args.OIDCAudience, "issuer", args.OIDCIssuer)
+	}
+
+	// Phase 3 research-platform: resolve the research-config (if any)
+	// before constructing the runtime so any error halts startup with
+	// exit 2 (config error) rather than a half-started rtid. Path
+	// resolution priority: --research-config flag > GORTI_RESEARCH_CONFIG
+	// env > "" (defaults). The GORTI_DETERMINISM env var, when set,
+	// overrides whatever determinism mode the file selected.
+	resolved, err := resolveResearchConfig(args.ResearchConfigPath, os.Getenv("GORTI_RESEARCH_CONFIG"), os.Getenv("GORTI_DETERMINISM"))
+	if err != nil {
+		logger.Error("rtid research-config invalid", "err", err)
+		os.Exit(2)
+	}
+
+	// rtid-TUI Phase 5: enforce the loopback safety gate BEFORE
+	// constructing the runtime so an attempted mis-bind exits cleanly
+	// without standing up half a daemon. The gate fires only when
+	// the operator opted into mutating ops; default-off rtid keeps
+	// the existing read-only admin contract untouched.
+	if args.AdminMutating {
+		if args.AdminListen == "" {
+			logger.Error("rtid: --admin-mutating requires --admin-listen to be set")
+			os.Exit(2)
+		}
+		loopback := isLoopbackBind(args.AdminListen)
+		if !loopback && !args.AdminMutatingAllowNonLoopback {
+			logger.Error(
+				"rtid: --admin-mutating refuses to start on a non-loopback bind; "+
+					"either set --admin-listen to localhost:PORT or pass "+
+					"--admin-mutating-allow-non-loopback=true (and front the port with an ACL)",
+				"admin_listen", args.AdminListen,
+			)
+			os.Exit(2)
+		}
+		// Prominent warning either way — even on loopback, anyone with
+		// shell access can resign federates and destroy federations.
+		logger.Warn(
+			"rtid: MUTATING ADMIN OPS ENABLED — anyone with admin-port access "+
+				"can resign federates and destroy federations",
+			"admin_listen", args.AdminListen,
+			"loopback", loopback,
+		)
+	}
+
+	generationEpoch, err := nextFederationGenerationEpoch(args.StateDir)
+	if err != nil {
+		logger.Error("rtid: federation generation epoch initialization failed", "err", err)
+		os.Exit(1)
+	}
+	srv, err := newRTID(rtidConfig{
+		ListenAddr:                    args.Listen,
+		AdminListenAddr:               args.AdminListen,
+		MetricsListenAddr:             args.MetricsListen,
+		PluginFactories:               pluginFactories(args.AuditReplayPlugin, args.LogDir, args.AllowPartialEventLogProto),
+		Logger:                        logger,
+		TLSConfig:                     tlsConfig,
+		OIDCVerifier:                  oidcVerifier,
+		SaveDir:                       args.SaveDir,
+		Research:                      resolved,
+		AdminMutating:                 args.AdminMutating,
+		AdminMutatingAllowNonLoopback: args.AdminMutatingAllowNonLoopback,
+		EnableDDS:                     args.EnableDDS,
+		DDSDomainID:                   args.DDSDomainID,
+		NodeID:                        args.NodeID,
+		ClusterPeers:                  args.ClusterPeers,
+		ClusterAdvertise:              args.ClusterAdvertise,
+		OutboxEventCapacity:           args.OutboxEventCapacity,
+		OutboxBatchSize:               args.OutboxBatchSize,
+		OutboxFlushInterval:           args.OutboxFlushInterval,
+		GRPCWriteBufferSize:           args.GRPCWriteBufferSize,
+		GRPCReadBufferSize:            args.GRPCReadBufferSize,
+		GCPercent:                     args.GCPercent,
+		GoMemLimitBytes:               args.GoMemLimitBytes,
+		GenerationEpoch:               generationEpoch,
+		GenerationSpan:                generationReservationSpan,
+	})
+	if err != nil {
+		logger.Error("rtid initialization failed", "err", err)
+		os.Exit(1)
+	}
+	if tlsConfig != nil {
+		logger.Info("rtid: TLS enabled (clients should dial grpcs://...)", "cert", args.TLSCert)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	serveErr := srv.Serve(ctx)
+	cancel()
+	if serveErr != nil && !errors.Is(serveErr, context.Canceled) {
+		logger.Error("rtid serve exited with error", "err", serveErr)
+		os.Exit(1)
+	}
+}
+
+// isLoopbackBind reports whether addr (host:port) resolves to a
+// loopback address. Accepts the literal hosts "localhost", "127.0.0.1",
+// and "::1"; an unspecified host (":PORT" or "0.0.0.0:PORT") returns
+// false because it accepts non-loopback connections. Any host that
+// fails to parse falls back to false (safer to reject than accept).
+//
+// Only the literal forms are recognised — DNS resolution is
+// intentionally avoided because a name that today resolves to
+// loopback may resolve to something else after a config push, and we
+// want the safety gate to be byte-deterministic from the flag.
+func isLoopbackBind(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return false
+}
+
+const federationGenerationEpochFilename = ".federation-generation-epoch"
+
+func nextFederationGenerationEpoch(logDir string) (epoch uint32, err error) {
+	if logDir == "" {
+		var raw [4]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			return 0, err
+		}
+		maxBase := ^uint32(0) - generationReservationSpan + 1
+		epoch := 1 + binary.LittleEndian.Uint32(raw[:])%maxBase
+		return epoch, nil
+	}
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return 0, err
+	}
+	path := filepath.Join(logDir, federationGenerationEpochFilename)
+	release, err := lockFederationGenerationEpoch(path + ".lock")
+	if err != nil {
+		return 0, fmt.Errorf("lock %s: %w", path, err)
+	}
+	defer func() {
+		if releaseErr := release(); releaseErr != nil {
+			epoch = 0
+			err = errors.Join(err, fmt.Errorf("unlock %s: %w", path, releaseErr))
+		}
+	}()
+
+	var previous uint64
+	contents, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		previous, err = strconv.ParseUint(strings.TrimSpace(string(contents)), 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("parse %s: %w", path, err)
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return 0, err
+	}
+	if previous > uint64(^uint32(0)-generationReservationSpan) {
+		return 0, errors.New("federation generation epoch exhausted")
+	}
+	epoch = uint32(previous + 1)
+	highWater := uint32(previous) + generationReservationSpan
+	tmp, err := os.CreateTemp(logDir, ".federation-generation-epoch-*")
+	if err != nil {
+		return 0, err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := fmt.Fprintf(tmp, "%d\n", highWater); err != nil {
+		_ = tmp.Close()
+		return 0, err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return 0, err
+	}
+	if err := tmp.Close(); err != nil {
+		return 0, err
+	}
+	if err := replaceFederationGenerationEpoch(tmpPath, path, logDir); err != nil {
+		return 0, err
+	}
+	return epoch, nil
+}
+
+// Each persistent RTI process reserves a disjoint generation block before it
+// starts. Crashes may leave gaps, but a later process cannot reuse a generation
+// already published by an earlier process.
+const generationReservationSpan uint32 = 1 << 16
+
+// timedRunArgs bundles the flags for runTimedMain. Extracted so flags
+// stay grouped at the call site and a future "stall" mode can add
+// fields without growing the function signature.
+type timedRunArgs struct {
+	Federation        string
+	Ticks             int
+	LogDir            string
+	Deterministic     bool
+	StallSkipFederate int       // 1-based federate index to skip NER for (0 = none)
+	StallTimeoutMs    int       // stall timeout in ms; only used when StallSkipFederate>0
+	StallAdvanceMs    int       // post-loop FakeClock advance, then CheckStalls (0 = skip)
+	FederationMode    core.Mode // TASK-076: federation operating mode for the created federation
+}
+
+// runTimedMain runs the M3 timed demo and exits. logDir, when set,
+// gets per-federation .log files written into it (same format as server
+// mode); empty means the demo runs without persistence.
+//
+// Mirrors runPingpongMain's shape so the W4 integration is symmetric
+// with M2's W4-equivalent. The actual runner lives in timed.go.
+//
+// Stall mode (StallSkipFederate > 0): the demo enables every federate
+// but skips NER for the chosen one, then advances the FakeClock by
+// StallAdvanceMs and calls CheckStalls. The result (halt count + the
+// stalled federate handle) is emitted on stdout as a single line of
+// the form "TIMED_HALT halts=N stalled_federate=H" so the example
+// stall_test.go can capture and assert without parsing the log file.
+func runTimedMain(logger *slog.Logger, args timedRunArgs) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cfg := timedConfig{
+		FederationName:    core.FederationName(args.Federation),
+		Ticks:             args.Ticks,
+		LogDir:            args.LogDir,
+		Deterministic:     args.Deterministic,
+		SkipFederateIndex: args.StallSkipFederate,
+	}
+	if args.StallSkipFederate > 0 && args.StallTimeoutMs > 0 {
+		cfg.StallTimeout = time.Duration(args.StallTimeoutMs) * time.Millisecond
+	}
+	stats, err := runTimedDemo(ctx, cfg)
+	if err != nil {
+		cancel()
+		logger.Error("timed-demo failed", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("timed-demo complete",
+		"ticks", stats.TicksCompleted,
+		"federates", stats.FederateCount,
+		"grants", stats.GrantsObserved,
+		"halts", stats.HaltsObserved,
+		"elapsed_ms", stats.Elapsed.Milliseconds(),
+	)
+
+	// Stall harness path: build a fresh runtime that we can drive
+	// post-loop (advance FakeClock + CheckStalls). The runTimedDemo
+	// above doesn't expose the runtime so we stand up a second one
+	// dedicated to the stall scenario when StallAdvanceMs is set.
+	// This keeps the "normal demo" code path untouched.
+	if args.StallSkipFederate > 0 && args.StallAdvanceMs > 0 {
+		halts, stalledFed, err := runTimedStall(ctx, args)
+		if err != nil {
+			cancel()
+			logger.Error("timed-stall failed", "err", err)
+			os.Exit(1)
+		}
+		// Machine-readable signal for stall_test.go. Emitted on
+		// stdout (the logger writes to stderr); the example test
+		// captures stdout and parses the line.
+		emitTimedHaltLine(halts, stalledFed)
+	}
+	cancel()
+}
+
+// emitTimedHaltLine writes the single TIMED_HALT line to stdout. Lives
+// in its own helper so the forbidigo allowlist for fmt.Print* can be
+// scoped to just this function via a //nolint comment (we avoid using
+// the logger because the line MUST be on stdout — the example
+// stall_test.go captures stdout independently of the logger handler).
+func emitTimedHaltLine(halts int, stalled core.FederateHandle) {
+	// Use os.Stdout.WriteString to bypass the forbidigo fmt.Print
+	// ban while still emitting a deterministic single-line signal.
+	_, _ = os.Stdout.WriteString(
+		"TIMED_HALT halts=" + strconv.Itoa(halts) +
+			" stalled_federate=" + strconv.FormatUint(uint64(stalled), 10) + "\n",
+	)
+}
+
+// runTimedStall stands up a dedicated runtime for the stall scenario,
+// runs the abbreviated NER pattern (every federate enables; only the
+// non-skipped ones NER once), advances the FakeClock past the
+// configured stall timeout, then invokes CheckStalls. Returns the halt
+// count and the recorded stalled-federate handle (0 if none).
+//
+// Lives here (not in timed.go) so the M2-style runtime helpers stay
+// single-purpose; stall is a one-shot affair, not a loop.
+func runTimedStall(ctx context.Context, args timedRunArgs) (int, core.FederateHandle, error) {
+	clk := core.NewFakeClock(time.Unix(0, 0))
+	rt, cleanup, err := buildTimedRuntime(timedConfig{
+		FederationName: core.FederationName(args.Federation),
+		Ticks:          1,
+		Lookaheads:     []core.LogicalTime{1.0, 1.0, 1.0},
+		StallTimeout:   time.Duration(args.StallTimeoutMs) * time.Millisecond,
+		Clock:          clk,
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	defer cleanup()
+
+	for i := 0; i < 3; i++ {
+		h := core.FederateHandle(uint64(i + 1))
+		if err := rt.tm.EnableRegulation(ctx, core.FederationName(args.Federation), h, core.LogicalTime(1.0)); err != nil {
+			return 0, 0, fmt.Errorf("EnableRegulation %d: %w", h, err)
+		}
+	}
+	skip := uint64(0)
+	if args.StallSkipFederate > 0 {
+		skip = uint64(args.StallSkipFederate)
+	}
+	for i := 0; i < 3; i++ {
+		h := core.FederateHandle(uint64(i + 1))
+		if uint64(h) == skip {
+			continue
+		}
+		// NER to a target peers can't satisfy without the skipped
+		// federate also advancing.
+		if err := rt.tm.NextMessageRequest(ctx, core.FederationName(args.Federation), h, core.LogicalTime(10.0)); err != nil {
+			return 0, 0, fmt.Errorf("NER %d: %w", h, err)
+		}
+	}
+	halts := rt.AdvanceClockAndCheckStalls(ctx, time.Duration(args.StallAdvanceMs)*time.Millisecond)
+	var stalledFed core.FederateHandle
+	for _, s := range rt.outbox.Sent() {
+		if fh := stalledFromEvent(s.Event); fh != 0 {
+			stalledFed = fh
+			break
+		}
+	}
+	return halts, stalledFed, nil
+}
+
+// stalledFromEvent extracts the StalledFederate handle from a
+// *timepkg.FederationHalted event, or 0 for any other event type.
+func stalledFromEvent(evt core.OutboundEvent) core.FederateHandle {
+	if hv, ok := evt.(*timepkg.FederationHalted); ok {
+		return hv.StalledFederate
+	}
+	return 0
+}
+
+// runPingpongMain runs the pingpong demo and exits. logDir, when set,
+// gets per-federation .log files written into it (same format as server
+// mode); empty means the demo runs without persistence.
+func runPingpongMain(logger *slog.Logger, federation string, rounds int, logDir string, deterministic bool, fedMode core.Mode) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	stats, err := runPingpongDemo(ctx, pingpongConfig{
+		FederationName: core.FederationName(federation),
+		Rounds:         rounds,
+		LogDir:         logDir,
+		Deterministic:  deterministic,
+		FederationMode: fedMode,
+	})
+	cancel()
+	if err != nil {
+		logger.Error("pingpong-demo failed", "err", err)
+		os.Exit(1)
+	}
+	logger.Info("pingpong-demo complete",
+		"rounds", stats.RoundsCompleted,
+		"elapsed_ms", stats.Elapsed.Milliseconds(),
+	)
+}
+
+// rtidConfig bundles the runnable configuration. main.go translates flags
+// into this struct; tests construct it directly.
+type rtidConfig struct {
+	ListenAddr        string
+	MetricsListenAddr string
+	// PluginFactories is empty for the default HLA core profile.
+	PluginFactories []runtimeplugin.Factory
+	Logger          *slog.Logger
+	// Zero values retain the production defaults for tests and internal
+	// callers that predate these settings.
+	OutboxEventCapacity int
+	OutboxBatchSize     int
+	OutboxFlushInterval time.Duration
+	GenerationEpoch     uint32
+	GenerationSpan      uint32
+
+	// W8 — per-connection gRPC transport buffers for the
+	// federate-facing listener. Zero selects the product defaults
+	// (defaultGRPCWriteBufferSize / defaultGRPCReadBufferSize), -1
+	// forces the gRPC library default (no ServerOption appended),
+	// positive values are bytes. See grpcbuffers.go.
+	GRPCWriteBufferSize int
+	GRPCReadBufferSize  int
+
+	// Round-2 — Go runtime GC tuning, applied by newRTID via
+	// applyGoRuntimeTuning (goruntime.go) so the real binary and every
+	// newRTID composer (lrcbench harness, tests) inherit the same
+	// product default. GCPercent: 0 = product-default policy (a set
+	// GOGC env wins; unset GOGC installs defaultGCPercent=400), -1 =
+	// never call debug.SetGCPercent, >0 = install that value (explicit
+	// operator choice; beats GOGC). GoMemLimitBytes: 0 = no
+	// debug.SetMemoryLimit call, >0 = soft memory limit in bytes.
+	GCPercent       int
+	GoMemLimitBytes int64
+
+	// AdminListenAddr is the bind address for the read-only
+	// AdminService gRPC server (rtid-TUI Phase 1 — docs/rtid-tui.md
+	// §2.5 PINNED). Default localhost:8443 in main.go's flag binding.
+	// Empty string disables admin (no second listener / server is
+	// constructed). Plaintext only in Phase 1 — TLSConfig DOES NOT
+	// apply here; mTLS / RBAC for admin are deferred. Production
+	// deployments that need network-exposed admin should front it
+	// with a reverse proxy + ACL.
+	AdminListenAddr string
+
+	// TLSConfig, when non-nil, enables server-side TLS on the gRPC
+	// listener. nil keeps the listener insecure (the default for
+	// local/dev workloads). Construct via buildServerTLSWithMTLS or
+	// by hand in tests; M14 W1 added mTLS support via the
+	// --tls-client-ca flag.
+	TLSConfig *tls.Config
+
+	// OIDCVerifier, when non-nil, installs a bearer-token gRPC
+	// interceptor that validates `authorization: Bearer <jwt>` on
+	// every RPC. M14 W4 — supports RS256 against a pre-pinned PEM
+	// public key (--oidc-jwks-pem); JWKS HTTP discovery is a future
+	// cut. Stackable with TLSConfig (mTLS + OIDC both required when
+	// both configured).
+	OIDCVerifier *oidc.Verifier
+
+	// SaveDir is the directory under which the savepoint.Manager
+	// writes + reads federation save bundles (M9: FR-SR-1..5). Empty
+	// string disables persistence (the manager is still composed but
+	// any RequestFederationSave will fail with a stat-error wrapped
+	// in core.ErrSaveBundleCorrupt — production callers should set
+	// this; tests may leave it empty when they construct the manager
+	// directly).
+	SaveDir string
+
+	// Research carries the resolved research-platform strategies +
+	// determinism mode (Phase 3 of docs/research-platform.md). Zero
+	// value (Resolved{} with all-nil strategies) means "no
+	// research-config wired"; newRTID falls back to package defaults
+	// for every Manager so behavior is identical to today's
+	// hand-wired runtime. When non-zero, the resolved
+	// Time.LBTS/Time.Grant/Ownership.Negotiation strategies thread
+	// into the corresponding Options fields at Manager construction.
+	Research research.Resolved
+
+	// AdminMutating, when true, registers the MutatingService
+	// (ForceResign / DestroyFederation) on the admin gRPC server.
+	// rtid-TUI Phase 5 — DANGEROUS; only set after the loopback safety
+	// gate has fired (see runServerMain).
+	AdminMutating bool
+
+	// AdminMutatingAllowNonLoopback is the "yes I really know what
+	// I'm doing" override for the loopback bind requirement. Surfaced
+	// here only so newRTID can log it; the gate logic lives in
+	// runServerMain so an early exit doesn't construct the runtime.
+	AdminMutatingAllowNonLoopback bool
+
+	// EnableDDS, when true, accepts CreateFederation requests with
+	// transport_mode=DDS. M19 Phase 1a (docs/m19-dds-adapter.md §4.4).
+	// In the default CGo-free build, the transport/dds package's
+	// stubs return errors.ErrUnsupported on every primitive — so the
+	// flag exists in every build but is effectively a no-op without
+	// the dds build tag. The dds-tagged build (Phase 1b) wires real
+	// CGo-backed implementations.
+	EnableDDS bool
+
+	// DDSDomainID is the default DDS domain ID stamped into a
+	// federation when CreateFederation is accepted in DDS mode.
+	// Zero is the DDS default domain. Only meaningful when
+	// EnableDDS=true.
+	DDSDomainID int32
+
+	// M15 cut-2 demo cluster fields.
+	//
+	// NodeID is this node's stable opaque identifier in the
+	// cluster. Empty = fall back to ListenAddr.
+	NodeID string
+	// ClusterPeers is a comma-separated list of node_id=host:port
+	// entries identifying peer rtid nodes. Empty = single-node
+	// (cut-1 behavior).
+	ClusterPeers string
+	// ClusterAdvertise is the host:port this node advertises to
+	// peers as its dial address. Empty = use ListenAddr.
+	ClusterAdvertise string
+}
+
+// rtid is the composed runtime: gRPC server + metrics handler + the
+// underlying core components. Construct via newRTID; run via Serve.
+type rtid struct {
+	cfg       rtidConfig
+	logger    *slog.Logger
+	startedAt time.Time
+	fedMgr    *federation.Manager
+	declMgr   core.DeclarationManagement
+	objReg    *object.Registry
+	syncMgr   core.SyncCoordinator
+	ownMgr    core.OwnershipCoordinator
+	momMgr    core.ManagementObjectModel
+	ddmMgr    core.DataDistributionManagement
+	saveMgr   core.SavepointCoordinator
+	timeMgr   core.TimeManager
+	plugins   *runtimeplugin.Manager
+	outbox    *multiOutbox
+	grpcS     *stdgrpc.Server
+	// adminS is the dedicated AdminService gRPC server bound to
+	// cfg.AdminListenAddr. nil when admin is disabled.
+	adminS  *stdgrpc.Server
+	metrics *metricsHandler
+	foms    *fomRepository
+	// M15 cut-2 demo cluster wiring. Always non-nil; single-node
+	// mode keeps the manager empty of peers and behaves identically
+	// to cut-1.
+	clusterMgr *cluster.Manager
+	clusterSvc *grpcsvc.ClusterService
+}
+
+// newRTID composes all the components and returns a runnable rtid.
+//
+// Wiring order matters: the multiplex writer is shared by the federation
+// manager and the object registry (both write to the same per-federation
+// log files); the FOM repository is wired into the federation manager;
+// the gRPC server is the last composer.
+func newRTID(cfg rtidConfig) (*rtid, error) {
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
+	}
+	// Round-2 GC product default. Lives HERE — not in main() — so the
+	// lrcbench harness and every other newRTID composer runs with the
+	// exact GC configuration an untouched production rtid runs with.
+	// A set GOGC env var always wins over the product default; an
+	// explicit --gc-percent (translated by main()) wins over both.
+	if err := applyGoRuntimeTuning(cfg.GCPercent, cfg.GoMemLimitBytes, cfg.Logger); err != nil {
+		return nil, fmt.Errorf("rtid: invalid Go runtime tuning: %w", err)
+	}
+	batchSize, flushInterval, err := resolveMultiOutboxConfig(cfg.OutboxBatchSize, cfg.OutboxFlushInterval)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: invalid outbox configuration: %w", err)
+	}
+	eventCapacity, err := resolveMultiOutboxCapacity(cfg.OutboxEventCapacity)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: invalid outbox configuration: %w", err)
+	}
+	if eventCapacity < batchSize {
+		return nil, fmt.Errorf(
+			"rtid: invalid outbox configuration: event capacity must be at least batch size (got %d < %d)",
+			eventCapacity,
+			batchSize,
+		)
+	}
+	clock := core.NewRealClock()
+
+	// Plugins are constructed before the federation manager, but audit writers
+	// resolve metadata lazily on their first event, after fedMgr is assigned.
+	var fedMgr *federation.Manager
+	eventLogMetadata := func(fed core.FederationName) (uint64, core.Mode, uint64, bool) {
+		if fedMgr == nil {
+			return 0, core.ModeUnspecified, 0, false
+		}
+		return fedMgr.EventLogMetadataFor(fed)
+	}
+	plugins, err := runtimeplugin.Open(cfg.PluginFactories, runtimeplugin.Host{
+		Clock:    clock,
+		Logger:   cfg.Logger,
+		Metadata: eventLogMetadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+	keepPlugins := false
+	defer func() {
+		if !keepPlugins {
+			_ = plugins.Close()
+		}
+	}()
+	runtimeEventLog := plugins.EventLog()
+
+	foms := newFOMRepository()
+	declMgr := declaration.New()
+	outbox := newMultiOutboxWithBatch(eventCapacity, batchSize, flushInterval)
+	// M37 — §5.10-§5.13 registration / interaction advisories
+	// flow through the shared outbox.
+	declMgr.SetAdvisoryOutbox(outbox)
+
+	// M11: MOM manager constructed BEFORE federation manager so the
+	// federation manager's OnFederateJoined / OnFederateResigned hooks
+	// can dispatch to MOM. The Outbox is shared with sync/ownership/
+	// object — MOM uses it for the (cut-2 deferred) subscriber fan-out.
+	momMgr, err := mom.New(mom.Options{
+		Outbox:   outbox,
+		EventLog: runtimeEventLog,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// M21 TASK-204: time.Manager is composed BEFORE federation.Manager
+	// so the federation's OnFederateResigned hook can call into
+	// timeMgr.OnFederateResign (TASK-204c) — pending NER/TAR/TARA/
+	// NMRA/FQR state must drop when the federate leaves.
+	// M17.26 — capture momMgr (constructed earlier) in the
+	// OnTimeStateChanged hook so HLAfederate.HLAtimeRegulating /
+	// HLAtimeConstrained / HLAlookahead / HLAlogicalTime mirror
+	// the time.Manager's state.
+	timeMgr, err := timepkg.New(timepkg.Options{
+		Clock:    clock,
+		Outbox:   outbox,
+		EventLog: runtimeEventLog,
+		OnTimeStateChanged: func(
+			ctx context.Context,
+			fed core.FederationName,
+			h core.FederateHandle,
+			regulating bool,
+			constrained bool,
+			lookahead core.LogicalTime,
+			logicalTime core.LogicalTime,
+		) {
+			_ = momMgr.TimeStateChanged(
+				ctx, fed, h, regulating, constrained,
+				lookahead, logicalTime,
+			)
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("rtid: time manager init: %w", err)
+	}
+
+	// M24 W1+W2 — resign hooks are set after ownMgr/objReg are constructed
+	// (a few lines down). The fedMgr captures function-pointer indirections
+	// so dispatch resolves at runtime, after the dependencies are wired in.
+	var ownResignHook func(context.Context, core.FederationName, core.FederateHandle)
+	var resigningDispatch func(context.Context, core.FederationName, core.FederateHandle, core.ResignAction)
+	var destroyingDispatch func(context.Context, core.FederationName) error
+	// M26 Phase F — same indirection pattern for the object registry's
+	// reservation-cleanup hook (objReg is constructed below).
+	var reservationResignHook func(core.FederationName, core.FederateHandle)
+	fedMgr, err = federation.New(federation.Options{
+		Clock:           clock,
+		EventLog:        runtimeEventLog,
+		FOMs:            foms,
+		GenerationEpoch: cfg.GenerationEpoch,
+		GenerationSpan:  cfg.GenerationSpan,
+		OnFederateJoined: chainOnFederateJoined(
+			// M27 Phase A — pre-bind the outbox channel for the
+			// federate so events emitted by a service-group RPC fired
+			// immediately after JoinFederation returns are buffered
+			// rather than dropped. Runs before MOM so the channel
+			// exists by the time the join RPC returns.
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle, _ string, _ string) {
+				outbox.Bind(fed, h)
+			},
+			momFederateJoinedHook(momMgr, cfg.Logger),
+		),
+		OnFederateResigned: chainOnFederateResigned(
+			momFederateResignedHook(momMgr, cfg.Logger),
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+				declMgr.OnFederateResign(fed, h)
+			},
+			// M27 Phase A — drop the outbox state if the federate
+			// resigned without ever opening its Events stream. The
+			// stream subscribe path's cancel func handles the case
+			// where a stream WAS opened (idempotent vs Unbind).
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+				outbox.Unbind(fed, h)
+			},
+			// M21 TASK-204c: drop time-mgr pending state on resign so a
+			// pending NER/TAR/TARA/NMRA/FQR doesn't leak in nerStore.
+			timeMgr.OnFederateResign,
+			// M26 Phase F — drop object instance name reservations
+			// owned by the resigning federate.
+			func(_ context.Context, fed core.FederationName, h core.FederateHandle) {
+				if reservationResignHook != nil {
+					reservationResignHook(fed, h)
+				}
+			},
+			// M24 W1: indirection — resolved when ownResignHook is set
+			// after ownMgr construction. UNCONDITIONALLY_DIVEST is the
+			// default action; this hook fires on every resign regardless
+			// of action so we run release-on-resign for the divest paths
+			// AND ensure stale-record cleanup happens on the no-action
+			// path too (defensive — pre-M24 left these stale).
+			func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+				if ownResignHook != nil {
+					ownResignHook(ctx, fed, h)
+				}
+			},
+		),
+		// M24 W2 — action-aware pre-resign dispatch. Runs BEFORE the
+		// roster mutation so ownership/object cleanup observes the
+		// federate as still-joined. Indirection resolved below.
+		OnFederateResigning: func(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction) {
+			if resigningDispatch != nil {
+				resigningDispatch(ctx, fed, h, action)
+			}
+		},
+		OnFederationDestroying: func(ctx context.Context, fed core.FederationName) error {
+			if destroyingDispatch != nil {
+				return destroyingDispatch(ctx, fed)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// M8 W1: ownership + sync managers. Sync uses Outbox for
+	// announceSynchronizationPoint / federationSynchronized; ownership
+	// uses Outbox for the §7 transfer notifications. Neither manager
+	// is exposed via gRPC in cut-1 (proto Service definitions for
+	// sync/ownership are not yet defined — M8 W2 follow-up); they are
+	// composed here so the runtime owns canonical state and so the
+	// object.Registry's OnRegister hook can populate initial ownership.
+	// M17.27 — Subscribers resolver routes negotiated divest's
+	// "assumption" broadcast to the federates that have subscribed
+	// to the divesting attributes on the divested object's class.
+	// Pre-M17.27 wiring left this nil (per ownership manager docstring)
+	// which silently skipped the fan-out; cross-federate ownership
+	// transfer scenarios couldn't fire requestAttributeOwnership
+	// Assumption on subscribers.
+	//
+	// Same indirection pattern as ownResignHook: objReg is constructed
+	// later in the wiring (after ownMgr), so we close over a pointer
+	// that is resolved at call time.
+	var objRegPtr **object.Registry
+	subscribersResolver := func(
+		ctx context.Context,
+		fed core.FederationName,
+		obj core.ObjectHandle,
+		attrs []core.AttributeHandle,
+	) []core.FederateHandle {
+		if objRegPtr == nil || *objRegPtr == nil {
+			return nil
+		}
+		cls := (*objRegPtr).ClassOf(fed, obj)
+		if cls == 0 {
+			return nil
+		}
+		return declMgr.SubscribersFor(ctx, fed, cls, attrs)
+	}
+	ownMgr, err := ownership.New(ownership.Options{
+		Outbox:      outbox,
+		EventLog:    runtimeEventLog,
+		Subscribers: subscribersResolver,
+		// Phase 3 research-platform: thread the resolved
+		// NegotiationStrategy when --research-config is set; nil →
+		// ownership.New falls back to defaultNegotiation, identical
+		// to today's behavior.
+		Strategy: cfg.Research.Ownership.Negotiation,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// M24 W1 — wire the ownership release into the resign chain. The
+	// federation manager's OnFederateResigned was constructed earlier
+	// with a closure that defers to ownResignHook; assigning here
+	// activates it. ReleaseAllOwnedBy is silent at the manager level —
+	// no peer notifications — which matches the cut-1 simplification
+	// documented in rti/internal/ownership/release.go.
+	ownResignHook = func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+		ownMgr.ReleaseAllOwnedBy(ctx, fed, h)
+	}
+	syncMgr, err := syncpkg.New(syncpkg.Options{
+		Outbox:   outbox,
+		EventLog: runtimeEventLog,
+		// M13 thread A (docs/srs.md §10.4): wire the federation
+		// manager's joined-federate snapshot as the sync-point
+		// required-set resolver. Register calls with nil
+		// requiredFederates now materialize the implicit "all
+		// joined federates" set at request-time instead of falling
+		// back to dynamic-mode aggregation. Unknown federation
+		// returns an empty slice (no joined federates) which leaves
+		// the sync point announced-but-never-achieved — same as the
+		// caller-supplied empty list.
+		Members: fedMgr.MembersOf,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// M21 TASK-204: timeMgr is constructed earlier (above the federation
+	// manager) so the OnFederateResigned chain can call into it; see
+	// the construction site above for rationale.
+
+	// M10 W1: Data Distribution Management. The Manager is composed
+	// here so the object.Registry can consult it on every update;
+	// gRPC handlers for the DDMService are deferred to M10 W2 (the
+	// proto definition is FROZEN at this cut, so DDM operations are
+	// reachable only via the in-process API for now).
+	ddmMgr, err := ddm.New(ddm.Options{
+		Outbox:   outbox,
+		EventLog: runtimeEventLog,
+		FOMs:     foms,
+		FederationExists: func(fed core.FederationName) bool {
+			_, ok := fedMgr.GenerationFor(fed)
+			return ok
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// M9 W1: Federation Save/Restore. Composed here so the runtime
+	// owns canonical save state and the Storage backend (filesystem
+	// rooted at SaveDir). gRPC handlers for the save/restore services
+	// are deferred to M9 W2 — the proto Service definition is FROZEN
+	// at this cut and does not yet expose save/restore RPCs, so the
+	// manager is reachable only via the in-process API for now.
+	var saveMgr *savepoint.Manager
+	if cfg.SaveDir != "" {
+		fsStore, err := savepoint.NewFSStorage(cfg.SaveDir)
+		if err != nil {
+			return nil, fmt.Errorf("rtid: savepoint storage init: %w", err)
+		}
+		saveMgr, err = savepoint.New(savepoint.Options{
+			Outbox:      outbox,
+			EventLog:    runtimeEventLog,
+			BundleStore: fsStore,
+			// M13 thread A (docs/srs.md §10.4): wire
+			// federation.Manager.MembersOf as the joined-federate
+			// snapshot resolver. Closes the M26 deferral —
+			// RequestFederationSave now fans out
+			// initiateFederateSave to every joined federate via a
+			// concrete recipient list instead of emitting a single
+			// broadcast envelope addressed to InvalidFederateHandle
+			// (which multiOutbox.Send drops). Federates therefore
+			// receive the save-callback delivery that the M12 W2
+			// proto FederateEvent variants made possible.
+			Members: fedMgr.MembersOf,
+			// M36 DB-3: wire the (handle, name) roster so save
+			// bundles capture federate names and restore routes
+			// initiateFederateRestore by NAME (IEEE 1516.1 §4.27)
+			// — a participant that resigned and rejoined under a
+			// new handle still receives the initiate and its
+			// federateRestoreComplete is accepted.
+			Roster:     fedMgr.ListMembers,
+			Generation: fedMgr.GenerationFor,
+			FOMSHA256:  foms.DigestFor,
+			// M13 thread C (docs/srs.md §10.4): wire the four
+			// service-group managers as snapshot participants. On
+			// save, each Marshal(fed) result is bundled into the
+			// manifest under its registered key; on restore, the
+			// matching Unmarshal runs before the event-log replay
+			// so state lands from structured bytes without sole
+			// reliance on replay determinism. Old bundles that
+			// pre-date M13 omit manager_snapshots — the restore
+			// path is nil-safe and falls back to event-log replay.
+			ManagerSnapshots: map[string]savepoint.ManagerSnapshotter{
+				savepoint.ManagerSnapshotKeySync:      syncMgr,
+				savepoint.ManagerSnapshotKeyOwnership: ownMgr,
+				savepoint.ManagerSnapshotKeyMOM:       momMgr,
+				savepoint.ManagerSnapshotKeyDDM:       ddmMgr,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("rtid: savepoint manager init: %w", err)
+		}
+	}
+
+	// M20.3 — HLAmanager interaction dispatch. The dispatcher
+	// intercepts incoming sendInteraction calls whose class is in
+	// the HLAmanager subtree and routes to the matching handler
+	// (HLAsetSwitches, HLArequest*, etc.) instead of broadcasting.
+	// M20.6 wires the production ResponseEmitter so HLAreport*
+	// responses from HLArequest* handlers reach the wire via the
+	// shared outbox.
+	momDispatcher := mom.NewDispatcher(momMgr)
+	momDispatcher.SetEmitter(mom.NewProductionEmitter(outbox))
+	objReg, err := object.New(object.Options{
+		EventLog:           runtimeEventLog,
+		Declarations:       declMgr,
+		Outbox:             outbox,
+		FOMs:               foms,
+		Clock:              clock,
+		ManagementDispatch: momDispatcher,
+		// TASK-077: wire mode + per-attribute order lookup so the
+		// registry can choose RO over TSO when both the federation
+		// is best-effort AND the FOM declares the attribute as
+		// Receive-order. The production fomHandle does not yet
+		// implement FOMOrderResolver, so FOMRepoOrderLookup returns
+		// "unknown" for every attribute and the registry stays on
+		// the TSO path until a future cut upgrades the handle.
+		Federations: fedMgr,
+		Orders:      grpcsvc.FOMRepoOrderLookup{Repo: foms},
+		// M8 W1: notify ownership.Manager of every successful object
+		// registration so QueryOwnership / IsOwnedBy reflect the
+		// producing federate as the initial owner of all class
+		// attributes (FR-OWN-5).
+		OnRegister: func(fed core.FederationName, owner core.FederateHandle, obj core.ObjectHandle, _ core.ObjectClassHandle, attrs []core.AttributeHandle) {
+			ownMgr.RegisterInitialOwnership(fed, owner, obj, attrs)
+		},
+		// M38 GB — §6.6 per-instance ownership gate: UpdateAttributes
+		// requires the producer to be the CURRENT §7 owner of every
+		// updated attribute (publication stays the §5 class-level
+		// precondition, necessary but not sufficient). ownMgr
+		// satisfies object.InstanceAttributeOwnership via
+		// core.OwnershipCoordinator.IsOwnedBy; state is seeded by the
+		// OnRegister hook above and mutated by the §7 divest/acquire
+		// flows. The internal MOM producer is exempt at the gate.
+		Ownership: ownMgr,
+		// M11: per-federate MOM counters (FR-MOM-1). See momCounterHooks.
+		OnUpdateSent:           momMgr.IncrementUpdatesSent,
+		OnInteractionSent:      momMgr.IncrementInteractionsSent,
+		OnReflectDelivered:     momMgr.IncrementReflectionsReceived,
+		OnInteractionDelivered: momMgr.IncrementInteractionsReceived,
+		// M10: DDM-aware fan-out filter. The adapter wraps
+		// ddm.Manager into the object.DDMFilter shape (see
+		// ddmFilterAdapter below for the handle-conversion glue).
+		DDM: ddmFilterAdapter{m: ddmMgr},
+		// M22 W2 — TSO delivery gate. The time manager satisfies
+		// core.TSODeliveryGate; when nil the registry falls back to
+		// pre-M22 always-async behavior. Wiring it here makes the
+		// IEEE 1516.1 §8.16-8.17 default (async OFF) observable
+		// cross-process.
+		TSOGate: timeMgr,
+		// M37 EB-3 — outgoing-TSO timestamp validation (§8.1.2):
+		// regulating senders may not stamp TSO messages below
+		// currentTime + lookahead. The time manager satisfies
+		// object.OutgoingTSOValidator directly.
+		TSOValidator: timeMgr,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// M36 — MOM object-instance fan-out: the MOM manager registers
+	// HLAfederation/HLAfederate instances through the standard object
+	// registry (discover/reflect/remove ride the normal fan-out), and
+	// the declaration manager's post-subscribe hook delivers
+	// retroactive Discover+Reflect to late subscribers of the MOM
+	// object classes. Wired here, AFTER objReg exists (the MOM
+	// manager itself is constructed before the registry).
+	momMgr.EnableInstanceFanout(objReg, declMgr, foms)
+	// M37 EB-4 — chain the post-subscribe hook: the MOM manager sends
+	// retroactive Discover+Reflect for its own (internal-producer)
+	// instances; the object registry sends retroactive §6.9 Discover
+	// for federate-registered instances (subscribe-after-register).
+	// The registry path skips internal-producer instances so late MOM
+	// subscribers never see double discovers.
+	declMgr.SetOnSubscribeObjectClass(func(
+		ctx context.Context,
+		fed core.FederationName,
+		sub core.FederateHandle,
+		cls core.ObjectClassHandle,
+		attrs []core.AttributeHandle,
+	) {
+		momMgr.ObjectClassSubscribed(ctx, fed, sub, cls, attrs)
+		objReg.ObjectClassSubscribed(ctx, fed, sub, cls, attrs)
+	})
+
+	// M26 Phase F — bind the reservation-resign indirection now that
+	// objReg exists.
+	reservationResignHook = objReg.OnFederateResign
+	// M17.27 — resolve the SubscribersResolver indirection now that
+	// objReg exists. The ownership manager captured the resolver at
+	// New-time; it dereferences objRegPtr at every Subscribers call.
+	objRegPtr = &objReg
+
+	// M24 W2 — action-aware resign dispatch. Wired here, AFTER both
+	// ownMgr and objReg exist. Per IEEE 1516.1-2010 §4.10:
+	//   UNCONDITIONALLY_DIVEST_ATTRIBUTES → release ownership.
+	//   DELETE_OBJECTS → delete every owned instance.
+	//   DELETE_THEN_DIVEST → DELETE_OBJECTS + RELEASE.
+	//   CANCEL_PENDING_OWNERSHIP → cancel pending divest/acquire.
+	//   CANCEL_THEN_DELETE → cancel + DELETE_OBJECTS (no divest).
+	//   NO_ACTION → leave everything (subscribers still see the obj).
+	resigningDispatch = func(ctx context.Context, fed core.FederationName, h core.FederateHandle, action core.ResignAction) {
+		switch action {
+		case core.ResignActionUnconditionallyDivestAttributes:
+			ownMgr.ReleaseAllOwnedBy(ctx, fed, h)
+		case core.ResignActionDeleteObjects:
+			deleteAllOwnedBy(ctx, objReg, fed, h)
+		case core.ResignActionDeleteThenDivest:
+			deleteAllOwnedBy(ctx, objReg, fed, h)
+			ownMgr.ReleaseAllOwnedBy(ctx, fed, h)
+		case core.ResignActionCancelPendingOwnership:
+			ownMgr.CancelPendingFor(ctx, fed, h)
+		case core.ResignActionCancelThenDelete:
+			ownMgr.CancelPendingFor(ctx, fed, h)
+			deleteAllOwnedBy(ctx, objReg, fed, h)
+		case core.ResignActionNoAction:
+			// Leave ownership + objects in place. Stale records will
+			// linger pointing at the resigned handle (matches the
+			// spec's NO_ACTION semantic — caller knows what they're
+			// asking for).
+		}
+	}
+
+	// M15 cut-2 — construct cluster manager + service BEFORE the
+	// grpc handlers so the federation-creation hook can reference
+	// them. The service is registered on the gs server later in
+	// this function (after gs is created).
+	clusterAdvAddr := cfg.ClusterAdvertise
+	if clusterAdvAddr == "" {
+		clusterAdvAddr = cfg.ListenAddr
+	}
+	clusterMgr := cluster.New(cfg.NodeID, clusterAdvAddr)
+	peers, err := parseClusterPeers(cfg.ClusterPeers)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: --cluster-peers: %w", err)
+	}
+	for nodeID, address := range peers {
+		clusterMgr.RegisterPeer(nodeID, address)
+	}
+	clusterSvc := grpcsvc.NewClusterService(clusterMgr, nil)
+	clusterSvc.SetGenerationResolver(fedMgr.GenerationFor)
+	destroyingDispatch = func(ctx context.Context, fed core.FederationName) error {
+		var cleanupErrors []error
+		if err := momMgr.FederationDestroyed(ctx, fed); err != nil {
+			cfg.Logger.Error("rtid: MOM federation cleanup failed", "federation", fed, "error", err)
+			cleanupErrors = append(cleanupErrors, err)
+		}
+		declMgr.OnFederationDestroyed(fed)
+		objReg.OnFederationDestroyed(fed)
+		timeMgr.OnFederationDestroyed(fed)
+		syncMgr.OnFederationDestroyed(fed)
+		ownMgr.OnFederationDestroyed(fed)
+		ddmMgr.OnFederationDestroyed(fed)
+		if saveMgr != nil {
+			saveMgr.OnFederationDestroyed(fed)
+		}
+		foms.ForgetFor(fed)
+		clusterMgr.UnassignFederation(fed)
+		outbox.UnbindFederation(fed)
+		// Optional observers close last. Their failures are logged by the
+		// plugin manager and never change federation teardown semantics.
+		plugins.CloseFederation(fed)
+		return errors.Join(cleanupErrors...)
+	}
+
+	grpcSrv, err := grpcsvc.NewServer(grpcsvc.Options{
+		Federations:                 fedMgr,
+		Membership:                  fedMgr,
+		Declarations:                declMgr,
+		Objects:                     objReg,
+		Outbox:                      outbox,
+		EnableInteractionStream:     cfg.OIDCVerifier == nil,
+		EnableConfirmedObjectStream: true,
+		EnableLocalLRC:              cfg.OIDCVerifier == nil,
+		OnCreateFederationSuccess:   createFederationHook(foms, momMgr, clusterMgr, clusterSvc, cfg.Logger),
+		// M21 TASK-204: TimeService gRPC. Composed unconditionally
+		// in server mode (vs cut-1's nil placeholder) so federates
+		// can drive HLA time advance cross-process.
+		Time: timeMgr,
+		// M12 W1: cut-3 gRPC services. Save manager is optional —
+		// only wired when --save-dir is set (saveMgr == nil otherwise).
+		Sync:      syncMgr,
+		Ownership: ownMgr,
+		DDM:       ddmMgr,
+		Savepoint: saveMgr,
+		// M12 W3: MomService — federates introspect MOM-tracked
+		// state (HLAfederation / HLAfederate object snapshots +
+		// per-federate counters). Read-only; lives on the federate
+		// port (this --listen) since it is federate-facing
+		// introspection, not operator-facing observability.
+		MOM: momMgr,
+		// M19 Phase 1a (docs/m19-dds-adapter.md §4.4): wire the
+		// DDS opt-in flags into the federation handler so
+		// CreateFederation rejects transport_mode=DDS unless the
+		// operator opted in. TransportLookup feeds the manager's
+		// recorded mode back to JoinFederationResponse so federates
+		// pick the right wire path.
+		DDSEnabled:         cfg.EnableDDS,
+		DDSDefaultDomainID: cfg.DDSDomainID,
+		TransportLookup:    fedMgr.TransportFor,
+		// M25 Phase B (§10.2): SupportService — read-only handle /
+		// name / dimension / order / transport lookups against the
+		// per-federation FOM. Same repository the federation manager
+		// already uses.
+		FOMs: foms,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var serverOpts []stdgrpc.ServerOption
+	// W8 — gRPC buffer knobs. Zero config selects the tuned product
+	// defaults (1MB write / 1MB read, adopted from the isolated A/B
+	// in grpcbuffers.go); -1 per knob appends NOTHING, restoring the
+	// byte-identical pre-W8 ServerOption set (unit-tested in
+	// grpcbuffers_test.go).
+	bufferOpts, err := grpcBufferServerOptions(cfg.GRPCWriteBufferSize, cfg.GRPCReadBufferSize)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: invalid gRPC buffer configuration: %w", err)
+	}
+	serverOpts = append(serverOpts, bufferOpts...)
+	if cfg.TLSConfig != nil {
+		// credentials.NewTLS clones the *tls.Config internally, so the
+		// caller is free to keep mutating its copy without affecting
+		// the live server. Static-cert only at this cut: cfg.TLSConfig
+		// is built from --tls-cert/--tls-key and not reloaded.
+		serverOpts = append(serverOpts, stdgrpc.Creds(credentials.NewTLS(cfg.TLSConfig)))
+	}
+	unaryInterceptors := []stdgrpc.UnaryServerInterceptor{grpcSrv.UnaryMembershipInterceptor()}
+	streamInterceptors := []stdgrpc.StreamServerInterceptor{grpcSrv.StreamMembershipInterceptor()}
+	if cfg.OIDCVerifier != nil {
+		// M14 W4 — OIDC bearer-token interceptor. Validates the
+		// `authorization: Bearer <jwt>` metadata before any service
+		// handler runs. Stackable with mTLS: a deployment configured
+		// with both must satisfy both.
+		unaryInterceptors = append([]stdgrpc.UnaryServerInterceptor{oidc.UnaryServerInterceptor(cfg.OIDCVerifier)}, unaryInterceptors...)
+		streamInterceptors = append([]stdgrpc.StreamServerInterceptor{oidc.StreamServerInterceptor(cfg.OIDCVerifier)}, streamInterceptors...)
+	}
+	serverOpts = append(serverOpts,
+		stdgrpc.ChainUnaryInterceptor(unaryInterceptors...),
+		stdgrpc.ChainStreamInterceptor(streamInterceptors...),
+	)
+	gs := stdgrpc.NewServer(serverOpts...)
+	if err := grpcSrv.Register(gs); err != nil {
+		return nil, err
+	}
+
+	metrics := newMetricsHandler(
+		fedMgr,
+		objectCounterFor(objReg),
+		zeroSeqSource{},
+	)
+
+	// rtid-TUI Phase 1: AdminService gRPC server. Bound to
+	// cfg.AdminListenAddr — a SEPARATE listener so admin traffic does
+	// not contend with federate traffic on --listen, and the cfg.TLSConfig
+	// (server-side TLS for federates) does NOT apply (Phase 1 admin is
+	// plaintext only; production deployments front it with a reverse
+	// proxy + ACL when network-exposed). Empty AdminListenAddr means
+	// admin is disabled — adminS stays nil and Serve skips the
+	// listener.
+	startedAt := time.Now()
+	var adminGS *stdgrpc.Server
+	if cfg.AdminListenAddr != "" {
+		adminGS = stdgrpc.NewServer()
+		if err := grpcsvc.RegisterAdminService(adminGS, grpcsvc.AdminOptions{
+			Federations:  fedMgr,
+			Declarations: declMgr,
+			Sync:         syncMgr,
+			Ownership:    ownMgr,
+			DDM:          ddmMgr,
+			Savepoint:    saveMgr,
+			MOM:          momMgr,
+			// M21 TASK-204: time manager is composed in server mode
+			// (the same instance the TimeServiceServer wraps), so the
+			// AdminService Snapshot includes per-federation time state.
+			Time:      timeMgr,
+			Objects:   objReg,
+			Outbox:    outbox,
+			EventLog:  plugins.AdminEventLog(),
+			Version:   rtidVersion(),
+			StartedAt: startedAt,
+		}); err != nil {
+			return nil, fmt.Errorf("rtid: admin service register: %w", err)
+		}
+
+		// rtid-TUI Phase 5: register MutatingService ONLY when the
+		// composition-root flag is set. AdminService stays read-only.
+		// See docs/rtid-tui.md §7.5 for the safety contract.
+		if cfg.AdminMutating {
+			if err := grpcsvc.RegisterMutatingService(adminGS, grpcsvc.MutatingOptions{
+				Federations:  fedMgr,
+				Membership:   fedMgr,
+				Version:      rtidVersion(),
+				Cluster:      clusterMgr,
+				ClusterPeers: clusterSvc,
+			}); err != nil {
+				return nil, fmt.Errorf("rtid: mutating service register: %w", err)
+			}
+		}
+	}
+
+	// M15 cut-2 — register the cluster service on the federate-facing
+	// gRPC server (constructed earlier in this function alongside the
+	// other handlers).
+	clusterSvc.RegisterWith(gs)
+
+	keepPlugins = true
+	return &rtid{
+		cfg:        cfg,
+		logger:     cfg.Logger,
+		startedAt:  startedAt,
+		fedMgr:     fedMgr,
+		declMgr:    declMgr,
+		objReg:     objReg,
+		syncMgr:    syncMgr,
+		ownMgr:     ownMgr,
+		momMgr:     momMgr,
+		ddmMgr:     ddmMgr,
+		saveMgr:    saveMgr,
+		timeMgr:    timeMgr,
+		plugins:    plugins,
+		outbox:     outbox,
+		grpcS:      gs,
+		adminS:     adminGS,
+		metrics:    metrics,
+		foms:       foms,
+		clusterMgr: clusterMgr,
+		clusterSvc: clusterSvc,
+	}, nil
+}
+
+// parseClusterPeers splits a comma-separated --cluster-peers value
+// into a node_id→address map. Each entry is "node_id=host:port";
+// duplicate node_ids are rejected. Empty input yields an empty map
+// (single-node mode).
+func parseClusterPeers(s string) (map[string]string, error) {
+	out := map[string]string{}
+	if s == "" {
+		return out, nil
+	}
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		eq := strings.Index(entry, "=")
+		if eq <= 0 || eq == len(entry)-1 {
+			return nil, fmt.Errorf("invalid peer %q (want node_id=host:port)", entry)
+		}
+		id := entry[:eq]
+		addr := entry[eq+1:]
+		if _, dup := out[id]; dup {
+			return nil, fmt.Errorf("duplicate peer node_id %q", id)
+		}
+		out[id] = addr
+	}
+	return out, nil
+}
+
+// rtidVersion returns the build version used in the AdminService
+// Status / Snapshot responses. Defaults to the buildinfo "dev"
+// sentinel; release builds override via -ldflags injection (see
+// .goreleaser.yaml).
+func rtidVersion() string {
+	return buildinfo.String()
+}
+
+// ddmFilterAdapter bridges the core.DataDistributionManagement API
+// into the object.DDMFilter contract. The two packages use distinct
+// typed handles (core.DDMRegionHandleCore vs object.DDMRegionHandle,
+// both uint64) so the adapter performs the trivial conversion at the
+// boundary. Defined here (cmd/rtid composition) rather than inside ddm
+// so the ddm package stays free of an object-package import.
+//
+// Phase 1 of the research-platform refactor (docs/research-platform.md
+// §5.4): the field type is the interface so alternative DDM impls
+// composed at the rtid root flow through unchanged.
+type ddmFilterAdapter struct {
+	m core.DataDistributionManagement
+}
+
+func (a ddmFilterAdapter) HasObjectAssociations(fed core.FederationName, obj core.ObjectHandle) bool {
+	return a.m.HasObjectAssociations(fed, obj)
+}
+
+func (a ddmFilterAdapter) PublisherRegionsFor(fed core.FederationName, obj core.ObjectHandle, attr core.AttributeHandle) []object.DDMRegionHandle {
+	rs := a.m.PublisherRegionsFor(fed, obj, attr)
+	if len(rs) == 0 {
+		return nil
+	}
+	out := make([]object.DDMRegionHandle, len(rs))
+	for i, r := range rs {
+		out[i] = object.DDMRegionHandle(r)
+	}
+	return out
+}
+
+func (a ddmFilterAdapter) SubscribersForUpdate(
+	fed core.FederationName,
+	cls core.ObjectClassHandle,
+	attr core.AttributeHandle,
+	publisherRegions []object.DDMRegionHandle,
+) []core.FederateHandle {
+	if len(publisherRegions) == 0 {
+		return nil
+	}
+	rs := make([]core.DDMRegionHandleCore, len(publisherRegions))
+	for i, r := range publisherRegions {
+		rs[i] = core.DDMRegionHandleCore(r)
+	}
+	return a.m.SubscribersForUpdate(fed, cls, attr, rs)
+}
+
+// RegionSubscribersFor — M36 DC-1. Pass-through (no handle conversion
+// needed: the result is federate handles).
+func (a ddmFilterAdapter) RegionSubscribersFor(
+	fed core.FederationName,
+	cls core.ObjectClassHandle,
+	attr core.AttributeHandle,
+) []core.FederateHandle {
+	return a.m.RegionSubscribersFor(fed, cls, attr)
+}
+
+// Serve runs the gRPC + metrics listeners until ctx is canceled. Returns
+// the first non-graceful error from either listener.
+//
+// rtid-TUI Phase 1: when r.adminS is non-nil, also binds a third
+// listener on cfg.AdminListenAddr serving the read-only AdminService.
+// Admin is plaintext only — the cfg.TLSConfig set by --tls-cert
+// does NOT apply (separate listener; production deployments add an
+// ACL via mTLS or a reverse proxy when network-exposed).
+func (r *rtid) Serve(ctx context.Context) error {
+	gln, err := net.Listen("tcp", r.cfg.ListenAddr)
+	if err != nil {
+		return err
+	}
+	mln, err := net.Listen("tcp", r.cfg.MetricsListenAddr)
+	if err != nil {
+		_ = gln.Close()
+		return err
+	}
+	var aln net.Listener
+	if r.adminS != nil {
+		aln, err = net.Listen("tcp", r.cfg.AdminListenAddr)
+		if err != nil {
+			_ = gln.Close()
+			_ = mln.Close()
+			return err
+		}
+	}
+
+	logArgs := []any{"grpc", gln.Addr().String(), "metrics", mln.Addr().String()}
+	if aln != nil {
+		logArgs = append(logArgs, "admin", aln.Addr().String())
+		r.logger.Info("rtid: admin gRPC listening (plaintext, read-only)", "addr", aln.Addr().String())
+	}
+	r.logger.Info("rtid serving", logArgs...)
+
+	metricsSrv := &http.Server{
+		Handler:           r.metrics,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	// Channel sized for the worst case: federate gRPC + metrics +
+	// admin gRPC.
+	errCh := make(chan error, 3)
+	go func() { errCh <- r.grpcS.Serve(gln) }()
+	go func() { errCh <- metricsSrv.Serve(mln) }()
+	if r.adminS != nil {
+		go func() { errCh <- r.adminS.Serve(aln) }()
+	}
+
+	select {
+	case <-ctx.Done():
+		r.logger.Info("rtid shutting down", "cause", ctx.Err())
+		r.grpcS.GracefulStop()
+		if r.adminS != nil {
+			r.adminS.GracefulStop()
+		}
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = metricsSrv.Shutdown(shutCtx)
+		shutCancel()
+		_ = r.plugins.Close()
+		return ctx.Err()
+	case err := <-errCh:
+		_ = gln.Close()
+		_ = mln.Close()
+		if aln != nil {
+			_ = aln.Close()
+		}
+		_ = r.plugins.Close()
+		if errors.Is(err, http.ErrServerClosed) || errors.Is(err, stdgrpc.ErrServerStopped) {
+			return nil
+		}
+		return err
+	}
+}
+
+// newMultiplexLog returns an event-log MultiplexWriter rooted at logDir,
+// or an in-memory factory when logDir is empty. The in-memory factory
+// drops bytes (no observable file) but keeps the writer happy so the
+// rest of the pipeline runs.
+
+func newMultiplexLog(logDir string, clock core.Clock, metadata ...eventlog.MetadataResolver) (*eventlog.MultiplexWriter, error) {
+	return newMultiplexLogConfigured(logDir, clock, false, metadata...)
+}
+
+func newMultiplexLogConfigured(
+	logDir string,
+	clock core.Clock,
+	allowPartialProto bool,
+	metadata ...eventlog.MetadataResolver,
+) (*eventlog.MultiplexWriter, error) {
+	var resolver eventlog.MetadataResolver
+	if len(metadata) > 0 {
+		resolver = metadata[0]
+	}
+	if logDir == "" {
+		return eventlog.NewMultiplexWriter(eventlog.MultiplexOptions{
+			Clock:             clock,
+			AllowPartialProto: allowPartialProto,
+			Mode:              core.ModeVerbose,
+			Metadata:          resolver,
+			Factory:           discardWriterFactory(clock),
+		})
+	}
+	return eventlog.NewMultiplexWriter(eventlog.MultiplexOptions{
+		Clock:             clock,
+		AllowPartialProto: allowPartialProto,
+		Mode:              core.ModeVerbose,
+		Metadata:          resolver,
+		Dir:               logDir,
+	})
+}
+
+// discardWriterFactory builds Writers whose sink discards bytes — used
+// when --log-dir is empty so the system stays runnable without
+// persisting logs (the rtid log emits a Warn at startup explaining the
+// non-persistence).
+func discardWriterFactory(clock core.Clock) eventlog.WriterFactory {
+	return func(opts eventlog.WriterOptions) (*eventlog.Writer, error) {
+		opts.Sink = discardSink{}
+		opts.Clock = clock
+		return eventlog.NewWriter(opts)
+	}
+}
+
+// discardSink is io.Writer that swallows everything. Used by the
+// no-log-dir factory.
+type discardSink struct{}
+
+func (discardSink) Write(p []byte) (int, error) { return len(p), nil }
+
+// resolveResearchConfig produces a research.Resolved bundle from the
+// --research-config flag value, the GORTI_RESEARCH_CONFIG env var
+// fallback, and the GORTI_DETERMINISM env var override.
+//
+// Path resolution priority: flagPath > envPath > "". When the
+// resolved path is "" the returned Resolved is the all-defaults
+// bundle (default strategies + per-impl-opt-in determinism), which
+// makes the code path through newRTID identical to today's
+// hand-wired runtime — Options.Strategy on the resulting Manager is
+// the package default, and behavior is bit-for-bit unchanged.
+//
+// The determinismOverride argument, when non-empty, replaces the
+// determinism mode on the resolved Config before Apply runs. This is
+// the documented escape hatch from design doc §8 step 2 for one-off
+// determinism flips without editing the TOML file. Unknown override
+// values are rejected with the same error LoadConfig would produce.
+//
+// Errors are returned wrapped so the caller can log them with
+// context. The caller (runServerMain) exits 2 on any error so the
+// rtid never starts in a misconfigured state.
+func resolveResearchConfig(flagPath, envPath, determinismOverride string) (research.Resolved, error) {
+	path := flagPath
+	if path == "" {
+		path = envPath
+	}
+	cfg, err := research.LoadConfig(path)
+	if err != nil {
+		return research.Resolved{}, err
+	}
+	if determinismOverride != "" {
+		// Re-encode through ParseConfig's path validation so an
+		// unknown override surfaces with the same error wording the
+		// TOML field would. We synthesize a one-line TOML body to
+		// reuse parseDeterminismMode without exposing it.
+		var probe research.Config
+		probe.Determinism = cfg.Determinism
+		ovrCfg, err := research.ParseConfig([]byte("determinism = \"" + determinismOverride + "\""))
+		if err != nil {
+			return research.Resolved{}, fmt.Errorf("rtid: GORTI_DETERMINISM override: %w", err)
+		}
+		cfg.Determinism = ovrCfg.Determinism
+	}
+	reg := research.Default()
+	resolved, err := research.Apply(cfg, reg)
+	if err != nil {
+		return research.Resolved{}, err
+	}
+	return resolved, nil
+}
+
+// buildServerTLS loads a server-side *tls.Config from the
+// --tls-cert/--tls-key flag pair. Returns (nil, nil) when both are empty
+// (insecure mode). Returns an error when one is set without the other,
+// or when the keypair fails to load. M6 W1B cut: server-side TLS only,
+// no mTLS, no rotation; clients dial grpcs://host:port and rely on a
+// trusted CA bundle (or system roots when the cert chains to one).
+func buildServerTLS(certPath, keyPath string) (*tls.Config, error) {
+	return buildServerTLSWithMTLS(certPath, keyPath, "", "")
+}
+
+// buildOIDCVerifier builds an *oidc.Verifier from the M14 W4 flags.
+// Returns (nil, nil) when no OIDC flags are set (i.e., OIDC is
+// disabled, the default). Returns an error when --oidc-issuer is set
+// but --oidc-jwks-pem isn't (M14 doesn't yet implement OIDC discovery).
+func buildOIDCVerifier(jwksPemPath, audience, issuer string) (*oidc.Verifier, error) {
+	if jwksPemPath == "" && issuer == "" && audience == "" {
+		return nil, nil
+	}
+	if jwksPemPath == "" {
+		return nil, fmt.Errorf("rtid: --oidc-jwks-pem is required (M14: OIDC discovery via --oidc-issuer is a future cut)")
+	}
+	pemBytes, err := os.ReadFile(jwksPemPath)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: read --oidc-jwks-pem: %w", err)
+	}
+	return oidc.NewFromPEM(pemBytes, audience, issuer)
+}
+
+// buildServerTLSWithMTLS extends buildServerTLS with optional mTLS
+// (M14 W1). When clientCAPath is non-empty, the returned config
+// requires + verifies a client cert against the CA bundle. When
+// clientCNAllow is non-empty, only certs whose Subject CN appears in
+// the comma-separated list are accepted (the verification chain still
+// runs first; the allow-list is the secondary filter).
+func buildServerTLSWithMTLS(certPath, keyPath, clientCAPath, clientCNAllow string) (*tls.Config, error) {
+	if certPath == "" && keyPath == "" {
+		if clientCAPath != "" {
+			return nil, fmt.Errorf("rtid: --tls-client-ca requires --tls-cert + --tls-key (mTLS implies TLS)")
+		}
+		return nil, nil
+	}
+	if certPath == "" || keyPath == "" {
+		return nil, fmt.Errorf("rtid: --tls-cert and --tls-key must both be set (got cert=%q key=%q)", certPath, keyPath)
+	}
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("rtid: load TLS keypair: %w", err)
+	}
+	cfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		// MinVersion: TLS 1.2 floor matches Go's secure-by-default
+		// recommendation and avoids the gosec G402 lint. Clients
+		// dialing with the Python SDK's default ssl.create_default_context
+		// negotiate TLS 1.2 or higher.
+		MinVersion: tls.VersionTLS12,
+	}
+	if clientCAPath != "" {
+		caPEM, err := os.ReadFile(clientCAPath)
+		if err != nil {
+			return nil, fmt.Errorf("rtid: read --tls-client-ca: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("rtid: --tls-client-ca contains no valid PEM certs")
+		}
+		cfg.ClientCAs = pool
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
+
+		if clientCNAllow != "" {
+			allowList := strings.Split(clientCNAllow, ",")
+			for i := range allowList {
+				allowList[i] = strings.TrimSpace(allowList[i])
+			}
+			cfg.VerifyPeerCertificate = makeCNAllowVerifier(allowList)
+		}
+	}
+	return cfg, nil
+}
+
+// makeCNAllowVerifier — M14 W1. Returns a tls.Config.VerifyPeerCertificate
+// callback that succeeds only when the peer leaf cert's Subject CN is
+// in allow. The standard chain verification has already passed by the
+// time this fires (we set ClientAuth=RequireAndVerifyClientCert above).
+func makeCNAllowVerifier(allow []string) func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	allowSet := make(map[string]struct{}, len(allow))
+	for _, cn := range allow {
+		if cn != "" {
+			allowSet[cn] = struct{}{}
+		}
+	}
+	return func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
+		if len(verifiedChains) == 0 || len(verifiedChains[0]) == 0 {
+			return fmt.Errorf("rtid: no verified chain for client cert")
+		}
+		leaf := verifiedChains[0][0]
+		if _, ok := allowSet[leaf.Subject.CommonName]; !ok {
+			return fmt.Errorf("rtid: client cert CN %q not in --tls-client-cn-allow", leaf.Subject.CommonName)
+		}
+		return nil
+	}
+}
+
+// buildLogger constructs the slog Logger from the level / format flags.
+func buildLogger(levelStr, formatStr string) *slog.Logger {
+	level := slog.LevelInfo
+	switch levelStr {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	if formatStr == "text" {
+		return slog.New(slog.NewTextHandler(os.Stderr, opts))
+	}
+	return slog.New(slog.NewJSONHandler(os.Stderr, opts))
+}
+
+// objectCounterFor returns an objectCounter view over the object
+// registry. The cut-1 stub returns 0 — the registry doesn't expose a
+// public per-federation count yet (not required by an in-flight test).
+// A future enhancement adds a Stats() method to the registry; for now
+// the metrics line is present (so scrapers see the gauge) but always
+// reports 0 in production. Tests inject their own counter.
+func objectCounterFor(_ *object.Registry) objectCounter {
+	return zeroObjectCounter{}
+}
+
+type zeroObjectCounter struct{}
+
+func (zeroObjectCounter) ObjectCount(core.FederationName) uint64 { return 0 }
+
+type zeroSeqSource struct{}
+
+func (zeroSeqSource) EventLogSeq(core.FederationName) uint64 { return 0 }
+
+// momFederateJoinedHook returns the federation.Manager OnFederateJoined
+// closure that forwards joins to MOM.FederateJoined. M13 thread B
+// (docs/srs.md §10.4): the federate-type string the federate declared
+// on its JoinFederationRequest is now plumbed through, so HLAfederate
+// snapshots reflect HLAfederateType. Errors are logged but not
+// propagated — MOM is a metric/introspection layer, not a
+// federation-correctness gate.
+func momFederateJoinedHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle, string, string) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle, federateName string, federateType string) {
+		if err := momMgr.FederateJoined(ctx, fed, h, federateName, federateType); err != nil {
+			logger.Warn("rtid: MOM FederateJoined hook failed",
+				"federation", fed, "handle", h, "err", err)
+		}
+	}
+}
+
+// momFederateResignedHook is the resign-side analogue.
+func momFederateResignedHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName, core.FederateHandle) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+		if err := momMgr.FederateResigned(ctx, fed, h); err != nil {
+			logger.Warn("rtid: MOM FederateResigned hook failed",
+				"federation", fed, "handle", h, "err", err)
+		}
+	}
+}
+
+// deleteAllOwnedBy is the M24 W2 helper used by the action-aware
+// resign dispatch. Walks the object registry's snapshot for the
+// federation, finds every instance whose owner matches h, and calls
+// Registry.Delete to fan out RemoveObjectInstance.
+//
+// Implementation note: Registry doesn't expose an "iterate instances"
+// API, so we rely on the OwnerSnapshot below — for each (obj, attr)
+// owned by h, attempt Delete(obj). Delete is idempotent on already-
+// deleted handles (returns ErrObjectHandleInvalid silently).
+func deleteAllOwnedBy(ctx context.Context, reg *object.Registry, fed core.FederationName, h core.FederateHandle) {
+	if reg == nil {
+		return
+	}
+	// Collect distinct object handles owned by h via the registry's
+	// public Snapshot — cheap, returns aggregate counts only. We
+	// enumerate via a brute-force probe over the object handle space
+	// using the object snapshot count as the upper bound. (A future
+	// cut should add Registry.IterateInstances for cleanliness.)
+	snap := reg.Snapshot(fed)
+	if snap.InstanceCount == 0 {
+		return
+	}
+	// Conservative: try every handle in [1, InstanceCount + slack].
+	// Delete returns ErrObjectHandleInvalid for handles that don't
+	// exist or have been deleted; ErrObjectNotOwned for handles owned
+	// by other federates. Both are silently ignored — only owned
+	// instances actually delete.
+	const slack = 16 // protects against late-registration races
+	for i := uint32(1); i <= snap.InstanceCount+slack; i++ {
+		_ = reg.Delete(ctx, fed, h, core.ObjectHandle(i), nil, nil)
+	}
+}
+
+// chainOnFederateResigned composes multiple OnFederateResigned hooks
+// into one. M21 TASK-204c: the federation.Manager exposes a single
+// hook field, so cmd/rtid chains MOM's resign-side hook with the
+// time-manager's pending-state cleanup.
+func chainOnFederateResigned(
+	hs ...func(context.Context, core.FederationName, core.FederateHandle),
+) func(context.Context, core.FederationName, core.FederateHandle) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle) {
+		for _, h2 := range hs {
+			if h2 != nil {
+				h2(ctx, fed, h)
+			}
+		}
+	}
+}
+
+// chainOnFederateJoined composes multiple OnFederateJoined hooks
+// in declaration order. M27 Phase A — needed once the outbox-bind
+// hook joined MOM as a second registrant on the join-side.
+func chainOnFederateJoined(
+	hs ...func(context.Context, core.FederationName, core.FederateHandle, string, string),
+) func(context.Context, core.FederationName, core.FederateHandle, string, string) {
+	return func(ctx context.Context, fed core.FederationName, h core.FederateHandle, name string, fedType string) {
+		for _, h2 := range hs {
+			if h2 != nil {
+				h2(ctx, fed, h, name, fedType)
+			}
+		}
+	}
+}
+
+// createFederationHook returns the gRPC OnCreateFederationSuccess
+// closure that (a) populates the FOM repository's per-federation map
+// for FOMRepoOrderLookup and (b) registers the HLAfederation MOM
+// instance. M15.2.3 also (c) records the federation→self assignment
+// in the cluster manager and broadcasts NotifyAssignment to peers.
+//
+// The double parse on the FOM modules is intentional: the
+// federation manager already validated them, so a Load failure here
+// would be a programmer error — surfacing it would lie about the
+// federation's existence (it has already been created).
+func createFederationHook(foms *fomRepository, momMgr core.ManagementObjectModel, clusterMgr *cluster.Manager, clusterSvc *grpcsvc.ClusterService, logger *slog.Logger) func(context.Context, core.FederationName, []core.FOMModule) {
+	return func(ctx context.Context, name core.FederationName, modules []core.FOMModule) {
+		h, err := foms.Load(ctx, modules)
+		if err != nil {
+			logger.Warn("rtid: post-CreateFederation FOM Load failed; "+
+				"FOMRepoOrderLookup will default to TSO for this federation",
+				"federation", name, "err", err)
+			return
+		}
+		foms.RememberFor(name, h)
+		if err := momMgr.FederationCreated(ctx, name, modules); err != nil {
+			logger.Warn("rtid: MOM FederationCreated hook failed",
+				"federation", name, "err", err)
+		}
+		// M15 cut-2 — claim the federation locally and tell peers.
+		if clusterMgr != nil {
+			if clusterSvc != nil {
+				clusterSvc.AssignLocalFederation(name)
+				clusterSvc.BroadcastAssignment(
+					ctx, name, clusterMgr.SelfID(), clusterMgr.SelfAddress(),
+				)
+			} else {
+				clusterMgr.AssignFederation(name)
+			}
+		}
+	}
+}
+
+// destroyFederationHook is the destroy-side analogue.
+func destroyFederationHook(momMgr core.ManagementObjectModel, logger *slog.Logger) func(context.Context, core.FederationName) {
+	return func(ctx context.Context, name core.FederationName) {
+		if err := momMgr.FederationDestroyed(ctx, name); err != nil {
+			logger.Warn("rtid: MOM FederationDestroyed hook failed",
+				"federation", name, "err", err)
+		}
+	}
+}

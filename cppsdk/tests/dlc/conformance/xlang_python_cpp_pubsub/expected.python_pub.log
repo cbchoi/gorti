@@ -1,0 +1,12 @@
+# M31 fixture xlang_python_cpp_pubsub — Python pub golden (SKELETON).
+# gorti-only fixture (cross-language by design; no commercial-RTI parity leg).
+# Real golden lands when M28 typed-handle pysdk + DLC cppsdk paths
+# co-exist in a single rtid (M32+ when impl lands).
+PUB: CONNECT                                                       # §4.2 — pysdk Layer 2 connect
+PUB: JOIN federate=py-pub                                          # §4.9
+PUB: PUBLISH class=Vehicle attributes=[Position]                   # §5.2
+PUB: REGISTER class=Vehicle name=car-1                             # §6.8 registerObjectInstance
+PUB: UPDATE name=car-1 Position=10.000000                          # §6.10 RO (catalogue 17.1 mandatory tag, here empty bytes)
+PUB: UPDATE name=car-1 Position=20.000000                          # §6.10
+PUB: UPDATE name=car-1 Position=30.000000                          # §6.10
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

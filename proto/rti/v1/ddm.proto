@@ -1,0 +1,279 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// DDMService — Data Distribution Management per IEEE 1516.1-2010 §6.
+// Cut-3 (M12) gRPC exposure of cut-2 ddm.Manager.
+//
+// Routing-space + dimension queries return handles federates use in
+// subsequent RPCs. Region-scoped pub/sub APIs extend the cut-1
+// declaration + object services.
+service DDMService {
+  rpc LookupRoutingSpace(LookupRoutingSpaceRequest) returns (LookupRoutingSpaceResponse);
+  rpc LookupDimension(LookupDimensionRequest) returns (LookupDimensionResponse);
+  rpc CreateRegion(CreateRegionRequest) returns (CreateRegionResponse);
+  rpc SetRangeBounds(SetRangeBoundsRequest) returns (Empty);
+  rpc CommitRegionModifications(CommitRegionRequest) returns (Empty);
+  rpc DeleteRegion(DeleteRegionRequest) returns (Empty);
+  rpc QueryBounds(QueryBoundsRequest) returns (QueryBoundsResponse);
+  rpc SubscribeObjectClassAttributesWithRegions(SubscribeOCAWithRegionsRequest) returns (Empty);
+  rpc SubscribeInteractionClassWithRegions(SubscribeICWithRegionsRequest) returns (Empty);
+  rpc RegisterObjectInstanceWithRegions(RegisterObjectWithRegionsRequest) returns (RegisterObjectWithRegionsResponse);
+
+  // M23 W5 — IEEE 1516.1-2010 §9 additions (append-only).
+  rpc AssociateRegionsForUpdates(AssociateRegionsForUpdatesRequest) returns (Empty);
+  rpc UnassociateRegionsForUpdates(UnassociateRegionsForUpdatesRequest) returns (Empty);
+  rpc UnsubscribeObjectClassAttributesWithRegions(UnsubscribeOCAWithRegionsRequest) returns (Empty);
+  rpc UnsubscribeInteractionClassWithRegions(UnsubscribeICWithRegionsRequest) returns (Empty);
+  rpc SendInteractionWithRegions(SendInteractionWithRegionsRequest) returns (Empty);
+  rpc RequestAttributeValueUpdateWithRegions(RequestAttributeValueUpdateWithRegionsRequest) returns (Empty);
+}
+
+message LookupRoutingSpaceRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string name = 3;
+}
+
+message LookupRoutingSpaceResponse {
+  uint64 routing_space_handle = 1;  // 0 if not found
+  bool found = 2;
+}
+
+message LookupDimensionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 routing_space_handle = 3;
+  string name = 4;
+}
+
+message LookupDimensionResponse {
+  uint64 dimension_handle = 1;
+  bool found = 2;
+}
+
+message CreateRegionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 routing_space_handle = 4;
+  repeated uint64 dimension_handles = 5;
+}
+
+message CreateRegionResponse {
+  uint64 region_handle = 1;
+}
+
+message Range {
+  uint64 lower = 1;
+  uint64 upper = 2;
+}
+
+message SetRangeBoundsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 region_handle = 4;
+  uint64 dimension_handle = 5;
+  Range bounds = 6;
+}
+
+message CommitRegionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  repeated uint64 region_handles = 4;
+}
+
+message DeleteRegionRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 region_handle = 4;
+}
+
+message QueryBoundsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 region_handle = 3;
+  uint64 dimension_handle = 4;
+}
+
+message QueryBoundsResponse {
+  Range bounds = 1;
+  bool found = 2;
+}
+
+message SubscribeOCAWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // subscriber
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  repeated uint64 region_handles = 6;
+}
+
+message SubscribeICWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // subscriber
+  uint64 interaction_class_handle = 4;
+  repeated uint64 region_handles = 5;
+}
+
+// AttributeRegions associates an attribute handle with the publisher's
+// region(s) for that attribute on a single object instance.
+message AttributeRegions {
+  uint64 attribute_handle = 1;
+  repeated uint64 region_handles = 2;
+}
+
+message RegisterObjectWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // owner
+  uint64 object_class_handle = 4;
+  string object_name = 5;  // optional
+  repeated AttributeRegions attribute_regions = 6;
+}
+
+message RegisterObjectWithRegionsResponse {
+  uint64 object_handle = 1;
+  string object_name = 2;
+}
+
+// AssociateRegionsForUpdates — IEEE 1516.1-2010 §9.6 (M23).
+// Wires the existing manager method AssociateRegionsWithObjectInstance.
+message AssociateRegionsForUpdatesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated AttributeRegions attribute_regions = 5;
+}
+
+// UnassociateRegionsForUpdates — IEEE 1516.1-2010 §9.7 (M23).
+// Drops associations matching the supplied (attr, regions) pairs.
+// Empty attribute_regions drops ALL associations for the object.
+message UnassociateRegionsForUpdatesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated AttributeRegions attribute_regions = 5;
+}
+
+// UnsubscribeObjectClassAttributesWithRegions — §9.9 (M23).
+message UnsubscribeOCAWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  repeated uint64 region_handles = 6;
+}
+
+// UnsubscribeInteractionClassWithRegions — §9.11 (M23).
+message UnsubscribeICWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+  repeated uint64 region_handles = 5;
+}
+
+// SendInteractionWithRegions — §9.12 (M23). Same shape as
+// SendInteractionRequest plus region filter.
+message SendInteractionWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+  map<uint64, bytes> parameters = 5;
+  optional double logical_time = 6;
+  repeated uint64 region_handles = 7;
+}
+
+// RequestAttributeValueUpdateWithRegions — §9.13 (M23). Class-scoped
+// pull filtered by region overlap.
+message RequestAttributeValueUpdateWithRegionsRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_class_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  repeated uint64 region_handles = 6;
+  bytes user_supplied_tag = 7;
+}
+
+// =============================================================================
+// DDMManagerState — save manifest snapshot
+// =============================================================================
+
+// DDMRangeEntry maps one dimension to a (lower, upper) Range. Used
+// inside DDMRegionEntry's committed + pending maps.
+message DDMRangeEntry {
+  uint64 dimension_handle = 1;
+  uint64 lower = 2;
+  uint64 upper = 3;
+}
+
+// DDMRegionEntry is one region's runtime state.
+message DDMRegionEntry {
+  uint64 region_handle = 1;
+  uint64 owner_federate = 2;
+  uint64 routing_space_handle = 3;
+  repeated uint64 dimension_handles = 4;
+  // Sorted by dimension_handle ascending for determinism.
+  repeated DDMRangeEntry committed = 5;
+  repeated DDMRangeEntry pending = 6;
+}
+
+// DDMSubscriptionEntry is one (class, attribute, subscriber) entry.
+message DDMSubscriptionEntry {
+  uint64 object_class_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 subscriber_federate = 3;
+  repeated uint64 region_handles = 4;
+}
+
+// DDMInteractionSubscriptionEntry is one (interaction_class, subscriber).
+message DDMInteractionSubscriptionEntry {
+  uint64 interaction_class_handle = 1;
+  uint64 subscriber_federate = 2;
+  repeated uint64 region_handles = 3;
+}
+
+// DDMObjectPublicationEntry is one (object, attribute) → regions
+// publisher association.
+message DDMObjectPublicationEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  repeated uint64 region_handles = 3;
+}
+
+// DDMManagerState is the per-federation snapshot persisted into the
+// save manifest under key "ddm". M13 thread C (docs/srs.md §10.4).
+//
+// Setup-time configuration (routing-space + dimension declarations,
+// per-dimension upper bounds, permissive flag) is intentionally NOT
+// captured here — those are FOM-derived and are reconstructed at
+// restore-time when the federation is re-created against the same
+// FOM. Only runtime state (regions, subscriptions, publications)
+// changes during a federation's lifetime; the snapshot captures
+// exactly that.
+message DDMManagerState {
+  uint64 next_region_handle = 1;
+  // Sorted by region_handle ascending.
+  repeated DDMRegionEntry regions = 2;
+  // Sorted by (object_class, attribute, subscriber) ascending.
+  repeated DDMSubscriptionEntry object_subscriptions = 3;
+  // Sorted by (interaction_class, subscriber) ascending.
+  repeated DDMInteractionSubscriptionEntry interaction_subscriptions = 4;
+  // Sorted by (object, attribute) ascending.
+  repeated DDMObjectPublicationEntry object_publications = 5;
+}

@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gorti:benchmark:devstone-hla-workload:v1",
+  "title": "gorti DEVStone-HLA workload",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generator",
+    "benchmark",
+    "configuration",
+    "hla_mapping",
+    "event_semantics",
+    "atomic_nodes",
+    "directed_couplings",
+    "injected_events",
+    "expected_counts",
+    "topology_identity",
+    "identity"
+  ],
+  "properties": {
+    "schema_version": { "const": "devstone-hla-workload/v1" },
+    "generator": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "gorti-devstone-hla-workload" },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "requested_spelling",
+        "resolved_name",
+        "topology_definition",
+        "profile",
+        "scope"
+      ],
+      "properties": {
+        "requested_spelling": { "const": "DEVSOne" },
+        "resolved_name": { "const": "DEVStone" },
+        "topology_definition": { "enum": ["LI", "HI"] },
+        "profile": { "const": "DEVStone-HLA workload mapping" },
+        "scope": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "configuration": {
+      "type": "object",
+      "required": [
+        "topology",
+        "width",
+        "depth",
+        "external_event_count",
+        "seed",
+        "synthetic_transition_delay"
+      ],
+      "properties": {
+        "topology": { "enum": ["LI", "HI"] },
+        "width": { "type": "integer", "minimum": 2 },
+        "depth": { "type": "integer", "minimum": 1 },
+        "external_event_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "synthetic_transition_delay": {
+          "type": "object",
+          "required": ["external_seconds", "internal_seconds"],
+          "properties": {
+            "external_seconds": { "const": 0 },
+            "internal_seconds": { "const": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "hla_mapping": { "type": "object" },
+    "event_semantics": { "type": "object" },
+    "atomic_nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/atomicNode" }
+    },
+    "directed_couplings": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/coupling" }
+    },
+    "injected_events": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/injectedEvent" }
+    },
+    "expected_counts": { "type": "object" },
+    "topology_identity": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "identity_version",
+        "canonicalization",
+        "scope",
+        "digest"
+      ],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "identity_version": {
+          "const": "devstone-hla-topology/v1"
+        },
+        "canonicalization": {
+          "const": "sorted-key-compact-json-utf8-v1"
+        },
+        "scope": {
+          "const": "topology, width, depth, external_event_count, ordered atomic_nodes, ordered directed_couplings, hla_mapping, and synthetic transition delays"
+        },
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": false
+    },
+    "identity": {
+      "type": "object",
+      "required": ["algorithm", "canonicalization", "scope", "digest"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "canonicalization": {
+          "const": "sorted-key-compact-json-utf8-v1"
+        },
+        "scope": { "const": "document excluding the identity member" },
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "endpoint": {
+      "type": "object",
+      "required": ["node", "port"],
+      "properties": {
+        "node": { "type": "string", "minLength": 1 },
+        "port": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "atomicNode": {
+      "type": "object",
+      "required": ["id", "kind", "level", "index", "ports"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "const": "devstone_atomic" },
+        "level": { "type": "integer", "minimum": 0 },
+        "index": { "type": "integer", "minimum": 1 },
+        "ports": {
+          "type": "object",
+          "required": ["input", "output"],
+          "properties": {
+            "input": { "const": "in" },
+            "output": { "const": "out" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "coupling": {
+      "type": "object",
+      "required": ["id", "kind", "source", "target"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["external_input", "internal"] },
+        "source": { "$ref": "#/$defs/endpoint" },
+        "target": { "$ref": "#/$defs/endpoint" }
+      },
+      "additionalProperties": false
+    },
+    "injectedEvent": {
+      "type": "object",
+      "required": ["id", "sequence", "logical_time", "payload"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "logical_time": { "type": "integer", "minimum": 1 },
+        "payload": {
+          "type": "object",
+          "required": ["encoding", "size_bytes", "value"],
+          "properties": {
+            "encoding": { "const": "hex" },
+            "size_bytes": { "const": 16 },
+            "value": { "type": "string", "pattern": "^[0-9a-f]{32}$" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

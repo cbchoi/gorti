@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gorti.fair-comparison/launcher-result-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "implementation", "workload", "semantics",
+    "provenance", "metrics", "accounting"
+  ],
+  "properties": {
+    "schema": {"const": "gorti.fair-comparison/launcher-result-v1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "implementation": {"enum": ["reference_rti", "go"]},
+    "workload": {"$ref": "#/$defs/workload"},
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["normalization", "canonical_projection", "projection_sha256", "status"],
+      "properties": {
+        "normalization": {"const": "gorti.fm-dm-om-tm-projection/v1"},
+        "canonical_projection": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            {"$ref": "#/$defs/fmRecord"},
+            {"$ref": "#/$defs/dmRecord"},
+            {"$ref": "#/$defs/omRecord"},
+            {"$ref": "#/$defs/tmRecord"}
+          ],
+          "items": false
+        },
+        "projection_sha256": {"$ref": "#/$defs/sha256"},
+        "status": {"const": "pass"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit", "binary_sha256", "runtime_versions", "build_flags",
+        "exact_argv", "environment"
+      ],
+      "properties": {
+        "commit": {"type": "string", "minLength": 1},
+        "binary_sha256": {"$ref": "#/$defs/sha256"},
+        "runtime_versions": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "string", "minLength": 1}
+        },
+        "build_flags": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "exact_argv": {"type": "array", "items": {"type": "string"}},
+        "environment": {"type": "object"},
+        "event_log": {"$ref": "#/$defs/eventLog"},
+        "server_process": {"$ref": "#/$defs/serverProcess"},
+        "server_logs": {"$ref": "#/$defs/serverLogs"},
+        "notes": {"type": "string"}
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "unit", "direction", "sample_scope", "dimensions", "samples"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
+          "unit": {"const": "ns"},
+          "direction": {"enum": ["lower", "higher"]},
+          "sample_scope": {"type": "string", "minLength": 1},
+          "dimensions": {"type": "object"},
+          "samples": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_fanout", "delivered", "explicitly_rejected", "dropped",
+        "duplicates", "invalid"
+      ],
+      "properties": {
+        "expected_fanout": {"type": "integer", "minimum": 0},
+        "delivered": {"type": "integer", "minimum": 0},
+        "explicitly_rejected": {"type": "integer", "minimum": 0},
+        "dropped": {"type": "integer", "minimum": 0},
+        "duplicates": {"type": "integer", "minimum": 0},
+        "invalid": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "eventLog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "header", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "header": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "federation", "generation"],
+          "properties": {
+            "format": {"const": "kdrti/v2"},
+            "federation": {"type": "string", "minLength": 1},
+            "generation": {"type": "integer", "minimum": 1}
+          }
+        },
+        "bytes": {"type": "integer", "minimum": 65},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "serverProcess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle", "pid", "started_at", "executable", "executable_sha256", "argv"
+      ],
+      "properties": {
+        "lifecycle": {"enum": ["per_arm", "persistent_session"]},
+        "pid": {"type": "integer", "minimum": 1},
+        "started_at": {"type": "string", "minLength": 1},
+        "executable": {"type": "string", "minLength": 1},
+        "executable_sha256": {"$ref": "#/$defs/sha256"},
+        "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "serverLogs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stdout", "stderr"],
+      "properties": {
+        "stdout": {"type": "string", "minLength": 1},
+        "stderr": {"type": "string", "minLength": 1}
+      }
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "projectionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "record"],
+      "properties": {"service": {"type": "string"}, "record": {"type": "object"}}
+    },
+    "fmRecord": {"allOf": [{"$ref": "#/$defs/projectionRecord"}, {"properties": {"service": {"const": "FM"}}}]},
+    "dmRecord": {"allOf": [{"$ref": "#/$defs/projectionRecord"}, {"properties": {"service": {"const": "DM"}}}]},
+    "omRecord": {"allOf": [{"$ref": "#/$defs/projectionRecord"}, {"properties": {"service": {"const": "OM"}}}]},
+    "tmRecord": {"allOf": [{"$ref": "#/$defs/projectionRecord"}, {"properties": {"service": {"const": "TM"}}}]},
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "fom_sha256", "seed", "count", "two_process", "choreography",
+        "delivery_boundary", "callback", "server_event_log"
+      ],
+      "properties": {
+        "schema": {"const": "gorti.fair-comparison/workload-v1"},
+        "fom_sha256": {"$ref": "#/$defs/sha256"},
+        "seed": {"const": 1516},
+        "count": {"type": "integer", "minimum": 1},
+        "two_process": {"const": true},
+        "choreography": {"const": "sequential_update_send_then_tar"},
+        "delivery_boundary": {"const": "subscriber_pre_tar_to_both_callbacks"},
+        "callback": {"const": "immediate"},
+        "server_event_log": {"enum": ["off", "file"]}
+      }
+    }
+  }
+}

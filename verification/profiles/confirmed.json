@@ -1,0 +1,8 @@
+{
+  "schema_version": "gorti.receive-order-transport/v1",
+  "receive_order_transport": "confirmed",
+  "local_lrc_queue_capacity": 1024,
+  "local_lrc_ack_every": 32,
+  "local_lrc_batch_size": 32,
+  "callback_representation": "handles"
+}

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOM-011 fixture: an object class that is not nested under HLAobjectRoot
+  (i.e. its required parent class is missing from the document tree).
+  Expected diagnostic: FOM-011.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>FOM-011-missing-parent-class</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-28</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Bad FOM: object class declared at top level instead of under HLAobjectRoot.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>OrphanClass</name>
+      <sharing>Neither</sharing>
+      <semantics>Should be nested under HLAobjectRoot; declaring it at top level is malformed.</semantics>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

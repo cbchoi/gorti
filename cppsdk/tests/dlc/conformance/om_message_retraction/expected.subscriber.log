@@ -1,0 +1,17 @@
+# expected.subscriber.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §8.5, §8.6, §5.8, §8.22, §8.13, §4.10:
+SUB: CONNECT
+SUB: JOIN
+SUB: TIME_CONSTRAINED_ENABLED
+SUB: SUBSCRIBE Honk
+SUB: REQUEST_RETRACTION handle=<H>
+SUB: TIME_ADVANCE_GRANT
+SUB: RESIGN
+# CRITICAL: per §8.21 retract() the subscriber MUST see REQUEST_RETRACTION
+# BEFORE (and NEVER instead) any RECEIVE for the retracted TSO message.
+# If RECEIVE_SPURIOUS appears, the retraction failed to suppress the
+# original — golden diff fails.

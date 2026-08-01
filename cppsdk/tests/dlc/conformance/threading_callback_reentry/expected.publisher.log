@@ -1,0 +1,13 @@
+# M31 fixture threading_callback_reentry — publisher golden (SKELETON).
+# expected.publisher.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: N/A — gorti-only fixture by design (per dispatch Tier 5). See docs/COMMERCIAL_RTI_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+PUB: CONNECT                                                       # §4.2
+PUB: JOIN federate=pub                                             # §4.9
+PUB: PUBLISH class=Vehicle attributes=[Position]                   # §5.2
+PUB: NAME_RESERVED name=car-1                                      # §6.4 ack callback
+PUB: REGISTER class=Vehicle name=car-1                             # §6.8 registerObjectInstance (catalogue 11.2, 2 overloads)
+PUB: UPDATE name=car-1 Position=42.000000                          # §6.10 updateAttributeValues RO (catalogue 11.3 + 17.1 mandatory tag)
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST                  # §4.10

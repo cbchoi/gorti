@@ -1,0 +1,133 @@
+// Typed handles + value maps for the rti1516e C++ SDK.
+//
+// Mirrors IEEE 1516.1-2010 §10.5 handle types. Each handle is a
+// strong typedef over uint64_t so the compiler catches a
+// ParameterHandle-where-AttributeHandle-was-expected bug at the
+// call site. Invalid handles compare equal to the Invalid* sentinels.
+//
+// The handle/value-map types are deliberately minimal: a reference_rti
+// federate port typically does
+//
+//     ObjectClassHandle vc = amb.getObjectClassHandle(L"Vehicle");
+//     AttributeHandle ph = amb.getAttributeHandle(vc, L"Position");
+//     AttributeHandleValueMap m;
+//     m[ph] = encode_double(42.0);
+//     amb.updateAttributeValues(obj, m, /*tag=*/{}, /*time=*/{});
+//
+// — and that pattern is what the M17 Cut-1 surface targets.
+
+#pragma once
+
+#include <cstdint>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
+// M35 — M17 shim deprecation gate.
+// The rti1516e:: header hierarchy is gorti's pre-M32 shim; new federate code
+// should target the strict IEEE 1516.1-2010 DLC surface under <RTI/...>. The
+// namespace attribute fires a deprecation diagnostic on any unqualified use
+// of a name defined here, unless the consumer defines GORTI_ACCEPT_M17_SHIM.
+// Internal builds silence via -DGORTI_ACCEPT_M17_SHIM in cppsdk/CMakeLists.txt.
+// C++17 [dcl.attr.grammar]/6 places the attribute AFTER `namespace` and
+// BEFORE the identifier for a named-namespace-definition.
+#ifdef GORTI_ACCEPT_M17_SHIM
+#  define GORTI_M17_SHIM_DEPRECATED /* silenced */
+#else
+#  define GORTI_M17_SHIM_DEPRECATED \
+     [[deprecated("gorti M17 shim — use <RTI/...> per IEEE 1516.1-2010 DLC (M35). Define GORTI_ACCEPT_M17_SHIM to silence.")]]
+#endif
+namespace GORTI_M17_SHIM_DEPRECATED rti1516e {
+
+// Underlying integer width for every handle. Matches the proto wire
+// (uint64) and the Python SDK's int handles. Zero is reserved as the
+// invalid sentinel.
+using HandleValue = std::uint64_t;
+
+namespace detail {
+
+// Strong typedef over HandleValue. The Tag template parameter
+// distinguishes ObjectClassHandle from AttributeHandle at the type
+// level so a value confusion is a compile error, not a runtime bug.
+template <typename Tag>
+struct StrongHandle {
+  HandleValue value{0};
+
+  constexpr StrongHandle() = default;
+  constexpr explicit StrongHandle(HandleValue v) : value(v) {}
+
+  constexpr bool isValid() const noexcept { return value != 0; }
+  constexpr explicit operator bool() const noexcept { return isValid(); }
+  constexpr HandleValue raw() const noexcept { return value; }
+
+  friend constexpr bool operator==(StrongHandle a, StrongHandle b) noexcept {
+    return a.value == b.value;
+  }
+  friend constexpr bool operator!=(StrongHandle a, StrongHandle b) noexcept {
+    return a.value != b.value;
+  }
+  friend constexpr bool operator<(StrongHandle a, StrongHandle b) noexcept {
+    return a.value < b.value;
+  }
+};
+
+struct ObjectClassTag {};
+struct AttributeTag {};
+struct InteractionClassTag {};
+struct ParameterTag {};
+struct ObjectInstanceTag {};
+struct FederateTag {};
+struct DimensionTag {};
+struct RoutingSpaceTag {};
+struct RegionTag {};
+
+}  // namespace detail
+
+using ObjectClassHandle = detail::StrongHandle<detail::ObjectClassTag>;
+using AttributeHandle = detail::StrongHandle<detail::AttributeTag>;
+using InteractionClassHandle = detail::StrongHandle<detail::InteractionClassTag>;
+using ParameterHandle = detail::StrongHandle<detail::ParameterTag>;
+using ObjectInstanceHandle = detail::StrongHandle<detail::ObjectInstanceTag>;
+using FederateHandle = detail::StrongHandle<detail::FederateTag>;
+using DimensionHandle = detail::StrongHandle<detail::DimensionTag>;
+// IEEE 1516.1 §9 Data Distribution Management — M17.17 (Cut-3).
+using RoutingSpaceHandle = detail::StrongHandle<detail::RoutingSpaceTag>;
+using RegionHandle = detail::StrongHandle<detail::RegionTag>;
+
+// IEEE 1516.1 §10.5 handle-set types. std::set keeps deterministic
+// iteration order, matching the Java/C++ ambassador's
+// ``Set<AttributeHandle>`` shape.
+using AttributeHandleSet = std::set<AttributeHandle>;
+using ParameterHandleSet = std::set<ParameterHandle>;
+using FederateHandleSet = std::set<FederateHandle>;
+using RegionHandleSet = std::set<RegionHandle>;
+
+// IEEE 1516.1 §9.5 — one dimension's lower/upper extent in a region.
+struct DimensionRange {
+  std::uint64_t lower;
+  std::uint64_t upper;
+};
+
+// Per-attribute region binding used by RegisterObjectWithRegions /
+// Associate / Unassociate / Unsubscribe.
+using AttributeRegionMap = std::map<AttributeHandle, RegionHandleSet>;
+
+// Variable-length opaque payload. Federates encode attribute /
+// parameter bytes via the FOM datatype rules (HLAfloat64BE etc.);
+// the SDK passes them through unchanged.
+using VariableLengthData = std::vector<std::uint8_t>;
+
+// IEEE 1516.1-2010 §8.21 (M20.2) — federate-allocated handle for
+// message retraction. Gorti convention: a per-federate monotonic
+// counter; zero means "no retraction tracking". Federates that need
+// to retract a TSO message pass a non-zero handle in the original
+// send and the same handle to retract().
+using MessageRetractionHandle = std::uint64_t;
+
+// IEEE 1516.1 §10.5 value-map types. Order: AttributeHandle ->
+// payload bytes (or ParameterHandle -> bytes for interactions).
+using AttributeHandleValueMap = std::map<AttributeHandle, VariableLengthData>;
+using ParameterHandleValueMap = std::map<ParameterHandle, VariableLengthData>;
+
+}  // namespace rti1516e

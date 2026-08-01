@@ -1,0 +1,2 @@
+# Runtime delivery plans are generated per seed and must not be committed.
+*.dvshla

@@ -1,0 +1,34 @@
+# expected.querier.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.9, §7.17, §7.18, §4.10:
+# GOLDEN AMENDED (M37, 2026-07-02, specification review):
+#   Original golden expected `ATTRIBUTE_IS_OWNED_BY_RTI
+#   attr=HLAprivilegeToDelete`. That is wrong for this scenario: the
+#   carrier — a joined federate — registers car-query, and §6.8
+#   (registerObjectInstance) makes the REGISTRANT the owner of the
+#   instance attribute HLAprivilegeToDeleteObject. §7.18
+#   attributeIsOwnedByRTI applies only to RTI-owned instance
+#   attributes (MOM-managed instances per §6.8/§10; not
+#   federate-registered ones). Correct §7.18 answer is therefore
+#   informAttributeOwnership with the carrier as owner. See README
+#   "Golden review" for the full adjudication.
+# Two of three §7.18 callback flavors exercised in a single run
+# (informAttributeOwnership ×2, attributeIsNotOwned ×1); a true
+# attributeIsOwnedByRTI witness needs an RTI-owned (MOM) instance
+# attribute, out of scope for this fixture.
+# RO-bucket: the three INFORM/IS_NOT_OWNED/IS_OWNED_BY_RTI callback
+# orderings depend on RTI scheduling; harness LBTS-bucket sort
+# normalizes against this.
+QUERIER: CONNECT
+QUERIER: JOIN
+QUERIER: DISCOVER name=car-query handle=<H>
+QUERIER: QUERY_OWNERSHIP attr=OwnedAttr
+QUERIER: QUERY_OWNERSHIP attr=UnownedAttr
+QUERIER: QUERY_OWNERSHIP attr=HLAprivilegeToDelete
+QUERIER: INFORM_OWNERSHIP attr=OwnedAttr owner=<H>
+QUERIER: ATTRIBUTE_IS_NOT_OWNED attr=UnownedAttr
+QUERIER: INFORM_OWNERSHIP attr=HLAprivilegeToDelete owner=<H>  # §6.8: registrant owns HLAprivilegeToDeleteObject
+QUERIER: RESIGN

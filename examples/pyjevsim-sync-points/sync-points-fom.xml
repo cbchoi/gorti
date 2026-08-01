@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>pyjevsim-sync-points</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-05-03</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Reference FOM for the canonical HLA bootstrap pattern: all federates rendezvous at named sync labels (start_simulation, end_simulation) then run an exchange in between. One trivial interaction class (Tick) so the federates have a wire-visible heartbeat during the running phase; the pedagogical focus is on the rendezvous semantics, not the payload.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>Tick</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation>
+        <order>TimeStamp</order>
+        <semantics>Heartbeat sent by each federate during the running phase between start_simulation and end_simulation sync points. Carries the federate's own tick counter so the runner can verify that exactly the expected number of cycles ran between rendezvous points.</semantics>
+        <parameter>
+          <name>seq</name>
+          <dataType>HLAinteger32BE</dataType>
+          <semantics>Monotonic per-federate sequence number.</semantics>
+        </parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+</objectModel>

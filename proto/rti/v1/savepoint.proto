@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// SavepointService — Federation save/restore per IEEE 1516.1-2010 §4.8-4.12.
+// Cut-3 (M12) gRPC exposure of cut-2 savepoint.Manager.
+service SavepointService {
+  rpc RequestFederationSave(RequestFederationSaveRequest) returns (Empty);
+  rpc FederateSaveComplete(FederateSaveResponseRequest) returns (Empty);
+  rpc FederateSaveNotComplete(FederateSaveResponseRequest) returns (Empty);
+  rpc QuerySaveState(QuerySaveStateRequest) returns (QuerySaveStateResponse);
+  rpc RequestFederationRestore(RequestFederationRestoreRequest) returns (Empty);
+  rpc FederateRestoreComplete(FederateRestoreResponseRequest) returns (Empty);
+  rpc QueryRestoreState(QueryRestoreStateRequest) returns (QueryRestoreStateResponse);
+
+  // M24 W3 — IEEE 1516.1-2010 §4.28 + §4.30.
+  rpc AbortFederationSave(AbortFederationSaveRequest) returns (Empty);
+  rpc AbortFederationRestore(AbortFederationRestoreRequest) returns (Empty);
+}
+
+// AbortFederationSave — §4.28 (M24).
+message AbortFederationSaveRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  optional uint64 federate_handle = 3;
+}
+
+// AbortFederationRestore — §4.30 (M24).
+message AbortFederationRestoreRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  optional uint64 federate_handle = 3;
+}
+
+message RequestFederationSaveRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // requester
+  string label = 4;
+  // Optional save-time pin; absent means "save now at current sync point".
+  optional double save_time = 5;
+}
+
+message FederateSaveResponseRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+enum SaveState {
+  SAVE_STATE_UNSPECIFIED = 0;
+  SAVE_STATE_IDLE = 1;
+  SAVE_STATE_INITIATED = 2;
+  SAVE_STATE_SAVED = 3;
+  SAVE_STATE_NOT_SAVED = 4;
+}
+
+message QuerySaveStateRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string label = 3;
+}
+
+message QuerySaveStateResponse {
+  SaveState state = 1;
+}
+
+message RequestFederationRestoreRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;  // requester
+  string label = 4;
+}
+
+message FederateRestoreResponseRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+enum RestoreState {
+  RESTORE_STATE_UNSPECIFIED = 0;
+  RESTORE_STATE_IDLE = 1;
+  RESTORE_STATE_LOADING = 2;
+  RESTORE_STATE_INITIATED = 3;
+  RESTORE_STATE_COMPLETED = 4;
+  RESTORE_STATE_FAILED = 5;
+}
+
+message QueryRestoreStateRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string label = 3;
+}
+
+message QueryRestoreStateResponse {
+  RestoreState state = 1;
+}

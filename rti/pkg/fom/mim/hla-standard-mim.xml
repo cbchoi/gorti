@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Empty HLAstandardMIM wrapper module for the gorti project.
+
+  PROVENANCE NOTICE:
+
+  The canonical IEEE 1516.1-2010 standard MIM lives alongside this file at
+  ./standard-mim.xml (sourced from openlvc/portico CDDL distribution per
+  the package doc in embed.go). This wrapper exists so the //go:embed
+  directives in embed.go stay symmetric with downstream merge logic; it
+  contains no declarations of its own. If a future cut requires a real
+  HLAstandardMIM-distinct-from-MIM module (per 1516.1-2010 §4.13 letter
+  vs. spirit), populate this file then.
+
+  Maintained as a vendored exception under the repository dependency policy.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>HLAstandardMIM</name>
+    <type>FOM</type>
+    <version>2010-interim</version>
+    <modificationDate>2026-05-02</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Interim HLAstandardMIM. See provenance notice. Cut-1 carries no additional declarations beyond the standard MIM.</description>
+    <useHistory>Internal to gorti project.</useHistory>
+  </modelIdentification>
+
+  <objects/>
+  <interactions/>
+  <dataTypes>
+    <basicDataRepresentations/>
+    <simpleDataTypes/>
+    <enumeratedDataTypes/>
+    <arrayDataTypes/>
+    <fixedRecordDataTypes/>
+    <variantRecordDataTypes/>
+  </dataTypes>
+</objectModel>

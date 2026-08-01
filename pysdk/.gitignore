@@ -1,0 +1,21 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.tox/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated proto bindings (regenerate via `make py-codegen`)
+rti1516e/_generated/
+
+# IDE
+.vscode/
+.idea/

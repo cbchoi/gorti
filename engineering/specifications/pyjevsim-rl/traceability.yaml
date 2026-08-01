@@ -1,0 +1,231 @@
+schema_version: "1.0"
+document_id: TRACE-PYJEVSIM-RL
+version: 0.1-draft
+status: design-baseline-candidate
+updated: 2026-07-19
+note: >-
+  ISO 9001 quality-management principles alignment only; this record does not
+  claim certification or conformity assessment. Test IDs are planned evidence
+  identifiers until the corresponding STD procedure and executable evidence exist.
+
+sources:
+  requirements: SRS.md
+  milestones: MILESTONES.md
+  design: SDD.md
+  interfaces: IDD.md
+  tests: STD.md
+
+trace_policy:
+  requirement_acceptance: [design, interface_if_applicable, task, test, evidence, review]
+  task_lifecycle: [plan, do, review, reflect]
+  canonical_edges: requirements
+  reverse_edges: task_catalog_and_test_catalog
+
+requirements:
+  RL-FR-MDL-001: {milestone: MS-RL-01, tasks: [TASK-RL-010], tests: [TEST-RL-MDL-001]}
+  RL-FR-MDL-002: {milestone: MS-RL-01, tasks: [TASK-RL-011], tests: [TEST-RL-MDL-002]}
+  RL-FR-MDL-003: {milestone: MS-RL-01, tasks: [TASK-RL-010], tests: [TEST-RL-MDL-001]}
+  RL-FR-MDL-004: {milestone: MS-RL-01, tasks: [TASK-RL-011, TASK-RL-020], tests: [TEST-RL-MDL-002, TEST-RL-EXEC-001]}
+  RL-FR-MDL-005: {milestone: MS-RL-01, tasks: [TASK-RL-012], tests: [TEST-RL-MDL-003]}
+  RL-FR-MDL-006: {milestone: MS-RL-01, tasks: [TASK-RL-011], tests: [TEST-RL-MDL-002]}
+  RL-FR-MDL-007: {milestone: MS-RL-01, tasks: [TASK-RL-015], tests: [TEST-RL-EXT-001]}
+
+  RL-FR-GYM-001: {milestone: MS-RL-01, tasks: [TASK-RL-013], tests: [TEST-RL-GYM-001]}
+  RL-FR-GYM-002: {milestone: MS-RL-01, tasks: [TASK-RL-013], tests: [TEST-RL-GYM-001]}
+  RL-FR-GYM-003: {milestone: MS-RL-01, tasks: [TASK-RL-013], tests: [TEST-RL-GYM-001]}
+  RL-FR-GYM-004: {milestone: MS-RL-01, tasks: [TASK-RL-012, TASK-RL-013], tests: [TEST-RL-GYM-001]}
+  RL-FR-GYM-005: {milestone: MS-RL-02, tasks: [TASK-RL-013, TASK-RL-021], tests: [TEST-RL-GYM-001, TEST-RL-EXEC-002]}
+  RL-FR-GYM-006: {milestone: MS-RL-01, tasks: [TASK-RL-013], tests: [TEST-RL-GYM-001]}
+  RL-FR-GYM-007: {milestone: MS-RL-01, tasks: [TASK-RL-014], tests: [TEST-RL-GYM-002]}
+
+  RL-FR-EXEC-001: {milestone: MS-RL-02, tasks: [TASK-RL-020], tests: [TEST-RL-EXEC-001]}
+  RL-FR-EXEC-002: {milestone: MS-RL-02, tasks: [TASK-RL-020, TASK-RL-021], tests: [TEST-RL-EXEC-001, TEST-RL-EXEC-002]}
+  RL-FR-EXEC-003: {milestone: MS-RL-02, tasks: [TASK-RL-022], tests: [TEST-RL-EXEC-003]}
+  RL-FR-EXEC-004: {milestone: MS-RL-02, tasks: [TASK-RL-021], tests: [TEST-RL-EXEC-002]}
+  RL-FR-EXEC-005: {milestone: MS-RL-02, tasks: [TASK-RL-022], tests: [TEST-RL-EXEC-003]}
+  RL-FR-EXEC-006: {milestone: MS-RL-02, tasks: [TASK-RL-024], tests: [TEST-RL-TIME-001]}
+
+  RL-FR-LOC-001: {milestone: MS-RL-03, tasks: [TASK-RL-030], tests: [TEST-RL-LOC-001]}
+  RL-FR-LOC-002: {milestone: MS-RL-03, tasks: [TASK-RL-031], tests: [TEST-RL-LOC-002]}
+  RL-FR-LOC-003: {milestone: MS-RL-03, tasks: [TASK-RL-030, TASK-RL-031], tests: [TEST-RL-LOC-001, TEST-RL-LOC-002]}
+  RL-FR-LOC-004: {milestone: MS-RL-03, tasks: [TASK-RL-030, TASK-RL-033], tests: [TEST-RL-LOC-001, TEST-RL-EXP-001]}
+  RL-FR-LOC-005: {milestone: MS-RL-03, tasks: [TASK-RL-032], tests: [TEST-RL-LOC-003]}
+  RL-FR-LOC-006: {milestone: MS-RL-03, tasks: [TASK-RL-023, TASK-RL-030], tests: [TEST-RL-DET-001, TEST-RL-LOC-001]}
+
+  RL-FR-FED-001: {milestone: MS-RL-04, tasks: [TASK-RL-040], tests: [TEST-RL-FED-001]}
+  RL-FR-FED-002: {milestone: MS-RL-04, tasks: [TASK-RL-040], tests: [TEST-RL-FED-001]}
+  RL-FR-FED-003: {milestone: MS-RL-04, tasks: [TASK-RL-044], tests: [TEST-RL-GEN-001]}
+  RL-FR-FED-004: {milestone: MS-RL-04, tasks: [TASK-RL-041], tests: [TEST-RL-SYNC-001]}
+  RL-FR-FED-005: {milestone: MS-RL-04, tasks: [TASK-RL-042], tests: [TEST-RL-TIME-002]}
+  RL-FR-FED-006: {milestone: MS-RL-04, tasks: [TASK-RL-042], tests: [TEST-RL-TIME-002]}
+  RL-FR-FED-007: {milestone: MS-RL-04, tasks: [TASK-RL-040, TASK-RL-043], tests: [TEST-RL-FED-001, TEST-RL-FED-002]}
+  RL-FR-FED-008: {milestone: MS-RL-05, tasks: [TASK-RL-051], tests: [TEST-RL-BLOB-001]}
+  RL-FR-FED-009: {milestone: MS-RL-05, tasks: [TASK-RL-050], tests: [TEST-RL-DDM-001]}
+  RL-FR-FED-010: {milestone: MS-RL-04, tasks: [TASK-RL-044], tests: [TEST-RL-GEN-001]}
+  RL-FR-FED-011: {milestone: MS-RL-05, tasks: [TASK-RL-053], tests: [TEST-RL-REC-002]}
+  RL-FR-FED-012: {milestone: MS-RL-04, tasks: [TASK-RL-045], tests: [TEST-RL-FED-003]}
+  RL-FR-FED-013: {milestone: MS-RL-06, tasks: [TASK-RL-062], tests: [TEST-RL-OPS-003]}
+
+  RL-FR-RL-001: {milestone: MS-RL-03, tasks: [TASK-RL-034], tests: [TEST-RL-POL-001]}
+  RL-FR-RL-002: {milestone: MS-RL-03, tasks: [TASK-RL-033], tests: [TEST-RL-EXP-001]}
+  RL-FR-RL-003: {milestone: MS-RL-03, tasks: [TASK-RL-033], tests: [TEST-RL-EXP-001]}
+  RL-FR-RL-004: {milestone: MS-RL-05, tasks: [TASK-RL-052], tests: [TEST-RL-FLOW-001]}
+  RL-FR-RL-005: {milestone: MS-RL-03, tasks: [TASK-RL-032, TASK-RL-033], tests: [TEST-RL-LOC-003, TEST-RL-EXP-001]}
+  RL-FR-RL-006: {milestone: MS-RL-03, tasks: [TASK-RL-034], tests: [TEST-RL-POL-001]}
+  RL-FR-RL-007: {milestone: MS-RL-03, tasks: [TASK-RL-034], tests: [TEST-RL-POL-001]}
+  RL-FR-RL-008: {milestone: MS-RL-03, tasks: [TASK-RL-035], tests: [TEST-RL-REC-001]}
+  RL-FR-RL-009: {milestone: MS-RL-03, tasks: [TASK-RL-035, TASK-RL-053], tests: [TEST-RL-REC-001, TEST-RL-REC-002]}
+
+  RL-FR-OPS-001: {milestone: MS-RL-06, tasks: [TASK-RL-060], tests: [TEST-RL-OPS-001]}
+  RL-FR-OPS-002: {milestone: MS-RL-06, tasks: [TASK-RL-060], tests: [TEST-RL-OPS-001]}
+  RL-FR-OPS-003: {milestone: MS-RL-06, tasks: [TASK-RL-061], tests: [TEST-RL-OPS-002]}
+  RL-FR-OPS-004: {milestone: MS-RL-00, tasks: [TASK-RL-005], tests: [TEST-RL-TRACE-001]}
+  RL-FR-OPS-005: {milestone: MS-RL-06, tasks: [TASK-RL-005, TASK-RL-061], tests: [TEST-RL-TRACE-001, TEST-RL-OPS-002]}
+  RL-FR-OPS-006: {milestone: MS-RL-00, tasks: [TASK-RL-005, TASK-RL-083], tests: [TEST-RL-TRACE-001, TEST-RL-TRACE-002]}
+  RL-FR-OPS-007: {milestone: MS-RL-00, tasks: [TASK-RL-005, TASK-RL-083], tests: [TEST-RL-TRACE-001, TEST-RL-TRACE-002]}
+  RL-FR-OPS-008: {milestone: MS-RL-06, tasks: [TASK-RL-065], tests: [TEST-RL-ART-001]}
+
+  RL-FR-DEX-001: {milestone: MS-RL-00, tasks: [TASK-RL-006, TASK-RL-081], tests: [TEST-RL-DEX-001, TEST-RL-DEX-002]}
+  RL-FR-DEX-002: {milestone: MS-RL-00, tasks: [TASK-RL-006, TASK-RL-081], tests: [TEST-RL-DEX-001, TEST-RL-DEX-002]}
+
+  RL-NFR-DET-001: {milestone: MS-RL-02, tasks: [TASK-RL-023], tests: [TEST-RL-DET-001]}
+  RL-NFR-DET-002: {milestone: MS-RL-02, tasks: [TASK-RL-023, TASK-RL-065], tests: [TEST-RL-DET-001, TEST-RL-ART-001]}
+  RL-NFR-DET-003: {milestone: MS-RL-02, tasks: [TASK-RL-023], tests: [TEST-RL-DET-001]}
+  RL-NFR-PERF-001: {milestone: MS-RL-03, tasks: [TASK-RL-036, TASK-RL-064], tests: [TEST-RL-PERF-001, TEST-RL-OBS-001]}
+  RL-NFR-PERF-002: {milestone: MS-RL-05, tasks: [TASK-RL-036, TASK-RL-054], tests: [TEST-RL-PERF-001, TEST-RL-PERF-002]}
+  RL-NFR-PERF-003: {milestone: MS-RL-05, tasks: [TASK-RL-032, TASK-RL-052], tests: [TEST-RL-LOC-003, TEST-RL-FLOW-001]}
+  RL-NFR-REL-001: {milestone: MS-RL-06, tasks: [TASK-RL-063], tests: [TEST-RL-FAULT-001]}
+  RL-NFR-REL-002: {milestone: MS-RL-05, tasks: [TASK-RL-053], tests: [TEST-RL-REC-002]}
+  RL-NFR-REL-003: {milestone: MS-RL-06, tasks: [TASK-RL-063], tests: [TEST-RL-FAULT-001]}
+  RL-NFR-REL-004: {milestone: MS-RL-06, tasks: [TASK-RL-032, TASK-RL-061, TASK-RL-063], tests: [TEST-RL-LOC-003, TEST-RL-OPS-002, TEST-RL-FAULT-001]}
+  RL-NFR-SEC-001: {milestone: MS-RL-07, tasks: [TASK-RL-070], tests: [TEST-RL-SEC-001]}
+  RL-NFR-SEC-002: {milestone: MS-RL-07, tasks: [TASK-RL-070], tests: [TEST-RL-SEC-001]}
+  RL-NFR-SEC-003: {milestone: MS-RL-07, tasks: [TASK-RL-071], tests: [TEST-RL-SEC-002]}
+  RL-NFR-SEC-004: {milestone: MS-RL-07, tasks: [TASK-RL-071], tests: [TEST-RL-SEC-002]}
+  RL-NFR-SEC-005: {milestone: MS-RL-07, tasks: [TASK-RL-072], tests: [TEST-RL-SEC-003]}
+  RL-NFR-OBS-001: {milestone: MS-RL-06, tasks: [TASK-RL-064], tests: [TEST-RL-OBS-001]}
+  RL-NFR-OBS-002: {milestone: MS-RL-06, tasks: [TASK-RL-062, TASK-RL-064], tests: [TEST-RL-OPS-003, TEST-RL-OBS-001]}
+  RL-NFR-OBS-003: {milestone: MS-RL-06, tasks: [TASK-RL-064], tests: [TEST-RL-OBS-001]}
+  RL-NFR-PORT-001: {milestone: MS-RL-07, tasks: [TASK-RL-074], tests: [TEST-RL-PORT-001]}
+  RL-NFR-PORT-002: {milestone: MS-RL-07, tasks: [TASK-RL-043, TASK-RL-074], tests: [TEST-RL-FED-002, TEST-RL-PORT-001]}
+  RL-NFR-EXT-001: {milestone: MS-RL-07, tasks: [TASK-RL-015, TASK-RL-073], tests: [TEST-RL-EXT-001, TEST-RL-COMPAT-001]}
+  RL-NFR-EXT-002: {milestone: MS-RL-07, tasks: [TASK-RL-073], tests: [TEST-RL-COMPAT-001]}
+  RL-NFR-QUAL-001: {milestone: MS-RL-00, tasks: [TASK-RL-001, TASK-RL-002, TASK-RL-003, TASK-RL-004, TASK-RL-005], tests: [TEST-RL-DOC-001, TEST-RL-DOC-002, TEST-RL-DOC-003, TEST-RL-DOC-004, TEST-RL-TRACE-001]}
+  RL-NFR-QUAL-002: {milestone: MS-RL-00, tasks: [TASK-RL-001, TASK-RL-005], tests: [TEST-RL-DOC-001, TEST-RL-TRACE-001]}
+  RL-NFR-QUAL-003: {milestone: MS-RL-08, tasks: [TASK-RL-082], tests: [TEST-RL-QUAL-001]}
+  RL-NFR-QUAL-004: {milestone: MS-RL-07, tasks: [TASK-RL-075], tests: [TEST-RL-REL-001]}
+
+task_catalog:
+  MS-RL-00:
+    TASK-RL-001: {tests: [TEST-RL-DOC-001], output: SRS.md}
+    TASK-RL-002: {tests: [TEST-RL-DOC-002], output: SDD.md}
+    TASK-RL-003: {tests: [TEST-RL-DOC-003], output: IDD.md}
+    TASK-RL-004: {tests: [TEST-RL-DOC-004], output: STD.md}
+    TASK-RL-005: {tests: [TEST-RL-TRACE-001], output: traceability-validator}
+    TASK-RL-006: {tests: [TEST-RL-DEX-001], output: dexsim-comparison}
+  MS-RL-01:
+    TASK-RL-010: {tests: [TEST-RL-MDL-001], output: model-sdk}
+    TASK-RL-011: {tests: [TEST-RL-MDL-002], output: model-factory}
+    TASK-RL-012: {tests: [TEST-RL-MDL-003], output: environment-binding}
+    TASK-RL-013: {tests: [TEST-RL-GYM-001], output: gym-environment}
+    TASK-RL-014: {tests: [TEST-RL-GYM-002], output: multi-agent-adapter}
+    TASK-RL-015: {tests: [TEST-RL-EXT-001], output: third-party-kit}
+  MS-RL-02:
+    TASK-RL-020: {tests: [TEST-RL-EXEC-001], output: executor-adapter}
+    TASK-RL-021: {tests: [TEST-RL-EXEC-002], output: decision-boundaries}
+    TASK-RL-022: {tests: [TEST-RL-EXEC-003], output: simultaneous-event-handler}
+    TASK-RL-023: {tests: [TEST-RL-DET-001], output: reproducibility-module}
+    TASK-RL-024: {tests: [TEST-RL-TIME-001], output: time-mapping}
+  MS-RL-03:
+    TASK-RL-030: {tests: [TEST-RL-LOC-001], output: local-executor}
+    TASK-RL-031: {tests: [TEST-RL-LOC-002], output: worker-supervisor}
+    TASK-RL-032: {tests: [TEST-RL-LOC-003], output: local-flow-control}
+    TASK-RL-033: {tests: [TEST-RL-EXP-001], output: experience-pipeline}
+    TASK-RL-034: {tests: [TEST-RL-POL-001], output: learner-adapter}
+    TASK-RL-035: {tests: [TEST-RL-REC-001], output: local-recovery-evaluation}
+    TASK-RL-036: {tests: [TEST-RL-PERF-001], output: local-scale-report}
+  MS-RL-04:
+    TASK-RL-040: {tests: [TEST-RL-FED-001], output: rl-fom}
+    TASK-RL-041: {tests: [TEST-RL-SYNC-001], output: phase-barriers}
+    TASK-RL-042: {tests: [TEST-RL-TIME-002], output: time-coordinator}
+    TASK-RL-043: {tests: [TEST-RL-FED-002], output: gorti-transport}
+    TASK-RL-044: {tests: [TEST-RL-GEN-001], output: generation-validator}
+    TASK-RL-045: {tests: [TEST-RL-FED-003], output: transport-contract-suite}
+  MS-RL-05:
+    TASK-RL-050: {tests: [TEST-RL-DDM-001], output: ddm-routing}
+    TASK-RL-051: {tests: [TEST-RL-BLOB-001], output: blob-protocol}
+    TASK-RL-052: {tests: [TEST-RL-FLOW-001], output: distributed-flow-control}
+    TASK-RL-053: {tests: [TEST-RL-REC-002], output: recovery-coordinator}
+    TASK-RL-054: {tests: [TEST-RL-PERF-002], output: distributed-scale-report}
+  MS-RL-06:
+    TASK-RL-060: {tests: [TEST-RL-OPS-001], output: manifest-validator}
+    TASK-RL-061: {tests: [TEST-RL-OPS-002], output: runner-control-api}
+    TASK-RL-062: {tests: [TEST-RL-OPS-003], output: federation-controller}
+    TASK-RL-063: {tests: [TEST-RL-FAULT-001], output: resilience-controller}
+    TASK-RL-064: {tests: [TEST-RL-OBS-001], output: observability-package}
+    TASK-RL-065: {tests: [TEST-RL-ART-001], output: artifact-catalog}
+  MS-RL-07:
+    TASK-RL-070: {tests: [TEST-RL-SEC-001], output: transport-identity-security}
+    TASK-RL-071: {tests: [TEST-RL-SEC-002], output: plugin-security}
+    TASK-RL-072: {tests: [TEST-RL-SEC-003], output: integrity-verifier}
+    TASK-RL-073: {tests: [TEST-RL-COMPAT-001], output: compatibility-policy}
+    TASK-RL-074: {tests: [TEST-RL-PORT-001], output: portability-evidence}
+    TASK-RL-075: {tests: [TEST-RL-REL-001], output: release-candidate}
+  MS-RL-08:
+    TASK-RL-080: {tests: [TEST-RL-USER-001], output: usability-report}
+    TASK-RL-081: {tests: [TEST-RL-DEX-002], output: comparison-evidence}
+    TASK-RL-082: {tests: [TEST-RL-QUAL-001], output: improvement-backlog}
+    TASK-RL-083: {tests: [TEST-RL-TRACE-002], output: audit-report}
+
+test_catalog:
+  TEST-RL-DOC-001: {kind: document-review, verifies: [RL-NFR-QUAL-001, RL-NFR-QUAL-002]}
+  TEST-RL-DOC-002: {kind: document-review, verifies: [RL-NFR-QUAL-001]}
+  TEST-RL-DOC-003: {kind: document-review, verifies: [RL-NFR-QUAL-001]}
+  TEST-RL-DOC-004: {kind: document-review, verifies: [RL-NFR-QUAL-001]}
+  TEST-RL-TRACE-001: {kind: static-validation, verifies: [RL-FR-OPS-004, RL-FR-OPS-005, RL-FR-OPS-006, RL-FR-OPS-007, RL-NFR-QUAL-001, RL-NFR-QUAL-002]}
+  TEST-RL-DEX-001: {kind: evidence-review, verifies: [RL-FR-DEX-001, RL-FR-DEX-002]}
+  TEST-RL-MDL-001: {kind: contract, verifies: [RL-FR-MDL-001, RL-FR-MDL-003]}
+  TEST-RL-MDL-002: {kind: unit-contract, verifies: [RL-FR-MDL-002, RL-FR-MDL-004, RL-FR-MDL-006]}
+  TEST-RL-MDL-003: {kind: contract, verifies: [RL-FR-MDL-005, RL-FR-GYM-004]}
+  TEST-RL-GYM-001: {kind: api-contract, verifies: [RL-FR-GYM-001, RL-FR-GYM-002, RL-FR-GYM-003, RL-FR-GYM-004, RL-FR-GYM-005, RL-FR-GYM-006]}
+  TEST-RL-GYM-002: {kind: api-contract, verifies: [RL-FR-GYM-007]}
+  TEST-RL-EXT-001: {kind: clean-room-onboarding, verifies: [RL-FR-MDL-007, RL-NFR-EXT-001]}
+  TEST-RL-EXEC-001: {kind: conformance, verifies: [RL-FR-MDL-004, RL-FR-EXEC-001, RL-FR-EXEC-002]}
+  TEST-RL-EXEC-002: {kind: golden-trace, verifies: [RL-FR-GYM-005, RL-FR-EXEC-002, RL-FR-EXEC-004]}
+  TEST-RL-EXEC-003: {kind: golden-trace, verifies: [RL-FR-EXEC-003, RL-FR-EXEC-005]}
+  TEST-RL-DET-001: {kind: determinism, verifies: [RL-FR-LOC-006, RL-NFR-DET-001, RL-NFR-DET-002, RL-NFR-DET-003]}
+  TEST-RL-TIME-001: {kind: contract, verifies: [RL-FR-EXEC-006]}
+  TEST-RL-LOC-001: {kind: integration, verifies: [RL-FR-LOC-001, RL-FR-LOC-003, RL-FR-LOC-004, RL-FR-LOC-006]}
+  TEST-RL-LOC-002: {kind: fault-injection, verifies: [RL-FR-LOC-002, RL-FR-LOC-003]}
+  TEST-RL-LOC-003: {kind: overload-cancellation, verifies: [RL-FR-LOC-005, RL-FR-RL-005, RL-NFR-PERF-003, RL-NFR-REL-004]}
+  TEST-RL-EXP-001: {kind: schema-and-dedup, verifies: [RL-FR-LOC-004, RL-FR-RL-002, RL-FR-RL-003, RL-FR-RL-005]}
+  TEST-RL-POL-001: {kind: integration, verifies: [RL-FR-RL-001, RL-FR-RL-006, RL-FR-RL-007]}
+  TEST-RL-REC-001: {kind: recovery-evaluation, verifies: [RL-FR-RL-008, RL-FR-RL-009]}
+  TEST-RL-PERF-001: {kind: benchmark, verifies: [RL-NFR-PERF-001, RL-NFR-PERF-002]}
+  TEST-RL-FED-001: {kind: distributed-integration, verifies: [RL-FR-FED-001, RL-FR-FED-002, RL-FR-FED-007]}
+  TEST-RL-SYNC-001: {kind: distributed-conformance, verifies: [RL-FR-FED-004]}
+  TEST-RL-TIME-002: {kind: distributed-time, verifies: [RL-FR-FED-005, RL-FR-FED-006]}
+  TEST-RL-FED-002: {kind: distributed-schema, verifies: [RL-FR-FED-007, RL-NFR-PORT-002]}
+  TEST-RL-GEN-001: {kind: stale-and-duplicate-fault, verifies: [RL-FR-FED-003, RL-FR-FED-010]}
+  TEST-RL-FED-003: {kind: backend-parity, verifies: [RL-FR-FED-012]}
+  TEST-RL-DDM-001: {kind: routing-oracle, verifies: [RL-FR-FED-009]}
+  TEST-RL-BLOB-001: {kind: artifact-integrity, verifies: [RL-FR-FED-008]}
+  TEST-RL-FLOW-001: {kind: overload-and-policy-lag, verifies: [RL-FR-RL-004, RL-NFR-PERF-003]}
+  TEST-RL-REC-002: {kind: distributed-recovery, verifies: [RL-FR-FED-011, RL-FR-RL-009, RL-NFR-REL-002]}
+  TEST-RL-PERF-002: {kind: distributed-benchmark, verifies: [RL-NFR-PERF-002]}
+  TEST-RL-OPS-001: {kind: manifest-negative-positive, verifies: [RL-FR-OPS-001, RL-FR-OPS-002]}
+  TEST-RL-OPS-002: {kind: command-workflow, verifies: [RL-FR-OPS-003, RL-FR-OPS-005, RL-NFR-REL-004]}
+  TEST-RL-OPS-003: {kind: state-reconciliation, verifies: [RL-FR-FED-013, RL-NFR-OBS-002]}
+  TEST-RL-FAULT-001: {kind: fault-injection, verifies: [RL-NFR-REL-001, RL-NFR-REL-003, RL-NFR-REL-004]}
+  TEST-RL-OBS-001: {kind: telemetry-contract, verifies: [RL-NFR-PERF-001, RL-NFR-OBS-001, RL-NFR-OBS-002, RL-NFR-OBS-003]}
+  TEST-RL-ART-001: {kind: provenance-retention, verifies: [RL-FR-OPS-008, RL-NFR-DET-002]}
+  TEST-RL-SEC-001: {kind: transport-authz-security, verifies: [RL-NFR-SEC-001, RL-NFR-SEC-002]}
+  TEST-RL-SEC-002: {kind: plugin-and-redaction-security, verifies: [RL-NFR-SEC-003, RL-NFR-SEC-004]}
+  TEST-RL-SEC-003: {kind: tamper-negative, verifies: [RL-NFR-SEC-005]}
+  TEST-RL-COMPAT-001: {kind: compatibility-matrix, verifies: [RL-NFR-EXT-001, RL-NFR-EXT-002]}
+  TEST-RL-PORT-001: {kind: os-matrix, verifies: [RL-NFR-PORT-001, RL-NFR-PORT-002]}
+  TEST-RL-REL-001: {kind: release-gate, verifies: [RL-NFR-QUAL-004]}
+  TEST-RL-USER-001: {kind: independent-user-trial, verifies: [RL-FR-MDL-007, RL-NFR-EXT-001]}
+  TEST-RL-DEX-002: {kind: comparative-benchmark-review, verifies: [RL-FR-DEX-001, RL-FR-DEX-002]}
+  TEST-RL-QUAL-001: {kind: improvement-audit, verifies: [RL-NFR-QUAL-003]}
+  TEST-RL-TRACE-002: {kind: end-to-end-audit, verifies: [RL-FR-OPS-006, RL-FR-OPS-007]}

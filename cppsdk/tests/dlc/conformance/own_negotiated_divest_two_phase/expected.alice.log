@@ -1,0 +1,13 @@
+# expected.alice.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §7.3, §7.5, §7.6, §4.10:
+ALICE: CONNECT
+ALICE: JOIN
+ALICE: REGISTER name=car-divest handle=<H>
+ALICE: NEGOTIATED_DIVEST attrs=[Position]
+ALICE: REQUEST_DIVESTITURE_CONFIRMATION attrs=1
+ALICE: CONFIRM_DIVESTITURE
+ALICE: RESIGN

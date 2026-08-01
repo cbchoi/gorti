@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+import "rti/v1/object.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// ConfirmedObjectService preserves the synchronous Object Management
+// completion boundary while reusing one bidirectional HTTP/2 stream. Every
+// request receives exactly one same-sequence result before the next request is
+// accepted from that federate's Go SDK.
+service ConfirmedObjectService {
+  rpc Exchange(stream ConfirmedObjectRequest) returns (stream ConfirmedObjectResult);
+}
+
+message ConfirmedObjectRequest {
+  // Sequence numbers are gapless and start at one for each stream. They make a
+  // mismatched or stale response a protocol error instead of a false success.
+  uint64 sequence = 1;
+
+  oneof operation {
+    // The first request is open with sequence zero. Its ACK proves that the
+    // server supports this service before the client sends a mutation.
+    ConfirmedObjectOpen open = 2;
+    UpdateAttributeValuesRequest attribute_update = 3;
+    SendInteractionRequest interaction = 4;
+  }
+}
+
+message ConfirmedObjectOpen {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 expected_federation_generation = 4;
+  // Requests optional server-side stage timing in operation results.
+  bool transport_diagnostics = 5;
+}
+
+message ConfirmedObjectResult {
+  uint64 sequence = 1;
+
+  // Empty means success. Otherwise this is a serialized google.rpc.Status,
+  // including ErrorInfo details, so the SDK returns the same typed HLA error
+  // as the unary ObjectService call without terminating the stream.
+  bytes error_status = 2;
+
+  // Populated only when transport_diagnostics was requested at open.
+  uint64 server_service_ns = 3;
+
+  // Duration of the preceding result's server-side gRPC Send call. Reporting
+  // it one response later avoids changing that preceding response after send.
+  uint64 previous_ack_send_ns = 4;
+}

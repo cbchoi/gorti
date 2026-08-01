@@ -1,0 +1,16 @@
+# expected.carrier.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: NOT CROSS-CHECKED — fixture uses >2 federates; exceeds the scope of the locally licensed validation environment. Independently verifiable against any DLC-conformant RTI via the external commercial-RTI harness. See docs/COMMERCIAL_RTI_PARITY.md.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.8, §7.2, §4.10:
+# parity-CD golden fix (spec-wins): the carrier must §7.2-divest
+# Position for the §7.9 race to have a winner — acquisitionIfAvailable
+# only acquires UNOWNED attributes and never solicits release from an
+# owner, so the M31 scenario (carrier holds Position throughout) made
+# the bob-wins golden unreachable under any compliant RTI.
+CARRIER: CONNECT
+CARRIER: JOIN
+CARRIER: REGISTER name=car-race handle=<H>
+CARRIER: UNCONDITIONAL_DIVEST attrs=[Position]
+CARRIER: RESIGN

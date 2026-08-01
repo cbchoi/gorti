@@ -1,0 +1,60 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - revive
+    - gocyclo
+    - gosec
+    - misspell
+    - goconst
+    - unused
+    - gocritic
+    - forbidigo
+    - depguard
+    - ineffassign
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  forbidigo:
+    forbid:
+      - p: '^time\.Now$'
+        msg: "use core.Clock for determinism (see CODING_CONVENTIONS.md D-1)"
+      - p: '^time\.Since$'
+        msg: "use core.Clock for determinism"
+      - p: '^fmt\.Print(ln|f)?$'
+        msg: "use log/slog for committed code"
+  depguard:
+    rules:
+      pkg-must-not-import-internal:
+        list-mode: lax
+        files:
+          - "**/rti/pkg/**"
+        deny:
+          - pkg: "github.com/cbchoi/gorti/rti/internal"
+            desc: "rti/pkg/* MUST NOT depend on rti/internal/* (must be standalone library)"
+
+issues:
+  exclude-dirs:
+    - rti/internal/genproto
+  # The repository predates the current lint profile. Keep that debt visible
+  # locally while rejecting newly introduced violations on branch changes.
+  new-from-rev: origin/main
+  exclude-rules:
+    - path: _test\.go
+      linters: [gosec, gocyclo]
+    - path: rti/internal/genproto/
+      linters: [revive, gocyclo, errcheck, staticcheck]
+    - path: tests/spec/
+      linters: [gocyclo]
+    # rti/internal/core/clock.go is the single sanctioned wrapper around
+    # time.Now (the whole reason core.Clock exists). Everywhere else,
+    # forbidigo's time.Now ban applies — see CODING_CONVENTIONS.md D-1.
+    - path: rti/internal/core/clock\.go
+      linters: [forbidigo]

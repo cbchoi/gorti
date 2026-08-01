@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package rti.v1;
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// Empty is used as a request or response when no payload is needed.
+message Empty {}
+
+// WireVersion identifies the wire protocol version. Bumped when breaking
+// changes occur (pre-1.0: freely; post-1.0: with migration plan).
+enum WireVersion {
+  WIRE_VERSION_UNSPECIFIED = 0;
+  WIRE_VERSION_V1 = 1;
+}
+
+// Mode is the federation operating mode, fixed at federation create time.
+//   VERBOSE: TSO for everything, full event log, target <=100 msg/s/federate.
+//   BEST_EFFORT: per-attribute reliability per FOM declaration; minimal log;
+//                target >1k msg/s/federate.
+enum Mode {
+  MODE_UNSPECIFIED = 0;
+  MODE_VERBOSE = 1;
+  MODE_BEST_EFFORT = 2;
+}
+
+// LogicalTime is HLA logical time. IEEE 1516.2-2010 leaves the representation
+// implementation-defined; this RTI uses IEEE 754 double.
+message LogicalTime {
+  double value = 1;
+}
+
+// ResignAction — IEEE 1516.1-2010 §4.10. M24 expanded the accepted
+// set from 1 (UNCONDITIONALLY_DIVEST_ATTRIBUTES) to all 6 spec values.
+enum ResignAction {
+  RESIGN_ACTION_UNSPECIFIED = 0;
+  RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES = 1;
+  RESIGN_ACTION_DELETE_THEN_DIVEST                = 2;  // M24
+  RESIGN_ACTION_CANCEL_THEN_DELETE                = 3;  // M24 — cancel pending acquires + delete owned objects
+  RESIGN_ACTION_CANCEL_PENDING_OWNERSHIP          = 4;  // M24
+  RESIGN_ACTION_NO_ACTION                         = 5;  // M24 — leave ownership/objects in place
+  RESIGN_ACTION_DELETE_OBJECTS                    = 6;  // M24 — delete owned objects without divest
+}
+
+// TransportationType — IEEE 1516.1-2010 §6.20-6.22 (M23). Per-instance
+// or per-class transport selection. Default (unspecified at the wire
+// level) inherits the FOM-declared transport.
+enum TransportationType {
+  TRANSPORTATION_TYPE_UNSPECIFIED = 0;
+  TRANSPORTATION_TYPE_RELIABLE = 1;
+  TRANSPORTATION_TYPE_BEST_EFFORT = 2;
+}
+
+// FOMModule represents one FOM XML module submitted at federation create.
+message FOMModule {
+  // Optional: source path or filename, for diagnostics. Not used for parsing.
+  string path = 1;
+  // The XML bytes. Validated strictly per IEEE 1516.2-2010 DIF.
+  bytes xml = 2;
+}

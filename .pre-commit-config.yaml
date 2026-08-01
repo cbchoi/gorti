@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: no-emojis
+        name: no emojis in source
+        entry: scripts/check-no-emojis.sh
+        language: script
+        files: '\.(go|py|md|proto|yaml|yml|toml)$'
+
+      - id: no-debug-prints
+        name: no fmt.Println / print() in committed code
+        entry: scripts/check-no-debug-prints.sh
+        language: script
+        files: '\.(go|py)$'

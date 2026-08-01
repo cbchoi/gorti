@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// FederationService — federation lifecycle.
+// See docs/srs.md §5.1, docs/idd.md §1.1.1.
+service FederationService {
+  rpc CreateFederation(CreateFederationRequest) returns (CreateFederationResponse);
+  rpc DestroyFederation(DestroyFederationRequest) returns (Empty);
+  rpc JoinFederation(JoinFederationRequest) returns (JoinFederationResponse);
+  rpc ResignFederation(ResignFederationRequest) returns (Empty);
+  rpc ListFederations(ListFederationsRequest) returns (ListFederationsResponse);
+
+  // M24 W3 — IEEE 1516.1-2010 §4.8.
+  rpc ListFederationMembers(ListFederationMembersRequest) returns (ListFederationMembersResponse);
+}
+
+message CreateFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  repeated FOMModule fom_modules = 3;
+  Mode mode = 4;
+  // Stall-detection timeout in seconds. 0 = use server default (60s).
+  double stall_timeout_seconds = 5;
+  // Optional deterministic seed override. 0 = derive from name + creation time.
+  uint64 seed = 6;
+
+  // M19 Phase 1a (docs/m19-dds-adapter.md §4.1): optional data-plane
+  // transport mode. Absent / TRANSPORT_MODE_UNSPECIFIED → GRPC for
+  // backward-compat (the cut-2 wire path). DDS requires the rtid
+  // binary to have been built with `-tags=dds` AND the operator to
+  // have started rtid with `--enable-dds=true`; otherwise the gRPC
+  // handler rejects the create with FailedPrecondition + a clear
+  // "this rtid was not built with DDS support" message. Append-only:
+  // old federates that omit this field are treated as GRPC.
+  TransportMode transport_mode = 7;
+}
+
+// TransportMode selects the data-plane wire path for a federation.
+// M19 Phase 1a — see docs/m19-dds-adapter.md §2.1 (two modes side by
+// side) and §4.1 (proto changes). UNSPECIFIED is treated as GRPC for
+// backward-compat with cut-2 wire clients.
+enum TransportMode {
+  TRANSPORT_MODE_UNSPECIFIED = 0;
+  TRANSPORT_MODE_GRPC = 1;
+  TRANSPORT_MODE_DDS = 2;
+}
+
+message CreateFederationResponse {
+  // Echo of the seed actually applied (useful when client supplied 0).
+  uint64 effective_seed = 1;
+  // Generation assigned to this concrete federation execution.
+  uint64 federation_generation = 2;
+}
+
+message DestroyFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  // Required by generation-aware servers; presence distinguishes generation
+  // zero from a legacy client that omitted the fencing token.
+  optional uint64 expected_federation_generation = 3;
+}
+
+message JoinFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string federate_name = 3;
+
+  // M13 thread B (docs/srs.md §10.4): optional federate type designator.
+  // Recorded by federation.Manager and surfaced via the MOM HLAfederate
+  // attribute set as HLAfederateType. Wire-version compatible: an
+  // unset / empty field is treated as "no type declared" (preserving
+  // the cut-1 default behavior).
+  string federate_type = 4;
+  // Fences a delayed join from entering a same-name replacement execution.
+  optional uint64 expected_federation_generation = 5;
+}
+
+message JoinFederationResponse {
+  // Federate handle assigned deterministically by join order.
+  uint64 federate_handle = 1;
+
+  // M19 Phase 1a (docs/m19-dds-adapter.md §4.1): the federation's
+  // data-plane transport mode. Echoes whatever was recorded at
+  // CreateFederation time. UNSPECIFIED on responses from cut-2 rtid
+  // binaries that pre-date this field — federates handle that as GRPC.
+  TransportMode transport_mode = 2;
+
+  // M19 Phase 1a: DDS domain ID for the federation. Only meaningful
+  // when transport_mode == TRANSPORT_MODE_DDS; ignored otherwise.
+  // Federates joining a DDS-mode federation use this to construct
+  // their DomainParticipant. Zero is the DDS default domain.
+  int32 dds_domain_id = 3;
+}
+
+message ResignFederationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  ResignAction action = 4;
+}
+
+message ListFederationsRequest {
+  WireVersion wire_version = 1;
+}
+
+message ListFederationsResponse {
+  repeated FederationSummary federations = 1;
+}
+
+message FederationSummary {
+  string name = 1;
+  Mode mode = 2;
+  uint32 federates_joined = 3;
+  uint64 federation_generation = 4;
+}
+
+// ListFederationMembers — IEEE 1516.1-2010 §4.8 listFederationExecutionMembers.
+// M24 W3.
+message ListFederationMembersRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+}
+
+message ListFederationMembersResponse {
+  repeated FederationMember members = 1;
+}
+
+message FederationMember {
+  uint64 federate_handle = 1;
+  string federate_name = 2;
+  string federate_type = 3;
+}

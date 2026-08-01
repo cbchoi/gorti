@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>DLC Conformance — own_query_via_callbacks</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <description>
+      queryAttributeOwnership(object, attr) is VOID; result via three
+      callbacks: §7.18 informAttributeOwnership / attributeIsNotOwned /
+      attributeIsOwnedByRTI. M31 dispatch plan §2.2 fixture #18;
+      divergence catalogue rows 12.6, 4.32.
+
+      Three attribute states exercised:
+        - OwnedAttr — held by a known federate (carrier); §7.18 inform.
+        - UnownedAttr — divested then nobody acquired; attributeIsNotOwned.
+        - HLAprivilegeToDelete is RTI-managed per the spec implicit
+          attribute; queries against it fire attributeIsOwnedByRTI.
+    </description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>OwnedAttr</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+        </attribute>
+        <attribute>
+          <name>UnownedAttr</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>Neither</sharing>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="false"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>

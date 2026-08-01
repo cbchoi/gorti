@@ -1,0 +1,168 @@
+{
+  "schema_version": "gorti.benchmark.environment/v1",
+  "experiment": {
+    "id": "devstone-hla-portico-gorti-30x2-v1",
+    "benchmark": {
+      "name": "DEVStone-HLA",
+      "source_benchmark": "DEVStone",
+      "requested_alias": "DEVSOne",
+      "version": "DEVStone-HLA/1.0.0",
+      "profile": "HI-width-10-depth-10-events-100",
+      "scope": "HLA application-traffic workload; not a DEVS simulator-kernel benchmark score",
+      "configuration_path": "benchmark/devstone/workload/workload.json",
+      "configuration_schema_path": "benchmark/devstone/workload/workload.schema.json",
+      "configuration_sha256": "a82b332fc2935c0e0433edc21128d5594049de26e59d9f00e91f7b45d4392940",
+      "configuration_identity_sha256": "889b0729a135054f754bf0fc8b3bbf7903ee4bef94f27dd614823aff76c3b990",
+      "fom_path": "verification/commercial-rti/fom/CommercialRtiVerifier.xml",
+      "fom_sha256": "28c473b45137c4becaa0f93259e7c8d1dffd6785353b971424402669430c2618"
+    },
+    "implementations": [
+      {
+        "id": "portico",
+        "order_symbol": "A",
+        "role": "baseline",
+        "product": "Portico RTI",
+        "version": "2.1.4",
+        "source_revision": "2.1.4",
+        "artifact_path": "${PORTICO_HOME}/lib/portico.jar",
+        "artifact_sha256": "146dc0a7916b168396c6e595c42aaed0bdc69d64c5c54e728b7cb53fdd94ea84",
+        "runtime": "Portico bundled Java runtime",
+        "topology": "two independent federate processes using Portico LRCs"
+      },
+      {
+        "id": "gorti",
+        "order_symbol": "B",
+        "role": "candidate",
+        "product": "gorti",
+        "version": "0.9.0",
+        "source_revision": "38b1f128a9d0597f93040d49d18bc3f479d38761",
+        "artifact_path": "transient build from rti/cmd/rtid",
+        "artifact_sha256": "resolved in the external runtime manifest",
+        "runtime": "native Go binary",
+        "topology": "one RTI server process and two independent federate processes",
+        "callback_representation": "handles",
+        "outbox_event_capacity": 8192,
+        "outbox_batch_size": 32,
+        "outbox_flush_interval_ms": 1
+      }
+    ],
+    "design": {
+      "type": "paired-balanced-ab-ba",
+      "warmup_runs_per_implementation": 5,
+      "measured_runs_per_implementation": 30,
+      "measured_pair_count": 30,
+      "base_seed": 1516,
+      "pair_seed_rule": "base_seed + pair_index - 1",
+      "same_seed_within_pair": true,
+      "order_pattern": [
+        [
+          "portico",
+          "gorti"
+        ],
+        [
+          "gorti",
+          "portico"
+        ]
+      ],
+      "order_pattern_repetitions": 15,
+      "portico_first_pairs": 15,
+      "gorti_first_pairs": 15,
+      "fresh_processes_per_run": true,
+      "parallel_measured_runs": false,
+      "failed_runs_are_measurements": false,
+      "replacement_run_uses_same_pair_seed_and_order": true,
+      "max_pair_attempts": 3,
+      "replacement_policy": "Only participant process exit or timeout after verified cleanup replays the entire pair with the same seed, materialized plan, and AB/BA order on a fresh network; semantic, summary, plan, evidence, and cleanup failures abort without replacement"
+    },
+    "federation_contract": {
+      "federates_per_run": 2,
+      "independent_federate_processes": true,
+      "same_fom_bytes": true,
+      "same_model_parameters": true,
+      "same_payload_bytes": true,
+      "same_callback_policy": true,
+      "same_choreography": true,
+      "semantic_gate_required_before_measurement": true,
+      "semantic_gate": "both implementations must produce the same DEVStone-HLA terminal state, callback accounting, and ordered observable projection"
+    },
+    "measurement": {
+      "clock": "monotonic",
+      "timer_boundary_id": "subscriber_timer_armed_before_VERIFY_START_release_to_final_callback_arrival",
+      "start_boundary": "the subscriber arms its monotonic timer before both federates achieve VERIFY_START and the publisher is released",
+      "stop_boundary": "the final expected DEVStone-HLA callback arrives at the subscriber callback/event boundary; callback content is validated before the run is accepted",
+      "choreography": "sequential_receive_order_update_then_interaction",
+      "callback_model": "HLA_IMMEDIATE",
+      "time_management": "excluded",
+      "included_metrics": [
+        {
+          "id": "completed_delivery_batch_ns",
+          "unit": "ns",
+          "direction": "lower-is-better"
+        },
+        {
+          "id": "deliveries_per_second",
+          "unit": "deliveries/s",
+          "direction": "higher-is-better"
+        },
+        {
+          "id": "update_attribute_values_median_ns",
+          "unit": "ns",
+          "direction": "lower-is-better"
+        },
+        {
+          "id": "send_interaction_median_ns",
+          "unit": "ns",
+          "direction": "lower-is-better"
+        }
+      ],
+      "operation_warmup_iterations_per_channel": 128,
+      "process_startup_included": false,
+      "federation_setup_included": false,
+      "teardown_included": false
+    },
+    "log_policy": {
+      "measurement_from_logs": false,
+      "parse_stdout": false,
+      "parse_stderr": false,
+      "capture_stdout": false,
+      "capture_stderr": false,
+      "rti_event_logging": "disabled",
+      "federate_event_logging": "disabled",
+      "console_progress": "interactive-only-not-retained"
+    },
+    "output_policy": {
+      "root_environment_variable": "GORTI_BENCHMARK_OUTPUT",
+      "must_be_outside_repository": true,
+      "atomic_result_write": true,
+      "allowed_artifacts": [
+        "manifest.json",
+        "results.json",
+        "analysis.json",
+        "comparison.tex"
+      ],
+      "forbidden_patterns": [
+        "*.log",
+        "*.out",
+        "*.err",
+        "stdout*",
+        "stderr*",
+        "eventlog*",
+        "transcript*"
+      ],
+      "retention": {
+        "successful_structured_results_days": 365,
+        "failed_or_partial_artifacts_days": 0,
+        "published_analysis": "retain-with-publication-record",
+        "execution_logs": "never-create-or-retain"
+      }
+    },
+    "pin_policy": {
+      "unresolved_value_pattern": "^__REQUIRED_[A-Z0-9_]+__$",
+      "unresolved_placeholders_are_fatal": true,
+      "dirty_gorti_worktree_is_fatal": false,
+      "dirty_gorti_worktree_is_recorded": true,
+      "artifact_hash_algorithm": "SHA-256",
+      "configuration_hash_algorithm": "SHA-256"
+    }
+  }
+}

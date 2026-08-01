@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 IEEE1516-DIF-2010.xsd">
+  <modelIdentification>
+    <name>pyjevsim-object-tracking</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-05-10</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Reference FOM for the time-managed object-tracking example. One object class (Vehicle) with two attributes (Position, Speed) updated by a producer federate at each TimeAdvanceGrant. Tracker federates subscribe and receive the reflects via the pysdk events stream → pyjevsim-style external_transition.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name>
+        <sharing>PublishSubscribe</sharing>
+        <semantics>A moving vehicle whose Position and Speed are updated periodically. Updates are timestamped (TSO delivery) so subscribers receive them in logical-time order coordinated by rtid's TimeService.</semantics>
+        <attribute>
+          <name>Position</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>Scalar position along a 1-D track. Encoded as 8-byte big-endian IEEE-754 double.</semantics>
+        </attribute>
+        <attribute>
+          <name>Speed</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Periodic</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>NoTransfer</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>TimeStamp</order>
+          <semantics>Scalar speed along the track.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

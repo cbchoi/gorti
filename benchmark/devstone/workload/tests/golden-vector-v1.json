@@ -1,0 +1,18 @@
+{
+  "description": "One-record DVSHLA1 interoperability vector for Java and Go readers",
+  "workload": {
+    "topology": "LI",
+    "width": 2,
+    "depth": 1,
+    "external_event_count": 1
+  },
+  "runtime_seed_decimal": 72623859790382856,
+  "runtime_seed_hex": "0102030405060708",
+  "topology_identity_sha256": "302a7a9fb09e15878ceda39c9fccbc49a404a144065eadbfede1004f98e1387f",
+  "header_hex": "445653484c413100000000010102030405060708302a7a9fb09e15878ceda39c9fccbc49a404a144065eadbfede1004f98e1387f",
+  "record_hex": "000000000000000100000000000000005a17f0ce2dc7bb859473601f959a48c3",
+  "attribute_payload_hex": "5a17f0ce2dc7bb85",
+  "interaction_payload_hex": "9473601f959a48c3",
+  "plan_size_bytes": 84,
+  "plan_sha256": "3826423951cfc247af1e5f11cf3cdeee209fa384ddb67e16fef9ffa4f056ac00"
+}

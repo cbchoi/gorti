@@ -1,0 +1,90 @@
+# GoReleaser configuration for the CGo-free rtid and rti-top binaries.
+# The experimental DDS build is not part of the portable release archives.
+
+version: 2
+
+project_name: gorti
+
+builds:
+  - id: rtid
+    binary: rtid
+    main: ./rti/cmd/rtid
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/cbchoi/gorti/rti/internal/buildinfo.Version={{.Version}}
+      - -X github.com/cbchoi/gorti/rti/internal/buildinfo.Commit={{.ShortCommit}}
+      - -X github.com/cbchoi/gorti/rti/internal/buildinfo.Date={{.Date}}
+
+  - id: rti-top
+    binary: rti-top
+    main: ./rti/cmd/rti-top
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/cbchoi/gorti/rti/internal/buildinfo.Version={{.Version}}
+      - -X github.com/cbchoi/gorti/rti/internal/buildinfo.Commit={{.ShortCommit}}
+      - -X github.com/cbchoi/gorti/rti/internal/buildinfo.Date={{.Date}}
+
+archives:
+  - id: gorti
+    ids: [rtid, rti-top]
+    formats: [tar.gz]
+    # Windows users expect .zip, not .tar.gz.
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      gorti_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: "gorti_{{ .Version }}_SHA256SUMS"
+  algorithm: sha256
+
+snapshot:
+  version_template: "0.0.0-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^style:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: cbchoi
+    name: gorti
+  draft: false
+  prerelease: auto
+  name_template: "gorti {{ .Version }}"
+  header: |
+    ## gorti {{ .Version }}
+
+    IEEE 1516-2010 (HLA Evolved) Run-Time Infrastructure in Go.
+
+    See [`CHANGELOG.md`](https://github.com/cbchoi/gorti/blob/main/CHANGELOG.md)
+    for release notes and known limitations.
+  footer: |
+    ---
+
+    Verify the download:
+
+    ```bash
+    sha256sum -c gorti_{{ .Version }}_SHA256SUMS
+    ```

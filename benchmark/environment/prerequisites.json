@@ -1,0 +1,76 @@
+{
+  "schema_version": "gorti.benchmark.prerequisites/v1",
+  "supported_hosts": [
+    {
+      "id": "windows-amd64",
+      "operating_system": "Windows 11",
+      "architecture": "amd64",
+      "shell": "Windows PowerShell 5.1 or PowerShell 7",
+      "container_backend": "Docker Desktop using Linux containers and the WSL 2 backend"
+    },
+    {
+      "id": "ubuntu-amd64",
+      "operating_system": "Ubuntu 24.04 LTS",
+      "architecture": "amd64",
+      "shell": "Bash 5 or newer",
+      "container_backend": "Docker Engine"
+    }
+  ],
+  "runtime_pins": {
+    "go": {
+      "version": "1.26.5",
+      "purpose": "build Linux amd64 gorti server and federate artifacts"
+    },
+    "python": {
+      "version": "3.14.0",
+      "purpose": "orchestration, schema validation, and analysis using the standard library"
+    },
+    "java": {
+      "distribution": "Eclipse Temurin",
+      "version": "11.0.31+11",
+      "purpose": "compile the Portico federate; runtime execution uses the pinned Portico distribution"
+    },
+    "portico_bundled_java": {
+      "version": "11.0.14+9",
+      "purpose": "run the Portico 2.1.4 federates inside the benchmark container"
+    },
+    "docker": {
+      "client_version": "28.5.1",
+      "server_version": "28.5.1"
+    }
+  },
+  "container_pin": {
+    "required": true,
+    "image": "ubuntu:24.04",
+    "platform": "linux/amd64",
+    "digest": "sha256:66460d557b25769b102175144d538d88219c077c678a49af4afca6fbfc1b5252",
+    "network": "one fresh user-defined bridge network per measured pair",
+    "resource_rule": "all containers receive identical CPU and memory limits within a run pair"
+  },
+  "required_inputs": {
+    "PORTICO_HOME": "absolute path to the Portico 2.1.4 distribution",
+    "GORTI_BENCHMARK_OUTPUT": "absolute output directory outside the Git worktree"
+  },
+  "host_controls": {
+    "same_physical_host_for_both_implementations": true,
+    "same_container_image_for_both_implementations": true,
+    "ac_power_required": true,
+    "fixed_host_power_profile": true,
+    "background_updates_disabled_during_measurement": true,
+    "unrelated_compute_workloads_disabled_during_measurement": true,
+    "one_measured_run_at_a_time": true,
+    "same_host_cpu_set_and_total_memory_budget_for_each_implementation": true,
+    "per_container_limits_required": false
+  },
+  "preflight": {
+    "require_clean_git_worktree": false,
+    "record_git_worktree_state": true,
+    "require_all_pins_resolved": true,
+    "verify_artifact_hashes": true,
+    "verify_fom_hash": true,
+    "verify_devstone_configuration_hash": true,
+    "reject_output_inside_repository": true,
+    "reject_existing_output_directory": true,
+    "reject_enabled_event_logging": true
+  }
+}

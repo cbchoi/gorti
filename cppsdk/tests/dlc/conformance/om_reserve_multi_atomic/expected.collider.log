@@ -1,0 +1,11 @@
+# expected.collider.log
+# attestation: spec-derived from IEEE 1516.1-2010 references below
+# Cross-check status: not yet cross-checked (2-federate scenario; reproducible via the external commercial-RTI harness against any DLC-conformant RTI)
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md
+# Per IEEE 1516.1-2010 §4.2, §4.9, §6.3, §4.10:
+COLLIDER: CONNECT
+COLLIDER: JOIN
+COLLIDER: RESERVE_REQUEST name=car-X
+COLLIDER: NAME_RESERVED name=car-X
+COLLIDER: RESIGN

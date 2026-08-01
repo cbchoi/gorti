@@ -1,0 +1,96 @@
+# Publish the rti1516e Python SDK to PyPI on a version tag.
+#
+# The wheel is pure-Python (py3-none-any) — the SAME artifact installs on
+# Linux and Windows; grpcio/protobuf ship their own platform wheels via pip.
+#
+# The buf-generated gRPC wire stubs (pysdk/rti1516e/_generated/, gitignored)
+# are produced by `buf generate` BEFORE the build and shipped as package data
+# (see pysdk/pyproject.toml [tool.setuptools.package-data] + MANIFEST.in).
+# Without that step the wheel cannot talk to rtid.
+#
+# One-time setup: configure a PyPI Trusted Publisher for this repo+workflow
+# (PyPI project → Settings → Publishing → add GitHub, owner=cbchoi,
+# repo=gorti, workflow=pypi.yml, environment=pypi). No API token needed once
+# trusted publishing is configured. See docs/DEPLOYMENT.md.
+
+name: PyPI
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: bufbuild/buf-setup-action@v1
+
+      - name: Generate gRPC wire stubs (buf → pysdk/rti1516e/_generated)
+        run: buf generate
+
+      - name: Guard — tag must match pysdk version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(sed -n 's/^version = "\(.*\)"/\1/p' pysdk/pyproject.toml | head -1)"
+          echo "tag=$tag  pyproject=$ver"
+          if [ "$tag" != "$ver" ]; then
+            echo "::error::tag v$tag does not match pysdk/pyproject.toml version $ver — bump the version before tagging"
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          cp LICENSE pysdk/LICENSE          # MANIFEST.in can't reach the repo root
+          python -m pip install --upgrade build
+          python -m build pysdk --outdir dist
+
+      - name: Sanity-check the wheel (stubs bundled, no symlink recursion)
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          whl = sorted(glob.glob("dist/rti1516e-*.whl"))[-1]
+          n = zipfile.ZipFile(whl).namelist()
+          stubs = [x for x in n if x.startswith("rti1516e/_generated/") and x.endswith(".py")]
+          assert 20 <= len(stubs) <= 80, f"unexpected stub count {len(stubs)} (symlink recursion?)"
+          assert any(x.endswith("rti/v1/common_pb2.py") for x in n), "common_pb2 missing"
+          assert any(x.endswith("_pb2_grpc.py") for x in n), "grpc stubs missing"
+          assert not any("_generated/_generated" in x for x in n), "recursive _generated bundled"
+          print(f"OK: {whl} — {len(stubs)} stubs bundled")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi
+    permissions:
+      id-token: write        # trusted publishing (OIDC) — no API token needed
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

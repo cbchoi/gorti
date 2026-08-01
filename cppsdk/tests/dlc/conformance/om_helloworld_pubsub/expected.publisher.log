@@ -1,0 +1,14 @@
+# expected.publisher.log
+# authority: IEEE 1516.1-2010 — every event line is derived from the spec sections cited below/in README.md. Cross-checked locally against a DLC-conformant commercial RTI via the external commercial-RTI harness (byte-identical after canonicalization); that check is reproducible but is NOT the authority for this golden.
+# canonicalization: cppsdk/tests/dlc/conformance/_harness/normalize.py
+# spec-cites: see README.md "Spec citations per event in goldens"
+# Per IEEE 1516.1-2010 §4.2, §4.5, §4.9, §5.3, §5.7, §6.5, §6.10, §6.12, §4.10.
+PUB: CONNECT
+PUB: CREATE federation=om_helloworld_pubsub
+PUB: JOIN federate=publisher
+PUB: PUBLISH class=Vehicle attributes=[Position,Velocity]
+PUB: PUBLISH interaction=Honk
+PUB: REGISTER class=Vehicle name=car-1 handle=<H>
+PUB: UPDATE name=car-1 Position=42.000000 Velocity=7.000000
+PUB: SEND class=Honk Volume=5
+PUB: RESIGN action=CANCEL_THEN_DELETE_THEN_DIVEST
