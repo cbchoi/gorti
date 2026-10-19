@@ -32,29 +32,40 @@ linters-settings:
         msg: "use log/slog for committed code"
   depguard:
     rules:
-      pkg-must-not-import-internal:
+      standalone-packages:
         list-mode: lax
         files:
           - "**/rti/pkg/**"
+          - "!**/rti/pkg/federate/**"
+          - "!$test"
         deny:
           - pkg: "github.com/cbchoi/gorti/rti/internal"
-            desc: "rti/pkg/* MUST NOT depend on rti/internal/* (must be standalone library)"
+            desc: "standalone SDK libraries must not depend on server internals"
+      federate-client-boundary:
+        list-mode: lax
+        files:
+          - "**/rti/pkg/federate/**"
+          - "!$test"
+        allow:
+          - "github.com/cbchoi/gorti/rti/internal/adapters/protobuf"
+          - "github.com/cbchoi/gorti/rti/internal/adapters/delivery/callbackprofile$"
+        deny:
+          - pkg: "github.com/cbchoi/gorti/rti/internal"
+            desc: "the client may use protocol codecs and receipt profiles, not server services"
 
 issues:
-  exclude-dirs:
-    - rti/internal/genproto
   # The repository predates the current lint profile. Keep that debt visible
   # locally while rejecting newly introduced violations on branch changes.
   new-from-rev: origin/main
   exclude-rules:
     - path: _test\.go
       linters: [gosec, gocyclo]
-    - path: rti/internal/genproto/
+    - path: rti/internal/adapters/protobuf/rti/v1/.*\.pb\.go$
       linters: [revive, gocyclo, errcheck, staticcheck]
     - path: tests/spec/
       linters: [gocyclo]
-    # rti/internal/core/clock.go is the single sanctioned wrapper around
+    # rti/internal/hla/core/clock.go is the single sanctioned wrapper around
     # time.Now (the whole reason core.Clock exists). Everywhere else,
     # forbidigo's time.Now ban applies — see CODING_CONVENTIONS.md D-1.
-    - path: rti/internal/core/clock\.go
+    - path: rti/internal/hla/core/clock\.go
       linters: [forbidigo]

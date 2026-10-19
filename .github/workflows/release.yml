@@ -25,23 +25,36 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
       - uses: bufbuild/buf-setup-action@v1
       - name: Generate protocol bindings
         run: buf generate
       - name: Check release metadata
         run: python scripts/check_release_metadata.py --tag "${GITHUB_REF_NAME}"
+      - name: Python peer and SDK validation dependencies
+        run: python -m pip install -e './pysdk[dev]'
       - name: Test Go packages
         run: go test ./...
-      - name: Test Python SDK
+      - name: Test Python and Java SDKs
         run: |
-          python -m pip install -e './pysdk[dev]'
-          python -m pytest pysdk/tests
+          python scripts/validate_sdks.py python java ivct --artifacts "${RUNNER_TEMP}/sdk-validation"
           cd pysdk
           python -m mypy --strict rti1516e pyjevsim_bridge
       - name: Build documentation
         run: |
           python -m pip install -r docs/requirements.txt
           python -m mkdocs build --strict
+      - name: Validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-sdk-validation
+          path: ${{ runner.temp }}/sdk-validation
+          if-no-files-found: ignore
 
   goreleaser:
     name: GoReleaser

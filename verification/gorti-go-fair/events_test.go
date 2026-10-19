@@ -10,6 +10,22 @@ import (
 	"github.com/cbchoi/gorti/rti/pkg/federate"
 )
 
+func TestCallbackAdmissionFailureWakesWaitersAndPreservesFirstError(t *testing.T) {
+	state := newEventState(config{Role: rolePublisher, Count: 1})
+	result := startBlockedEventStateWait(t, state, context.Background(), 5*time.Second, "announcement", func(s *eventState) bool { return s.announced[readySync] })
+	failure := errors.New("callback entry denied")
+	state.fail(failure)
+	state.fail(errors.New("later stream closure"))
+	select {
+	case err := <-result:
+		if !errors.Is(err, failure) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("admission failure did not wake waiter")
+	}
+}
+
 func TestEventStateWaitReturnsWhenPredicateAlreadySatisfied(t *testing.T) {
 	state := newEventState(config{Role: rolePublisher, Count: 1})
 	state.mu.Lock()

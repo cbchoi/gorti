@@ -9,7 +9,7 @@
 
 package main
 
-import rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+import rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 
 // timeRingCap is the sparkline's window size — 30 samples matches
 // the design-doc mockup ("last 30 ticks").

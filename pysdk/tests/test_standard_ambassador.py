@@ -135,3 +135,62 @@ def test_ambassador_callbacks_dispatch_from_event_pump(fake_rti: FakeRtiServer) 
     assert received.get("discover") == (42, "V", "V1")
     assert received.get("interaction") == ("Ping", {"seq": 1}, None)
     assert received.get("grant") == 5.0
+
+
+@pytest.mark.parametrize("enqueue", ["push_event", "queue"], ids=["transport", "queue"])
+def test_cross_thread_enqueue_wakes_parked_event_pump(fake_rti, enqueue):
+    import asyncio
+    import threading
+
+    delivered = threading.Event()
+    received = []
+
+    class Sub(Rti1516eAmbassador):
+        def timeAdvanceGrant(self, time):  # noqa: N802
+            received.append(time)
+            if len(received) == 3:
+                delivered.set()
+
+    amb = Sub()
+    try:
+        amb.connect(amb, "memory://fake-rti")
+        amb.joinFederationExecution("caller", "demo")
+        handle = amb._fed().handle
+        queue = fake_rti.events_for(handle)
+
+        async def parked_reader():
+            for _ in range(10):
+                if queue._getters:
+                    return
+                await asyncio.sleep(0)
+            raise AssertionError("event pump did not park on the empty queue")
+
+        amb._run(parked_reader())
+        for time in (1, 2, 3):
+            event = TimeAdvanceGrant(time=time)
+            if enqueue == "push_event":
+                fake_rti.push_event(handle, event)
+            else:
+                queue.put_nowait(event)
+        assert delivered.wait(0.5), "cross-thread enqueue did not wake the parked reader"
+        assert received == [1, 2, 3]
+    finally:
+        amb.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_event_queue_preserves_prequeued_same_loop_and_cancelled_reads(fake_rti):
+    import asyncio
+
+    queue = fake_rti.events_for(42)
+    fake_rti.push_event(42, TimeAdvanceGrant(time=1))
+    assert await queue.get() == TimeAdvanceGrant(time=1)
+    queue.put_nowait(TimeAdvanceGrant(time=2))
+    assert await queue.get() == TimeAdvanceGrant(time=2)
+    reader = asyncio.create_task(queue.get())
+    await asyncio.sleep(0)
+    reader.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await reader
+    fake_rti.push_event(42, TimeAdvanceGrant(time=3))
+    assert await queue.get() == TimeAdvanceGrant(time=3)

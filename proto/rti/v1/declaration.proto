@@ -17,6 +17,7 @@ service DeclarationService {
   rpc UnpublishInteractionClass(UnpubInterRequest) returns (Empty);
   rpc SubscribeInteractionClass(SubInterRequest) returns (Empty);
   rpc UnsubscribeInteractionClass(UnsubInterRequest) returns (Empty);
+  rpc SetAdvisorySwitch(SetAdvisorySwitchRequest) returns (Empty);
 }
 
 message PubObjAttrsRequest {
@@ -33,6 +34,10 @@ message UnpubObjAttrsRequest {
   uint64 federate_handle = 3;
   uint64 object_class_handle = 4;
   repeated uint64 attribute_handles = 5;
+  // True selects the supplied set, including an empty no-op. Absent retains
+  // legacy behavior: empty means whole class, nonempty means the supplied set.
+  // Explicit false selects the whole class and requires an empty list.
+  optional bool attribute_set_present = 6;
 }
 
 message SubObjAttrsRequest {
@@ -41,6 +46,9 @@ message SubObjAttrsRequest {
   uint64 federate_handle = 3;
   uint64 object_class_handle = 4;
   repeated uint64 attribute_handles = 5;
+  // Absence preserves the active subscription behavior of older clients.
+  optional bool active = 6;
+  string update_rate_designator = 7;
 }
 
 message UnsubObjAttrsRequest {
@@ -49,6 +57,10 @@ message UnsubObjAttrsRequest {
   uint64 federate_handle = 3;
   uint64 object_class_handle = 4;
   repeated uint64 attribute_handles = 5;
+  // True selects the supplied set, including an empty no-op. Absent retains
+  // legacy behavior: empty means whole class, nonempty means the supplied set.
+  // Explicit false selects the whole class and requires an empty list.
+  optional bool attribute_set_present = 6;
 }
 
 message PubInterRequest {
@@ -70,6 +82,23 @@ message SubInterRequest {
   string federation_name = 2;
   uint64 federate_handle = 3;
   uint64 interaction_class_handle = 4;
+  optional bool active = 5;
+}
+
+enum AdvisorySwitchKind {
+  ADVISORY_SWITCH_KIND_UNSPECIFIED = 0;
+  ADVISORY_SWITCH_KIND_OBJECT_CLASS_RELEVANCE = 1;
+  ADVISORY_SWITCH_KIND_ATTRIBUTE_RELEVANCE = 2;
+  ADVISORY_SWITCH_KIND_ATTRIBUTE_SCOPE = 3;
+  ADVISORY_SWITCH_KIND_INTERACTION_RELEVANCE = 4;
+}
+
+message SetAdvisorySwitchRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  AdvisorySwitchKind switch_kind = 4;
+  bool enabled = 5;
 }
 
 message UnsubInterRequest {

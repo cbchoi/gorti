@@ -1,0 +1,793 @@
+{
+  "schema_version": 1,
+  "latest_defect_increment": {
+    "date": "2026-10-03",
+    "report": "engineering/verification/ieee1516-2010-defect-fixes-20261003.md",
+    "scope": "Pending-deletion below/equal/above timestamp bounds now pass in both time families; equality additionally verifies reflection before removal before grant. Typed later-time rejection and state/retry controls pass. Older reproduced-defect notes are retained checkpoint observations. Other conditions and whole requirement verdicts remain open.",
+    "coverage_complete": false,
+    "full_conformance": false
+  },
+  "source_id": "S1516.1",
+  "reviewed_units": ["5.1.1", "5.1.2", "5.1.3", "5.1.5", "5.1.6", "5.10", "5.11", "6.1.1", "6.1.2", "6.1.3", "6.1.4", "6.1.5", "6.1.6", "6.1.7", "6.1.9", "6.1.10", "6.1.11", "6.1.12", "6.2", "6.3", "6.4", "6.5", "6.6", "6.7", "6.17", "6.18", "6.19", "6.23", "6.24", "6.25", "6.26", "6.27", "6.28", "6.29", "6.30"],
+  "coverage_complete": false,
+  "requirements": [
+    {
+      "id": "DM2010-FDD-HIERARCHY", "source_id": "S1516.1", "clause": "5.1.1(a-g)", "pdf_pages": [83], "subject": "rti", "applicability": "applicable",
+      "statement": "Use acyclic single-parent class hierarchies; available attributes and parameters are the union of locally declared and inherited members.", "conditions": "For FDD object and interaction classes used by declaration services; each class has its own declared member set.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go", "rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/tests/unit/object/delayed_subscription_inheritance_test.go","name":"TestG13TypedInheritedProjection","oracle":"Float64/Integer64 actual object/time managers receive a child interaction at the currently subscribed ancestor with exactly the inherited payload parameter, excluding child-only parameter; child object reflection uses historical ancestor handles and two subscribed inherited values after time-state marshal/unmarshal. Does not count all callbacks."},{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassAncestorDiscoveryAndStableRediscovery","oracle":"With parsed production FOM and real declaration/object/ownership/delivery managers, parent-only recipient discovers parent, recipient subscribed at parent and child discovers child; each queue initially has exactly one discovery. Later child subscription does not change remembered parent or rediscover; local delete permits one new child-class discovery."}], "open_items": ["Inherited attributes and parameters are evidenced at two class levels only. Cycle/multiple-parent admission, complete available-member union and all hierarchy levels remain unlinked; arbitrary model-author correctness is outside the RTI claim."]
+    },
+    {
+      "id": "DM2010-FDD-CLASS-INPUTS", "source_id": "S1516.1", "clause": "5.1.1(h); 5.1.2(a)", "pdf_pages": [83, 84], "subject": "rti", "applicability": "applicable",
+      "statement": "Class-and-attribute services accept only attributes available at the specified class; availability does not override other service preconditions.", "conditions": "Includes publish, unpublish, subscribe and unsubscribe, including inherited attributes and mixed valid/invalid sets.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go"], "tests": [{"path": "rti/internal/adapters/grpc/declaration_unsubscribe_test.go", "name": "TestUnsubscriptionWrongFOMSetNoEffectsAndIEEEErrorTrailer", "oracle": "Mixed valid/invalid attributes and invalid class with explicit empty set produce AttributeNotDefined/ObjectClassNotDefined trailers and leave ExportState unchanged; bufconn fixture, not standard Java."}], "open_items": ["Extend this negative oracle to the other three declaration operations and inherited class coordinates."]
+    },
+    {
+      "id": "DM2010-FDD-KNOWN-CLASS-INPUTS", "source_id": "S1516.1", "clause": "5.1.1(i); 5.1.2(p-q)", "pdf_pages": [83, 85], "subject": "rti", "applicability": "applicable",
+      "statement": "Instance attribute arguments and class/instance correspondence use the involved federate's known class, not merely the globally registered class.", "conditions": "For object-instance services; corresponding instance attributes include unowned known instances and caller-owned instances whose known class matches the class attribute.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/local_delete.go", "rti/internal/hla/object/update.go"], "tests": [{"path": "rti/internal/hla/object/unpublication_integration_test.go", "name": "TestUnpublicationMapsRememberedParentAttributes", "oracle": "Unpublishing caller 2's parent-coordinate attribute 101 relinquishes canonical attribute 1, preserves unrelated ownership and caller 1 publications."}], "open_items": ["Map all object-input operations with superclass-known classes; one unpublication case is not complete coordinate coverage."]
+    },
+    {
+      "id": "DM2010-OBJECT-DECLARATION-STATE", "source_id": "S1516.1", "clause": "5.1.2(b-e,g-i)", "pdf_pages": [84], "subject": "rti", "applicability": "applicable",
+      "statement": "Maintain cumulative per-federate, per-class publication and subscription sets; each subscribed attribute has exactly one active/passive mode, and a class is published or subscribed precisely when its respective set is nonempty.", "conditions": "Unpublish/unsubscribe remove declarations; operations on one object class must not alter another; first explicit publication establishes publication state; publication includes any implicit privilege attribute.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go", "rti/internal/hla/declaration/options.go"], "tests": [{"path": "rti/internal/hla/declaration/publication_hook_test.go", "name": "TestPublicationHookRunsAfterCommitForNewAttributesOnly", "oracle": "Duplicate publication emits no new delta; adding {3,2} after {1,2} emits only {3}; hook validates committed publication and input remains unmodified."}], "open_items": ["Link cross-class isolation, empty-set class eligibility, and per-attribute active/passive overwrite oracles."]
+    },
+    {
+      "id": "DM2010-IMPLICIT-DELETE-PRIVILEGE",
+      "source_id": "S1516.1",
+      "clause": "5.1.2(f-g); 5.2.4(c); 5.3.4(b)",
+      "pdf_pages": [
+        84,
+        93,
+        95
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Implicitly publish the delete-privilege attribute only while another explicit publication exists and neither explicit privilege publication nor explicit privilege unpublication has occurred in the current publication lifetime.",
+      "conditions": "Publication lifetime restarts when publication is reestablished; the general conditional rule constrains the service postcondition's implicit-publication possibility.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/declaration/manager.go",
+        "rti/internal/hla/declaration/unpublication.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR1ImplicitDeletePublicationLifetime",
+          "oracle": "Historical 2026-10-03 run: S1516.1 5.1.2(f), page 84: parsed standard-MIM-backed class checks implicit privilege on first explicit publication and new lifetime; explicit privilege unpublication suppresses it during that lifetime, while explicit publication restores it. Fresh review-oracles.jsonl FAIL: initial and restarted implicit publication are absent."
+        },
+        {
+          "path": "rti/internal/hla/declaration/privilege_lifetime_test.go",
+          "name": "TestPrivilegeLifetimePersistenceAndReset",
+          "oracle": "Implicit, explicit and suppressed privilege histories survive detached JSON snapshot restore; duplicate publication respects suppression, last explicit-attribute removal ends lifetime, explicit privilege survives until removed, and a new lifetime restores implicit publication."
+        },
+        {
+          "path": "rti/internal/hla/object/privilege_initial_ownership_test.go",
+          "name": "TestPrivilegeInitialOwnershipFollowsPublicationLifetime",
+          "oracle": "Registration initially owns implicit privilege; explicit unpublication removes existing ownership and prevents the next registration owning it. Re-established lifetime restores privilege ownership; last explicit unpublication removes implicit publication and ownership."
+        }
+      ],
+      "open_items": [
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): REPRODUCED DEFECT: initial and restarted implicit delete-privilege publication are absent. Explicit-state branches pass but do not establish correct implicit history or initial instance ownership. No production fix made; see declaration-object-applicable-review-20261003.md.",
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): PublishedObjectAttributes is the actual registration publication snapshot, not an explicit-only convenience list. Manager stores explicit inputs without implicit-publication/history state; registry separately appends deletion privilege to initial ownership unconditionally. That shortcut does not satisfy 5.1.2(f). Java forwards supplied publications unchanged. Live explicit-unpublication ownership consequences remain untested.",
+        "2026-10-04 increment: parent fixes the named-admission/implicit-publication defect without weakening its oracle. Historical failures remain evidence of the earlier snapshot; current implementation and tests, not that old result, determine present behavior. Whole-row and source-scope completeness remain false.",
+        "Current exact initial ownership/publication controls replace the earlier unconditional registry privilege shortcut; standard Java end-to-end and complete exception/lifecycle variants remain open."
+      ]
+    },
+    {
+      "id": "DM2010-OBJECT-CLASS-KNOWLEDGE", "source_id": "S1516.1", "clause": "5.1.2(j-o)", "pdf_pages": [84, 85], "subject": "rti", "applicability": "applicable",
+      "statement": "An object has one immutable federation-wide registered class and at most one immutable discovered class per knowledge lifetime at each federate; registration and discovery establish known class.", "conditions": "Registration requires publication; known class is registered class for registrant, discovered class otherwise; local delete, global delete and removal end knowledge subject to their time rules; rediscovery after local delete may use a different class.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/registry.go", "rti/internal/hla/object/discover.go", "rti/internal/hla/object/local_delete.go"], "tests": [{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassAncestorDiscoveryAndStableRediscovery","oracle":"With parsed production FOM and real declaration/object/ownership/delivery managers, parent-only recipient discovers parent, recipient subscribed at parent and child discovers child; each queue initially has exactly one discovery. Later child subscription does not change remembered parent or rediscover; local delete permits one new child-class discovery."}], "open_items": ["Global registered-class immutability across restore, all local/global/timestamp removal boundaries and complete standard-Java service matrix remain open; direct manager discovery is not actual Java callback entry."]
+    },
+    {
+      "id": "DM2010-OBJECT-OWNERSHIP-ROUTING", "source_id": "S1516.1", "clause": "5.1.2(r-s)", "pdf_pages": [85], "subject": "rti", "applicability": "applicable",
+      "statement": "Enforce publication for attribute ownership/update eligibility and reflect owner updates only to other federates subscribed to the corresponding attribute at their own known class.", "conditions": "RTI enforcement facet of joined-federate rules; DM-only semantics here, with DDM extensions assessed separately.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go", "rti/internal/hla/declaration/manager.go"], "tests": [{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassReflectionUsesRememberedSubscriptionAndHandles","oracle":"Child update containing inherited value 7 and child-only value 9 yields exactly one parent-class reflection with only the mapped parent attribute value 7; replacing parent interest by child interest does not change remembered class and produces no reflection."},{"path":"rti/internal/hla/object/registry_test.go","name":"TestUpdateAttributes_NoSelfDelivery","oracle":"Registry with stub FOM, real declaration manager and recording outbox sends exactly one reflection to peer 2 and none to subscribed producer 1."},{"path":"rti/internal/hla/object/registry_test.go","name":"TestUpdateAttributes_RejectsUnowned","oracle":"Caller 99 cannot update attribute 2 on caller 1's registered object: exact ErrAttributeNotOwned asserted. Stub FOM and fallback publication fixture."}], "open_items": ["Combine parent-coordinate routing with acquired ownership and publication-loss negative controls through the public binding; fake/stub fixtures here do not establish arbitrary federate model behavior."]
+    },
+    {
+      "id": "DM2010-INTERACTION-DECLARATION-STATE", "source_id": "S1516.1", "clause": "5.1.3(a-f)", "pdf_pages": [85, 86], "subject": "rti", "applicability": "applicable",
+      "statement": "Track interaction publication/subscription until explicitly removed, retain one active/passive subscription mode, and permit sends only at published classes; each interaction has one federation-wide sent class.", "conditions": "Sent class is the class argument of Send Interaction; modes are mutually exclusive per federate/class.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go", "rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/internal/hla/declaration/manager_test.go","name":"TestManager_InteractionPubSub_Idempotent","oracle":"Four repeated publish/subscribe calls leave publisher set exactly {4} and subscriber set exactly {6}."},{"path":"rti/internal/hla/declaration/subscription_options_test.go","name":"TestSubscriptionOptionsSnapshotAndAdvisoryEdges","oracle":"Repeated active subscription produces one on edge; overwriting same interaction class as passive produces one off edge, and passive saved object options/disabled object-class switch survive restore."},{"path":"rti/internal/hla/object/registry_test.go","name":"TestSendInteraction_FansReceiveInSortedOrder","oracle":"Published class 11 send yields one journal with original sender/class and exactly three receives in recipient order 4,6,8; each receive retains class and asserted payload bytes. Stub FOM fixture."},{"path":"rti/internal/hla/declaration/manager_test.go","name":"TestManager_UnpublishInteractionClass_Removes","oracle":"After publishing interaction 11, unpublication leaves publisher lookup empty. Direct manager state oracle; it does not attempt a subsequent send."}], "open_items": ["Sending before publication and exact error mapping are partly covered by separate core oracles; direct send rejection after unpublication, cross-class mode isolation, save/restore and actual Java publication lifecycle remain open."]
+    },
+    {
+      "id": "DM2010-INTERACTION-PROMOTION", "source_id": "S1516.1", "clause": "5.1.3(g-n)", "pdf_pages": [86], "subject": "rti", "applicability": "applicable",
+      "statement": "Receive an interaction at one subscribed received class per recipient and expose only sent parameters available at that class, including inherited parameters.", "conditions": "Sent parameters must be available at sent class; received class and parameter subsets may differ among federates; promotion preserves superclass-facing clients.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/tests/unit/object/delayed_subscription_inheritance_test.go","name":"TestG13TypedInheritedProjection","oracle":"Float64/Integer64 actual object/time managers receive a child interaction at the currently subscribed ancestor with exactly the inherited payload parameter, excluding child-only parameter; child object reflection uses historical ancestor handles and two subscribed inherited values after time-state marshal/unmarshal. Does not count all callbacks."}], "open_items": ["Two-level inherited parameter projection is evidenced in both time families. Multi-level nearest-class choice, competing hierarchy subscriptions and exact at-most-one callback counts remain open."]
+    },
+    {
+      "id": "DM2010-DDM-COEXISTENCE", "source_id": "S1516.1", "clause": "5.1.5", "pdf_pages": [92], "subject": "rti", "applicability": "applicable",
+      "statement": "Preserve DM-only service semantics for a federate even when other federates use DDM or mixed DM/DDM.", "conditions": "For the invoking federate's own mixed use, apply the extensions in 9.1.5 rather than treating regional interest as an ordinary subscription.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/regional_interest.go"], "tests": [{"path": "rti/internal/hla/declaration/subscription_options_test.go", "name": "TestDeclarationRegionalInterestDoesNotBroadenRouting", "oracle": "Regional active interest advises publishers but leaves ordinary subscriber lookup empty; removing interest emits off edges. This is local manager evidence."}], "open_items": ["Assess complete 9.1.5 coexistence separately; no full DDM clause claim is made."]
+    },
+    {
+      "id": "DM2010-SUBSCRIBED-RATE", "source_id": "S1516.1", "clause": "5.1.6; 5.6; 5.6.5(c)", "pdf_pages": [92, 98, 100], "subject": "rti", "applicability": "applicable",
+      "statement": "Resolve supplied update-rate designators through the FDD and reject unknown designators; absence selects unrestricted default-rate subscription.", "conditions": "Per subscribed object attribute; an invalid rate must not partly install attributes or alter their active/passive options.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/options.go", "rti/internal/hla/declaration/update_rate.go"], "tests": [{"path": "rti/internal/adapters/grpc/declaration_options_test.go", "name": "TestDeclarationOptionsRealWire", "oracle": "Unknown rate with added attribute yields InvalidArgument and exact InvalidUpdateRateDesignator trailer; before/after ExportState is deeply equal; omitted active later restores active mode. Uses bufconn."}], "open_items": ["Link valid named-rate lookup, omitted-rate reset, per-attribute rate changes and standard-Java overload coverage."]
+    },
+    {
+      "id": "DM2010-PUBLISH-OBJECT-EFFECT", "source_id": "S1516.1", "clause": "5.2; 5.2.1-5.2.4", "pdf_pages": [92, 93], "subject": "rti", "applicability": "applicable",
+      "statement": "Add the supplied attributes to object-class publication; empty input adds nothing; nonempty publication permits registration and ownership of corresponding instance attributes.", "conditions": "Input class and attribute set; no returned arguments; registration initializes ownership of published attributes, while later ownership acquisition remains a separate service.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go", "rti/internal/hla/object/registry.go"], "tests": [{"path": "rti/internal/hla/declaration/manager_test.go", "name": "TestManager_PublishObjectClass_RecordsPublisher", "oracle": "Publishing {2,3} makes publisher lookup for each attribute equal to {1}; does not assert registration or acquired ownership."}], "open_items": ["Link additive and explicit-empty publication through standard Java, registration eligibility and initial owner-set assertions; referenced Figures 11/12 not fully reviewed."]
+    },
+    {
+      "id": "DM2010-PUBLISH-OBJECT-ADMISSION", "source_id": "S1516.1", "clause": "5.2.3; 5.2.5", "pdf_pages": [93], "subject": "rti", "applicability": "applicable",
+      "statement": "Admit publication only for connected members of an existing execution with a defined class and available attributes, outside save/restore; expose the corresponding service errors.", "conditions": "Attribute-not-defined, class-not-defined, save, restore, nonmember, disconnected and RTI-internal-error cases; no universal ordering of simultaneous failures is inferred.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/declaration.go", "rti/internal/hla/declaration/manager.go"], "tests": [{"path": "rti/internal/hla/declaration/publication_hook_test.go", "name": "TestPublicationHookDoesNotRunWhenAdvisoryReservationFails", "oracle": "Forced queue overflow preserves declaration snapshot and suppresses publication continuation; retry invokes continuation once. It does not cover all listed IEEE admission errors."}], "open_items": ["Link each listed standard-Java exception and no-effect oracle; inspect Figure 11/12 transitions before claiming whole 5.2 review."]
+    },
+    {
+      "id": "DM2010-UNPUBLISH-SET-PRESENCE", "source_id": "S1516.1", "clause": "5.3; 5.3.1-5.3.4(a-d)", "pdf_pages": [93, 94, 95], "subject": "rti", "applicability": "applicable",
+      "statement": "Unpublish only a supplied attribute set, do nothing for a supplied empty set, and unpublish the entire class when the set is omitted; loss of all publication removes registration eligibility.", "conditions": "Class and optional set input; no returned arguments; implicit delete privilege follows publication-history rules.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/unpublication.go", "rti/internal/adapters/grpc/declaration.go"], "tests": [{"path": "rti/internal/adapters/grpc/declaration_unpublication_test.go", "name": "TestUnpublicationAttributeSetPresenceRealWire", "oracle": "Table asserts remaining publication sets for legacy/explicit whole, scoped and empty requests; contradictory presence returns InvalidArgument without deleting {2,3}."}], "open_items": ["Link standard-Java omitted-versus-empty overload behavior and attempted registration after final unpublication."]
+    },
+    {
+      "id": "DM2010-UNPUBLISH-OWNERSHIP", "source_id": "S1516.1", "clause": "5.3; 5.3.4(e)", "pdf_pages": [94, 95], "subject": "rti", "applicability": "applicable",
+      "statement": "Relinquish every owned instance attribute corresponding to removed class publications while preserving unrelated ownership.", "conditions": "Across all known instances affected by the caller's class publication; no further updates of relinquished attributes are permitted.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/unpublication.go"], "tests": [{"path": "rti/internal/hla/object/unpublication_integration_test.go", "name": "TestUnpublicationRelinquishesOwnedInstanceAttributes", "oracle": "Unpublishing attribute 1 removes caller ownership of 1 and preserves ownership of 2."}, {"path": "rti/internal/hla/object/unpublication_integration_test.go", "name": "TestUnpublicationEntireObjectSelectionIsAtomic", "oracle": "Capacity failure across two affected objects leaves complete ownership snapshot and publication set unchanged and releases the object pin."}], "open_items": ["Link public update rejection after unpublication and Java multi-instance ownership effects."]
+    },
+    {
+      "id": "DM2010-UNPUBLISH-PENDING-ADMISSION", "source_id": "S1516.1", "clause": "5.3.3; 5.3.5", "pdf_pages": [95, 96], "subject": "rti", "applicability": "applicable",
+      "statement": "Reject unpublication while a qualifying ownership-acquisition obligation for an attribute being removed remains unresolved; require valid class/attributes, connected membership and no save/restore.", "conditions": "Covers acquisition and acquisition-if-available until the specified terminal callback invocation; errors include pending acquisition, unavailable attribute/class, save, restore, nonmember, disconnected and RTI internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/unpublication.go"], "tests": [{"path": "rti/internal/hla/object/unpublication_integration_test.go", "name": "TestUnpublicationPendingAcquisitionRequiresTerminalInvocation", "oracle": "Pending acquisition rejects without ownership/publication effects; explicit empty succeeds; queuing cancellation is insufficient; reporting terminal callback invocation permits unpublication and preserves other owner."}], "open_items": ["Link acquisition-if-available branch and full standard-Java error matrix; Figures 11/12 remain unreviewed."]
+    },
+    {
+      "id": "DM2010-PUBLISH-INTERACTION", "source_id": "S1516.1", "clause": "5.4.1-5.4.5", "pdf_pages": [96], "subject": "rti", "applicability": "applicable",
+      "statement": "Publish a defined interaction class for a connected joined member outside save/restore so that sends of that class are permitted; return no arguments.", "conditions": "Input interaction class; errors are undefined class, save, restore, nonmember, disconnected and RTI internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go", "rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/internal/hla/object/registry_test.go","name":"TestSendInteraction_FansReceiveInSortedOrder","oracle":"Published class 11 send yields one journal with original sender/class and exactly three receives in recipient order 4,6,8; each receive retains class and asserted payload bytes. Stub FOM fixture."},{"path":"rti/internal/hla/object/interaction_p0_test.go","name":"TestP0SendInteractionRejectsInvalidHandlesBeforeAppend","oracle":"Defined/published class control; undefined class 99 and undefined parameter 9 produce precise core errors with zero WAL and outbox appends. Strict fixture FOM, not public binding."}], "open_items": ["Positive published send and undefined send inputs are core evidence, not every publication admission error. Connected/member/save/restore publication guards, no-effects, Java exceptions and Figure 13 remain open."]
+    },
+    {
+      "id": "DM2010-UNPUBLISH-INTERACTION", "source_id": "S1516.1", "clause": "5.5.1-5.5.5", "pdf_pages": [97], "subject": "rti", "applicability": "applicable",
+      "statement": "Unpublish a defined interaction class for a connected joined member outside save/restore so subsequent sends at that class are not permitted; return no arguments.", "conditions": "Input interaction class; errors are undefined class, save, restore, nonmember, disconnected and RTI internal error; this service has no transportation-reset postcondition.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go", "rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/internal/hla/declaration/manager_test.go","name":"TestManager_UnpublishInteractionClass_Removes","oracle":"After publishing interaction 11, unpublication leaves publisher lookup empty. Direct manager state oracle; it does not attempt a subsequent send."}], "open_items": ["Publisher state removal is asserted; direct post-unpublication send rejection/retry, other publishers/classes, full Java admission matrix and Figure 13 remain open."]
+    },
+    {
+      "id": "DM2010-SUBSCRIBE-OBJECT-ADDITIVE", "source_id": "S1516.1", "clause": "5.6; 5.6.1-5.6.4", "pdf_pages": [97, 98, 99], "subject": "rti", "applicability": "applicable",
+      "statement": "Add supplied class attributes to subscription without replacing unrelated prior subscriptions; an empty set changes neither subscribed attributes nor their active/passive modes.", "conditions": "Class, attribute set, optional passive indicator and optional rate designator; no returned arguments; only available attributes; valid connected membership outside save/restore.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/options.go"], "tests": [{"path":"rti/internal/hla/object/applicable_r1_declaration_review_test.go","name":"TestApplicableR1AdditiveSubscriptionPreservesOptions","oracle":"Production FOM-backed declaration manager retains passive inherited attribute and active child-only attribute after additive calls, empty subscribe leaves complete ExportState equal, later inherited-attribute active overwrite retains unrelated subscription."}], "open_items": ["Named-rate preservation, cross-class/federate isolation, lifecycle and standard-Java overloads remain open."]
+    },
+    {
+      "id": "DM2010-SUBSCRIBE-OBJECT-DISCOVERY", "source_id": "S1516.1", "clause": "5.6", "pdf_pages": [97, 98], "subject": "rti", "applicability": "applicable",
+      "statement": "Discover at most once per object knowledge lifetime at the registered class if subscribed, otherwise the closest subscribed superclass, and reflect only subscribed corresponding attributes.", "conditions": "Multiple subscription levels in one hierarchy; discovery still depends on the ownership and scope eligibility rules of 6.1, not registration alone.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/discover.go", "rti/internal/hla/object/update.go"], "tests": [{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassAncestorDiscoveryAndStableRediscovery","oracle":"With parsed production FOM and real declaration/object/ownership/delivery managers, parent-only recipient discovers parent, recipient subscribed at parent and child discovers child; each queue initially has exactly one discovery. Later child subscription does not change remembered parent or rediscover; local delete permits one new child-class discovery."},{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassReflectionUsesRememberedSubscriptionAndHandles","oracle":"Child update containing inherited value 7 and child-only value 9 yields exactly one parent-class reflection with only the mapped parent attribute value 7; replacing parent interest by child interest does not change remembered class and produces no reflection."}], "open_items": ["Two-level candidate selection, at-most-once initial discovery and known-class reflection subset are linked. Deeper hierarchies, RTI-owned eligibility, callback-entry lifecycle and Java binding remain open."]
+    },
+    {
+      "id": "DM2010-SUBSCRIBE-PASSIVE", "source_id": "S1516.1", "clause": "5.6; 5.8", "pdf_pages": [98, 102], "subject": "rti", "applicability": "applicable",
+      "statement": "Passive subscription retains data eligibility but must not create active-interest start/on advisories; replacing active interest with passive may produce stop/off advisories; omission defaults to active.", "conditions": "Object mode is per specified attribute; interaction mode is per class; advisory generation also depends on other interest and the respective switch.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/options.go"], "tests": [{"path": "rti/internal/hla/declaration/subscription_options_test.go", "name": "TestSubscriptionOptionsPassiveStillRoutes", "oracle": "Passive object and interaction subscriber lookups still return the federate."}, {"path": "rti/internal/hla/declaration/subscription_options_test.go", "name": "TestSubscriptionOptionsSnapshotAndAdvisoryEdges", "oracle": "Passive causes no advisory; active transition emits interaction-on once, repeat is suppressed, active-to-passive emits off; disabled object switch suppresses its edge."}], "open_items": ["Lookup eligibility is not actual callback delivery; link standard-Java passive overloads and remote-interest hierarchy cases."]
+    },
+    {
+      "id": "DM2010-SUBSCRIBE-OBJECT-ERRORS", "source_id": "S1516.1", "clause": "5.6.3; 5.6.5", "pdf_pages": [99, 100], "subject": "rti", "applicability": "applicable",
+      "statement": "Report unavailable attributes, undefined class, invalid rate, save/restore, nonmembership, disconnection and internal errors rather than admitting invalid object subscriptions.", "conditions": "Existing execution and connected joined member; attribute availability is at supplied class; rate errors must not install a subset of the request.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/declaration.go"], "tests": [{"path": "rti/internal/hla/declaration/subscription_options_test.go", "name": "TestSubscriptionOptionsInvalidRateAtomic", "oracle": "Unknown named rate for {1,2} is rejected and complete declaration ExportState remains equal to pre-call state."}], "open_items": ["Link every other error and Java exception identity; Figures 11/12 remain outside reviewed_units."]
+    },
+    {
+      "id": "DM2010-UNSUBSCRIBE-OBJECT-SET", "source_id": "S1516.1", "clause": "5.7; 5.7.1-5.7.4", "pdf_pages": [100, 101], "subject": "rti", "applicability": "applicable",
+      "statement": "Remove only supplied subscriptions, remove none for explicit empty input and remove the whole class if the set is omitted; removed attributes become out of scope.", "conditions": "No returned arguments; if no attributes remain, no further discovery at that class; no future reflections for attributes no longer subscribed; may implicitly leave scope without an out-of-scope callback, with DDM extensions in 9.1.1.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/unsubscribe.go"], "tests": [{"path": "rti/internal/adapters/grpc/declaration_unsubscribe_test.go", "name": "TestUnsubscriptionAttributeSetPresenceRealWire", "oracle": "Remaining subscriber lookup is asserted independently for attributes 2 and 3 across omitted, scoped and explicit-empty requests; contradictory presence is rejected without removal."}], "open_items": ["HIGH RISK: lookup state alone does not show suppression of already queued callbacks; link send-to-callback unsubscribe windows and implicit scope behavior."]
+    },
+    {
+      "id": "DM2010-UNSUBSCRIBE-OBJECT-ADMISSION", "source_id": "S1516.1", "clause": "5.7.3; 5.7.5", "pdf_pages": [100, 101], "subject": "rti", "applicability": "applicable",
+      "statement": "Validate defined class and any supplied attributes, connected membership and save/restore admission before removing subscriptions; expose the corresponding errors.", "conditions": "Includes explicit empty set with invalid class; errors include attributes/class, save, restore, nonmember, disconnected and internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/declaration.go"], "tests": [{"path": "rti/internal/adapters/grpc/declaration_unsubscribe_test.go", "name": "TestUnsubscriptionWrongFOMSetNoEffectsAndIEEEErrorTrailer", "oracle": "Invalid mixed set and invalid class yield exact trailers and preserve ExportState."}], "open_items": ["Link lifecycle guards and all Java overload errors; Figures 11/12 not fully reviewed."]
+    },
+    {
+      "id": "DM2010-SUBSCRIBE-INTERACTION", "source_id": "S1516.1", "clause": "5.8; 5.8.1-5.8.5", "pdf_pages": [101, 102], "subject": "rti", "applicability": "applicable",
+      "statement": "Accept a defined interaction class and optional passive indicator for connected joined members outside save/restore, enabling receipt at sent class or closest subscribed superclass with only available sent parameters and at most one receipt.", "conditions": "No returned arguments; errors include undefined class, save, restore, nonmember, disconnected and internal error; the service-reporting restriction is separately recorded.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/options.go", "rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/tests/unit/object/delayed_subscription_inheritance_test.go","name":"TestG13TypedInheritedProjection","oracle":"Float64/Integer64 actual object/time managers receive a child interaction at the currently subscribed ancestor with exactly the inherited payload parameter, excluding child-only parameter; child object reflection uses historical ancestor handles and two subscribed inherited values after time-state marshal/unmarshal. Does not count all callbacks."},{"path":"rti/internal/hla/declaration/subscription_options_test.go","name":"TestSubscriptionOptionsPassiveStillRoutes","oracle":"Passive object and interaction subscriptions both remain in subscriber lookup; local manager state, not callback execution."}], "open_items": ["Promoted parameter subset is evidenced, but competing hierarchy/DDM at-most-one count, passive actual callback, full Java admission matrix, MOM-report restriction and Figure 13 remain open."]
+    },
+    {
+      "id": "DM2010-MOM-SERVICE-REPORT-SUBSCRIPTION",
+      "source_id": "S1516.1",
+      "clause": "5.8; 5.8.3(e); 5.8.5(a)",
+      "pdf_pages": [
+        102
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Reject subscription to the MOM service-invocation report class while the caller's service invocations are being reported via MOM.",
+      "conditions": "Exact HLAmanager.HLAfederate.HLAreport.HLAreportServiceInvocation class; Service Reporting Switch enabled for the invoking federate.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/declaration/options.go",
+        "rti/internal/hla/core/mom_subscription.go",
+        "rti/internal/adapters/grpc/mom_subscription.go",
+        "rti/internal/hla/mom/servicecatalog.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/application/server/applicable_support_admission_20261004_test.go",
+          "name": "TestApplicableSupportReportingSubscriptionAdmission",
+          "oracle": "In-process production server, authenticated joined caller, actual MOM switch: active and passive exact-report subscription both return FailedPrecondition with FederateServiceInvocationsAreBeingReportedViaMOM trailer and identical declaration state; disabling the switch permits subscription and exact singleton subscriber. Initial run accepted both and changed state; corrected path passes."
+        }
+      ],
+      "open_items": [
+        "Java exception construction, ancestor/regional public variants and simultaneous switch/subscription race remain unverified. Public ordinary/regional adapters and MOM service dispatch now share the guard; direct unwrapped declaration-manager calls are not guarded."
+      ]
+    },
+    {
+      "id": "DM2010-UNSUBSCRIBE-INTERACTION", "source_id": "S1516.1", "clause": "5.9.1-5.9.5", "pdf_pages": [103], "subject": "rti", "applicability": "applicable",
+      "statement": "Remove the specified interaction subscription and stop corresponding delivery, after validating defined class, connected membership and absence of save/restore; return no arguments.", "conditions": "Errors: undefined class, save, restore, nonmember, disconnected and internal error; mixed DDM semantics defer to 9.1.5; other hierarchy subscriptions remain separate.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/manager.go", "rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/internal/hla/object/ro_filter_test.go","name":"TestROQueuedInteractionRechecksCurrentSubscription","oracle":"Real object/time managers queue a receive-order interaction while recipient is constrained; unsubscribing before asynchronous release leaves recording outbox empty."},{"path":"rti/internal/hla/declaration/manager_test.go","name":"TestManager_UnsubscribeInteractionClass_Removes","oracle":"Removing subscriber 6 preserves subscriber 8 exactly at interaction class 11."}], "open_items": ["Other superclass subscription continuation, TSO/current-interval interpretation, actual Java callback-entry suppression, lifecycle errors and Figure 13 remain open."]
+    },
+    {
+      "id": "DM2010-START-REGISTRATION-CALLBACK", "source_id": "S1516.1", "clause": "5.10", "pdf_pages": [103, 104], "subject": "rti", "applicability": "applicable",
+      "statement": "Advise registration by supplying the object class when another joined federate actively subscribes to a matching published attribute at its candidate discovery class, and only with the object-class relevance switch enabled.", "conditions": "Existing execution, joined recipient, no recipient save/restore; candidate discovery class may be a superclass; no returned arguments; callback exception is federate internal error; no reference state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/registration.go"], "tests": [{"path": "rti/internal/hla/declaration/options_test.go", "name": "TestRegistrationRelevanceRequiresMatchingRemoteAttribute", "oracle": "Self subscription produces no advisory; remote subscription to attribute 2 advises only matching publisher 2."}, {"path": "rti/internal/hla/declaration/options_test.go", "name": "TestRegistrationRelevanceOnLatePublication", "oracle": "Publication after active subscription yields exactly one AdvisoryStartRegistration."}], "open_items": ["Link candidate-discovery superclass, disabled-switch, save/restore and actual Java callback arguments; local recipient selection is partial evidence."]
+    },
+    {
+      "id": "DM2010-STOP-REGISTRATION-CALLBACK", "source_id": "S1516.1", "clause": "5.11", "pdf_pages": [104, 105], "subject": "rti", "applicability": "applicable",
+      "statement": "Advise stopping registration by supplying the published object class when no other joined federate has qualifying active attribute interest, and only with object-class relevance enabled.", "conditions": "Existing execution, joined publishing recipient, no save/restore; evaluate candidate discovery class; no returned arguments; callback exception is federate internal error; no reference state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/registration.go"], "tests": [{"path":"rti/internal/hla/declaration/applicable_r1_registration_advice_test.go","name":"TestApplicableR1StopRegistrationRequiresLastActiveInterestAndSwitch","oracle":"Production parsed FOM and real delivery queue: first active interest emits one StartRegistration, removing one of two active matching subscribers emits no Stop, removing last emits one Stop at exact class despite passive matching and active unrelated-attribute subscriptions; duplicate unsubscribe emits no duplicate; disabled switch emits neither edge."}], "open_items": ["Superclass candidate discovery class, save/restore suppression and actual standard-Java callback/exception behavior remain open."]
+    },
+    {
+      "id": "DM2010-REGISTRATION-ADVICE-RESPONSE", "source_id": "S1516.1", "clause": "5.10; 5.11", "pdf_pages": [103, 104], "subject": "federate", "applicability": "not-applicable",
+      "statement": "The advised federate should adjust its application registration activity in response to relevance advice.", "conditions": "Application recommendation, not an RTI obligation or a guarantee that arbitrary federation models act on advice; the RTI callback facets remain applicable.", "review_status": "source-reviewed", "implementation": [], "tests": [], "open_items": ["No arbitrary federate-model behavior is claimed by this RTI-only assessment."]
+    },
+    {
+      "id": "DM2010-INTERACTION-ON-OFF-CALLBACKS", "source_id": "S1516.1", "clause": "5.12; 5.13", "pdf_pages": [105, 106, 107], "subject": "rti", "applicability": "applicable",
+      "statement": "Supply interaction-on advice to a publishing federate with remote active interest at its class or superclass and interaction-off advice when no such interest remains, only with interaction relevance enabled.", "conditions": "Existing execution, joined publisher, no save/restore; input interaction class, no returned arguments; callback exception is federate internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/options.go"], "tests": [{"path": "rti/internal/hla/declaration/subscription_options_test.go", "name": "TestSubscriptionOptionsSnapshotAndAdvisoryEdges", "oracle": "Passive-to-active emits on once, repeated active emits none, active-to-passive emits off; object switch is separate."}, {"path": "rti/internal/hla/declaration/subscription_options_test.go", "name": "TestSubscriptionResignLastActiveAdvisory", "oracle": "Resignation of last active interaction subscriber emits exactly one off advisory."}], "open_items": ["Link hierarchy, self-interest, switch-off and save/restore controls plus Java callback delivery; Figure 13 is not assessed, so whole 5.12/5.13 are not reviewed_units."]
+    },
+    {
+      "id": "DM2010-INTERACTION-ADVICE-RESPONSE", "source_id": "S1516.1", "clause": "5.12", "pdf_pages": [105], "subject": "federate", "applicability": "not-applicable",
+      "statement": "The advised federate should follow its federation's scheme for sending relevant interactions.", "conditions": "Federation-specific application recommendation; no requirement that the RTI create application interactions or prove arbitrary federates' policies.", "review_status": "source-reviewed", "implementation": [], "tests": [], "open_items": ["RTI on/off notification is separately applicable."]
+    },
+    {
+      "id": "OM2010-DISCOVERY-KNOWLEDGE", "source_id": "S1516.1", "clause": "6.1.1", "pdf_pages": [107], "subject": "rti", "applicability": "applicable",
+      "statement": "Discover unknown eligible objects at the registered class if subscribed, otherwise nearest subscribed superclass; freeze discovered class until knowledge ends and use registration/discovery to establish known class.", "conditions": "At least one subscribed corresponding instance attribute is owned by another federate or RTI; regional-only eligibility additionally requires update/subscription overlap; candidate discovery class can change while discovered class cannot.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/discover.go", "rti/internal/hla/object/local_delete.go"], "tests": [{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassAncestorDiscoveryAndStableRediscovery","oracle":"With parsed production FOM and real declaration/object/ownership/delivery managers, parent-only recipient discovers parent, recipient subscribed at parent and child discovers child; each queue initially has exactly one discovery. Later child subscription does not change remembered parent or rediscover; local delete permits one new child-class discovery."},{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassNoDiscoveryForUnownedAttribute","oracle":"After divesting the inherited attribute, subscribing its parent coordinate and refreshing does not establish recipient knowledge; production FOM and ownership manager."},{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassCommittedRegionRefreshDiscoversOnce","oracle":"No discovery under nonoverlap or pending draft; committing overlap creates exactly one parent discovery; later committed overlap loss preserves remembered class without another discovery."}], "open_items": ["RTI-owned discovery, deeper hierarchy and binding callback-entry guards remain open. Unowned single attribute is not a whole orphan-object oracle."]
+    },
+    {
+      "id": "OM2010-SCOPE-ELIGIBILITY", "source_id": "S1516.1", "clause": "6.1.2", "pdf_pages": [108], "subject": "rti", "applicability": "applicable",
+      "statement": "At discovery at least one attribute immediately enters scope; scope requires object knowledge, another federate or RTI owner, and ordinary subscription or regional overlap at known class.", "conditions": "Both DM and DDM; scope is semantic state, not dependent on enabling scope advisories.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/discover.go", "rti/internal/hla/object/update.go"], "tests": [{"path": "rti/internal/hla/object/ordinary_scope_test.go", "name": "TestOrdinaryScopeEligibilityAndSwitchSuppression", "oracle": "Ordinary subscription routes reflection despite an installed DDM surface with no regional match; switch-on adds in-scope before first reflect only, switch-off preserves reflection. Does not assert immediate scope at discovery."}], "open_items": ["Link direct scope state at discovery, RTI ownership and no-self scope controls."]
+    },
+    {
+      "id": "OM2010-IN-OUT-SCOPE-REFLECTS", "source_id": "S1516.1", "clause": "6.1.3; 6.1.4", "pdf_pages": [108, 109], "subject": "rti", "applicability": "applicable",
+      "statement": "An in-scope attribute has one other eligible updating federate; reflections may also occur after scope is lost if the corresponding update was sent while in scope.", "conditions": "Corresponding update by another federate is required; this permission does not override explicit unsubscribe or callback preconditions in 6.10/6.11.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path":"rti/internal/hla/object/conveyed_known_class_test.go","name":"TestConveyedReflectionPreservesKnownAttributeAndSenderBounds","oracle":"Accepted reflection retains sent region realization despite sender later commit, unassociation, deletion and JSON roundtrip; moving current receiver subscription away filters it to nil. Production FOM and DDM manager; direct queued filter, not final user callback."}], "open_items": ["Source 6.1.4 permits out-of-scope reflects sent while in scope; it is not an unconditional delivery requirement. Buffered eligibility through callback entry, ownership-driven scope loss and all unsubscribe interval combinations remain open."]
+    },
+    {
+      "id": "OM2010-ATTRIBUTE-RELEVANCE-CONTROL", "source_id": "S1516.1", "clause": "6.1.5", "pdf_pages": [109], "subject": "rti", "applicability": "applicable",
+      "statement": "Honor each federate's attribute-relevance advisory switch for updates-on/off advice.", "conditions": "Controls advice about relevance to other joined federates, not data delivery eligibility itself.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/declaration/options.go"], "tests": [{"path":"rti/internal/hla/declaration/update_rate_fom_test.go","name":"TestUpdateRateMaximumSwitchOwnershipAndDurableRetry","oracle":"Parsed named rates Slow=2.5/Fast=20 drive actual queue advice; passive Fast leaves Slow maximum, active Fast raises it, relevance switch off suppresses advice, re-enable emits Fast, active default removes designator and passive default restores Fast; failed queue reservation preserves ExportState, durable retry emits one edge."},{"path":"rti/internal/hla/declaration/update_rate_test.go","name":"TestUpdateRateDefaultDemandAndPassiveEdges","oracle":"Actual delivery queue receives TurnUpdatesOn for object 100/attribute 1 without a named limit after passive-to-active transition; active-to-passive produces off advice while passive subscription remains in data routing."}], "open_items": ["Attribute relevance advice is independently toggled and passive data routing persists. All combinations with scope/object-class switches and actual binding data delivery remain open."]
+    },
+    {
+      "id": "OM2010-ORPHAN-OBJECTS",
+      "source_id": "S1516.1",
+      "clause": "6.1.6",
+      "pdf_pages": [
+        109
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Handle objects known to no federate as unreachable orphan objects; without owned attributes they cannot be rediscovered or acquired by a federate.",
+      "conditions": "Last knowledgeable federate resigns or local-deletes; the source leaves appropriate internal RTI treatment unspecified rather than mandating a particular garbage-collection policy.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/local_delete.go",
+        "rti/internal/hla/object/registry.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_support_orphan_20261004_test.go",
+          "name": "TestApplicableSupportOrphanCannotRediscoverOrAcquire",
+          "oracle": "Divests all three attributes including delete privilege; last two knowledgeable members locally delete, then all four members are confirmed unaware. Each publishes/subscribes again: no discovery or restored knowledge; each acquisition returns ErrObjectHandleInvalid and ownership snapshot stays unchanged."
+        }
+      ],
+      "open_items": [
+        "Local-delete last-knowledge path only; last-member resign, lifecycle restore, Java callback entry and resource treatment remain separate. Source does not prescribe immediate garbage collection."
+      ]
+    },
+    {
+      "id": "OM2010-INTERACTION-RECEIVED-CLASS", "source_id": "S1516.1", "clause": "6.1.7", "pdf_pages": [109, 110], "subject": "rti", "applicability": "applicable",
+      "statement": "Select interaction received class at receipt as sent class if subscribed or closest subscribed superclass otherwise, requiring another sender and qualifying ordinary or overlapping regional subscription.", "conditions": "Candidate received class and actual received-class argument coincide at receipt; DM and DDM subscription modes both qualify.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/tests/unit/object/delayed_subscription_inheritance_test.go","name":"TestG13TypedInheritedProjection","oracle":"Float64/Integer64 actual object/time managers receive a child interaction at the currently subscribed ancestor with exactly the inherited payload parameter, excluding child-only parameter; child object reflection uses historical ancestor handles and two subscribed inherited values after time-state marshal/unmarshal. Does not count all callbacks."},{"path":"rti/internal/hla/object/registry_test.go","name":"TestSendInteraction_NoSelfDelivery","oracle":"Published sender also subscribes; one send produces exactly one receive addressed to peer 4 and none to sender. Stub FOM fixture, not a standard binding."},{"path":"rti/internal/hla/object/ro_filter_test.go","name":"TestROQueuedFilterInheritsInteractionsButRetainsKnownObjectClass","oracle":"Queued child interaction survives replacing sent-class subscription with ancestor; analogous object reflection is rejected rather than changing its historical conveyed class. The test does not assert projected interaction callback arguments."}], "open_items": ["Receipt-time ancestor argument/parameter projection uses the separate typed test. Deeper nearest-superclass selection, overlapping ordinary/regional choices and exact one-receipt counts remain open."]
+    },
+    {
+      "id": "OM2010-AUTO-PROVIDE-SWITCH", "source_id": "S1516.1", "clause": "6.1.9", "pdf_pages": [112, 113], "subject": "rti", "applicability": "applicable",
+      "statement": "Initialize the execution-wide Auto-Provide Switch from the FDD and allow MOM switch adjustment; when enabled solicit owners for attributes newly in scope elsewhere, and solicit every currently in-scope attribute upon enabling.", "conditions": "Simultaneous new scope at multiple recipients may coalesce into one owner request; auto-provide operates independently of the Attribute Scope Advisory Switch.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/discover.go", "rti/internal/hla/object/request_update.go"], "tests": [{"path":"rti/internal/hla/mom/dispatch_test.go","name":"TestHandleFederationSetSwitches_SetsAutoProvide","oracle":"MOM dispatcher processes HLAsetSwitches with the standard four-byte HLAinteger32BE true vector and asserts execution AutoProvideSwitch becomes true. Fixture FOM; only switch modification is evidenced."}], "open_items": ["No production-FDD initial setting, newly-in-scope owner solicitation, late-enable backlog, scope-switch independence or coalescing oracle is linked. MOM flag mutation does not prove object-manager composition."]
+    },
+    {
+      "id": "OM2010-TRANSPORT-TYPES-FALLBACK", "source_id": "S1516.1", "clause": "6.1.10", "pdf_pages": [113], "subject": "rti", "applicability": "applicable",
+      "statement": "Support HLAreliable and HLAbestEffort, preserving reliability category when unsupported custom transport falls back, ultimately to its standard default; silently fall back for unsupported FDD types.", "conditions": "Reliable promises one delivered copy; best effort permits loss; request confirmations and query reports expose the achieved type, which need not equal the requested type.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/sent_transport.go", "rti/internal/hla/object/transportation_service.go"], "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "activationOccursOnlyAtCallbackEntryAndUsesAuthoritativeResult", "oracle": "Mock returns Reliable after BestEffort request; user confirmation sees Reliable and activation occurred before callback. This establishes authoritative result mapping, not custom-FDD fallback or actual reliable delivery."}], "open_items": ["HIGH RISK: metadata labels do not prove one-copy reliable delivery; link real reliable transport and unsupported custom reliability-category fallback oracles."]
+    },
+    {
+      "id": "OM2010-PASSEL-INTEGRITY", "source_id": "S1516.1", "clause": "6.1.11", "pdf_pages": [113], "subject": "rti", "applicability": "applicable",
+      "statement": "Group update pairs into passels by identical transportation, sent order and conveyed region set; never split, merge or move elements across passels or combine separate updates in one reflection.", "conditions": "Recipient subscription filtering still applies; one update can induce several reflections when passel properties differ.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path": "rti/internal/hla/object/preferred_order_test.go", "name": "TestPreferredOrderMixedPasselsAtomicRetry", "oracle": "Mixed RO/TSO attributes form four one-attribute deliveries for two recipients under one gate reservation; each retains value, order, timestamp and retraction identity; injected failures leak no callbacks/IDs."}], "open_items": ["Link same-property multi-attribute indivisibility, transport/region partitions, subscription filtering and separate-update noncombination."]
+    },
+    {
+      "id": "OM2010-BEST-EFFORT-RATE-REDUCTION",
+      "source_id": "S1516.1",
+      "clause": "6.1.12",
+      "pdf_pages": [
+        113,
+        114
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "For nondefault best-effort subscriptions, discard excess updates and maintain at least the subscribed interval between delivered messages; never promise a minimum rate or generate more updates than owners send.",
+      "conditions": "Rate x Hz gives earliest subsequent delivery t+1/x; EVOKED model rate guarantee depends on publisher and evoke rates exceeding subscription rate; defaults have no reduction.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/update_rate.go",
+        "rti/internal/hla/object/metadata.go",
+        "rti/internal/hla/object/delivery_rate.go",
+        "rti/internal/hla/object/update.go",
+        "rti/internal/hla/declaration/delivery_rate.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_support_rate_20261004_test.go",
+          "name": "TestApplicableSupportBestEffortRateReduction",
+      "oracle": "Manual-clock real registry/declaration/delivery with parsed TwoHz=2 and BestEffort metadata: active/passive variants assert first value, no delivery at 100 ms, current value at 500 ms, default-rate delivery of every sent value, no synthesized update, whole two-attribute passels and immediate reset to default rate. Fresh correction passes; this is a core immediate outbound-delivery oracle, not Java callback-entry timing."
+        },
+        {
+          "path": "rti/internal/hla/object/applicable_support_rate_20261004_test.go",
+          "name": "TestApplicableSupportReliableRateDoesNotDrop",
+          "oracle": "With the same TwoHz subscription and two-attribute passels, reliable reflections retain both the first and 100 ms excess update, preserve current payloads and continue after reset to default. No claim of reliable pacing is made."
+        },
+        {
+          "path": "rti/internal/hla/object/applicable_support_rate_20261004_test.go",
+          "name": "TestApplicableSupportRateFailedAdmissionCanRetry",
+          "oracle": "At the 500 ms eligible boundary, injected atomic outbox admission rejects with the exact sentinel and neither recipient receives data; retry at the same wall-clock instant delivers the new value, proving failure does not consume the named interval."
+        }
+      ],
+      "open_items": [
+        "Historical first-red 2026-10-04: 2 Hz best-effort subscriber received at t+100 ms. Corrected by per-instance/recipient/attribute last-successful immediate-delivery times and whole-passel dropping before reservation; rate-correction.jsonl retains the fresh passing cases while earlier red logs remain intact.",
+        "EVOKED publisher/evoke preconditions, buffered RO/TSO and callback-entry timing, reliable pacing, transport transitions, regional/concurrent scenarios and rate-clock behavior across save/restore remain unverified. Immediate delivery reduction, reliable no-drop, default reset and failed-admission retry are narrower than complete 6.1.12 satisfaction."
+      ]
+    },
+    {
+      "id": "OM2010-RELIABLE-RATE-AND-ADVICE", "source_id": "S1516.1", "clause": "6.1.12", "pdf_pages": [114], "subject": "rti", "applicability": "applicable",
+      "statement": "Do not drop reliable updates for rate reduction; when relevance advice is enabled notify the owner of maximum active subscribed rate and changes, omitting a rate designator when any active subscription uses default rate.", "conditions": "A transportation change changes the applicable reduction behavior; the reliable no-drop rule must not be replaced by a best-effort throttle assertion.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update_rate.go", "rti/internal/hla/declaration/update_rate.go"], "tests": [{"path":"rti/internal/hla/declaration/update_rate_fom_test.go","name":"TestUpdateRateMaximumSwitchOwnershipAndDurableRetry","oracle":"Parsed named rates Slow=2.5/Fast=20 drive actual queue advice; passive Fast leaves Slow maximum, active Fast raises it, relevance switch off suppresses advice, re-enable emits Fast, active default removes designator and passive default restores Fast; failed queue reservation preserves ExportState, durable retry emits one edge."}], "open_items": ["Only maximum active/default-rate advice and switch behavior are linked. Reliable overload no-loss, best-effort-to-reliable transition, EVOKED delivery timing and full Java callback overloads remain open."]
+    },
+    {
+      "id": "OM2010-RESERVE-SINGLE-INPUT",
+      "source_id": "S1516.1",
+      "clause": "6.2",
+      "pdf_pages": [
+        114,
+        115
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Accept a candidate single name only from a connected joined member outside save/restore, reject names beginning HLA as illegal, and report reservation outcome asynchronously rather than as returned arguments.",
+      "conditions": "Existing execution; input name; errors illegal name, save, restore, nonmember, disconnected and internal error; accepted postcondition is candidate received, not guaranteed reservation success; no state chart.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/reservation_handlers.go",
+        "rti/internal/adapters/grpc/object.go",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR1IllegalSingleReservationHasNoEffects",
+          "oracle": "Historical 2026-10-03 run: S1516.1 6.2 pages 114-115: direct production registry must synchronously reject HLAreserved without changing ExportState or emitting a reservation callback. Fresh review FAIL: request accepted and state/callback effects observed."
+        },
+        {
+          "path": "rti/internal/hla/ddm/applicable_r1_time_independence_test.go",
+          "name": "TestApplicableR1LiveObjectNameAdmissionBoundaries",
+          "oracle": "Historical 2026-10-03 run: Joined raw gRPC after successful reserve/release control: single-HLA subtest returns nil error for invalid HLA name. Pinned real server; live-name-boundaries-r2.jsonl FAIL. 2026-10-04 updated assertion: all four raw joined-RPC negative cases require exact IllegalName, NameSetWasEmpty or ObjectInstanceNameNotReserved trailers after a successful reserve/release positive control; parent reports four passing live subcases. This worker inspected the current body but did not rerun that live campaign."
+        }
+      ],
+      "open_items": [
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): REPRODUCED DEFECT: HLA-prefixed name is accepted. Complete connected/member/save/restore/error mapping and standard-Java IllegalName still need public oracle; no production fix made.",
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): Raw live reproduction confirms reachable RTI admission, not only a primitive fixture. Java forwards nonnull HLA-prefixed names unchanged. Full lifecycle and exact standard-Java exception mapping remain open.",
+        "2026-10-04 increment: parent fixes the named-admission/implicit-publication defect without weakening its oracle. Historical failures remain evidence of the earlier snapshot; current implementation and tests, not that old result, determine present behavior. Whole-row and source-scope completeness remain false.",
+        "Current exact raw-RPC exception metadata is not itself standard Java exception construction. Save/restore, disconnection and all precedence combinations remain open."
+      ]
+    },
+    {
+      "id": "OM2010-RESERVE-SINGLE-CALLBACK",
+      "source_id": "S1516.1",
+      "clause": "6.3",
+      "pdf_pages": [
+        115
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Respond to the same federate's prior single-name request with name and success indicator; success grants exclusive registration rights and prevents another joined federate succeeding on that name.",
+      "conditions": "Existing execution, joined requester, no save/restore; no returned arguments; callback exception federate internal error; reservation lasts until resign or successful release; no state chart.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/reservation_handlers.go",
+        "rti/internal/hla/object/reservation.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR1ReservationCallbacksCorrelateAndExcludeOtherHolders",
+          "oracle": "single subtest: exactly one success callback with original name to requester 1, collision yields exactly one failure to requester 2, no callback to peer; releasing holder 1 allows requester 2 success. Production registry and real delivery."
+        },
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR2ReservationSurvivesRegistrationDeletionAndRestore",
+          "oracle": "Reserved name remains owned after named registration; a detached registry snapshot with both reservation and object restores after release. Deletion does not release the restored reservation; peer reservation fails, original holder can re-register, and explicit release removes reservation even while registered. Single-name path, not resign or multiple-name generalization."
+        }
+      ],
+      "open_items": [
+        "Reservation retention until resign, actual standard-Java invocation and save/restore callback suppression remain open.",
+        "2026-10-04: single-name reservation retention across registration/deletion and object+reservation restore is linked; existing registered name does not prevent holder release. Retain-until-resign and complete multiple-name lifecycle remain open."
+      ]
+    },
+    {
+      "id": "OM2010-RELEASE-SINGLE-NAME",
+      "source_id": "S1516.1",
+      "clause": "6.4",
+      "pdf_pages": [
+        116
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Release a name reserved by the caller after successful single or multiple reservation so it becomes available to other joined federates.",
+      "conditions": "Input name, no returned arguments; connected member in existing execution outside save/restore; errors unreserved name, save, restore, nonmember, disconnected and internal error; no state chart.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/reservation_handlers.go",
+        "rti/internal/hla/object/reservation.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR1ReservationCallbacksCorrelateAndExcludeOtherHolders",
+          "oracle": "single and multiple subtests release each caller-owned reservation via single release; another federate then obtains matching success callbacks, proving availability after release."
+        },
+        {
+          "path": "rti/tests/integration/spec/M26/reservation_test.go",
+          "name": "TestSpec_M26_Release_ByOther_Fails",
+          "oracle": "Release by non-holder 2 after holder 1 reserve asserts exact ErrObjectInstanceNameReservedByOther; direct registry fixture."
+        },
+        {
+          "path": "rti/tests/integration/spec/M26/reservation_test.go",
+          "name": "TestSpec_M26_Release_Unreserved_Fails",
+          "oracle": "Releasing an unreserved name asserts ErrObjectInstanceNameNotReserved."
+        },
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR2ReservationSurvivesRegistrationDeletionAndRestore",
+          "oracle": "Reserved name remains owned after named registration; a detached registry snapshot with both reservation and object restores after release. Deletion does not release the restored reservation; peer reservation fails, original holder can re-register, and explicit release removes reservation even while registered. Single-name path, not resign or multiple-name generalization."
+        }
+      ],
+      "open_items": [
+        "Complete no-effects snapshot on rejected release and connected/member/save/restore standard-Java errors remain open.",
+        "2026-10-04: single-name reservation retention across registration/deletion and object+reservation restore is linked; existing registered name does not prevent holder release. Retain-until-resign and complete multiple-name lifecycle remain open."
+      ]
+    },
+    {
+      "id": "OM2010-RESERVE-MULTIPLE-INPUT",
+      "source_id": "S1516.1",
+      "clause": "6.5",
+      "pdf_pages": [
+        116,
+        117,
+        118
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Require a nonempty candidate name set with no HLA-prefixed name, and abort all reservations for any illegal name; use the multiple-name callback, not single-name callbacks, for its outcome.",
+      "conditions": "Connected joined member in existing execution, no save/restore; no returned arguments; errors empty set, illegal name, nonmember, save, restore, disconnected and internal error; no state chart.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/reservation_handlers.go",
+        "rti/internal/hla/object/reservation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR1IllegalMultipleReservationIsAtomic",
+          "oracle": "Historical 2026-10-03 run: S1516.1 6.5 pages 117-118: empty set and {validCandidate,HLAreserved} must synchronously reject with identical ExportState and no callback. Both fresh subtests FAIL: invalid requests accepted with state or callback effects."
+        },
+        {
+          "path": "rti/internal/hla/ddm/applicable_r1_time_independence_test.go",
+          "name": "TestApplicableR1LiveObjectNameAdmissionBoundaries",
+          "oracle": "Historical 2026-10-03 run: Joined raw gRPC after successful reserve/release control: multiple-mixed-HLA and multiple-empty both return nil error for invalid input. Pinned real server; live-name-boundaries-r2.jsonl FAIL. 2026-10-04 updated assertion: all four raw joined-RPC negative cases require exact IllegalName, NameSetWasEmpty or ObjectInstanceNameNotReserved trailers after a successful reserve/release positive control; parent reports four passing live subcases. This worker inspected the current body but did not rerun that live campaign."
+        }
+      ],
+      "open_items": [
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): REPRODUCED DEFECT: empty-set and mixed HLA-prefix batch admission accepts invalid requests. Exact EmptyNameSet/IllegalName public-binding exceptions, lifecycle guards and mixed-order variants remain open; no production fix made.",
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): Java rejects empty sets locally: raw empty-set acceptance does not prove Java accepts empty sets. Java does not guard HLA-prefixed members. Complete lifecycle, exception mapping and mixed-order atomicity remain open.",
+        "2026-10-04 increment: parent fixes the named-admission/implicit-publication defect without weakening its oracle. Historical failures remain evidence of the earlier snapshot; current implementation and tests, not that old result, determine present behavior. Whole-row and source-scope completeness remain false.",
+        "Current exact raw-RPC exception metadata is not itself standard Java exception construction. Save/restore, disconnection and all precedence combinations remain open."
+      ]
+    },
+    {
+      "id": "OM2010-RESERVE-MULTIPLE-CALLBACK", "source_id": "S1516.1", "clause": "6.6", "pdf_pages": [118, 119], "subject": "rti", "applicability": "applicable",
+      "statement": "Report the names and corresponding success indicators to the joined federate that made the prior multiple-name request; each successful reservation grants exclusive rights retained until resign or release.", "conditions": "No callback for a single-name request; existing execution, joined requester, no save/restore; no returned arguments; callback exception federate internal error; no state chart.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/reservation_handlers.go"], "tests": [{"path":"rti/internal/hla/object/applicable_r1_declaration_review_test.go","name":"TestApplicableR1ReservationCallbacksCorrelateAndExcludeOtherHolders","oracle":"multiple subtest: valid two-name request emits one multiple-success callback with exact names, competing holder emits one multiple-failure callback, release permits other holder success; single requests assert only single callback kind. Production registry/delivery."}], "open_items": ["Per-name partial success interpretation, retain-until-resign, actual Java invocation, save/restore and federate-internal-error handling remain open."]
+    },
+    {
+      "id": "OM2010-RELEASE-MULTIPLE-NAMES", "source_id": "S1516.1", "clause": "6.7", "pdf_pages": [120], "subject": "rti", "applicability": "applicable",
+      "statement": "Release all supplied names only if every name is currently reserved by the caller; any unreserved name aborts the entire release.", "conditions": "Input name set, no returned arguments; prior single or multiple success; connected joined member outside save/restore; errors unreserved name, save, restore, nonmember, disconnected and internal error; successful names become reservable by others; no state chart.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/reservation_handlers.go", "rti/internal/hla/object/reservation.go"], "tests": [{"path": "rti/internal/hla/object/release_multiple_test.go", "name": "TestReleaseMultipleNamesAtomicValidation", "oracle": "Missing, foreign, registered and empty-name members of a batch yield expected local errors and preserve the entire ExportState snapshot."}, {"path": "rti/internal/hla/object/release_multiple_test.go", "name": "TestReleaseMultipleNamesSuccessScopeAndConcurrentWinner", "oracle": "Two competing releases yield exactly one success; other federation and holder reservations remain; canceled request and zero holder are rejected."}], "open_items": ["Foreign-holder sentinel is product-specific, not an inferred IEEE precedence; link Java mapping, successful subsequent reservation and save/restore admission."]
+    },
+    {
+      "id": "OM2010-REGISTER-IDENTITY-OWNERSHIP",
+      "source_id": "S1516.1",
+      "clause": "6.8; 6.8.1-6.8.4",
+      "pdf_pages": [
+        120,
+        121
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Return a federation-unique object handle associated with the supplied class and initialize ownership of currently published corresponding attributes; all discovering federates receive equal handles, including across language APIs.",
+      "conditions": "Connected joined member in existing execution, defined published class, no save/restore; optional reserved unique name or RTI-generated execution-unique name; equality, not object identity, governs handle sameness.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/registry.go"
+      ],
+      "tests": [
+        {
+          "path": "pysdk/tests/test_ieee2010_independent_contract_live.py",
+          "name": "test_delete_unknown_precedes_privilege_and_preserves_object",
+          "oracle": "Witness discovery reports the same instance handle, name and class as owner registration and witness name-to-handle lookup agrees; Python-only, not cross-language identity."
+        },
+        {
+          "path": "rti/internal/hla/object/privilege_initial_ownership_test.go",
+          "name": "TestPrivilegeInitialOwnershipFollowsPublicationLifetime",
+          "oracle": "Checks exact delete-privilege ownership consequences of implicit, explicitly suppressed and restarted publication lifetimes across three registrations, without unconditional recreation of unpublished privilege."
+        }
+      ],
+      "open_items": [
+        "Link exact initial owner set, auto-name uniqueness, Java handle equality and cross-language handle encoding; Figures 10/15/16 not fully assessed.",
+        "2026-10-04 delete-privilege lifetime facet is now linked. This does not establish every attribute's initial owner set or cross-language handle equality."
+      ]
+    },
+    {
+      "id": "OM2010-REGISTER-NAME-ADMISSION",
+      "source_id": "S1516.1",
+      "clause": "6.8.3; 6.8.5",
+      "pdf_pages": [
+        121,
+        122
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Reject supplied names not reserved by the registering federate or already bound to an instance, undefined/unpublished classes, save/restore, nonmember and disconnected calls; expose internal errors.",
+      "conditions": "The optional-name restriction is distinct from unnamed registration; validation rejection should not consume names, allocate visible objects or publish discovery.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/registry.go",
+        "rti/internal/hla/object/reservation.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR1ExplicitRegistrationRequiresReservation",
+          "oracle": "Historical 2026-10-03 run: S1516.1 6.8.3: unreserved explicit name must raise ErrObjectInstanceNameNotReserved and leave complete object/name ExportState unchanged. Fresh review FAIL: nil error and visible state created."
+        },
+        {
+          "path": "rti/tests/integration/spec/M26/reservation_test.go",
+          "name": "TestSpec_M26_Reserve_ByOther_BlocksRegister",
+          "oracle": "Holder 1's reserved name cannot be registered by federate 2: exact ErrObjectInstanceNameReservedByOther asserted."
+        },
+        {
+          "path": "rti/internal/hla/ddm/applicable_r1_time_independence_test.go",
+          "name": "TestApplicableR1LiveObjectNameAdmissionBoundaries",
+          "oracle": "Historical 2026-10-03 run: Joined raw gRPC with valid class/attribute/publication and reservation positive control: unreserved-registration returns nil error and object handle 4. Pinned real server; live-name-boundaries-r2.jsonl FAIL. 2026-10-04 updated assertion: all four raw joined-RPC negative cases require exact IllegalName, NameSetWasEmpty or ObjectInstanceNameNotReserved trailers after a successful reserve/release positive control; parent reports four passing live subcases. This worker inspected the current body but did not rerun that live campaign."
+        },
+        {
+          "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+          "name": "TestApplicableR2ReservationSurvivesRegistrationDeletionAndRestore",
+          "oracle": "Reserved name remains owned after named registration; a detached registry snapshot with both reservation and object restores after release. Deletion does not release the restored reservation; peer reservation fails, original holder can re-register, and explicit release removes reservation even while registered. Single-name path, not resign or multiple-name generalization."
+        }
+      ],
+      "open_items": [
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): REPRODUCED GAP against the IEEE named-registration precondition: product registry permits reservation-free named registration. Historical TestSpec_M26_RegisterWithoutReserve_AutoReserves explicitly expects that behavior; compatibility versus standard-service policy needs main coordination, not weakened oracle. Full class/lifecycle/public-binding matrix remains open.",
+        "Historical 2026-10-03 checkpoint (superseded where the 2026-10-04 increment below applies): Reachable RTI admission, not a fake/primitive-only defect. Java forwards nonempty explicit names without reservation checking. Historical auto-reserving compatibility expectation conflicts with the standard-service precondition; no production policy change here.",
+        "2026-10-04 increment: parent fixes the named-admission/implicit-publication defect without weakening its oracle. Historical failures remain evidence of the earlier snapshot; current implementation and tests, not that old result, determine present behavior. Whole-row and source-scope completeness remain false.",
+        "Current exact raw-RPC exception metadata is not itself standard Java exception construction. Save/restore, disconnection and all precedence combinations remain open.",
+        "2026-10-04: single-name reservation retention across registration/deletion and object+reservation restore is linked; existing registered name does not prevent holder release. Retain-until-resign and complete multiple-name lifecycle remain open."
+      ]
+    },
+    {
+      "id": "OM2010-DISCOVER-CALLBACK", "source_id": "S1516.1", "clause": "6.9.1-6.9.5", "pdf_pages": [122, 123], "subject": "rti", "applicability": "applicable",
+      "statement": "Deliver unique uniform handle, discovered class and name for an existing object previously unknown to a joined recipient with an eligible owned subscribed attribute, thereby establishing knowledge.", "conditions": "Existing execution, no save/restore; DDM eligibility uses overlap; optionally convey original registrant when switch enabled, even if it no longer owns attributes or has resigned; no returned arguments; callback error federate internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/discover.go"], "tests": [{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassAncestorDiscoveryAndStableRediscovery","oracle":"With parsed production FOM and real declaration/object/ownership/delivery managers, parent-only recipient discovers parent, recipient subscribed at parent and child discovers child; each queue initially has exactly one discovery. Later child subscription does not change remembered parent or rediscover; local delete permits one new child-class discovery."}], "open_items": ["Known-class and at-most-one initial core discovery effects are linked. Uniform handle/name, optional original registrant switches, post-resign metadata, callback entry and full Java lifecycle/error behavior remain open."]
+    },
+    {
+      "id": "OM2010-UPDATE-INPUT-ADMISSION", "source_id": "S1516.1", "clause": "6.10.1-6.10.5", "pdf_pages": [124, 125], "subject": "rti", "applicability": "applicable",
+      "statement": "Accept object, attribute/value pairs, tag and optional timestamp only for a known existing object whose supplied attributes are available and owned by the connected joined caller, outside save/restore.", "conditions": "Values accepted by RTI on success; timestamp constraints depend on Clause 8; errors timestamp, ownership, unavailable attribute, unknown object, save, restore, nonmember, disconnected and internal error; optional retraction result handled separately.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path":"rti/internal/hla/object/registry_test.go","name":"TestUpdateAttributes_RejectsUnowned","oracle":"Wrong caller update produces exact ErrAttributeNotOwned; direct registry with stub FOM."},{"path":"rti/internal/hla/object/registry_test.go","name":"TestUpdateAttributes_RejectsUnknownObject","oracle":"Missing object 99 produces exact ErrObjectNotFound."},{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassMappingRejectsInvisibleAttributesAtomically","oracle":"Production FOM mapping rejects a registered child-only attribute invisible to parent-known recipient, invalid later known attribute, and unknown recipient with exact core errors; returns nil maps and leaves caller input unchanged. Mapping oracle, not a full UpdateAttributeValues transaction."}], "open_items": ["Mixed update-set no-effects across values/outbox/WAL, parent-known owner updates, timestamp/admission/save/restore matrix, Java binding and Figure 15 remain open."]
+    },
+    {
+      "id": "OM2010-UPDATE-DELETE-TIMESTAMP-BOUND", "source_id": "S1516.1", "clause": "6.10.3(i); 6.14.4(c)(1); 8.1.2; 8.1.4", "pdf_pages": [125, 132, 183, 184], "subject": "rti", "applicability": "applicable",
+      "statement": "A regulating caller's timestamped update after its regulating timestamped deletion request must not exceed the deletion timestamp; equality is within this particular bound.", "conditions": "Other Clause 8 timestamp constraints and object lifetime still apply. Public Python cases isolate this non-strict bound using a joined publisher/owner, known subscribed object, preferred TSO, sender time 0 and positive lookahead 1, constrained receiver time 0, and a pending deletion before either advances. Float64 deletion is 10; Integer64 deletion is 9007199254741009. Page 125 and Tables 1/2 on pages 183-184 were visually reviewed; no same-time callback ordering is prescribed by this test.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go", "rti/internal/hla/object/delete.go", "rti/internal/adapters/grpc/errs.go"], "tests": [{"path": "rti/internal/hla/object/deferred_delete_test.go", "name": "TestDeferredDeleteRealTimeOrderingAndTooLateRetraction", "oracle": "Current case accepts update at 5 after delete at 10 but explicitly expects ErrObjectDeletionPending for update at 10. This is a conflicting equality expectation, not positive evidence for the source bound."}, {"path": "pysdk/tests/test_ieee2010_order_completion_live.py", "name": "test_pending_tso_delete_update_timestamp_boundary", "oracle": "Six public-service cases require below/equal deletion timestamps to be accepted and above to raise InvalidLogicalTime, with positive lookahead and no initial advance. Rejected calls must preserve update count, logical times, lookahead and object lookup; a valid earlier retry must deliver exactly one tagged TSO reflection before its grant, without removal. Fresh run has below pass in both time families, equal fail with INTERNAL in both, and above fail because INTERNAL is not InvalidLogicalTime; all four rejected-call state/retry controls reached their final semantic assertions."}], "open_items": ["REPRODUCED: update.go prepareAttributeFanout rejects pending deletions when *ts >= d.Timestamp, contradicting the source equality bound in the isolated tested state. The historical core oracle encodes that same equality rejection. No production repair was authorized in this slice.", "Above-deletion rejection uses ErrObjectDeletionPending, unmapped by errToStatus to a standard timestamp exception, and reaches Python as raw AioRpcError INTERNAL. Fresh JUnit: D:/workspace/gorti/completion-check-dm-om-20261002/run-150416/results.xml (8 cases total: 4 passed, 4 failed, 0 errors, 0 skips).", "Standard Java exception/return behavior and other sender advance, zero-lookahead, lifetime and equal-time delivery facets remain untested here; Python product evidence does not discharge Java-binding conformance."]
+    },
+    {
+      "id": "OM2010-UPDATE-RETRACTION", "source_id": "S1516.1", "clause": "6.10; 6.10.2", "pdf_pages": [124], "subject": "rti", "applicability": "applicable",
+      "statement": "Return a federation-unique retraction designator only when at least one updated attribute has preferred TSO, the sender is regulating and a timestamp is supplied; otherwise return none.", "conditions": "Preferred order is not the receiver's delivered order; a timestamp recommendation for regulating TSO is not a mandatory application send rule.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go", "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"], "tests": [{"path": "rti/internal/hla/object/preferred_order_test.go", "name": "TestPreferredOrderProfilesAndOverrides", "oracle": "For regulating timestamped reflect cases, preferred RO has no origin reservation/ID while TSO preserves supplied ID 901 and per-recipient order. Local core does not test public returned designator uniqueness."}], "open_items": ["Link complete sender-regulation/timestamp/preferred-order truth table and federation-wide unique public return handles."]
+    },
+    {
+      "id": "OM2010-UPDATE-SUBSCRIPTION-WINDOW", "source_id": "S1516.1", "clause": "6.10", "pdf_pages": [124], "subject": "rti", "applicability": "applicable",
+      "statement": "Apply subscription and regional eligibility over the interval from update invocation to induced reflection, suppressing attributes when the source's unsubscribe/nonoverlap condition applies and delivering eligible attributes subject to callback/time preconditions.", "conditions": "Region overlap uses the update region set at wall-clock update time; do not collapse all interval clauses into a single send-time subscriber snapshot.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path":"rti/internal/hla/object/ro_filter_test.go","name":"TestROQueuedReflectionTrimsWithoutMutatingRetrySource","oracle":"After queuing {1,2}, partial unsubscribe produces a detached callback containing only 1 and leaves original two-attribute event intact; full unsubscribe filters to nil. Direct queued-filter oracle, not user callback entry."},{"path":"rti/internal/hla/object/ro_ddm_test.go","name":"TestROQueuedDDMReflectionRetainsPerAttributeRegions","oracle":"Two attribute RO passels share one admission reservation; after receiver-region commit and sender unassociation, async release delivers only attribute 1 under retained sent regions."},{"path":"rti/tests/unit/object/delayed_subscription_review_test.go","name":"TestG13EnabledDelaySubscriptionLateAttributeInterest","oracle":"Delay-subscription-enabled TSO send retains both values; recipient already knows object, subscribes second attribute before release and receives both exact retained values, with no early reflection."}], "open_items": ["RO and delay-enabled TSO cases cover selected intervals, not a single send-time-only rule. Complete unsubscribe/resubscribe combinations, disabled-delay controls and actual binding callback-entry timing remain open; source interval ambiguity retained."]
+    },
+    {
+      "id": "OM2010-UPDATE-FAILURE-ATOMICITY", "source_id": "S1516.1", "clause": "6.10.3-6.10.5", "pdf_pages": [125], "subject": "rti", "applicability": "applicable",
+      "statement": "Do not expose partial successful update delivery when admission fails before the update's accepted postcondition.", "conditions": "Bounded rejection/no-effect oracle interpretation; no additional universal transaction protocol is claimed from the source.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path": "rti/internal/hla/object/preferred_order_test.go", "name": "TestPreferredOrderMixedPasselsAtomicRetry", "oracle": "Reserve/journal/commit failure leaves no outbox records or originating IDs, later queue-release controls reveal no leaked callbacks, and retry admits the complete mixed-order delivery set."}, {"path": "pysdk/tests/test_ieee2010_order_completion_live.py", "name": "test_pending_tso_delete_update_timestamp_boundary", "oracle": "Above-deletion timestamp cases in both time families check unchanged MOM update count, logical times, lookahead and known-object lookup after rejection. A public synchronization fence plus valid below-deletion retry and subsequent time grants expose exactly one retry reflection and no removal. These bounded no-effect controls pass, but each overall above case fails its expected InvalidLogicalTime identity; equality rejection is separately a source conflict."}], "open_items": ["Other invalid mixed service inputs, leaked reservations beyond this callback window, and standard-Java visible no-effect assertions remain unlinked; do not infer universal transaction atomicity."]
+    },
+    {
+      "id": "OM2010-REFLECT-CONTENT-ORDERS", "source_id": "S1516.1", "clause": "6.11; 6.11.1; 8.1.2; 8.1.4", "pdf_pages": [125, 126, 183, 184], "subject": "rti", "applicability": "applicable",
+      "statement": "Reflect object and attribute/value pairs with original tag, passel transport and sent order; preserve supplied timestamp together with actual received order, and supply retraction designator exactly for sent TSO.", "conditions": "Every induced reflection, including multiple passels at one recipient; original timestamp can remain even when received order is RO; absent timestamp means absent received-order argument.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go", "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"], "tests": [{"path": "rti/internal/hla/object/preferred_order_test.go", "name": "TestPreferredOrderProfilesAndOverrides", "oracle": "Reflect deliveries assert sent/received order, ID and original timestamp, tag {0,255}, and different constrained/unconstrained receiving order; uses local callbacks, not Java overload dispatch."}, {"path": "pysdk/tests/test_ieee2010_order_completion_live.py", "name": "test_tables_one_two_tso_send_has_receiver_specific_order", "oracle": "For Float64 and Integer64, a regulating preferred-TSO update exactly at time plus positive lookahead preserves object, binary value/tag, timestamp and supplied retraction ID 901. Unconstrained recipient receives RO while still at time 0; constrained recipient receives TSO before its grant at timestamp 1, with no reflection before advance and none at the sender. Both fresh cases pass the selected Tables 1/2 branch; this does not test public returned retraction uniqueness or Java overload dispatch."}], "open_items": ["Link Java overload pairing for absent/present timestamp and retraction, transport partitions and tag preservation for every passel.", "The full Tables 1/2 sender truth table is not exercised. Adjacent 8.1.2 order prose and Table 1 require separate reconciliation for other branches; this test uses only the common regulating/timestamp/preferred-TSO branch."]
+    },
+    {
+      "id": "OM2010-REFLECT-OPTIONAL-METADATA", "source_id": "S1516.1", "clause": "6.11", "pdf_pages": [126], "subject": "rti", "applicability": "applicable",
+      "statement": "When respective convey switches are enabled, reflect a copy of the sent update-region realization for dimensioned attributes and the updating federate's designator.", "conditions": "Region sets may be absent; conveyed regions are copies of realization used at update, not live mutable local region handles; producer is updater, unlike removal's registrant.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go", "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"], "tests": [{"path":"rti/internal/hla/object/conveyed_known_class_test.go","name":"TestConveyedReflectionPreservesKnownAttributeAndSenderBounds","oracle":"Reflection metadata maps region copy to recipient's inherited attribute and retains sent realization after sender commit/deletion and JSON roundtrip; current receiver region still governs eligibility. Not merely a live region-handle list."}], "open_items": ["Independent convey switches on/off, updating-producer identity after transfer and actual Java metadata/callback-entry lifetime remain open."]
+    },
+    {
+      "id": "OM2010-REFLECT-RECIPIENT-ADMISSION", "source_id": "S1516.1", "clause": "6.11.2-6.11.5", "pdf_pages": [126, 127], "subject": "rti", "applicability": "applicable",
+      "statement": "Invoke reflection only on joined recipients knowing the object and subscribed or region-overlap eligible for every supplied attribute, excluding the updating federate and recipients in save/restore.", "conditions": "Existing execution; no returned arguments; supplied new values reach the federate; callback exception is federate internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path":"rti/internal/hla/object/registry_test.go","name":"TestUpdateAttributes_NoSelfDelivery","oracle":"Registry with stub FOM, real declaration manager and recording outbox sends exactly one reflection to peer 2 and none to subscribed producer 1."},{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassReflectionUsesRememberedSubscriptionAndHandles","oracle":"Child update containing inherited value 7 and child-only value 9 yields exactly one parent-class reflection with only the mapped parent attribute value 7; replacing parent interest by child interest does not change remembered class and produces no reflection."},{"path":"rti/tests/unit/object/region_delivery_test.go","name":"TestRegionReflectionRecipientComposition","oracle":"Table asserts sorted unique non-producer reflection recipients and per-recipient exact attribute/value subsets for ordinary/regional union, disjoint interest, default and mixed attributes; exact per-attribute scope snapshots checked. Regional routing provider is a controlled fixture, not real DDM service."}], "open_items": ["Actual callback entry, joined/save/restore recipients, unknown versus globally existing objects, public Java callback and Figure 15 remain open."]
+    },
+    {
+      "id": "OM2010-SEND-INTERACTION-INPUTS", "source_id": "S1516.1", "clause": "6.12; 6.12.1-6.12.5", "pdf_pages": [127, 128], "subject": "rti", "applicability": "applicable",
+      "statement": "Accept sent class, available parameter/value subset, tag and optional timestamp from a connected joined publisher; sending every available parameter is not required.", "conditions": "Existing execution, defined class/parameters, Clause 8 timestamp constraints, no save/restore except allowed MOM interactions per 11.4.2; errors invalid timestamp, unpublished/undefined class, undefined parameter, save, restore, nonmember, disconnected and internal error; RTI receives interaction on success.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/internal/hla/object/interaction_p0_test.go","name":"TestP0SendInteractionRejectsInvalidHandlesBeforeAppend","oracle":"Defined/published class control; undefined class 99 and undefined parameter 9 produce precise core errors with zero WAL and outbox appends. Strict fixture FOM, not public binding."}], "open_items": ["Only undefined class/parameter and zero journal/outbox effects are linked. Partial/empty parameter acceptance, mixed valid/invalid atomicity, timestamp/lifecycle matrix, exact MOM save/restore exemptions and Figure 13 remain open."]
+    },
+    {
+      "id": "OM2010-SEND-INTERACTION-RETRACTION", "source_id": "S1516.1", "clause": "6.12; 6.12.2", "pdf_pages": [127, 128], "subject": "rti", "applicability": "applicable",
+      "statement": "Return a federation-unique retraction designator exactly for timestamped interactions sent by a regulating federate with preferred TSO; otherwise return none.", "conditions": "Preferred order may be changed independently of transportation and receiver constraints.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/interaction.go"], "tests": [{"path": "rti/internal/hla/object/preferred_order_test.go", "name": "TestPreferredOrderProfilesAndOverrides", "oracle": "Interaction and regional cases compare preferred/override order against sent order, origin ID reservation and delivered ID; local supplied ID, not public-return uniqueness."}], "open_items": ["Link complete Java overload truth table and unique return handle across updates, sends and deletes."]
+    },
+    {
+      "id": "OM2010-SEND-INTERACTION-DELIVERY-WINDOW", "source_id": "S1516.1", "clause": "6.12", "pdf_pages": [127], "subject": "rti", "applicability": "applicable",
+      "statement": "Honor subscription changes between send and receipt, preserve tag on every induced receipt and never deliver the induced interaction back to its sender.", "conditions": "Subscribed ordinary or regional recipient, subject to receive/time preconditions; unsubscribe interval is not merely an initial lookup check.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/internal/hla/object/ro_filter_test.go","name":"TestROQueuedInteractionRechecksCurrentSubscription","oracle":"Real object/time managers queue a receive-order interaction while recipient is constrained; unsubscribing before asynchronous release leaves recording outbox empty."},{"path":"rti/internal/hla/object/registry_test.go","name":"TestSendInteraction_NoSelfDelivery","oracle":"Published sender also subscribes; one send produces exactly one receive addressed to peer 4 and none to sender. Stub FOM fixture, not a standard binding."},{"path":"rti/tests/unit/object/delayed_subscription_review_test.go","name":"TestG13EnabledDelaySubscriptionLateInteractionInterest","oracle":"For already-subscribed and late-subscription controls, delay-enabled TSO interaction is not received early; subscription before release yields exact retained payload."}], "open_items": ["Queued unsubscribe and late-subscribe controls do not cover all interval histories. Binary tag at each actual Java receipt, resubscribe history, regional union and callback entry remain open."]
+    },
+    {
+      "id": "OM2010-RECEIVE-INTERACTION-METADATA", "source_id": "S1516.1", "clause": "6.13; 6.13.1", "pdf_pages": [128, 129], "subject": "rti", "applicability": "applicable",
+      "statement": "Receive sent interaction data and original tag with sender's transport and sent order, timestamp paired with actual received order, and retraction handle exactly for sent TSO.", "conditions": "Ordinary and regional sends; optional region realization copy for dimensioned regional interactions when convey switch enabled, optional sending-federate designator when its switch enabled.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/interaction.go", "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"], "tests": [{"path": "rti/internal/hla/object/preferred_order_test.go", "name": "TestPreferredOrderProfilesAndOverrides", "oracle": "Interaction/regional callback assertions preserve tag, timestamp, sent/received order and retraction ID; regional case additionally requires one region entry, not complete region-copy switch semantics."}], "open_items": ["Link Java callback overloads, transport actually used and optional region/producer switch controls."]
+    },
+    {
+      "id": "OM2010-RECEIVE-INTERACTION-ADMISSION", "source_id": "S1516.1", "clause": "6.13; 6.13.2-6.13.5", "pdf_pages": [129, 130], "subject": "rti", "applicability": "applicable",
+      "statement": "Induce at most one receive callback per sent interaction per joined eligible non-sender, requiring ordinary subscription or overlapping region sets and no save/restore.", "conditions": "Existing execution; no returned arguments; successful callback supplies interaction to federate; callback exception federate internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/interaction.go"], "tests": [{"path":"rti/internal/hla/object/registry_test.go","name":"TestSendInteraction_NoSelfDelivery","oracle":"Published sender also subscribes; one send produces exactly one receive addressed to peer 4 and none to sender. Stub FOM fixture, not a standard binding."},{"path":"rti/internal/hla/object/ro_ddm_test.go","name":"TestROQueuedDDMInteractionRechecksOverlap","oracle":"Real DDM/object/time managers queue exactly one regional RO interaction reservation without immediate callback; committed receiver nonoverlap before async release suppresses receive entirely."}], "open_items": ["Multiple ordinary/regional/hierarchy subscriptions with one receipt, joined/save/restore actual callback guards, Java binding and Figure 13 remain open."]
+    },
+    {
+      "id": "OM2010-DELETE-KNOWLEDGE-PRIVILEGE", "source_id": "S1516.1", "clause": "6.14.1-6.14.5", "pdf_pages": [131, 132], "subject": "rti", "applicability": "applicable",
+      "statement": "Accept deletion object, tag and optional timestamp only for a known existing object whose delete-privilege attribute is owned by the connected joined caller, subject to time/save/restore constraints.", "conditions": "Errors invalid timestamp, missing privilege, unknown object, save, restore, nonmember, disconnected and internal error; no global exception-precedence rule is inferred; optional retraction return separately recorded.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go", "rti/internal/hla/object/local_delete.go"], "tests": [{"path": "pysdk/tests/test_ieee2010_independent_contract_live.py", "name": "test_delete_unknown_precedes_privilege_and_preserves_object", "oracle": "Existing-undiscovered stranger gets exact ObjectInstanceNotKnown; known nonowner gets DeletePrivilegeNotHeld; object/name lookups and later owner update remain usable; no premature remove; owner deletes once and repeated delete is unknown."}], "open_items": ["Link standard-Java exception identities, timestamp/lifecycle negatives and no-effect controls; Python product evidence is not Java binding evidence; Figure 10 remains unreviewed."]
+    },
+    {
+      "id": "OM2010-DELETE-GLOBAL-LIFETIME", "source_id": "S1516.1", "clause": "6.14", "pdf_pages": [131], "subject": "rti", "applicability": "applicable",
+      "statement": "After actual removal do not reuse the instance designator, retire all ownership, allow object-name reuse and notify other federates that know the object via removal callbacks with original tag.", "conditions": "Global deletion differs from caller-scoped local deletion; timing of actual removal depends on sent order and time progression.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go"], "tests": [{"path": "pysdk/tests/test_ieee2010_independent_contract_live.py", "name": "test_delete_unknown_precedes_privilege_and_preserves_object", "oracle": "Witness callback history is exactly discover/reflect/remove; removal retains binary tag, stranger has no callbacks, repeated owner deletion is unknown. Does not assert name reuse or ownership retirement."}], "open_items": ["Link no-handle-reuse, name reuse with retained reservation semantics, all-owner retirement and all-known-recipient enumeration."]
+    },
+    {
+      "id": "OM2010-DELETE-ORDER-RETRACTION", "source_id": "S1516.1", "clause": "6.14; 6.14.2", "pdf_pages": [131, 132], "subject": "rti", "applicability": "applicable",
+      "statement": "Choose deletion preferred order from the delete-privilege attribute and return unique retraction designator exactly when that order is TSO, sender regulating and timestamp supplied.", "conditions": "Do not use the first updated attribute's order, registration order, transport profile or receiver order.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go"], "tests": [{"path": "rti/internal/hla/object/preferred_order_test.go", "name": "TestPreferredOrderProfilesAndOverrides", "oracle": "Delete case deliberately gives privilege attribute 2 the opposite preferred order from attribute 1 and checks resulting order/retraction metadata and origin reservation."}], "open_items": ["Link Java return-handle uniqueness and nonregulating/no-timestamp branches."]
+    },
+    {
+      "id": "OM2010-DELETE-RO-TSO-STATE", "source_id": "S1516.1", "clause": "6.14.4", "pdf_pages": [132], "subject": "rti", "applicability": "applicable",
+      "statement": "RO deletion immediately ends sender knowledge/update eligibility and future discovery; TSO deletion limits later TSO updates to at most delete time and retires sender knowledge on reaching that time or disabling regulation.", "conditions": "Other federates may discover before their own logical time reaches deletion time; actual object retirement must not be conflated with receipt by an early unconstrained receiver.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go"], "tests": [{"path": "rti/internal/hla/object/deferred_delete_test.go", "name": "TestTimestampedDeleteRetainsObjectUntilDelivery", "oracle": "With/without supplied retraction ID, delete at 10 retains object and allows update at 5; does not cover equality."}, {"path": "rti/internal/hla/object/deferred_delete_test.go", "name": "TestDeferredDeleteRetractionAndNoSubscriberMarker", "oracle": "Retraction restores deletion lifecycle; logical-time progression retires object even with no subscribers and internal marker never reaches outbox."}], "open_items": ["HIGH RISK: source equality bound conflicts with another inspected test; link disable-regulation retirement, late discovery at recipient-specific logical times and Java state knowledge."]
+    },
+    {
+      "id": "OM2010-REMOVE-CALLBACK-CONTENTS", "source_id": "S1516.1", "clause": "6.15; 6.15.1", "pdf_pages": [134], "subject": "rti", "applicability": "applicable",
+      "statement": "Removal carries object, original deletion tag, sent order, timestamp paired with actual received order and a retraction designator exactly for sent TSO.", "conditions": "No induced removal at deleting federate; producing-federate convey identifies original registrant, not current delete-privilege owner, even if registrant has resigned.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go"], "tests": [{"path": "rti/internal/hla/object/deletion_ordering_test.go", "name": "TestDeletionProducingFederateRemainsRegistrant", "oracle": "After privilege transfer to caller 2, removal to recipient 3 retains producer 1 and parent known class 9 for delete and prepared resign paths."}, {"path": "rti/internal/hla/object/deletion_ordering_test.go", "name": "TestInteger64DeletionPreservesRegistrantAndExactTimestamp", "oracle": "Removal preserves producer 1 and exact int64 timestamp 2^53+17 after owner transfer; exactly one removal. Does not assert convey switch off."}], "open_items": ["Link producer switch off/on and departed registrant, Java overloads and paired absent metadata."]
+    },
+    {
+      "id": "OM2010-REMOVE-ADMISSION-KNOWLEDGE", "source_id": "S1516.1", "clause": "6.15.2-6.15.5", "pdf_pages": [135], "subject": "rti", "applicability": "applicable",
+      "statement": "Notify joined non-deleting recipients that know the object outside save/restore, with no returned arguments; successful non-speculative removal ends their knowledge.", "conditions": "Existing execution; immediate knowledge loss if timestamp absent, received order RO, or callback not induced by Flush Queue Request; callback exception federate internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go", "javasdk/client/src/main/java/org/gorti/rti/ExchangeKnowledge.java"], "tests": [{"path":"rti/internal/adapters/grpc/ieee2010_object_ownership_ddm_test.go","name":"TestIEEE2010ObjectTransferredDeletePrivilegeRealWire","oracle":"Bufconn real services transfer delete privilege, reject former owner's delete with exact trailer, then new owner delete emits one Remove with exact binary tag to each historical knowledgeable peer and none to deleter; all recipients lose knowledge and ownership empties."},{"path":"rti/internal/hla/object/retraction_lifecycle_test.go","name":"TestIEEE2010RemovalKnowledgeBoundary","oracle":"RO removal, FQR deferred removal, grant/disable boundaries and sender-first retirement assert recipient-local known state at the applicable boundary; FQR knowledge persists before deletion timestamp. Core real time manager, not Java callback entry."}], "open_items": ["Actual Java callback-entry query rejection, unknown recipient and save/restore suppression, federate-internal-error handling and Figure 10 remain open."]
+    },
+    {
+      "id": "OM2010-REMOVE-SPECULATIVE-KNOWLEDGE", "source_id": "S1516.1", "clause": "6.15.4(c)", "pdf_pages": [135], "subject": "rti", "applicability": "applicable",
+      "statement": "For timestamped TSO removal induced by Flush Queue Request, defer recipient knowledge loss until its time reaches deletion time or it disables time-constrained mode.", "conditions": "All three conditions are necessary; an ordinary timestamped callback is not automatically speculative.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go", "javasdk/client/src/main/java/org/gorti/rti/ExchangeKnowledge.java"], "tests": [{"path": "rti/internal/hla/object/deferred_delete_test.go", "name": "TestDeferredDeleteDeliveryFailureAndConstraintBoundary", "oracle": "Injected flush/constraint delivery failure preserves object and no callbacks; retry disabling constraints reports actual RO and does not retire authoritative object until sender progresses. Does not establish recipient Java knowledge after a successful speculative TSO callback."}], "open_items": ["HIGH RISK: link explicit successful FQR TSO remove, continued name/handle lookup, later time-boundary/disable-constrained retirement in Java and both time families."]
+    },
+    {
+      "id": "OM2010-LOCAL-DELETE", "source_id": "S1516.1", "clause": "6.16.1-6.16.5", "pdf_pages": [135, 136, 137], "subject": "rti", "applicability": "applicable",
+      "statement": "Forget only caller knowledge without deleting the shared object, and permit later rediscovery at another class; reject when caller owns any attribute or has a qualifying outstanding acquisition.", "conditions": "Input known existing object, no returned arguments; connected joined member outside save/restore; pending acquisition includes terminal callback not yet invoked; errors pending acquisition, owned attributes, unknown object, save, restore, nonmember, disconnected and internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/local_delete.go"], "tests": [{"path":"rti/internal/adapters/grpc/ieee2010_object_ownership_ddm_test.go","name":"TestIEEE2010ObjectLocalDeleteRealWire","oracle":"owner/pending/unknown cases assert exact FederateOwnsAttributes/OwnershipAcquisitionPending/ObjectInstanceNotKnown trailers; forget case removes caller knowledge only. All modes preserve owner knowledge/ownership snapshot and emit no callback to any queue. Bufconn real managers."},{"path":"rti/internal/hla/object/known_class_test.go","name":"TestKnownClassAncestorDiscoveryAndStableRediscovery","oracle":"With parsed production FOM and real declaration/object/ownership/delivery managers, parent-only recipient discovers parent, recipient subscribed at parent and child discovers child; each queue initially has exactly one discovery. Later child subscription does not change remembered parent or rediscover; local delete permits one new child-class discovery."},{"path":"rti/internal/hla/object/knowledge_epoch_test.go","name":"TestKnowledgeEpochRejectedOperationsPreserveKnowledge","oracle":"Pending acquisition makes LocalDelete fail with exact ErrOwnershipAcquisitionPending while prior knowledge projection remains valid; invalid/canceled projection also preserves knowledge."}], "open_items": ["Complete Java lifecycle errors, acquisition-if-available and queued terminal callback versus actual invocation, and Figure 10 remain open."]
+    },
+    {
+      "id": "OM2010-IN-SCOPE-CALLBACK", "source_id": "S1516.1", "clause": "6.17", "pdf_pages": [137, 138, 139], "subject": "rti", "applicability": "applicable",
+      "statement": "Advise a joined federate knowing an object that supplied subscribed or region-subscribed attributes have entered scope, only with the Attribute Scope Advisory Switch enabled and outside save/restore.", "conditions": "Existing execution; object and attribute set input, no returned arguments; successful callback advises scope; federate internal error callback exception; no state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path": "rti/internal/hla/object/ordinary_scope_test.go", "name": "TestOrdinaryScopeEligibilityAndSwitchSuppression", "oracle": "Switch-on yields in-scope then reflect for exact recipient/object/attribute 2; switch-off still reflects without scope callback; next update does not repeat in-scope."}, {"path": "rti/internal/hla/object/ordinary_scope_test.go", "name": "TestOrdinaryScopeFailedAdmissionRetainsInScopeNotificationForRetry", "oracle": "Queue admission failure produces no callbacks or journal additions; retry still emits in-scope before reflect."}], "open_items": ["Link save/restore, region-only entry, discovery-time entry and Java invocation oracles."]
+    },
+    {
+      "id": "OM2010-OUT-OF-SCOPE-CALLBACK", "source_id": "S1516.1", "clause": "6.18", "pdf_pages": [139, 140], "subject": "rti", "applicability": "applicable",
+      "statement": "Advise a joined recipient knowing the object that supplied subscribed or region-subscribed attributes are no longer in scope, only with Attribute Scope Advisory enabled and outside save/restore.", "conditions": "Existing execution; object and attribute set input, no returned arguments; successful callback advises loss of scope; federate internal error callback exception; implicit unsubscribe scope loss is separately constrained; no state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path":"rti/tests/unit/object/region_delivery_test.go","name":"TestRegionReflectionDefaultSubscriptionRemovalClearsScope","oracle":"Removing controlled provider's last regional/default recipient generates one out-of-scope event to 3 before reflection to still-interested 2, and scope snapshot retains only 2. Controlled routing fixture, not a real region commit or Java callback."}], "open_items": ["Real overlap/ownership transitions, no duplicate loss, switch-off suppression, exact attribute set at actual callback, implicit-unsubscribe constraints and Java lifecycle guards remain open."]
+    },
+    {
+      "id": "OM2010-REQUEST-VALUE-UPDATE", "source_id": "S1516.1", "clause": "6.19", "pdf_pages": [140, 141], "subject": "rti", "applicability": "applicable",
+      "statement": "Solicit current values from owners for supplied object attributes or every relevant instance at a supplied class and its subclasses; never solicit unowned attributes or explicitly callback the requester for its own attributes.", "conditions": "Input object-or-class, attributes and tag, no returned arguments; object form needs knowledge/existence and known-class availability; class form needs defined class/available attributes; connected joined member outside save/restore; errors unavailable attribute, undefined class, unknown object, save, restore, nonmember, disconnected and internal error; successful postcondition request received; no state chart.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/request_update.go", "rti/internal/hla/object/region_requests.go"], "tests": [{"path": "rti/internal/hla/object/region_requests_test.go", "name": "TestUpdateRequestsPreserveDeliveryErrors", "oracle": "Class request attempts two owners and propagates outbox failure; instance request propagates failure; mixed valid/invalid attribute request causes no additional sends."}], "open_items": ["Link subclasses, multi-owner grouping, unowned/self suppression, binary tag forwarding and Java overload/exception matrix; this failure test does not verify all routing contents."]
+    },
+    {
+      "id": "OM2010-REQUEST-UPDATE-TAG-TIME", "source_id": "S1516.1", "clause": "6.19; 6.20", "pdf_pages": [140, 141, 142], "subject": "rti", "applicability": "applicable",
+      "statement": "Preserve request tag in every Provide Attribute Value Update callback; any resulting reflection timestamp is chosen by the updating federate rather than synthesized by the request service.", "conditions": "Both instance and class requests; requesting owner's own attributes are treated as implicit provide invocation, not an explicit callback.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/region_requests.go"], "tests": [{"path":"rti/internal/hla/object/region_request_groups_test.go","name":"TestGroupedRegionUpdateRequestsSelectOnceAndValidateAll","oracle":"Duplicate grouped regional request yields exactly one ProvideUpdate to owner 1 for the selected object, attributes {1,2} and exact binary tag {0,255}; self-owner gets no callback. Invalid later groups yield no callback; changing one region excludes attribute 2. Imported real DDM state with fixture FOM."}], "open_items": ["Exact binary tag is linked for grouped regional class request only; ordinary instance/class tags, every actual Java owner callback and independently chosen response timestamp remain open. No owner response is required by this row."]
+    },
+    {
+      "id": "OM2010-PROVIDE-UPDATE-CALLBACK", "source_id": "S1516.1", "clause": "6.20.1-6.20.5", "pdf_pages": [141, 142], "subject": "rti", "applicability": "applicable",
+      "statement": "Request current values by supplying object, owned attribute set and original tag to a joined knowledgeable owner outside save/restore, with no returned arguments.", "conditions": "Existing execution; callback postcondition is owner notified, not values supplied; callback exception federate internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/region_requests.go"], "tests": [{"path":"rti/internal/hla/object/region_request_groups_test.go","name":"TestGroupedRegionUpdateRequestsSelectOnceAndValidateAll","oracle":"Duplicate grouped regional request yields exactly one ProvideUpdate to owner 1 for the selected object, attributes {1,2} and exact binary tag {0,255}; self-owner gets no callback. Invalid later groups yield no callback; changing one region excludes attribute 2. Imported real DDM state with fixture FOM."}], "open_items": ["Selected core owner/object/attribute/tag contents and no explicit self-owner callback are linked. Ordinary instance/class requests, joined/known/save/restore actual callback guards, Java invocation and Figure 14 remain open."]
+    },
+    {
+      "id": "OM2010-PROVIDE-APPLICATION-RESPONSE", "source_id": "S1516.1", "clause": "6.20", "pdf_pages": [141], "subject": "federate", "applicability": "not-applicable",
+      "statement": "A solicited owner may respond using Update Attribute Values but is not required to supply the requested values.", "conditions": "Application response is outside RTI-only claim; do not fail the RTI for an arbitrary owner's refusal or require synthetic RTI values.", "review_status": "source-reviewed", "implementation": [], "tests": [], "open_items": ["The RTI's owner notification remains applicable."]
+    },
+    {
+      "id": "OM2010-UPDATES-ON-CALLBACK", "source_id": "S1516.1", "clause": "6.21.1-6.21.5", "pdf_pages": [142, 143], "subject": "rti", "applicability": "applicable",
+      "statement": "Advise a joined knowledgeable owner of required attributes only with Attribute Relevance Advisory enabled, supplying maximum subscribed rate or omitting it when any applicable subscription uses default rate.", "conditions": "Existing execution, caller owns supplied attributes, possible active in-scope interest, no save/restore; object, attributes and optional rate input; no returned arguments; maximum active rate changes also induce advice; callback exception federate internal error.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update_rate.go", "rti/internal/hla/declaration/update_rate.go"], "tests": [{"path":"rti/internal/hla/declaration/update_rate_fom_test.go","name":"TestUpdateRateMaximumSwitchOwnershipAndDurableRetry","oracle":"Parsed named rates Slow=2.5/Fast=20 drive actual queue advice; passive Fast leaves Slow maximum, active Fast raises it, relevance switch off suppresses advice, re-enable emits Fast, active default removes designator and passive default restores Fast; failed queue reservation preserves ExportState, durable retry emits one edge."},{"path":"rti/internal/hla/declaration/update_rate_test.go","name":"TestUpdateRateDefaultDemandAndPassiveEdges","oracle":"Actual delivery queue receives TurnUpdatesOn for object 100/attribute 1 without a named limit after passive-to-active transition; active-to-passive produces off advice while passive subscription remains in data routing."}], "open_items": ["Active-only named maximum, default dominance, mode changes and relevance suppression are linked. Regional owner scope, save/restore actual callback entry, Java optional-rate overload and Figure 15 remain open."]
+    },
+    {
+      "id": "OM2010-UPDATES-OFF-CALLBACK", "source_id": "S1516.1", "clause": "6.22.1-6.22.5", "pdf_pages": [143, 144, 145], "subject": "rti", "applicability": "applicable",
+      "statement": "Advise a joined knowledgeable owner that specified attributes are no longer required when no other federate has active in-scope interest, only with Attribute Relevance Advisory enabled and outside save/restore.", "conditions": "Existing execution; object and owned attribute set input, no returned arguments; callback exception federate internal error. Deleted legacy callback errors on page 145 visually excluded.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/update.go"], "tests": [{"path":"rti/internal/hla/declaration/update_rate_test.go","name":"TestUpdateRateDefaultDemandAndPassiveEdges","oracle":"Actual delivery queue receives TurnUpdatesOn for object 100/attribute 1 without a named limit after passive-to-active transition; active-to-passive produces off advice while passive subscription remains in data routing."}], "open_items": ["Passive data subscription persists while final active interest produces off advice. Exact attribute arguments on off, independent switches, regional scope/ownership changes, actual Java callback/lifecycle and Figure 14 remain open."]
+    },
+    {
+      "id": "OM2010-ATTRIBUTE-TRANSPORT-REQUEST", "source_id": "S1516.1", "clause": "6.23", "pdf_pages": [145, 146, 147], "subject": "rti", "applicability": "applicable",
+      "statement": "Initialize instance attribute transport from FDD and accept a caller-scoped change request for future updates, with the achieved change taking effect at responding confirmation invocation rather than request acceptance.", "conditions": "Inputs object, attributes, transport; no returned arguments; connected joined member, existing known object, available known-class attributes owned by caller, valid transport, none already changing, no save/restore; accepted postcondition request received; no state chart. Page 145 visually checked.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_activation.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "rti/internal/hla/object/transportation_activation_test.go", "name": "TestTransportationPreparationDoesNotActivateAndReplayDoesNotReapply", "oracle": "Preparation leaves old type; overlapping set is rejected, unrelated attribute preparation allowed; activation changes only selected attribute, replay does not reapply stale choice."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "activationOccursOnlyAtCallbackEntryAndUsesAuthoritativeResult", "oracle": "Only prepare RPC occurs before callback; activation RPC happens before user confirmation and returned achieved type, generation/epoch/ticket are asserted. Mock channel, not live server."}], "open_items": ["Link live Java pre-confirmation update transport and all request input/lifecycle conditions; no pass verdict is inferred from the historical campaigns."]
+    },
+    {
+      "id": "OM2010-ATTRIBUTE-TRANSPORT-ERRORS", "source_id": "S1516.1", "clause": "6.23.3; 6.23.5", "pdf_pages": [145, 147], "subject": "rti", "applicability": "applicable",
+      "statement": "Reject attribute transport changes for already-changing attributes, nonownership, unavailable known-class attributes, unknown object, invalid transport, save/restore, nonmembership or disconnection, exposing internal errors.", "conditions": "Validate complete supplied set; no invented universal precedence among simultaneous failures.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_activation.go", "rti/internal/hla/object/transportation_service.go"], "tests": [{"path": "rti/internal/hla/object/transportation_activation_test.go", "name": "TestTransportationPreparationDoesNotActivateAndReplayDoesNotReapply", "oracle": "Overlapping {2,1} while 1 pending yields ErrAttributeAlreadyBeingChanged and old effective transport is checked before activation."}], "open_items": ["Link exact Java errors for all other listed conditions, mixed set no-effects and not-known versus globally existing object."]
+    },
+    {
+      "id": "OM2010-ATTRIBUTE-TRANSPORT-OWNERSHIP-RESET", "source_id": "S1516.1", "clause": "6.23", "pdf_pages": [145], "subject": "rti", "applicability": "applicable",
+      "statement": "Reset changed attribute transport to FDD default when a federate loses and later reacquires ownership, without resetting unrelated attributes.", "conditions": "Per instance attribute and owner lifetime, not merely on a query; pending/canceled transfers are not completed ownership loss.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_ownership.go"], "tests": [{"path": "rti/internal/hla/object/transportation_lifecycle_test.go", "name": "TestTransportationReacquisitionResetsWithoutInterveningQuery", "oracle": "Divest/reacquire attribute 1 with no intermediate query restores its BestEffort FDD default while attribute 2 remains Reliable."}, {"path": "rti/internal/hla/object/transportation_lifecycle_test.go", "name": "TestTransportationEveryCompletedOwnershipTransferResetsOnlyChangedAttributes", "oracle": "Six completed transfer methods assert owner 2, FDD type on changed attribute, unrelated Reliable override retained, snapshot cleanup and actual new-owner reflection using default type."}], "open_items": ["Link Java ownership-transfer-to-transport composition and producer-specific updates; local fixture evidence is not whole binding coverage."]
+    },
+    {
+      "id": "OM2010-CONFIRM-ATTRIBUTE-TRANSPORT", "source_id": "S1516.1", "clause": "6.24", "pdf_pages": [147, 148], "subject": "rti", "applicability": "applicable",
+      "statement": "Notify the same prior attribute-change requester with object, attribute set and achieved transport once the change has taken effect.", "conditions": "Existing execution, joined recipient, prior request for object/attributes, no save/restore; no returned arguments; callback exception federate internal error; no state charts; confirmation preconditions do not repeat request ownership checks.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_activation.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "allFourCallbacksAreDeferredAndCarryResponseSnapshotAndTargetProducer", "oracle": "Mutating requested attributes after request does not alter deferred confirmation; actual invoked callback checks object, {51,52} and achieved type; callback order and deferred execution checked with mock."}], "open_items": ["Link actual-server correlation, ownership-loss partial/empty result interpretation and federate-internal-error handling; broad test pass count supplies no automatic closure."]
+    },
+    {
+      "id": "OM2010-QUERY-ATTRIBUTE-TRANSPORT", "source_id": "S1516.1", "clause": "6.25", "pdf_pages": [149], "subject": "rti", "applicability": "applicable",
+      "statement": "Allow owner or nonowner members to query transport of one available attribute of a known existing object and respond through a report callback, not returned service arguments.", "conditions": "Object and attribute input; connected joined member, existing execution, no save/restore; no state-changing postcondition; errors unavailable attribute, unknown object, save, restore, nonmember, disconnected and internal error; no state chart. Duplicate letter labels are present visually, so no invented label normalization is used.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_service.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "rti/internal/hla/object/transportation_lifecycle_test.go", "name": "TestTransportationUnownedAttributeUsesFDDDefault", "oracle": "Query by federate 3 after owner 1 divests returns FDD BestEffort for unowned 1 and retains Reliable for owned 2; local value return is not the standardized report callback."}], "open_items": ["Link query-without-ownership live Java callback and full known-class/lifecycle error matrix; no universal exception letter ordering inferred."]
+    },
+    {
+      "id": "OM2010-REPORT-ATTRIBUTE-TRANSPORT", "source_id": "S1516.1", "clause": "6.26", "pdf_pages": [149, 150], "subject": "rti", "applicability": "applicable",
+      "statement": "Report current object/attribute transport to the same prior query requester, using FDD default when the attribute is unowned.", "conditions": "Existing execution, joined recipient, prior corresponding query, no save/restore; object, attribute and transport input; no returned arguments; callback exception federate internal error; no state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_service.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "rti/internal/hla/object/transportation_lifecycle_test.go", "name": "TestTransportationUnownedQueryIgnoresStaleSnapshotOverride", "oracle": "Artificial Reliable override on an unowned attribute is ignored in favor of FDD BestEffort."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "allFourCallbacksAreDeferredAndCarryResponseSnapshotAndTargetProducer", "oracle": "Actual mock-deferred report callback checks object 31, attribute 51 and snapshotted Reliable response."}], "open_items": ["Compose unowned-default core oracle with actual-server Java callback; fixture reports alone do not establish query/report lifecycle guard coverage."]
+    },
+    {
+      "id": "OM2010-INTERACTION-TRANSPORT-REQUEST", "source_id": "S1516.1", "clause": "6.27", "pdf_pages": [150, 151], "subject": "rti", "applicability": "applicable",
+      "statement": "Initialize interaction transport from FDD and attempt caller-specific changes for future ordinary and regional sends, effective at confirmation invocation.", "conditions": "Class and transport input, no returned arguments; connected joined member of existing execution, defined published class, valid transport, no pending change, no save/restore; request-received postcondition; errors already changing, unpublished/undefined class, invalid transport, save, restore, nonmember, disconnected and internal error; no state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_activation.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "rti/internal/hla/object/transportation_activation_test.go", "name": "TestTransportationInteractionPreparationIsPendingUntilActivation", "oracle": "Second preparation rejects as already changing; after unpublish activation remains permitted, and republish reveals achieved BestEffort. Confirmation has no publication precondition."}], "open_items": ["Link pre-confirmation effective transport, unrelated publisher isolation, regional send metadata and Java full admission matrix."]
+    },
+    {
+      "id": "OM2010-CONFIRM-INTERACTION-TRANSPORT", "source_id": "S1516.1", "clause": "6.28", "pdf_pages": [151, 152], "subject": "rti", "applicability": "applicable",
+      "statement": "Notify the same prior interaction-change requester of the achieved transport after it becomes effective.", "conditions": "Existing execution, joined recipient, prior class request, no save/restore; interaction class and achieved transport input, no returned arguments; callback exception federate internal error; no state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_activation.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "failedActivationNeverInvokesSuccessAndRetainsServerPending", "oracle": "Injected activation RTIinternalError never invokes success callback, and another request still rejects as already changing; uses mock server state."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "checkpointAdmissionDefersActivationWithoutLosingConfirmation", "oracle": "SaveInProgress/RestoreInProgress during activation invoke no success and requeue one callback; later success drains it."}], "open_items": ["Link live server no-early-success and achieved type callback, including unsupported-type fallback and checkpoint timing."]
+    },
+    {
+      "id": "OM2010-QUERY-INTERACTION-TRANSPORT", "source_id": "S1516.1", "clause": "6.29", "pdf_pages": [152, 153], "subject": "rti", "applicability": "applicable",
+      "statement": "Accept a target federate and defined interaction class to query that producer's transport, responding through a report callback rather than synchronous result arguments.", "conditions": "Connected joined caller, existing execution, no save/restore; no state-changing postcondition; caller publication and target publication are not query preconditions; errors undefined class, save, restore, nonmember, disconnected and internal error; no state charts.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_service.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "sixServicesUseExactRpcAndJoinedEnvelope", "oracle": "Interaction query carries target 8 and class 41 while caller envelope remains federate 7/federation fed/wire v1; this is mock request mapping, not target-specific live semantics."}], "open_items": ["Link live nonpublishing caller, target publisher/nonpublisher and full lifecycle/undefined-class exception controls."]
+    },
+    {
+      "id": "OM2010-REPORT-INTERACTION-TRANSPORT", "source_id": "S1516.1", "clause": "6.30", "pdf_pages": [153], "subject": "rti", "applicability": "applicable",
+      "statement": "Report the specified producer's current interaction transport to the same prior query caller; report the FDD type if that producer does not publish the class.", "conditions": "Existing execution, joined recipient, prior corresponding query, no save/restore; target federate, interaction class and transport input; no returned arguments; callback exception federate internal error; no state chart.", "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/transportation_service.go", "javasdk/client/src/main/java/org/gorti/rti/TransportationServices.java"], "tests": [{"path": "rti/internal/hla/object/transportation_lifecycle_test.go", "name": "TestTransportationUnpublishedQueryUsesFDDWithoutChangingOtherPublishers", "oracle": "Queries for unpublished producer 1 return FDD default while producer 2 retains Reliable; republishing 1 shows read-only query did not erase stored choice; includes targets 3 and 999 without inferring a required unknown-target policy."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/TransportationServicesTest.java", "name": "allFourCallbacksAreDeferredAndCarryResponseSnapshotAndTargetProducer", "oracle": "Invoked report callback carries producer 8, class 41 and snapshotted BestEffort response, independent of later mock response changes."}], "open_items": ["Link public Java target-specific default and override behavior with actual server reports; unknown target is not a separately inferred mandatory exception."]
+    },
+    {
+      "id": "DMOM2010-REVIEW-BOUNDARY", "source_id": "S1516.1", "clause": "5.1.4; 6.1.8", "pdf_pages": [86, 87, 88, 89, 90, 91, 111], "subject": "rti", "applicability": "unresolved",
+      "statement": "Declaration and object service behavior is constrained by the referenced formal class, attribute, privilege, interaction and instance state charts.", "conditions": "Candidate chart obligation pending decomposition of Figures 10-16 and their redline state/transition edits; text projection cannot establish visual transition topology. Reviewed prose does not imply full review of clauses 5 or 6.", "review_status": "candidate",
+      "implementation": [], "tests": [], "open_items": ["Figures and continuation prose of 5.1.4 are not fully assessed; leave 5.2-5.9, 5.12-5.13, 6.8-6.16 and 6.20-6.22 off reviewed_units despite inventoried prose facets.", "All test entries are inspected declarations/oracles, not verification verdicts. Trusted final Go/Python/Java records were not rerun or promoted to whole-conformance proof. A separate fresh bounded Python run is recorded on the timestamp-bound row and does not change coverage_complete. Source active_candidate is a candidate projection; visual checks here cover pages 125, 145, 149, 183 and 184 only.", "No production, historical seed, existing audit, previous evidence record, asset or Git edit is included in this subtask. Fresh runtime artifacts are outside the repository under D:/workspace/gorti/completion-check-dm-om-20261002/."]
+    }
+  ]
+}

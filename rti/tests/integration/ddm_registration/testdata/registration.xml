@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>DDM Registration Integration</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <description>Engineering regression fixture for production DDM registration.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>Vehicle</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>Position</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <dimensions><dimension>X</dimension></dimensions>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+          <semantics>Position in the declared X dimension.</semantics>
+        </attribute>
+        <attribute>
+          <name>Velocity</name>
+          <dataType>HLAfloat64BE</dataType>
+          <updateType>Conditional</updateType>
+          <updateCondition>NA</updateCondition>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <dimensions><dimension>X</dimension></dimensions>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+          <semantics>Velocity in the declared X dimension.</semantics>
+        </attribute>
+        <objectClass>
+          <name>SpecialVehicle</name>
+          <sharing>PublishSubscribe</sharing>
+          <attribute>
+            <name>Payload</name>
+            <dataType>HLAfloat64BE</dataType>
+            <updateType>Conditional</updateType>
+            <updateCondition>NA</updateCondition>
+            <ownership>DivestAcquire</ownership>
+            <sharing>PublishSubscribe</sharing>
+            <dimensions><dimension>X</dimension></dimensions>
+            <transportation>HLAreliable</transportation>
+            <order>Receive</order>
+            <semantics>Child attribute shifts inherited handle offsets.</semantics>
+          </attribute>
+        </objectClass>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <interactionClass>
+        <name>RegionalSignal</name>
+        <sharing>PublishSubscribe</sharing>
+        <dimensions><dimension>X</dimension></dimensions>
+        <transportation>HLAreliable</transportation>
+        <order>Receive</order>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <dimensions>
+    <dimension>
+      <name>X</name>
+      <dataType>HLAinteger64BE</dataType>
+      <upperBound>1000</upperBound>
+      <normalization>Linear</normalization>
+      <value>NA</value>
+    </dimension>
+    <dimension>
+      <name>Y</name>
+      <dataType>HLAinteger64BE</dataType>
+      <upperBound>1000</upperBound>
+      <normalization>Linear</normalization>
+      <value>NA</value>
+    </dimension>
+  </dimensions>
+</objectModel>

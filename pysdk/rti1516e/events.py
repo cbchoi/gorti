@@ -28,8 +28,50 @@ import enum
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+
+@dataclass(frozen=True)
+class TransportationChangeConfirmed:
+    """Prepared confirmation activated by dispatch before application invocation."""
+
+    ticket: bytes
+    federation_generation: int
+    callback_epoch: int
+    object_handle: int
+    attribute_handles: tuple[int, ...]
+    interaction_class_handle: int
+    transportation_type: int
+
 if TYPE_CHECKING:  # pragma: no cover - type-check imports only
     from rti1516e.handles import AttributeHandle, ObjectClassHandle
+
+
+class OrderType(enum.IntEnum):
+    UNSPECIFIED = 0
+    RECEIVE = 1
+    TIMESTAMP = 2
+
+
+@dataclass(frozen=True)
+class ObjectCallbackMetadata:
+    sent_order: int | None = None
+    received_order: int | None = None
+    transportation_type: int | None = None
+    producing_federate: int | None = None
+    message_retraction_handle: int | None = None
+    received_regions: tuple[int, ...] | None = None
+
+
+@dataclass(frozen=True)
+class TurnUpdatesOnForObjectInstance:
+    object_handle: int
+    attribute_handles: tuple[int, ...]
+    update_rate_designator: str | None = None
+
+
+@dataclass(frozen=True)
+class TurnUpdatesOffForObjectInstance:
+    object_handle: int
+    attribute_handles: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -51,6 +93,7 @@ class DiscoverObjectInstance:
     # Typed §6.9 class handle. None only for legacy producers that
     # construct the event without it (in-process test doubles).
     object_class: ObjectClassHandle | None = None
+    producing_federate: int | None = None
 
 
 @dataclass(frozen=True)
@@ -69,6 +112,8 @@ class ReflectAttributeValues:
     timestamp: float | None  # None for RO; non-None for TSO
     # Typed §6.11 attribute map. Empty for legacy producers.
     attribute_values: dict[AttributeHandle, bytes] = field(default_factory=dict)
+    tag: bytes = b""
+    metadata: ObjectCallbackMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -78,11 +123,27 @@ class ReceiveInteraction:
     class_name: str
     parameters: dict[str, Any]
     timestamp: float | None
+    tag: bytes = b""
+    metadata: ObjectCallbackMetadata | None = None
 
 
 @dataclass(frozen=True)
 class TimeAdvanceGrant:
     """The RTI granted our pending NER. Federate is now at ``time``."""
+
+    time: float
+
+
+@dataclass(frozen=True)
+class TimeRegulationEnabled:
+    """Time regulation is active at the RTI-selected logical time."""
+
+    time: float
+
+
+@dataclass(frozen=True)
+class TimeConstrainedEnabled:
+    """Time constraint is active at the RTI-selected logical time."""
 
     time: float
 
@@ -106,6 +167,7 @@ class RemoveObjectInstance:
     object_handle: int
     tag: bytes
     timestamp: float | None  # None for RO; non-None for TSO delete
+    metadata: ObjectCallbackMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -216,6 +278,7 @@ class AttributeOwnershipAcquisitionNotification:
     object_handle: int
     attribute_handles: tuple[int, ...]
     owning_federate: int
+    tag: bytes = b""
 
 
 @dataclass(frozen=True)
@@ -350,6 +413,12 @@ class AttributeOwnershipUnavailable:
 
 
 @dataclass(frozen=True)
+class ConfirmAttributeOwnershipAcquisitionCancellation:
+    object_handle: int
+    attribute_handles: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class InitiateFederateRestore:
     """§4.26 — a federation restore began; load state and report back.
 
@@ -361,6 +430,7 @@ class InitiateFederateRestore:
     label: str
     federate_handle: int
     federate_name: str
+    client_state: bytes = b""
 
 
 @dataclass(frozen=True)
@@ -368,6 +438,9 @@ class FederationRestored:
     """§4.14 — the federation restore completed successfully."""
 
     label: str
+    federate_handle: int | None = None
+    callback_epoch: int | None = None
+    next_retraction_handle: int | None = None
 
 
 @dataclass(frozen=True)

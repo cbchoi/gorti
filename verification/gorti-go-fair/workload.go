@@ -1065,7 +1065,25 @@ func (p *participant) call(ctx context.Context, call func(context.Context) error
 func (p *participant) pumpEvents() {
 	defer close(p.pumpDone)
 	for event := range p.fed.Events() {
-		p.state.accept(event, counterNow())
+		arrived := counterNow()
+		p.state.beginDispatch()
+		ctx, cancel := context.WithTimeout(context.Background(), p.cfg.Timeout)
+		callbackErr, reportErr := p.fed.DispatchEvent(ctx, event, func(admitted federate.Event) error {
+			p.state.accept(admitted, arrived)
+			return p.state.failure()
+		})
+		cancel()
+		if errors.Is(reportErr, federate.ErrCallbackReceiptUnavailable) {
+			reportErr = nil
+		}
+		err := errors.Join(callbackErr, reportErr)
+		if err != nil {
+			p.state.fail(fmt.Errorf("callback dispatch: %w", err))
+		}
+		p.state.endDispatch()
+		if err != nil {
+			return
+		}
 	}
 	p.state.streamClosed()
 }
@@ -1080,6 +1098,14 @@ func (p *participant) shutdown() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if p.state != nil {
+		// A terminal callback can wake the workload before its invocation report returns.
+		if err := p.state.wait(ctx, 5*time.Second, "callback invocation reports", func(s *eventState) bool {
+			return s.dispatching == 0
+		}); err != nil {
+			return err
+		}
+	}
 	if p.cfg.Role == rolePublisher && p.fed != nil {
 		for {
 			members, err := p.fed.ListFederationMembers(ctx)

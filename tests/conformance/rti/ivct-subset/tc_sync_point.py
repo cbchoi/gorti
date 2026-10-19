@@ -135,21 +135,25 @@ def test_tc002_duplicate_label_registration_fails(
 ) -> None:
     """§4.11/§4.12 — re-registering a live label is a registration failure.
 
-    pysdk surface note: the §4.12 Failed *callback* is not delivered
-    (same _translate_event gap as the Succeeded ack); gorti instead
-    rejects the RPC itself, which pysdk's cut-3 sync client translates
-    to the typed ``SyncPointAlreadyExists`` exception — the observable
-    equivalent asserted here.
+    The failure is reported through the registration callback, not a
+    synchronous exception. The existing point must remain unchanged.
     """
-    from rti1516e._grpc_errors import SyncPointAlreadyExists
+    from rti1516e.events import SynchronizationPointFailureReason
 
     alice = join(rtid_url, federation_name, "alice")
     try:
         alice.registerFederationSynchronizationPoint("once", b"")
+        alice.wait_for("synchronizationPointRegistrationSucceeded", label="once")
         alice.wait_for("announceSynchronizationPoint", label="once")
-        with pytest.raises(SyncPointAlreadyExists):
-            # §4.11 — duplicate label must not register a second point.
-            alice.registerFederationSynchronizationPoint("once", b"")
+        alice.registerFederationSynchronizationPoint("once", b"replacement")
+        failed = alice.wait_for("synchronizationPointRegistrationFailed", label="once")
+        assert failed["reason"] == SynchronizationPointFailureReason.SYNCHRONIZATION_POINT_LABEL_NOT_UNIQUE
+        assert alice.count("synchronizationPointRegistrationSucceeded") == 1
+        assert alice.count("announceSynchronizationPoint") == 1
+        assert alice.snapshot("announceSynchronizationPoint")[0][1]["tag"] == b""
+        alice.synchronizationPointAchieved("once")
+        alice.wait_for("federationSynchronized", label="once")
+        assert alice.count("federationSynchronized") == 1
     finally:
         leave(alice)
 

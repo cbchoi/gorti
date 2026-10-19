@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 )
@@ -24,7 +24,7 @@ func (f *Federate) ReserveObjectInstanceName(ctx context.Context, objectName str
 	_, err := f.conn.obj.ReserveObjectInstanceName(ctx, &rtiv1.ReserveObjectInstanceNameRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName: f.federationName,
-		FederateHandle: f.federateHandle,
+		FederateHandle: f.CurrentHandle(),
 		ObjectName:     objectName,
 	})
 	return wrapStatusErr(err)
@@ -32,7 +32,8 @@ func (f *Federate) ReserveObjectInstanceName(ctx context.Context, objectName str
 
 // RegisterObjectInstance registers an instance of the named object class and
 // returns the RTI-assigned object handle. objectName may be empty to request an
-// RTI-generated name.
+// RTI-generated name. An explicit name requires a successful reservation callback
+// first. Registration and deletion retain that reservation until release or resign.
 func (f *Federate) RegisterObjectInstance(ctx context.Context, className, objectName string) (uint64, error) {
 	classHandle, ok := f.handles.objectClassHandle(className)
 	if !ok {
@@ -41,7 +42,7 @@ func (f *Federate) RegisterObjectInstance(ctx context.Context, className, object
 	resp, err := f.conn.obj.RegisterObjectInstance(ctx, &rtiv1.RegisterObjectRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
+		FederateHandle:    f.CurrentHandle(),
 		ObjectClassHandle: classHandle,
 		ObjectName:        objectName,
 	})
@@ -122,17 +123,24 @@ func (f *Federate) UpdateAttributeValuesByHandle(
 func (f *Federate) UpdateAttributeValuesByHandleConfirmed(
 	ctx context.Context, objectHandle uint64, attributes map[uint64][]byte, timestamp *float64,
 ) error {
+	return f.updateAttributeValuesByHandleConfirmed(ctx, objectHandle, attributes, timestamp, MessageOptions{})
+}
+
+func (f *Federate) updateAttributeValuesByHandleConfirmed(ctx context.Context, objectHandle uint64, attributes map[uint64][]byte, timestamp any, options MessageOptions) error {
+	legacy, exact, encodeErr := f.optionalTimeWire(timestamp)
+	if encodeErr != nil {
+		return encodeErr
+	}
 	req := &rtiv1.UpdateAttributeValuesRequest{
-		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName: f.federationName,
-		FederateHandle: f.federateHandle,
-		ObjectHandle:   objectHandle,
-		Attributes:     attributes,
+		UserSuppliedTag:         append([]byte(nil), options.Tag...),
+		MessageRetractionHandle: options.RetractionHandle,
+		WireVersion:             rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:          f.federationName,
+		FederateHandle:          f.CurrentHandle(),
+		ObjectHandle:            objectHandle,
+		Attributes:              attributes,
 	}
-	if timestamp != nil {
-		value := *timestamp
-		req.LogicalTime = &value
-	}
+	req.LogicalTime, req.LogicalTimeValue = legacy, exact
 	if f.interactionClosing.Load() {
 		return ErrNotJoined
 	}
@@ -144,9 +152,9 @@ func (f *Federate) UpdateAttributeValuesByHandleConfirmed(
 	if err := ctx.Err(); err != nil {
 		return status.FromContextError(err).Err()
 	}
-	if f.interactionContext != nil {
+	if lifetime := f.transportLifetime(); lifetime != nil {
 		select {
-		case <-f.interactionContext.Done():
+		case <-lifetime.ctx.Done():
 			return ErrNotJoined
 		default:
 		}
@@ -196,6 +204,7 @@ func (f *Federate) rememberObjectClass(objectHandle, classHandle uint64) {
 
 func (f *Federate) forgetObjectClass(objectHandle uint64) {
 	f.mu.Lock()
+	f.discardDeletionKnowledgeLocked(objectHandle)
 	delete(f.objectClasses, objectHandle)
 	delete(f.ownedObjectAttributes, objectHandle)
 	f.mu.Unlock()
@@ -220,23 +229,7 @@ func (f *Federate) objectClassFor(objectHandle uint64) (uint64, bool) {
 // ts may be nil for RO delete; non-nil for TSO delete with that
 // logical timestamp. tag is passed through verbatim to subscribers.
 func (f *Federate) DeleteObjectInstance(ctx context.Context, obj uint64, tag []byte, ts *float64) error {
-	req := &rtiv1.DeleteObjectInstanceRequest{
-		WireVersion:     rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:  f.federationName,
-		FederateHandle:  f.federateHandle,
-		ObjectHandle:    obj,
-		UserSuppliedTag: append([]byte(nil), tag...),
-	}
-	if ts != nil {
-		v := *ts
-		req.LogicalTime = &v
-	}
-	_, err := f.conn.obj.DeleteObjectInstance(ctx, req)
-	if err != nil {
-		return wrapStatusErr(err)
-	}
-	f.forgetObjectClass(obj)
-	return nil
+	return f.DeleteObjectInstanceWithOptions(ctx, obj, ts, MessageOptions{Tag: tag})
 }
 
 // LocalDeleteObjectInstance — IEEE 1516.1-2010 §6.18 (M23 W2).
@@ -245,12 +238,40 @@ func (f *Federate) DeleteObjectInstance(ctx context.Context, obj uint64, tag []b
 // the server records the event but does NOT mutate global instance
 // state — other subscribers continue to see the instance.
 func (f *Federate) LocalDeleteObjectInstance(ctx context.Context, obj uint64) error {
-	_, err := f.conn.obj.LocalDeleteObjectInstance(ctx, &rtiv1.LocalDeleteObjectInstanceRequest{
+	finish, err := f.beginCallbackDeletion(ctx, obj)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if err := f.FlushOwnershipCallbackReceipts(ctx); err != nil {
+		return err
+	}
+	req := &rtiv1.LocalDeleteObjectInstanceRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName: f.federationName,
-		FederateHandle: f.federateHandle,
+		FederateHandle: f.CurrentHandle(),
 		ObjectHandle:   obj,
-	})
+	}
+	f.ownershipCallbackMu.Lock()
+	strict := f.ownershipReceiptsEnabled
+	f.ownershipCallbackMu.Unlock()
+	if strict {
+		var response *rtiv1.LocalDeleteObjectInstanceFence
+		response, err = f.conn.obj.LocalDeleteObjectInstanceFenced(f.sessionContext(ctx), req)
+		if err == nil {
+			if response.FederationGeneration != f.federationGeneration || response.CallbackEpoch != f.CallbackEpoch() {
+				return fmt.Errorf("federate: stale local-delete callback fence")
+			}
+			f.ownershipCallbackMu.Lock()
+			if f.retiredKnowledge == nil {
+				f.retiredKnowledge = make(map[uint64]uint64)
+			}
+			f.retiredKnowledge[obj] = max(f.retiredKnowledge[obj], response.RetiredKnowledgeEpoch)
+			f.ownershipCallbackMu.Unlock()
+		}
+	} else {
+		_, err = f.conn.obj.LocalDeleteObjectInstance(ctx, req)
+	}
 	if err != nil {
 		return wrapStatusErr(err)
 	}
@@ -267,7 +288,7 @@ func (f *Federate) RequestAttributeValueUpdate(ctx context.Context, obj uint64, 
 	_, err := f.conn.obj.RequestAttributeValueUpdate(ctx, &rtiv1.RequestAttributeValueUpdateRequest{
 		WireVersion:      rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:   f.federationName,
-		FederateHandle:   f.federateHandle,
+		FederateHandle:   f.CurrentHandle(),
 		ObjectHandle:     obj,
 		AttributeHandles: append([]uint64(nil), attrs...),
 		UserSuppliedTag:  append([]byte(nil), tag...),
@@ -283,7 +304,7 @@ func (f *Federate) RequestClassAttributeValueUpdate(ctx context.Context, cls uin
 	_, err := f.conn.obj.RequestClassAttributeValueUpdate(ctx, &rtiv1.RequestClassAttributeValueUpdateRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
+		FederateHandle:    f.CurrentHandle(),
 		ObjectClassHandle: cls,
 		AttributeHandles:  append([]uint64(nil), attrs...),
 		UserSuppliedTag:   append([]byte(nil), tag...),
@@ -322,7 +343,7 @@ func (f *Federate) ChangeAttributeTransportationType(ctx context.Context, obj ui
 	_, err := f.conn.obj.ChangeAttributeTransportationType(ctx, &rtiv1.ChangeAttributeTransportRequest{
 		WireVersion:      rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:   f.federationName,
-		FederateHandle:   f.federateHandle,
+		FederateHandle:   f.CurrentHandle(),
 		ObjectHandle:     obj,
 		AttributeHandles: append([]uint64(nil), attrs...),
 		TransportType:    tt.wire(),
@@ -336,7 +357,7 @@ func (f *Federate) ChangeInteractionTransportationType(ctx context.Context, cls 
 	_, err := f.conn.obj.ChangeInteractionTransportationType(ctx, &rtiv1.ChangeInteractionTransportRequest{
 		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:         f.federationName,
-		FederateHandle:         f.federateHandle,
+		FederateHandle:         f.CurrentHandle(),
 		InteractionClassHandle: cls,
 		TransportType:          tt.wire(),
 	})

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // HLAvariableArray is the composite codec for arrays of dynamic cardinality
@@ -44,8 +45,12 @@ func (c variableArrayCodec) Encode(v any) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("encoding: HLAvariableArray cannot encode %T (want []any)", v)
 	}
+	length := uint64(len(xs))
+	if length > math.MaxUint32 {
+		return nil, fmt.Errorf("encoding: length %d exceeds the uint32 wire limit", len(xs))
+	}
 	out := make([]byte, 4, 4+len(xs)*c.elem.OctetBoundary())
-	binary.BigEndian.PutUint32(out[:4], uint32(len(xs)))
+	binary.BigEndian.PutUint32(out[:4], uint32(length))
 	for i, x := range xs {
 		out = padTo(out, c.elem.OctetBoundary())
 		b, err := c.elem.Encode(x)

@@ -36,9 +36,7 @@ from rti1516e.events import (
     ReceiveInteraction,
     ReflectAttributeValues,
 )
-
-BIN_DIR = REPO_ROOT / "bin"
-RTID_BINARY = BIN_DIR / "rtid"
+from tests._legacy_server import build_rtid, spawn_rtid
 
 _FOM = """<?xml version="1.0" encoding="utf-8"?>
 <objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
@@ -87,24 +85,11 @@ def _free_port() -> int:
 
 
 def _build_rtid() -> Path:
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    argv = ["go", "build", "-o", str(RTID_BINARY), "./rti/cmd/rtid"]  # noqa: S607
-    subprocess.run(argv, cwd=REPO_ROOT, check=True)  # noqa: S603
-    return RTID_BINARY
+    return build_rtid()
 
 
 def _spawn_rtid(binary: Path, port: int, mport: int) -> subprocess.Popen[bytes]:
-    return subprocess.Popen(  # noqa: S603
-        [
-            str(binary),
-            "--listen", f":{port}",
-            "--metrics-listen", f":{mport}",
-            "--log-level", "warn",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    return spawn_rtid(binary, port, mport)
 
 
 async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109
@@ -175,7 +160,7 @@ async def test_spec_m27b_handle_keyed_publish_register_update() -> None:
                 await fed.publish_object_class(vehicle_class, attributes=[pos_attr, vel_attr])
 
                 # Register by handle.
-                obj_h = await fed.register_object_instance(vehicle_class, instance_name="car-A")
+                obj_h = await fed.register_object_instance(vehicle_class)
                 assert obj_h > 0
 
                 # Update by handle keys.
@@ -207,7 +192,7 @@ async def test_spec_m27b_handle_keyed_cross_federate_reflect() -> None:
                 await pub_fed.publish_object_class(vehicle, attributes=[pos_attr])
                 await sub_fed.subscribe_object_class(vehicle, attributes=[pos_attr])
 
-                obj_h = await pub_fed.register_object_instance(vehicle, instance_name="car-B")
+                obj_h = await pub_fed.register_object_instance(vehicle)
 
                 # Subscriber must see Discover.
                 discovered: list[DiscoverObjectInstance] = []
@@ -306,7 +291,7 @@ async def test_spec_m27b_string_path_still_works() -> None:
         async with RtiConnection.connect(url) as rti:
             async with rti.join_federation(spec, federate_name="fed1") as fed:
                 await fed.publish_object_class("Vehicle", attributes=["Position", "Velocity"])
-                obj_h = await fed.register_object_instance("Vehicle", instance_name="legacy")
+                obj_h = await fed.register_object_instance("Vehicle")
                 assert obj_h > 0
                 await fed.update_attributes(
                     obj_h,

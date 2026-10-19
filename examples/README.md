@@ -20,7 +20,7 @@ bash examples/go-pingpong/run.sh
 | `go-pingpong/` | Two in-process Go federates exchange interactions | Go |
 | `go-tar-wait/` | One federate waits for its peer before receiving a time grant | Go |
 | `go-timed/` | Three Go processes advance with different lookaheads | Go; Python for Bash verification |
-| `cpp-ieee1516e-smoke/` | C++ publisher and cross-language delivery | Go, C++ toolchain |
+| [`java-exchange/`](java-exchange/) | Two independent Java processes synchronize and exchange an object update and interaction | Running RTI, JDK 11+, Maven |
 | `ieee1516e-ambassador-smoke/` | Python ambassador lifecycle and callbacks | Go, Python |
 | `ieee1516e-chat-parity/` | Object and interaction behavior from the IEEE Chat pattern | Go, Python |
 | `ieee1516e-typed-smoke/` | Typed Python handles and collections | Go, Python |
@@ -48,10 +48,9 @@ python -m rti1516e._proto
 
 Install `./pysdk[dev,pyjevsim]` instead for `pyjevsim-real-model`.
 
-The C++ example needs a C++17 compiler, CMake 3.18 or later, protobuf, and
-gRPC++. See [`cppsdk/README.md`](../cppsdk/README.md) for dependency setup. The
-C++ SDK is maintained on Linux and macOS; its PowerShell launcher reports
-missing prerequisites but does not imply Windows C++ support.
+For `java-exchange`, build and install the Java SDK once before starting its two
+roles. Its launchers use an explicitly supplied RTI endpoint and do not start a
+server. See the example README for Windows and Linux commands.
 
 Most cross-process examples build and start `rtid` themselves. Pass an
 existing binary through the runner option documented by the example when Go

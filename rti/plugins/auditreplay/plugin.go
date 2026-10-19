@@ -9,9 +9,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/eventlog"
-	"github.com/cbchoi/gorti/rti/internal/runtimeplugin"
+	"github.com/cbchoi/gorti/rti/internal/adapters/eventlog"
+	"github.com/cbchoi/gorti/rti/internal/application/runtimeplugin"
+	"github.com/cbchoi/gorti/rti/internal/hla/core"
 )
 
 const Name = "audit-replay"

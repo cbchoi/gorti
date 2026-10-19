@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "source_id": "S1516.1",
+  "reviewed_units": ["8.1.2", "8.1.3", "8.1.4", "8.1.5", "8.1.11", "12.1", "12.3"],
+  "coverage_complete": false,
+  "requirements": [
+    {
+      "id": "TM-PREFERRED-ORDER", "source_id": "S1516.1", "clause": "8.1.2", "pdf_pages": [182], "subject": "rti", "applicability": "applicable",
+      "statement": "Initialize preferred order from FDD; apply instance-attribute overrides to updates, interaction overrides to interactions, and deletion-privilege attribute order to deletion. Do not change class-attribute preference during execution.",
+      "conditions": "Timestamp remains optional even with TSO preference and a regulating sender; scope of Change Attribute Order Type differs from Change Interaction Order Type.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/object/legacy_time.go"],
+      "tests": [{"path":"rti/internal/hla/object/preferred_order_test.go","name":"TestPreferredOrderProfilesAndOverrides","oracle":"Injected FOM preference and attribute/interaction overrides drive six message paths across five profiles; assertions check sent/received order, timestamp/tag, retraction reservation and deletion-privilege order distinct from another attribute."}],
+      "open_items": ["Injected FOM lookup is not parsed FDD/inheritance proof. Need class-preference immutability, independent instances/publishers, and public Java order-change exception controls; 8.23/8.24 not fully decomposed."]
+    },
+    {
+      "id": "TM-SEND-ORDER-TABLE1", "source_id": "S1516.1", "clause": "8.1.2", "pdf_pages": [182,183], "subject": "rti", "applicability": "applicable",
+      "statement": "Send TSO and return a retraction designator only with TSO preference, regulating sender and supplied timestamp; all seven other combinations send RO without a retraction designator.",
+      "conditions": "Table 1 visually reviewed; surrounding prose has malformed sentence order, but the table retains the explicit three-factor classification.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/object/legacy_time.go", "rti/internal/hla/time/validate_tso.go"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveTimeArithmeticTest.java","name":"sendGaltAndRetractionUseTheSameRepresentableBound","oracle":"Regulating timestamped Pulse send at the representable floor has a valid nonnull retraction return; below-floor send throws InvalidLogicalTime. One TSO combination only."}],
+      "open_items": ["Need complete eight-row Java matrix across update passels, interactions, regional interactions and deletion; a case pass is not requirement verification."]
+    },
+    {
+      "id": "TM-RECEIVE-ORDER-TABLE2", "source_id": "S1516.1", "clause": "8.1.2", "pdf_pages": [183,184], "subject": "rti", "applicability": "applicable",
+      "statement": "Receive TSO only for a TSO send to a constrained receiver; otherwise receive RO. Preserve TSO-send retraction designators even for RO receipt, and never upgrade sent RO to TSO.",
+      "conditions": "Table 2 applies independently per recipient; regulation does not imply incoming constraint.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/typed_timestamp.go", "rti/internal/hla/time/ro_delivery.go"],
+      "tests": [{"path":"rti/internal/hla/time/ieee2010_delivery_test.go","name":"TestIEEE2010RegulationDoesNotConstrainIncomingMessages","oracle":"Regulating-only recipient has one immediate, zero buffered timestamped deliveries and OrderReceive."},{"path":"pysdk/tests/test_ieee2010_time_live.py","name":"test_regulating_only_receiver_gets_timestamped_message_as_ro","oracle":"Without advance or async, receives timestamp 10 with retraction handle 57 as RECEIVE; logical time remains zero and no grant occurs. Product-interface evidence, not Java mapping proof."}],
+      "open_items": ["Need Java four-row matrix, simultaneous constrained/nonconstrained recipients, all callback overloads and message kinds."]
+    },
+    {
+      "id": "TM-DELIVERY-ORDER", "source_id": "S1516.1", "clause": "8.1.2", "pdf_pages": [184], "subject": "rti", "applicability": "applicable",
+      "statement": "Order received TSO by timestamp across senders except under flush; permit arbitrary equal-timestamp and RO ordering, preserving any supplied timestamp in RO callbacks.",
+      "conditions": "No normative RO FIFO or equal-TSO tie-order requirement.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/typed_timestamp.go"],
+      "tests": [{"path":"pysdk/tests/test_ieee2010_time_live.py","name":"test_constrained_async_keeps_tso_until_tar_and_delivers_before_tag","oracle":"Sends timestamps 10 then 5; asserts [5,10], payload/tag/handle preservation and each delivery before grant. RO markers establish stream progress without early TSO."},{"path":"rti/internal/hla/time/integer_manager_test.go","name":"TestIntegerManagerAllModesUseExactQueueOrder","oracle":"Reverse-arriving adjacent timestamps above 2^53 retain exact order; TAR/TARA/FQR deliver IDs [2,3], next-message modes only [2], with exact grant targets."}],
+      "open_items": ["Need cross-sender Java order and timestamp-preserving RO overloads; sorted flush in this test is legal but not mandatory."]
+    },
+    {
+      "id": "TM-INITIAL-EXPLICIT-MONOTONE", "source_id": "S1516.1", "clause": "8.1.3", "pdf_pages": [184], "subject": "rti", "applicability": "applicable",
+      "statement": "Assign selected initial time on join, reject backward advances, and advance through explicit TAR/TARA/NMR/NMRA/FQR followed by grant; regulating peers constrain constrained advances.",
+      "conditions": "Joined federates may have different times. Enable-service implicit advancement is separately specified in 8.2/8.5 and not fully decomposed here.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/advance.go", "javasdk/client/src/main/java/org/gorti/rti/TimeWire.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveFederationTimeSelectionTest.java","name":"sdkCreateListAndJoinUseTheSelectedMetadata","oracle":"Explicit Float64, default and Integer64 creation/list/join preserve selected name; getTimeFactory and queryLogicalTime implement the corresponding standard interfaces and return initial zero."},{"path":"rti/internal/hla/time/zero_lookahead_test.go","name":"TestIEEE2010ZeroLookaheadPendingAndGranted","oracle":"All five admitted modes keep current time zero while pending and reach 10 only after peer progress permits grant."}],
+      "open_items": ["Need Java backward rejection and pending/callback-entry transition controls for every request; server admission and user callback entry are distinct boundaries."]
+    },
+    {
+      "id": "TM-REGULATION-LIFECYCLE", "source_id": "S1516.1", "clause": "8.1.4", "pdf_pages": [184,185], "subject": "rti", "applicability": "applicable",
+      "statement": "Only regulating federates send TSO; enable becomes effective through its enabled callback and disable ends regulation. Establish nonnegative lookahead on enable and change it through Modify Lookahead.",
+      "conditions": "Senders need not submit timestamps in increasing order; received TSO remains ordered except under FQR.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/enable.go", "rti/internal/hla/time/regulation.go", "rti/internal/hla/time/lookahead.go"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveFederationTest.java","name":"twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants","oracle":"Two live Java participants observe no user regulation callback before evoke, then exactly one enabled callback at zero; duplicate enable throws TimeRegulationAlreadyEnabled without another callback. Typed queryLookahead returns 0.5 and then 1 after modification."}],
+      "open_items": ["No independent TSO-send-before-callback-entry, disable or invalid-lookahead oracle in this case; full 8.2-8.4 errors and implicit advances remain open."]
+    },
+    {
+      "id": "TM-LOOKAHEAD-SEND-FLOOR", "source_id": "S1516.1", "clause": "8.1.4", "pdf_pages": [184], "subject": "rti", "applicability": "applicable",
+      "statement": "Reject regulating TSO sends below current logical time plus actual lookahead, with strict zero-lookahead history applied separately.",
+      "conditions": "Time Granted state; positive Float64 lookahead must preserve a distinguishable representable bound.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/validate_tso.go", "rti/internal/hla/time/arithmetic.go"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveTimeArithmeticTest.java","name":"sendGaltAndRetractionUseTheSameRepresentableBound","oracle":"At time 1/lookahead Double.MIN_VALUE and at 2^53/lookahead 1, peer GALT equals Math.nextUp(current); send at current throws InvalidLogicalTime, next representable send succeeds."}],
+      "open_items": ["Need every Java timestamped send service and Integer64 endpoint controls, not only interaction send."]
+    },
+    {
+      "id": "TM-ZERO-LOOKAHEAD-HISTORY", "source_id": "S1516.1", "clause": "8.1.4", "pdf_pages": [184,185], "subject": "rti", "applicability": "applicable",
+      "statement": "After zero-lookahead TAR/NMR grant, reject sends at or below logical time; same-time available requests do not remove that restriction, while a later advance applies its own rule.",
+      "conditions": "Restriction persists until time actually moves; fresh regulation enable has available-mode semantics per Table 3 footnote.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/zero_lookahead.go"],
+      "tests": [{"path":"rti/internal/hla/time/zero_lookahead_test.go","name":"TestIEEE2010ZeroLookaheadSameTimeHistoryAndRestore","oracle":"TAR/NER then TARA/NMRA/FQR at 10 retain strict equality rejection across export/import; available advance to 11 permits equality."},{"path":"rti/internal/hla/time/zero_lookahead_test.go","name":"TestIEEE2010ZeroLookaheadEnableResetsHistory","oracle":"Duplicate enable retains strict bound; disable/re-enable restores nonstrict equality eligibility."}],
+      "open_items": ["Need Java public API history controls for both families and actual callback delivery."]
+    },
+    {
+      "id": "TM-CONSTRAINT-LIFECYCLE", "source_id": "S1516.1", "clause": "8.1.5", "pdf_pages": [185], "subject": "rti", "applicability": "applicable",
+      "statement": "Only constrained federates receive TSO; enable takes effect through enabled callback, disable ends constraint, and constrained advances cannot allow future TSO below current time.",
+      "conditions": "Complete 8.5-8.7 service preconditions, exceptions and implicit advances are outside this overview decomposition.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/enable.go", "rti/internal/hla/time/regulation.go"],
+      "tests": [{"path":"rti/internal/hla/time/ieee2010_delivery_test.go","name":"TestIEEE2010DisableConstrainedReleasesQueuedMessagesAsRO","oracle":"Disabling constraint releases queued timestamped event exactly once as OrderReceive."}],
+      "open_items": ["Need Java transition timing and all queued/subsequent message kinds; one disable scenario does not prove no-past-arrival globally."]
+    },
+    {
+      "id": "TM-GALT-BOUND", "source_id": "S1516.1", "clause": "8.1.5", "pdf_pages": [185], "subject": "rti", "applicability": "applicable",
+      "statement": "Calculate each federate's GALT from other regulators and pending progress; TAR/NMR require grants below GALT, TARA/NMRA/FQR allow equality. No other regulators means undefined GALT and no peer wait.",
+      "conditions": "Nonconstrained federates also have prospective GALT; undefined is not a standardized finite final-time value.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/galt.go", "rti/internal/hla/time/lbts.go", "rti/internal/hla/time/advance.go"],
+      "tests": [{"path":"rti/internal/hla/time/integer_manager_test.go","name":"TestIntegerManagerStrictAndInclusiveBounds","oracle":"Exact GALT equality above 2^53 grants only inclusive modes; moving peer releases strict requests."},{"path":"rti/internal/hla/time/integer_manager_test.go","name":"TestIntegerManagerFinalTimeAndUnboundedRemainDistinct","oracle":"MaxInt64 GALT is finite and blocks strict equality; removing last regulator permits final grant and reports unbounded separately."}],
+      "open_items": ["Need Java validity flags and full multi-regulator pending-bound oracle; injected research LBTS/grant policies are not proved by default-policy evidence."]
+    },
+    {
+      "id": "TM-LITS-MINIMUM", "source_id": "S1516.1", "clause": "8.1.5", "pdf_pages": [185,186], "subject": "rti", "applicability": "applicable",
+      "statement": "Determine LITS from GALT and queued potentially receivable TSO; return undefined when both are absent.",
+      "conditions": "Applies to every joined federate. Footnote permits inclusion or exclusion of sent-TSO/received-RO messages in nonconstrained recipient LITS.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/galt.go", "rti/internal/hla/time/metrics.go"],
+      "tests": [{"path":"rti/internal/hla/time/ieee2010_delivery_test.go","name":"TestIEEE2010LITSIncludesGALT","oracle":"No regulators/queue yields undefined; lookahead-4 peer gives 4 with empty queue; queued 8 then 2 give min(timestamp,4) in query and metrics."}],
+      "open_items": ["Need Java TimeQueryReturn types/flags, exact Integer64 minima and filtering controls."]
+    },
+    {
+      "id": "TM-PENDING-SEND-FLOOR", "source_id": "S1516.1", "clause": "8.1.6", "pdf_pages": [186,187,188,189], "subject": "rti", "applicability": "applicable",
+      "statement": "While advancing use requested time and projected actual lookahead for outgoing TSO; after early next-message/flush grant use granted time and actual lookahead.",
+      "conditions": "Table 3; zero-lookahead TAR/NMR exclude equality. NMR table group text is visibly truncated; 8.10 provides full same-timestamp rule.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/validate_tso.go", "rti/internal/hla/time/lookahead.go"],
+      "tests": [{"path":"rti/internal/hla/time/outgoing_pending_time_test.go","name":"TestOutgoingTSOUsesRequestedTimeWhileAdvancing","oracle":"All five pending modes, target 10/lookahead 2, reject 2,10,11.5 and accept 12,15."},{"path":"rti/internal/hla/time/outgoing_pending_time_test.go","name":"TestOutgoingTSOBoundEasesAfterEarlyNextMessageGrant","oracle":"Pending NMR to 10 rejects 7; grant to 5/lookahead 2 then permits 7."},{"path":"rti/internal/hla/time/ieee2010_lookahead_followup_test.go","name":"TestIEEE2010LookaheadPendingUsesProjectedActual","oracle":"Reduction 5 to 2 with target 2 retains actual 5 but projects floor 5; predecessor rejected, regulator contribution time 2/lookahead 3."}],
+      "open_items": ["8.1.6 not complete: all table delivery facets and nonregulating-peer effects need atomic reconciliation."]
+    },
+    {
+      "id": "TM-RO-ELIGIBILITY-QUEUE", "source_id": "S1516.1", "clause": "8.1.7", "pdf_pages": [188,189,190], "subject": "rti", "applicability": "applicable",
+      "statement": "Queue ineligible messages per recipient and remove on delivery. Unconstrained recipients may receive RO in any state; constrained recipients receive RO when advancing or async-enabled. Async does not unlock TSO.",
+      "conditions": "Text reviewed; complete Figure 17 graph not decomposed, so this unit is omitted from reviewed_units.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/ro_delivery.go", "rti/internal/hla/time/asyncdelivery.go"],
+      "tests": [{"path":"rti/internal/hla/time/ro_delivery_test.go","name":"TestROEligibilityMatrix","oracle":"Boolean matrix checks immediate eligibility equals not-constrained OR async OR advancing, independent of regulation, with order remaining RO."},{"path":"rti/internal/hla/time/ro_delivery_test.go","name":"TestROReleaseBeforeEveryAdvanceGrant","oracle":"All five modes emit two queued RO events exactly once before TAG."},{"path":"rti/internal/hla/time/ieee2010_delivery_test.go","name":"TestIEEE2010AsyncDoesNotReleaseFutureTSO","oracle":"No future TSO emitted after async enable; TAR releases timestamp-ordered event before grant."}],
+      "open_items": ["Need Java dispatch observations, all message kinds and pending-enable transitions; FIFO asserted by fixture is product behavior, not normative RO ordering."]
+    },
+    {
+      "id": "TM-DELAY-SUBSCRIPTION", "source_id": "S1516.1", "clause": "8.1.8", "pdf_pages": [191], "subject": "rti", "applicability": "applicable",
+      "statement": "Fix the switch from FDD at creation; when enabled evaluate subscriptions at delivery eligibility, when disabled an immediate rejection may be permanent; always check current subscriptions at actual delivery.",
+      "conditions": "RO and TSO; switch cannot change during execution.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/next_message_filter.go"],
+      "tests": [{"path":"rti/internal/hla/time/next_message_filter_test.go","name":"TestIEEE2010NextMessageFilteredEarliestReevaluatesTarget","oracle":"NER/NMRA discard filtered time 3 and grant 7 for later delivered group, or target 10 if empty; unsafe group stays queued and unevaluated until peer progress."}],
+      "open_items": ["Injected filter is not FDD switch proof. Need Java switch immutability, enabled/disabled generation policy and late-unsubscribe controls; full unit reconciliation remains unfinished."]
+    },
+    {
+      "id": "TM-LEGAL-ORDER-TYPES", "source_id": "S1516.1", "clause": "8.1.11", "pdf_pages": [192], "subject": "rti", "applicability": "applicable",
+      "statement": "Support only timestamp and receive order, named TimeStamp and Receive respectively.",
+      "conditions": "Order name/handle support and order-change services in normative profile.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/adapters/grpc/support.go", "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java","name":"allBasicFomOrderAndTransportationLookupsUseRpc","oracle":"Scripted RPC maps returned code 2 for TimeStamp to TIMESTAMP and sends code 1 for RECEIVE name lookup yielding Receive; not a live backend round trip."},{"path":"rti/internal/hla/object/order_state_test.go","name":"TestOrderStateRoundTripAndValidation","oracle":"RECEIVE attribute and TIMESTAMP interaction orders survive export/import; invalid order 99 is rejected without changing retained attribute order, and destruction clears state."}],
+      "open_items": ["Need both lookup directions for both names on live Java and public invalid-order exception classification; component rejection and selected scripted lookups do not establish the entire order-service profile."]
+    },
+    {
+      "id": "TM-TAR-DELIVERY", "source_id": "S1516.1", "clause": "8.8", "pdf_pages": [199,200,201], "subject": "rti", "applicability": "applicable",
+      "statement": "Deliver queued RO and all receivable TSO at or below target before granting exactly target; close later TSO at or below grant.",
+      "conditions": "Connected member, existing federation, valid nonpast target, not advancing or pending enable, no save/restore. Strict GALT and zero-lookahead floor apply.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/advance.go", "rti/internal/hla/time/grant.go"],
+      "tests": [{"path":"pysdk/tests/test_ieee2010_time_live.py","name":"test_constrained_async_keeps_tso_until_tar_and_delivers_before_tag","oracle":"TAR 10 releases timestamps 5 and 10 before grant 10, retains them despite earlier async/sender progress, then queryLogicalTime is 10."}],
+      "open_items": ["Need Java all callback kinds, future-arrival closure and service exception matrix; row is selected body mapping, not complete atomic 8.8 decomposition."]
+    },
+    {
+      "id": "TM-TARA-QUEUED-EQUALITY", "source_id": "S1516.1", "clause": "8.9", "pdf_pages": [201,202,203], "subject": "rti", "applicability": "applicable",
+      "statement": "Deliver queued RO, all TSO below target and already queued TSO equal to target, then grant target while allowing future equal-timestamp arrivals.",
+      "conditions": "Ordinary advance preconditions; inclusive GALT and nonstrict floor subject to retained earlier strict history.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/advance.go"],
+      "tests": [{"path":"rti/internal/hla/time/applicable_time_support_equality_20261003_test.go","name":"TestApplicableTimeSupportTARAQueuedAndFutureEquality","oracle":"Production time-manager/outbox test buffers RO and reverse-arriving TSO 5 and 4, delivers RO then 4 and queued 5 before TAG 5; a later TSO 5 is accepted but held until a second TARA 5 delivers it before TAG, with time and queue assertions."}],
+      "open_items": ["Need public Java callback-kind/time-family matrix, full errors and retained strict-history controls. This component case does not prove below-grant exclusion or complete 8.9."]
+    },
+    {
+      "id": "TM-NMR-COMPLETE-EARLIEST-GROUP", "source_id": "S1516.1", "clause": "8.10", "pdf_pages": [203,204], "subject": "rti", "applicability": "applicable",
+      "statement": "Deliver queued RO and complete earliest receivable TSO timestamp group no later than target; grant group time, or target if no TSO arrives, closing future TSO at or below grant.",
+      "conditions": "Strict GALT; pending sends use requested horizon, postgrant sends use actual grant, with strict zero-lookahead equality; ordinary advance preconditions apply.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/ner.go", "rti/internal/hla/time/next_message_filter.go"],
+      "tests": [{"path":"rti/internal/hla/time/integer_manager_test.go","name":"TestIntegerManagerAllModesUseExactQueueOrder","oracle":"NER selects exact earliest base+2, delivers only earliest ID 2 and grants base+2 rather than target base+7."},{"path":"rti/internal/hla/time/zero_lookahead_test.go","name":"TestIEEE2010ZeroLookaheadEarlyNextMessageGrant","oracle":"Pending target 10 imposes strict floor 10; earliest-message grant 3 eases to strict floor 3."}],
+      "open_items": ["Need same-time messages from multiple senders and not-yet-queued arrivals proving complete NMR closure; Java callback and exception matrices unmapped."]
+    },
+    {
+      "id": "TM-NMRA-QUEUED-EARLIEST-GROUP", "source_id": "S1516.1", "clause": "8.11", "pdf_pages": [204,205,206], "subject": "rti", "applicability": "applicable",
+      "statement": "Deliver queued RO and earliest receivable TSO with other queued messages at that timestamp; grant delivered time or target if none, allowing future equality but no earlier TSO.",
+      "conditions": "Inclusive GALT; pending/postgrant sends use requested/granted horizons plus projected/actual lookahead; ordinary advance preconditions apply.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/ner.go"],
+      "tests": [{"path":"rti/internal/hla/time/next_message_filter_test.go","name":"TestIEEE2010NextMessageFilteredEarliestReevaluatesTarget","oracle":"NMRA independently recomputes target after earliest-message filtering: delivered later group grants 7, empty result grants target 10."}],
+      "open_items": ["Need Java queued-equal versus future-equal group tests; sharing NER implementation and passing names cannot establish complete NMRA semantics."]
+    },
+    {
+      "id": "TM-FQR-DRAIN-MINIMUM", "source_id": "S1516.1", "clause": "8.12", "pdf_pages": [206,207,208], "subject": "rti", "applicability": "applicable",
+      "statement": "Promptly drain every queued RO and TSO including timestamps beyond target/GALT, then grant minimum of target, defined GALT and smallest delivered TSO timestamp.",
+      "conditions": "May violate ordinary TSO order and expose retractable messages; receiver must handle Request Retraction. Pending/postgrant floors use requested/granted horizons; ordinary advance preconditions apply.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/flush.go", "rti/internal/hla/time/advance.go"],
+      "tests": [{"path":"rti/internal/hla/time/ieee2010_flush_test.go","name":"TestIEEE2010FQRGrantMinimum","oracle":"Independent cases select target 5, GALT 2, delivered minimum 3, same-time message 5 and stationary-peer bound 5; fire and clear pending."},{"path":"rti/internal/hla/time/ieee2010_flush_test.go","name":"TestIEEE2010FQRFlushesAllMessagesBeforeGrant","oracle":"Queued 20,3,9 all deliver as TSO before grant 2 for target 10/GALT 2; queue empties and advancing clears."},{"path":"rti/internal/hla/time/ro_delivery_test.go","name":"TestROReleaseBeforeEveryAdvanceGrant","oracle":"FQR also delivers two queued RO before TAG."}],
+      "open_items": ["Need Java flush/retraction callbacks, undefined GALT and full exceptions. Sorted flush is legal but not a mandatory order."]
+    },
+    {
+      "id": "TM-TAG-CLOSURE", "source_id": "S1516.1", "clause": "8.13", "pdf_pages": [208,209], "subject": "rti", "applicability": "applicable",
+      "statement": "Grant honors prior request and sets supplied time; TAR/NMR close future TSO at or below it, TARA/NMRA/FQR close only timestamps below it.",
+      "conditions": "Only service body on 208 assessed; full callback conditions on 209 not reconciled, unit not marked complete.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/grant.go"],
+      "tests": [{"path":"rti/internal/hla/time/applicable_time_support_equality_20261003_test.go","name":"TestApplicableTimeSupportTARAQueuedAndFutureEquality","oracle":"After TAG 5, a future equal-time TSO 5 remains legal, does not change current time, and is delivered by the next same-time TARA before its TAG. Available-equality subset only."}],
+      "open_items": ["Need strict TAR/NMR closure, below-grant exclusion, NMRA/FQR controls, callback preconditions/errors and public Java postgrant arrivals. Page 209 remains unreconciled; component callback events are not Java callback-entry proof."]
+    },
+    {
+      "id": "TM-LOOKAHEAD-CHANGE", "source_id": "S1516.1", "clause": "8.19", "pdf_pages": [213,214], "subject": "rti", "applicability": "applicable",
+      "statement": "Accept nonnegative lookahead while regulating and not advancing; increases/equality are immediate, decreases reduce actual interval by each granted time increment until requested interval is reached.",
+      "conditions": "Connected joined member, existing federation, no save/restore; specified invalid-lookahead/state/regulation/save/restore/membership/connection/internal exceptions must be assessed.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/lookahead.go"],
+      "tests": [{"path":"rti/internal/hla/time/ieee2010_lookahead_followup_test.go","name":"TestIEEE2010LookaheadDecreaseTracksGrantedTime","oracle":"Request 5 to 2 retains actual 5; grants 0,1,2,3,8 give actual 5,4,3,2,2; premature floor relaxation is rejected."},{"path":"rti/internal/hla/time/ieee2010_lookahead_followup_test.go","name":"TestIEEE2010ModifyLookaheadRejectsPendingAdvance","oracle":"Pending TAR/TARA/NER/NMRA rejects modify with ErrTimeAdvancingState and export is deeply unchanged."}],
+      "open_items": ["Immediate increase/equality, Java exceptions and FQR transient advancing rejection need inspected oracles; complete atomic 8.19 decomposition not claimed."]
+    },
+    {
+      "id": "TM-QUERY-ACTUAL-LOOKAHEAD", "source_id": "S1516.1", "clause": "8.20", "pdf_pages": [214,215], "subject": "rti", "applicability": "applicable",
+      "statement": "Query actual current lookahead, not the requested future reduction, with enabled regulation and ordinary connection/member/save/restore validity.",
+      "conditions": "Return interval; failures cover disabled regulation, save/restore, nonmembership, disconnection and internal error.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/time/lookahead.go", "rti/internal/adapters/grpc/time.go"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveFederationTest.java","name":"twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants","oracle":"Live public queryLookahead returns HLAfloat64Interval with exact 0.5 after enable and 1 after immediate increase; actual standard interval type/value asserted."}],
+      "open_items": ["Need public query during delayed reduction proving actual versus requested lookahead, Integer64 and the disabled/save/restore/nonmember/disconnected error matrix. Metrics helpers do not substitute for these queries."]
+    },
+    {
+      "id": "MAP-LANGUAGE-TRANSPARENCY", "source_id": "S1516.1", "clause": "12.1", "pdf_pages": [323], "subject": "rti", "applicability": "applicable",
+      "statement": "Keep a federate's API and implementation language transparent to other participants while mapping neutral designators, services and datatypes into the selected API.",
+      "conditions": "Assessed standard mapping is Java; Go/Python are product interfaces. This does not require every Annex B-D binding. C++ conformance is separate and not inferred from SDK existence or prerequisite skip.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java", "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java", "pysdk/rti1516e/standard.py", "pysdk/rti1516e/_transport.py"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/JavaLanguageTransparency20261004Test.java","name":"simultaneousJavaAndPythonParticipantsExchangeOpaqueInteractionBytesThroughPublicApis","oracle":"Simultaneously joined production Java and Python participants exchange receive-order interactions in both directions through public APIs. The Python helper asserts actual Java-origin callback identity through resolved handles, exact opaque bytes and tag, no timestamp, receive order, reliable transport, producing federate and EVOKED caller boundary before replying. Java asserts the actual Python-origin callback class/parameter handles, reverse byte payload, empty facade tag, order, transport, producer and EVOKED boundary, then confirms Python remains joined. Helper exits zero only after Java acknowledges its assertions and cleanup succeeds. Fresh final run passed; this is Java standard mapping plus Python product-interface interoperability, not exact Python standard-binding conformance."}],
+      "open_items": ["Fresh post-backend-fix evidence is D:/workspace/gorti/applicable-fixes-20261004/java/backend-final-java/, with pinned binary/source hashes, zero-exit Python peer and the Python callback assertion marker. Initial fully qualified Python callback-name expectation was corrected to compare the accepted alias's resolved neutral handle; that superseded harness failure is not a language-transparency defect.", "The run used its recorded external Java/Python snapshot and server SHA256 46147d74bd8aa3f424463d27c63aee9d143cef6f6b39c3918e218cf476593393. Subsequent shared-tree changes are not implicitly covered; source correspondence and the separately executed broader suite belong to backend-evidence-manifest.json. Older final/ evidence and its Python source drift remain preserved, not promoted to current evidence.", "Only bounded RO interaction traffic was exercised. Objects, timestamped traffic/time representations, ownership, DDM, save/restore and other language/API pairs remain open. Historical separate-language passes and the current paired exchange do not establish whole-requirement conformance, every Annex binding or arbitrary federate model correctness."]
+    },
+    {
+      "id": "MAP-TIME-INTERFACE-SEPARATION", "source_id": "S1516.1", "clause": "12.3", "pdf_pages": [325], "subject": "rti", "applicability": "applicable",
+      "statement": "Provide separate time/timestamp and interval interfaces: relative and endpoint comparisons, interval zero/constant-smallest-positive-epsilon checks, interval-based time arithmetic, interval arithmetic and printable values.",
+      "conditions": "Intervals have no final-value concept; custom implementations define their endpoints. Arithmetic is subject to representation-domain limits.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/types/Integer64Time.java", "javasdk/client/src/main/java/org/gorti/rti/types/Float64Time.java", "javasdk/client/src/main/java/org/gorti/rti/types/TimeValues.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/types/TimeValuesTest.java","name":"timeAndIntervalArithmeticIsImmutable","oracle":"Time 12 +/- interval 3 gives 15/9; interval gives 6/0; zero leaves time/interval unchanged."},{"path":"javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeTest.java","name":"valueEqualityHashingAndPrintingPreserveKindAndExactValue","oracle":"Time/interval are distinct and print exact 9007199254740993 with same-kind equality/hash preservation."}],
+      "open_items": ["Complete selected Java interface contract and custom endpoint acceptance remain unproved; these tests exercise standard families only."]
+    },
+    {
+      "id": "MAP-TIME-ALGEBRA", "source_id": "S1516.1", "clause": "12.3", "pdf_pages": [325,326], "subject": "rti", "applicability": "applicable",
+      "statement": "Nonzero interval addition/subtraction strictly increases/decreases time; zero is identity for time/interval; equal values differ by zero, distinct values differ by at least epsilon, nonzero intervals are at least epsilon, and comparisons reverse consistently.",
+      "conditions": "All time implementations; page 326 formulas visually reviewed, deleted Ada text excluded. Domain limits must not silently wrap or round to the original.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/types/Integer64Time.java", "javasdk/client/src/main/java/org/gorti/rti/types/TimeValues.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeTest.java","name":"seededAlgebraMatchesIndependentBigIntegerOracle","oracle":"512 seeded operands compare sums/differences/distances/comparison signs to BigInteger; out-of-domain arithmetic requires declared exceptions."},{"path":"javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeTest.java","name":"zeroIsAnIdentityAndEqualValuesHaveZeroDifference","oracle":"At 0,1,2^53+1,MaxInt64 zero preserves time/interval and equal differences are zero."},{"path":"javasdk/client/src/test/java/org/gorti/rti/types/TimeValuesTest.java","name":"distanceIsNonnegativeAndComparisonIsOrdered","oracle":"Symmetric nonnegative distances, equal-value zero, finite-final distance and reciprocal ordering signs."}],
+      "open_items": ["No exhaustive Float64 algebra proof or custom-time oracle; sampled positive-domain cases do not prove every implementation or operand."]
+    },
+    {
+      "id": "MAP-TIME-OFFSET-CODEC", "source_id": "S1516.1", "clause": "12.3", "pdf_pages": [325], "subject": "rti", "applicability": "applicable",
+      "statement": "Expose time/interval encoding to compact opaque network bytes at a supplied offset and factory decoding from those bytes at a supplied offset.",
+      "conditions": "Public Java codec is distinct from internal protobuf transport; custom encoding acceptance cannot be inferred from standard byte tests.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/types/Integer64TimeFactory.java", "javasdk/client/src/main/java/org/gorti/rti/types/TimeValues.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeTest.java","name":"encodingMatchesIndependentBigEndianGoldenVectors","oracle":"Both time/interval encode eight bytes at offset 2 with 0x55 guards, matching vectors for 0,1,0x0102030405060708,2^53+1,MaxInt64; factories decode exact values."},{"path":"javasdk/client/src/test/java/org/gorti/rti/types/TimeValuesTest.java","name":"encodingIsExactlyEightByteBigEndianWithOffset","oracle":"Float64 3.25, epsilon and finite-final match exact big-endian vectors; offset guards persist and time/interval decode."}],
+      "open_items": ["Need custom opaque encoding transport and factory-mediated callbacks; protobuf numeric fields do not prove generic codec support."]
+    },
+    {
+      "id": "MAP-TIME-FACTORY-ACCESS", "source_id": "S1516.1", "clause": "12.3", "pdf_pages": [325], "subject": "rti", "applicability": "applicable",
+      "statement": "Provide factory initial/final time and zero/epsilon interval construction, selected factory access through getTimeFactory, and both standardized implementations in Java.",
+      "conditions": "Values follow selected implementation; Integer64 and Float64 cannot be excluded from assessed RTI profile.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/types/Integer64TimeFactory.java", "javasdk/client/src/main/java/org/gorti/rti/types/Float64TimeFactory.java", "javasdk/client/src/main/java/org/gorti/rti/TimeWire.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java","name":"enumerationContainsBothStandardFactories","oracle":"Enumerated names include both exact standard names; discovery only, not runtime semantics."},{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveFederationTimeSelectionTest.java","name":"sdkCreateListAndJoinUseTheSelectedMetadata","oracle":"Selected creation/join produces corresponding standard factory and typed initial query value."}],
+      "open_items": ["Custom discovery/selection/use remains separate; enumeration does not prove timestamped service composition or all callbacks."]
+    },
+    {
+      "id": "MAP-CUSTOM-FACTORY-ENCODING", "source_id": "S1516.1", "clause": "12.3", "pdf_pages": [325,326], "subject": "rti", "applicability": "unresolved",
+      "statement": "Assess use of federate-provided time/interval/factory implementations with their endpoints, arithmetic and opaque encodings without assuming standard numeric families.",
+      "conditions": "Generic interfaces support customization; current Java selection recognizes only Float64/Integer64. Unknown-name rejection does not settle admission of a supplied valid custom factory.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/TimeWire.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveFederationTimeSelectionTest.java","name":"serverRejectsUnsupportedSelectorsWithTypedMetadataAndNoCreatedFederation","oracle":"UnsupportedTime/VendorExactTime yield CouldNotCreateLogicalTimeFactory and no created federation; negative unknown-selector control only, no installed custom provider."}],
+      "open_items": ["Highest-risk unresolved assumption: TimeWire factory/check/read/write recognize two numeric families. Need source/API admission analysis and valid custom-provider/encoding oracle before judging conformance; no defect or exclusion inferred here."]
+    },
+    {
+      "id": "MAP-INTEGER64-EXACT-TYPES", "source_id": "S1516.1", "clause": "12.4.1", "pdf_pages": [338,339], "subject": "rti", "applicability": "applicable",
+      "statement": "Implement signed-64 big-endian Integer64 time/interval, initial/zero 0, final 2^63-1 and epsilon 1; retain exact arithmetic and family-specific argument/return types.",
+      "conditions": "Table 18 and 12.4.1 visually reviewed; named factory, time and interval interfaces all matter, not only factory name. Live composition uses connected joined members, no save/restore or pending enable/advance, a regulating sender with actual lookahead 1 and an unconstrained nonregulating peer. Supporting service rules are 8.1.4, 8.9, 8.16-8.17 and 8.20-8.21; no beyond-final time value is submitted.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/types/Integer64Time.java", "javasdk/client/src/main/java/org/gorti/rti/types/Integer64TimeFactory.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java","name":"endpointsAndEpsilonUseExactStandardValues","oracle":"Initial/zero 0, final Long.MAX_VALUE, epsilon 1 and all endpoint/zero/epsilon predicates."},{"path":"javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeTest.java","name":"adjacentLargeIntegersStayDistinct","oracle":"Around 2^53 and MaxInt64-1, time/interval +/- epsilon gives exact neighbors, correct ordering/inequality and distance 1."},{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveTimeCompletionBoundaryTest.java","name":"integer64ExactSendQueryAndGrantBoundaries","oracle":"Two live standard-Java cases at 9007199254740993 and Long.MAX_VALUE-1 assert selected Integer64 factories, typed initial/enabled time zero and actual interval 1; TARA callback and query retain exact current, peer GALT is valid exact current+1, send at current throws InvalidLogicalTime, send at current+1 returns a valid handle and equality retraction throws MessageCanNoLongerBeRetracted. Then TARA grants exact Long.MAX_VALUE with typed isFinal callback/query and exactly two grants. Final+epsilon IllegalTimeArithmetic is a separate local-value assertion, not a beyond-final RPC."}],
+      "open_items": ["Separate LogicalTimeIntervalFactory wording must be reconciled with Java combined factory API; all narrowed argument/return declarations still need reconciliation, so unit not marked complete.", "Fresh focused execution: both parameter cases passed against pinned final server in D:/workspace/gorti/completion-check-time-boundary-20261002/work/javasdk/client/target/surefire-reports/TEST-org.gorti.rti.LiveTimeCompletionBoundaryTest.xml. Source snapshot is recorded outside Git in source-snapshot.json; passing cases do not verify the whole requirement.", "Remaining runtime facets include constrained-peer endpoint advances, other request modes, message kinds and received-message metadata; no custom factory or beyond-final service semantics are inferred."]
+    },
+    {
+      "id": "MAP-FLOAT64-FINAL-EPSILON", "source_id": "S1516.1", "clause": "12.4.2", "pdf_pages": [339,340], "subject": "rti", "applicability": "applicable",
+      "statement": "Implement big-endian binary64 time/interval, initial/zero 0.0, largest finite positive final and constant minimum-positive epsilon; epsilon arithmetic must select a distinguishable next result and need not reverse exactly.",
+      "conditions": "Final Double.MAX_VALUE and epsilon Double.MIN_VALUE, not infinity or machine epsilon at 1. Runtime unbounded sentinels are not standard time values. Live composition uses connected joined members without save/restore or pending enable/advance, a regulating sender with actual epsilon lookahead and an unconstrained nonregulating peer. Supporting service rules are 8.1.4, 8.9, 8.16-8.17 and 8.20-8.21; no infinity or beyond-final time is submitted.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/types/TimeValues.java", "javasdk/client/src/main/java/org/gorti/rti/types/Float64TimeFactory.java", "javasdk/client/src/main/java/org/gorti/rti/types/Float64Arithmetic.java", "javasdk/client/src/main/java/org/gorti/rti/TimeWire.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/types/TimeValuesTest.java","name":"factoryUsesStandardFiniteFinalAndSmallestPositiveEpsilon","oracle":"Exact symbolic name, initial/zero 0.0, Double.MAX_VALUE final, Double.MIN_VALUE epsilon and predicates."},{"path":"javasdk/client/src/test/java/org/gorti/rti/types/TimeValuesTest.java","name":"addingOrSubtractingNonzeroIntervalsNeverRoundsBack","oracle":"Subnormal, normal,1,1e100,1e300 epsilon time/interval operations equal Math.nextUp/nextDown; quarter-ULP at 1e100 also changes value."},{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveTimeCompletionBoundaryTest.java","name":"float64PredecessorAndFinalRetainFiniteSendQueryAndGrantBoundaries","oracle":"Live standard-Java selected Float64 case asserts typed initial/enabled zero, actual Double.MIN_VALUE lookahead, TARA grant/query at Math.nextDown(Double.MAX_VALUE), and valid finite-final peer GALT with isFinal. Send at predecessor throws InvalidLogicalTime; send at finite final returns valid handle, with equality retraction rejected as MessageCanNoLongerBeRetracted and sender time unchanged. Subsequent TARA grants exactly finite final, query remains finite final and typed callback has isFinal; exactly two grants occur. Predecessor+epsilon=final and final+epsilon IllegalTimeArithmetic are explicitly local arithmetic assertions."}],
+      "open_items": ["Need all family-specific Java interface contracts and remaining runtime finite-final facets, including constrained recipients, other request modes, message kinds and callback delivery metadata; larger epsilon-induced change is legal and exact reversal is not required.", "Fresh focused execution: one Float64 case passed against pinned final server in D:/workspace/gorti/completion-check-time-boundary-20261002/work/javasdk/client/target/surefire-reports/TEST-org.gorti.rti.LiveTimeCompletionBoundaryTest.xml. This is bounded standard-Java production composition evidence, not whole-requirement verification.", "No beyond-final timestamp RPC, undefined/unbounded GALT at final, custom encoding/factory admission or source-ambiguity resolution is established by this case."]
+    },
+    {
+      "id": "MAP-FLOAT64-ILLEGAL-ARITHMETIC-GUARDS", "source_id": "S1516.1", "clause": "12.3; 12.4.2", "pdf_pages": [325,326,339,340], "subject": "rti", "applicability": "applicable",
+      "statement": "Keep standardized Float64 arithmetic within its representable domain; do not silently retain an endpoint for a nonzero operation or return infinity or an out-of-domain negative result. Trace rejection through the selected Java arithmetic methods' declared IllegalTimeArithmetic exception.",
+      "conditions": "Source links cover time/interval algebra, initial zero, finite final time and distinguishable epsilon arithmetic. The inspected Java implementation uses a finite nonnegative value domain; intervals have no final-time concept, so interval overflow is a representation limit, not an interval final-value requirement. These are local value-arithmetic guards, not live RTI service-boundary evidence.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/types/Float64Arithmetic.java", "javasdk/client/src/main/java/org/gorti/rti/types/Float64Time.java", "javasdk/client/src/main/java/org/gorti/rti/types/Float64Interval.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/types/TimeValuesTest.java","name":"arithmeticRejectsOverflowAndNegativeResults","oracle":"Inspected body asserts IllegalTimeArithmetic for final time plus epsilon, final time plus Double.MAX_VALUE interval, initial time minus epsilon, time 1 minus interval 2, Double.MAX_VALUE interval plus epsilon, and zero interval minus epsilon. These assertions exercise local time/interval arithmetic, including rejection after representable-successor adjustment at finite final; they do not invoke a live server."}],
+      "open_items": ["No live Java timestamped-service, GALT, grant or callback finite-final boundary is proved by this test; keep finite-final versus internal-unbounded runtime assessment open.", "This row does not resolve custom factory/encoding applicability or the supplied Float64 interval-factory wording ambiguity, and does not enlarge reviewed_units or claim semantic verification."]
+    },
+    {
+      "id": "MAP-FLOAT64-FACTORY-AMBIGUITY", "source_id": "S1516.1", "clause": "12.4.2", "pdf_pages": [340], "subject": "rti", "applicability": "unresolved",
+      "statement": "Resolve the Float64 final interval-factory bullet naming Integer64 factory/interval types despite its Float64 context before assigning a literal obligation.",
+      "conditions": "Visually confirmed retained blue text on page 340, not red-exclusion artifact; local-only review did not search errata.",
+      "review_status": "source-reviewed", "implementation": [], "tests": [],
+      "open_items": ["Reconcile applicable correction and Java annex factory contracts; do not silently repair source or count 12.4/12.4.2 as fully decomposed."]
+    }
+  ]
+}

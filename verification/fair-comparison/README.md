@@ -101,7 +101,7 @@ be added directly to the corresponding argument arrays.
 These are adapter defaults, not environment overlays in the JSON, so caller
 environment values override them without editing the ready config.
 
-Run a claim-grade session from the repository root. The persistent wrapper
+Run a comparison session from the repository root. The persistent wrapper
 keeps one Go RTID alive across warmup and measured arms, mirroring the
 persistent-server shape of the externally managed reference RTI endpoint:
 

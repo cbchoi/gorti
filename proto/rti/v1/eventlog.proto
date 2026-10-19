@@ -31,6 +31,10 @@ message Event {
 message FederateJoined {
   uint64 federate_handle = 1;
   string federate_name = 2;
+  repeated FOMModule additional_fom_modules = 3;
+  uint64 fom_revision = 4;
+  string fom_digest = 5;
+  string federate_type = 6;
 }
 
 message FederateResigned {
@@ -48,6 +52,7 @@ message ObjectRegistered {
 message ObjectDeleted {
   uint64 object_handle = 1;
   optional double logical_time = 2;
+  LogicalTimeValue logical_time_value = 3;
 }
 
 message AttributeUpdated {
@@ -55,6 +60,7 @@ message AttributeUpdated {
   uint64 producer_federate_handle = 2;
   map<uint64, bytes> attributes = 3;
   optional double logical_time = 4;
+  LogicalTimeValue logical_time_value = 5;
 }
 
 message InteractionSent {
@@ -62,16 +68,19 @@ message InteractionSent {
   uint64 producer_federate_handle = 2;
   map<uint64, bytes> parameters = 3;
   optional double logical_time = 4;
+  LogicalTimeValue logical_time_value = 5;
 }
 
 message TimeAdvanceRequested {
   uint64 federate_handle = 1;
   double logical_time = 2;
+  LogicalTimeValue logical_time_value = 3;
 }
 
 message TimeAdvanceGranted {
   uint64 federate_handle = 1;
   double logical_time = 2;
+  LogicalTimeValue logical_time_value = 3;
 }
 
 message EventFederationHalted {

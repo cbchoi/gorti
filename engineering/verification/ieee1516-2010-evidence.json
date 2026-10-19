@@ -1,0 +1,2621 @@
+{
+  "schema_version": 1,
+  "claim": "supported-profile",
+  "profile": {
+    "id": "local-ieee2010-bounded-regression",
+    "scope": "Bounded preferred order and time-advance eligibility, RO/TSO delivery, ownership, object knowledge and deferred deletion, declaration/DDM routing, actual MOM observations, authenticated session lifecycle, checkpoint state graphs, live FOM views, ordered Go LocalLRC hydration and service bindings; not whole-service conformance",
+    "bindings": [
+      "Go implementation and product binding only"
+    ],
+    "platforms": [
+      "Current local Go host only; recorded in gate output"
+    ],
+    "source_id": "local-working-tree-unattested",
+    "required_requirements": [
+      "IEEE2010-FQR-subset",
+      "IEEE2010-safe-activation-subset",
+      "IEEE2010-retraction-subset",
+      "IEEE2010-timed-save-grant-subset",
+      "ENG-time-retraction-persistence",
+      "IEEE2010-preferred-order-subset",
+      "IEEE2010-unengaged-advance-subset",
+      "IEEE2010-idle-same-time-TSO-subset",
+      "IEEE2010-RO-eligibility-subset",
+      "ENG-RO-persistence-recovery",
+      "IEEE2010-available-GALT-subset",
+      "IEEE2010-strict-range-admission-subset",
+      "IEEE2010-zero-lookahead-history-subset",
+      "IEEE2010-ddm-empty-overlap-subset",
+      "IEEE2010-confirmation-preconditions-subset",
+      "ENG-atomic-outgoing-admission",
+      "IEEE2010-lookahead-modification-subset",
+      "IEEE2010-complete-class-admission-subset",
+      "IEEE2010-ddm-subset-interaction-subset",
+      "IEEE2010-divest-preconditions-subset",
+      "N02-acquisition-preconditions-subset",
+      "N02-ownership-query-preconditions-subset",
+      "N04-ownership-tags-results-subset",
+      "C06-switch-decoding-subset",
+      "C06-production-inherited-target",
+      "N12-qualified-class-identity-subset",
+      "C10-advance-target-validation-subset",
+      "N12-fdd-metadata-subset",
+      "F01-F03-checkpoint-state-subset",
+      "F11-F12-ddm-registration-subset",
+      "ENG-descriptor-regression",
+      "ENG-architecture-regression",
+      "ENG-object-knowledge-delivery",
+      "ENG-declaration-options",
+      "ENG-ddm-call-routing",
+      "ENG-mom-detailed-traffic",
+      "ENG-target-ceiling-checkpoint",
+      "ENG-fom-metadata-extension-preparation",
+      "ENG-live-fom-transaction",
+      "ENG-update-rate-services",
+      "ENG-object-callback-metadata",
+      "ENG-restore-identity",
+      "ENG-retraction-identity-history",
+      "ENG-local-validation-hydration",
+      "ENG-session-lifecycle",
+      "ENG-remaining-go-service-bindings",
+      "ENG-crossgeneration-state-graph",
+      "ENG-actual-mom-measurements",
+      "ENG-ownership-release-denial",
+      "ENG-atomic-name-release",
+      "ENG-deferred-deletion-lifecycle",
+      "ENG-authoritative-mom-source-subset",
+      "IEEE2010-FDD-description-merge-subset",
+      "IEEE2010-reserved-MIM-designator-subset",
+      "IEEE2010-outgoing-TSO-requested-time-subset",
+      "IEEE2010-object-delete-knowledge-subset",
+      "IEEE2010-repeated-acquisition-subset",
+      "IEEE2010-empty-regional-subscription-subset",
+      "IEEE2010-incoming-time-subset",
+      "IEEE2010-received-retraction-metadata-subset",
+      "IEEE2010-positive-update-rate-subset",
+      "IEEE2010-additive-regional-subscription-subset",
+      "ENG-exact-integer-layer-subset",
+      "ENG-terminal-ownership-invocation-subset",
+      "ENG-restored-callback-scope-subset",
+      "IEEE2010-unpublication-ownership-subset",
+      "ENG-mandatory-callback-entry-outcome",
+      "ENG-unsubscription-wire-presence",
+      "ENG-synchronization-invocation-lifecycle",
+      "ENG-ddm-template-realization",
+      "ENG-timed-save-participant-boundaries",
+      "ENG-label-only-restore-resolution",
+      "ENG-conveyed-region-invocation-subset",
+      "ENG-delayed-subscription-oracles",
+      "ENG-data-queue-entry-subset",
+      "ENG-mom-attribute-point-routing-subset",
+      "ENG-conveyed-region-checkpoint-subset",
+      "ENG-mom-incoming-entry-counts"
+    ],
+    "limitations": [
+      "LOCAL/MANUAL only; no automatic CI policy change",
+      "Run: python -B scripts/ieee2010_quality_gate.py --run",
+      "Check: python -B scripts/ieee2010_quality_gate.py --check (exit 2; no tests executed)",
+      "Full readiness: python -B scripts/ieee2010_quality_gate.py --claim full-2010 --check (expected FAIL)",
+      "JSON stdout contains commands, raw executed transcripts and verdicts; archive outside the source tree as needed",
+      "Existing report results are historical and are not imported as executed evidence",
+      "All listed commands and literal test names are required; any observed skip or fail rejects the gate",
+      "C06 and N12 are local regression identifiers, not a normative clause inventory",
+      "Engineering descriptor/architecture guards are not normative IEEE requirements",
+      "Record checks cover parts of G0/G1 in ieee1516-2010-quality-gates.md; no L1-L4 claim is awarded automatically",
+      "Three supplied 2010 redlines are registered in ieee1516-2010-normative-review-20260921.md; complete obligation coverage, applicable corrections and Q01-Q10 review remain required",
+      "This gate executes no C++/Python campaign and establishes no independent RTI verification, release identity or certification"
+    ]
+  },
+  "normative": {
+    "coverage_complete": false,
+    "standards": [
+      "IEEE 1516-2010",
+      "IEEE 1516.1-2010",
+      "IEEE 1516.2-2010"
+    ],
+    "requirement_ids": [],
+    "review_evidence": null
+  },
+  "requirements": [
+    {
+      "id": "ENG-mom-incoming-entry-counts",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "11.5; engineering authenticated invocation accounting",
+      "applicability": "applicable",
+      "rationale": "Reliable runtime and class incoming counts are updated atomically at authenticated callback entry, not generation-time fanout. Required lifecycle failure retries do not count, duplicate entry does not count twice and completion uses an explicit entry-accounting flag. Unsupported measurement or overflow marks coverage unavailable without blocking a valid callback. Complete transportation partitions and all MOM services remain separate work.",
+      "status": "resolved",
+      "tests": ["mom-incoming-entry-domain", "mom-incoming-entry-production"]
+    },
+    {
+      "id": "ENG-conveyed-region-checkpoint-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.16-4.29; 9; engineering detached-region persistence",
+      "applicability": "applicable",
+      "rationale": "Persistence tests preserve exact geometry and receiver lease state, reject malformed whole batches before mutation and validate both time-family restore graphs and receiver rebinding. Legacy field compatibility remains tested. Already-ready raw carriers and private SDK state require a separate fresh-ticket restore transition.",
+      "status": "resolved",
+      "tests": ["conveyed-region-checkpoint-codec"]
+    },
+    {
+      "id": "ENG-mom-attribute-point-routing-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "11.4.1(h); engineering postcommit subscription notification",
+      "applicability": "applicable",
+      "rationale": "Actual server tests exercise global and subject-point regional attribute subscriptions, late interest, refresh and periodic publication in both time families. The postcommit hook runs after subscription/advisory locks and suppresses failed or empty changes. Copied-point query lifetime and full report/service-group coverage are separate work.",
+      "status": "resolved",
+      "tests": ["mom-attribute-point-production", "ddm-subscription-postcommit"]
+    },
+    {
+      "id": "ENG-conveyed-region-invocation-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "6.7-6.8; 9.1-9.3; 10.28-10.29",
+      "applicability": "applicable",
+      "rationale": "Actual TCP and Go SDK tests cover receiver-authenticated query lifetime, exact copied geometry, deterministic reconnect, cache reclamation and restored time-waiting messages in both time families. Already-ready carrier and recreated private SDK checkpoint recovery remain separate obligations.",
+      "status": "resolved",
+      "tests": ["conveyed-region-production-invocation"]
+    },
+    {
+      "id": "ENG-delayed-subscription-oracles",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "6.7-6.8; FDD delaySubscriptionEvaluation",
+      "applicability": "applicable",
+      "rationale": "Independently authored domain/service tests reproduce late interaction interest and late attribute interest for known objects with enabled delayed subscription evaluation. These are bounded oracles, not an exhaustive actual-endpoint or whole-DDM verdict.",
+      "status": "resolved",
+      "tests": ["delayed-subscription-independent-oracles"]
+    },
+    {
+      "id": "ENG-data-queue-entry-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "11.5; engineering receiver-specific callback entry accounting",
+      "applicability": "applicable",
+      "rationale": "Adapter and actual server tests retain distinct equal-payload data messages through wire delivery until authenticated entry, exclude controls and tentative admissions, and reject foreign entry. Unknown received-order coverage fails explicitly. Complete queue/checkpoint conservation is not claimed.",
+      "status": "resolved",
+      "tests": ["data-queue-entry-adapter", "data-queue-entry-production", "data-queue-stage-conservation"]
+    },
+    {
+      "id": "ENG-timed-save-participant-boundaries",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.16-4.23; engineering typed checkpoint admission",
+      "applicability": "applicable",
+      "rationale": "Actual server tests cover Float64 and Integer64, five advance modes, individual constrained participant initiation, the nonconstrained boundary, held incoming messages and retained callback order. This does not establish all save/restore obligations or client private-state translation.",
+      "status": "resolved",
+      "tests": ["timed-save-production-participants"]
+    },
+    {
+      "id": "ENG-label-only-restore-resolution",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.24-4.29; engineering committed checkpoint resolution",
+      "applicability": "applicable",
+      "rationale": "Committed provenance resolution and actual recreated-execution label-only restoration cover both time families, exact Integer64 time and atomic incompatible-target rejection. Unknown or nonempty private SDK runtime state remains unsupported across executions; repeated labels retain the documented immutable-storage limitation. These tests do not close G17 as a whole.",
+      "status": "resolved",
+      "tests": ["committed-label-storage-resolution", "label-only-production-restore"]
+    },
+    {
+      "id": "ENG-synchronization-invocation-lifecycle",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.8-4.11; engineering durable-callback mechanism",
+      "applicability": "applicable",
+      "rationale": "Bounded contracts cover registration failure callbacks, all-member and explicit-subset behavior, late membership, actual announcement entry before achievement, terminal invocation before label retirement, queue rollback and persisted uninvoked callbacks. Actual TCP tests exercise authenticated Go SDK and raw stream boundaries for both time factories. Normative source ambiguity and exhaustive federation-management coverage remain separate.",
+      "status": "resolved",
+      "tests": ["synchronization-strict-domain", "synchronization-durable-domain", "synchronization-durable-codec", "synchronization-production-invocation", "synchronization-retry-admission"]
+    },
+    {
+      "id": "ENG-ddm-template-realization",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "9.1-9.3; engineering persistence mechanism",
+      "applicability": "applicable",
+      "rationale": "Bounded tests require complete first commits, atomic partial-commit rejection, template rejection at specification boundaries, contextual FOM default and Excluded realization semantics, and RO/TSO routing through real service ports. Immutable conveyed copies and delayed subscription evaluation are not established by these tests.",
+      "status": "resolved",
+      "tests": ["ddm-template-contract", "ddm-contextual-realization"]
+    },
+    {
+      "id": "ENG-exact-integer-layer-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Exact Integer64 domain state, queue ordering, unary codecs, callbacks, checkpoint graphs, MOM and journals at adjacent values above 2^53 and finite MaxInt64. Production composition tests additionally exercise independent Float64/Integer64 federations, Go SDK grants, timestamped reflection, resign and timed-save restart. Optimized Float64-only transport and exhaustive binding conformance remain separate.",
+      "status": "resolved",
+      "tests": ["exact-integer-time-domain", "exact-integer-object-domain", "exact-integer-checkpoint-domain", "exact-integer-persistence", "exact-integer-unary-transport", "exact-integer-journal", "exact-integer-mom", "exact-integer-mom-transport", "integer-production-composition"]
+    },
+    {
+      "id": "ENG-mandatory-callback-entry-outcome",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.8-4.11; engineering callback-entry and outcome mechanism",
+      "applicability": "applicable",
+      "rationale": "Mandatory callbacks reserve invocation evidence before queue admission. Authenticated handler entry precedes reentrant application services; completion applies the required lifecycle transition once and retries failures independently of optional MOM metrics. Reconnection retains callback identity, ordering and restored member identity. These adapter contracts do not establish all standard callback semantics or persisted synchronization conformance.",
+      "status": "resolved",
+      "tests": ["mandatory-callback-entry-and-outcome", "mandatory-callback-queue-and-reconnect"]
+    },
+    {
+      "id": "ENG-unsubscription-wire-presence",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "5.7; engineering wire-presence mechanism",
+      "applicability": "applicable",
+      "rationale": "The wire distinguishes whole-class unsubscription from an explicitly supplied empty set, preserves legacy requests and rejects conflicting presence flags. Binding and declaration-state coverage is assessed separately.",
+      "status": "resolved",
+      "tests": ["unsubscription-presence-wire"]
+    },
+    {
+      "id": "ENG-terminal-ownership-invocation-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "7.7, 7.10, 7.15; engineering invocation-receipt mechanism",
+      "applicability": "applicable",
+      "rationale": "Negotiated clients retain terminal ownership obligations through actual authenticated callback invocation, not queue admission or stream send. Bounded deterministic identities, delivery attempts, retry and duplicate reports are verified independently from optional MOM telemetry. Legacy clients retain weaker compatibility behavior; publication guard wiring and SDK profiles need separate assessment.",
+      "status": "resolved",
+      "tests": ["ownership-terminal-lifetime", "ownership-terminal-wire", "ownership-terminal-production"]
+    },
+    {
+      "id": "ENG-restored-callback-scope-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.16-4.27; engineering restore identity mechanism",
+      "applicability": "applicable",
+      "rationale": "Callback scope rebinding validates the entire imported ledger atomically, reserves epochs above both current and saved values, rejects exhausted epochs without effects, and blocks stale invocation receipts after restore. This is not exhaustive save/restore conformance.",
+      "status": "resolved",
+      "tests": ["restore-callback-epoch-floor", "restore-ownership-scopes", "ownership-terminal-production"]
+    },
+    {
+      "id": "IEEE2010-unpublication-ownership-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "5.3, especially 5.3.3f and 5.3.4e; supplied redline PDF 94-95",
+      "applicability": "applicable",
+      "rationale": "Unpublication distinguishes omission from a supplied empty set, maps remembered-class attributes to registered coordinates, rejects pending acquisitions on selected published attributes until terminal invocation, relinquishes selected owned instance attributes and validates complete callback capacity before declaration/ownership effects. Bounded local regressions, not exhaustive declaration-management conformance.",
+      "status": "resolved",
+      "tests": ["unpublication-object-ownership", "unpublication-presence-wire", "unpublication-independent-regressions", "unpublication-production"]
+    },
+    {
+      "id": "IEEE2010-FQR-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.12-8.13; supplied redline PDF 206-208",
+      "applicability": "applicable",
+      "rationale": "Flush all queued user TSO, preserve order metadata, grant the minimum of request, applicable GALT and actually delivered TSO, including unchanged-time completion and partial-delivery recovery. Exact standardized time representations remain separate.",
+      "status": "resolved",
+      "tests": ["fqr-domain"]
+    },
+    {
+      "id": "IEEE2010-safe-activation-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.2-8.6, 8.8-8.12 preconditions; supplied redline PDF 192-208",
+      "applicability": "applicable",
+      "rationale": "Pending activation and real completion callbacks, smallest safe Float64 regulation time, implicit TARA delivery, independent receiver guarantees and atomic failure recovery. Constraint equality uses current <= GALT; the wording ambiguity in 8.6 remains documented for final normative review.",
+      "status": "resolved",
+      "tests": ["safe-activation-domain", "time-activation-wire", "time-activation-go-sdk", "time-activation-wire-compatibility"]
+    },
+    {
+      "id": "IEEE2010-retraction-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "6.15.4, 8.21-8.22; supplied redline PDF 135, 215-217",
+      "applicability": "applicable",
+      "rationale": "Original sender and valid TSO designator, current regulation, strict current/requested-time plus actual current lookahead boundary, delivered recipient notification and atomic queued cancellation. Speculative deletion retraction restores original attribute owners; recipient knowledge follows received order and its own time boundary.",
+      "status": "resolved",
+      "tests": ["retraction-domain", "retraction-object", "retraction-go-sdk-knowledge"]
+    },
+    {
+      "id": "IEEE2010-timed-save-grant-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.16-4.17, 8.12; supplied redline PDF 64-66, 206-208",
+      "applicability": "applicable",
+      "rationale": "Actual next-grant eligibility, strict/Available save boundary and FQR progress before save initiation. This does not constitute exhaustive save/restore assessment.",
+      "status": "resolved",
+      "tests": ["timed-save-grant-domain"]
+    },
+    {
+      "id": "ENG-time-retraction-persistence",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Time state v5, retraction ledger v2 and object state v3 retain pending activation, delivered-message and recipient-knowledge state, reject malformed images, detach prepared state and rebind federate identities. Older images cannot recover history they never stored.",
+      "status": "resolved",
+      "tests": ["activation-flush-persistence", "retraction-ledger-persistence", "retraction-ledger-graph", "delivered-frontier-persistence", "deletion-knowledge-persistence"]
+    },
+    {
+      "id": "IEEE2010-preferred-order-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.2; supplied redline PDF 182-184",
+      "applicability": "applicable",
+      "rationale": "FOM preferred order applies in every runtime profile, with explicit overrides taking precedence. Mixed attributes retain separate order groups; deletion uses the privilege attribute. RO retains valid supplied timestamps without TSO-floor validation, while malformed originals are rejected before effects. Retraction callback metadata does not prove the complete Request Retraction protocol.",
+      "status": "resolved",
+      "tests": ["preferred-order-domain", "atomic-outgoing-object"]
+    },
+    {
+      "id": "IEEE2010-unengaged-advance-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.3, 8.1.5-8.1.6; supplied redline PDF 184-188",
+      "applicability": "applicable",
+      "rationale": "Joined federates may request finite advances without regulation or constraint. Unconstrained requests do not wait for peer GALT. Real service-boundary membership rejection, persistence, safe activation and FQR behavior have separate evidence rows. Standardized exact-time representations remain open.",
+      "status": "resolved",
+      "tests": ["unengaged-advance-domain", "advance-membership-production", "advance-state-persistence", "unengaged-go-sdk"]
+    },
+    {
+      "id": "IEEE2010-idle-same-time-TSO-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.7, 8.10-8.11; supplied redline PDF 189, 203-205",
+      "applicability": "applicable",
+      "rationale": "Constrained, granted federates hold TSO at their current logical time, including with asynchronous RO enabled. NMR/NMRA include equal-current queued messages and retain strict/inclusive peer-bound distinctions. Buffered retraction and persistence are covered; delivered-message retraction has a separate evidence row. Corrupt past-TSO recovery remains open.",
+      "status": "resolved",
+      "tests": ["same-time-tso-domain", "advance-state-persistence"]
+    },
+    {
+      "id": "IEEE2010-RO-eligibility-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.2, 8.1.6-8.1.8, 8.14-8.15; supplied redline PDF 184, 186-191, 209-210",
+      "applicability": "applicable",
+      "rationale": "Queue already-selected RO reflect/interaction/removal messages while constrained, granted and asynchronous delivery is disabled. Preserve original timestamps, release on eligibility transitions and before all five advance grants, and reevaluate current subscriptions. Preferred-order and same-current-time TSO corrections have separate requirement rows. Enabled delayed subscription evaluation for recipients unsubscribed at send time remains open.",
+      "status": "resolved",
+      "tests": ["ro-time-eligibility", "ro-object-routing", "ro-resign-lifecycle"]
+    },
+    {
+      "id": "ENG-RO-persistence-recovery",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product persistence/recovery contracts: separate RO queue, version-4 snapshot with v1-v3 compatibility, immutable prepared restore, typed identity rebinding, failed-admission retry and bounded transport-capacity progress. MOM source counts time-service waiting RO only, not complete callback-invocation accounting.",
+      "status": "resolved",
+      "tests": ["ro-persistence", "ro-time-recovery", "ro-mom-source", "ro-application-retry"]
+    },
+    {
+      "id": "IEEE2010-available-GALT-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.5-8.1.6, 8.8-8.13, 8.16 and 8.18; supplied redline PDF 185-188, 199-213",
+      "applicability": "applicable",
+      "rationale": "Pending TAR/TARA horizons and projected lookahead; early NMR/NMRA/FQR bounds; queued-message LITS, retraction, failed admission and requester exclusion. The default grant policy is capped by the available peer bound to prevent handle-order-dependent advancement past a peer's early grant. Finite zero-lookahead bounds use the current float64 representation; exact time representations and full RO/TSO eligibility remain separate.",
+      "status": "resolved",
+      "tests": ["normative-available-galt", "available-galt-review"]
+    },
+    {
+      "id": "IEEE2010-strict-range-admission-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "10.30.3(h-i) and 10.30.5(a); supplied redline PDF 272",
+      "applicability": "applicable",
+      "rationale": "New Set Range Bounds calls require strict lower/upper ordering within the dimension bound. Rejection preserves pending and committed state. Legacy zero-width snapshots remain readable; overlap semantics are a separate rule. Both Python interfaces are exercised by the separately executed Python campaign, not this Go-only manifest.",
+      "status": "resolved",
+      "tests": ["normative-strict-range", "strict-range-production", "strict-range-legacy", "ddm-registration-domain"]
+    },
+    {
+      "id": "IEEE2010-zero-lookahead-history-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.4, 8.1.6 Table 3 and 8.2; supplied redline PDF 184-188, 192",
+      "applicability": "applicable",
+      "rationale": "Finite float64 strict TAR/NMR outgoing boundaries, inclusive Available boundaries, same-time strict history, grant rollback, regulation re-enable and checkpoint persistence. The product infinity sentinel and exact logical-time representations remain separate work.",
+      "status": "resolved",
+      "tests": ["normative-zero-lookahead", "zero-lookahead-checkpoint"]
+    },
+    {
+      "id": "IEEE2010-ddm-empty-overlap-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "9.1.3.2(b), 9.1.4 and 9.9; supplied redline PDF 224-225, 240",
+      "applicability": "applicable",
+      "rationale": "Empty object-region unsubscribe leaves subscriptions unchanged after validation. Range overlap includes equal lower bounds. SetRangeBounds admission is not closed by these predicate tests.",
+      "status": "resolved",
+      "tests": ["normative-ddm-empty-overlap"]
+    },
+    {
+      "id": "IEEE2010-confirmation-preconditions-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "7.6; Confirm Divestiture",
+      "applicability": "applicable",
+      "rationale": "Distinguish confirmation never requested from a prior requested confirmation whose willing acquirer withdrew. Reject without ownership transfer; the withdrawn attributes return to waiting for acquisition as required, while other attributes retain their state.",
+      "status": "resolved",
+      "tests": ["normative-confirmation-preconditions", "confirmation-checkpoint", "confirmation-wire-errors"]
+    },
+    {
+      "id": "ENG-atomic-outgoing-admission",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product concurrency guard, not an additional normative obligation: serialize final sender timestamp validation through delivery admission against grant, advance-request, regulation and lookahead mutations, including empty fanout. Preserve failure atomicity and release leases before reentrant observers.",
+      "status": "resolved",
+      "tests": ["atomic-outgoing-lease", "atomic-outgoing-object"]
+    },
+    {
+      "id": "IEEE2010-lookahead-modification-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.3-8.1.4, 8.1.7 and 8.19-8.20; supplied redline PDF 184, 189, 213-214",
+      "applicability": "applicable",
+      "rationale": "Reject modification while advancing; retain actual lookahead during a requested decrease; project the decrease at the pending horizon; enforce the representable positive-lookahead floor and preserve reduction across checkpoint restore. Does not close zero-lookahead strictness, RO eligibility, pending GALT or atomic outgoing admission.",
+      "status": "resolved",
+      "tests": ["normative-lookahead-followup", "lookahead-checkpoint-followup", "lookahead-mom-observer-followup"]
+    },
+    {
+      "id": "IEEE2010-complete-class-admission-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.1.4-4.1.4.1; supplied redline PDF 47-49",
+      "applicability": "applicable",
+      "rationale": "Existing complete class definitions require identical regular member sets; declaration order and descriptive differences do not invalidate an otherwise compatible merge. New classes and legal scaffolding completion remain accepted.",
+      "status": "resolved",
+      "tests": ["normative-class-admission-followup"]
+    },
+    {
+      "id": "IEEE2010-ddm-subset-interaction-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "9.1.3.2-9.1.4 and 9.10",
+      "applicability": "applicable",
+      "rationale": "Proper-subset region contexts, shared-dimension overlap, additive interaction region options and empty interaction-region operations. Does not close all zero-width range or empty object-unsubscribe semantics.",
+      "status": "resolved",
+      "tests": ["normative-ddm-followup", "normative-ddm-restore-followup"]
+    },
+    {
+      "id": "IEEE2010-divest-preconditions-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "7.2.5(a-c), 7.3.5(b-d), 7.6.5(c-e); supplied redline PDF 161-162, 165-166",
+      "applicability": "applicable",
+      "rationale": "Validate known object, defined attributes and ownership before unconditional, negotiated and confirmed divestiture; do not require publication. Confirmation-specific exception distinctions remain a separate work item.",
+      "status": "resolved",
+      "tests": ["normative-divest-followup", "normative-divest-followup-wire"]
+    },
+    {
+      "id": "IEEE2010-incoming-time-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.2 Table 2, 8.1.5, 8.1.7, 8.7, 8.13-8.14 and 8.18; supplied redline PDF 183, 185, 189, 198-199, 208-209, 212-213",
+      "applicability": "applicable",
+      "rationale": "Asynchronous delivery cannot release future constrained TSO or relabel it RO. Regulating-only reception is RO; constraint disable releases queued messages subject to save/deletion boundaries. LITS includes the currently computed GALT. Full idle RO eligibility, exact-time strictness and pending-horizon GALT are not closed.",
+      "status": "resolved",
+      "tests": ["normative-incoming-time"]
+    },
+    {
+      "id": "IEEE2010-received-retraction-metadata-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.2 Table 2; supplied redline PDF 183",
+      "applicability": "applicable",
+      "rationale": "Timestamp-order sends retain their retraction designator on receive-order callbacks, including immediate attribute and object-removal delivery. Python interaction/live callback evidence is recorded separately, not executed by this Go gate.",
+      "status": "resolved",
+      "tests": ["normative-received-metadata"]
+    },
+    {
+      "id": "IEEE2010-positive-update-rate-subset",
+      "standard": "IEEE 1516.2-2010",
+      "clause": "4.11.2 and 6.2.11(2); supplied redline PDF 60 and 84",
+      "applicability": "applicable",
+      "rationale": "Checked model, merge, parser/create and export boundaries reject nonpositive maximum update rates using exact decimal values before float conversion. Arbitrary decimal runtime range and unchecked raw struct construction remain separate.",
+      "status": "resolved",
+      "tests": ["normative-positive-rate-model", "normative-positive-rate-parser", "normative-positive-rate-export", "normative-positive-rate-repository"]
+    },
+    {
+      "id": "IEEE2010-additive-regional-subscription-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "9.8 narrative and items (c-e); supplied redline PDF 238-239",
+      "applicability": "applicable",
+      "rationale": "Object subscriptions accumulate class/attribute/region triples and retain each region's options. Invalid calls and overlapping restore rows reject atomically; disjoint option groups round-trip. Proper-subset dimensions, interaction subscriptions and immediate late discovery remain separate.",
+      "status": "resolved",
+      "tests": ["normative-additive-regions", "normative-additive-regions-restore"]
+    },
+    {
+      "id": "IEEE2010-object-delete-knowledge-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "6.14.3(e-f) and 6.14.5(b-c); supplied redline PDF 131-132",
+      "applicability": "applicable",
+      "rationale": "Unknown joined caller gets ObjectInstanceNotKnown without mutation; known nonowner gets the privilege error. Internal MOM cleanup retains narrowly scoped internal ownership and member-gate protections. Timed deletion and combined-invalid-input precedence remain separate.",
+      "status": "resolved",
+      "tests": ["normative-object-ownership-ddm"]
+    },
+    {
+      "id": "IEEE2010-repeated-acquisition-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "7.8 narrative and 7.9.3(h)/7.9.5(a); supplied redline PDF 167-170",
+      "applicability": "applicable",
+      "rationale": "Ordinary repeated acquisition preserves pending state/tag and emits no duplicate callbacks while new attributes progress; if-available rejects an already-pending ordinary request atomically. Cancellation/in-transit callback states remain open.",
+      "status": "resolved",
+      "tests": ["normative-object-ownership-ddm"]
+    },
+    {
+      "id": "IEEE2010-empty-regional-subscription-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "9.8 narrative item (e); supplied redline PDF 238-239",
+      "applicability": "applicable",
+      "rationale": "An empty regional object-subscription set is validated without replacing prior subscriptions or their active/passive state. Nonempty additive/per-region settings are tracked by IEEE2010-additive-regional-subscription-subset; proper-subset dimension context remains open.",
+      "status": "resolved",
+      "tests": ["normative-object-ownership-ddm"]
+    },
+    {
+      "id": "IEEE2010-FDD-description-merge-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.1.4 and 4.1.4.1; supplied redline PDF 47-48",
+      "applicability": "applicable",
+      "rationale": "RTI FDD merge must not reject transportation/update-rate declarations solely for descriptive differences; operational reliability and exact-rate conflicts remain rejected. Bounded FIX-01/02 in the 20260921 source review, not all module-combination requirements.",
+      "status": "resolved",
+      "tests": ["normative-fdd-descriptions"]
+    },
+    {
+      "id": "IEEE2010-reserved-MIM-designator-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "4.5 and 4.5.5(d); supplied redline PDF 52-53",
+      "applicability": "applicable",
+      "rationale": "Reject an explicitly supplied HLAstandardMIM designator before mutation while allowing distinct filenames. Bounded FIX-03; default creation completeness, extended MIM support and standard-language exception identity remain separate obligations.",
+      "status": "resolved",
+      "tests": ["normative-mim-domain", "normative-mim-repository", "normative-mim-wire", "normative-mim-sdk"]
+    },
+    {
+      "id": "IEEE2010-outgoing-TSO-requested-time-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": "8.1.7; supplied redline PDF 189",
+      "applicability": "applicable",
+      "rationale": "Regulating sender uses requested time while advancing and granted time after an early grant. Bounded positive-lookahead FIX-04; zero-lookahead strictness, epsilon tolerance, gradual lookahead reduction and state-sampling interleavings remain open.",
+      "status": "resolved",
+      "tests": ["normative-outgoing-time-base"]
+    },
+    {
+      "id": "N02-acquisition-preconditions-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Engineering regression for atomic acquisition preconditions, coherent publication, valid inherited attributes, callback lock release and deletion without ownership resurrection; not complete ownership service semantics or closure of normative Q02",
+      "status": "resolved",
+      "tests": [
+        "ownership-acquisition-contracts"
+      ]
+    },
+    {
+      "id": "N02-ownership-query-preconditions-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Public API object/attribute errors exercised through real gRPC with registry ownership snapshots, inherited and unowned attributes, deleted/unseen objects and no mutation; not all ownership preconditions",
+      "status": "resolved",
+      "tests": [
+        "ownership-query-contracts"
+      ]
+    },
+    {
+      "id": "N04-ownership-tags-results-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Binary tag transport and exact divest-operation result, candidate selection and mutation under one lock; final normative tag-source and complete callback failure semantics remain open",
+      "status": "resolved",
+      "tests": [
+        "ownership-tag-result-contracts",
+        "ownership-wire-contracts"
+      ]
+    },
+    {
+      "id": "C06-switch-decoding-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Engineering regression from C06/N10/T16: switch encoding, explicit inherited target, framed uint64 handles, target membership and validate-before-mutate; broader MOM catalog and reporting semantics remain open",
+      "status": "resolved",
+      "tests": [
+        "mom-switch-contracts",
+        "mom-handle-encoding"
+      ]
+    },
+    {
+      "id": "N12-fdd-metadata-subset",
+      "standard": "IEEE 1516.2-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Engineering regression from matrix N12/T09 checkpoint: optional FDD metadata acceptance, structure and datatype-reference rejection only; not full OMT/schema/modular conformance",
+      "status": "resolved",
+      "tests": [
+        "fdd-metadata-contracts"
+      ]
+    },
+    {
+      "id": "ENG-descriptor-regression",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product-only wire descriptor/RPC regression guard; no IEEE clause is inferred from the product's protocol",
+      "status": "resolved",
+      "tests": [
+        "descriptor-golden"
+      ]
+    },
+    {
+      "id": "ENG-architecture-regression",
+      "standard": "IEEE 1516-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product-only source dependency and test-API guard; architecture policy is not IEEE conformance",
+      "status": "resolved",
+      "tests": [
+        "architecture-guards"
+      ]
+    },
+    {
+      "id": "C06-production-inherited-target",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Standard MIM service/exception reporting adjustments resolve inherited HLAfederate and change only the addressed target through repository, gRPC, object registry and MOM dispatch; direct wire path and malformed input included. Other MOM handlers are not covered",
+      "status": "resolved",
+      "tests": [
+        "standard-mim-target-rpc"
+      ]
+    },
+    {
+      "id": "N12-qualified-class-identity-subset",
+      "standard": "IEEE 1516.2-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Qualified XML identity, distinct standard-MIM branches, inherited attributes/parameters, branch-local validation and MIM merge protection; not full modular-FOM or OMT conformance",
+      "status": "resolved",
+      "tests": [
+        "fom-qualified-identity",
+        "fom-hierarchy-validation",
+        "fom-qualified-fixtures",
+        "go-sdk-qualified-handles"
+      ]
+    },
+    {
+      "id": "C10-advance-target-validation-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "NaN rejection before pending-request mutation for all five current Float64 advance modes, past-time rejection, unchanged snapshot/callback/journal state and valid subsequent progress; preserves current +Inf final-time sentinel without claiming complete final-time semantics",
+      "status": "resolved",
+      "tests": [
+        "time-target-domain",
+        "time-target-rpc"
+      ]
+    },
+    {
+      "id": "F01-F03-checkpoint-state-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product regression for typed state snapshots, deferred commit, incomplete-bundle rejection, unchanged participant identities and callback failure handling. Not a normative Save/Restore service inventory; full scheduled saves, identity rebinding, transport in-flight epochs and Q04 remain open",
+      "status": "resolved",
+      "tests": [
+        "checkpoint-protocol",
+        "checkpoint-state-codecs",
+        "checkpoint-time-state",
+        "checkpoint-object-state",
+        "checkpoint-declaration-state",
+        "checkpoint-mom-state",
+        "checkpoint-admission",
+        "checkpoint-admission-lifetime",
+        "checkpoint-federation-generation",
+        "checkpoint-production"
+      ]
+    },
+    {
+      "id": "F11-F12-ddm-registration-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Engineering regression for one-operation object registration with validated region associations, publication/ownership visibility, numeric range rejection, FOM dimension context, recipient composition and cleanup. Frozen audit codec rejects unsupported scoped records. Not full DDM semantics, complete discovery scheduling or normative Q09 closure; newer per-call cases are separately listed",
+      "status": "resolved",
+      "tests": [
+        "ddm-registration-domain",
+        "ddm-registration-object",
+        "ddm-registration-wire",
+        "ddm-registration-production",
+        "ddm-fom-composition",
+        "ddm-fom-parser",
+        "ddm-fom-model",
+        "ddm-fom-mim",
+        "ddm-registration-go-sdk",
+        "ddm-journal-boundary",
+        "ddm-audit-observer"
+      ]
+    },
+    {
+      "id": "ENG-object-knowledge-delivery",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Caller-local deletion, owned/pending acquisition rejection, discover-before-reflect admission and query visibility through production RPC. Closest-subscribed-ancestor known class and transport callback epochs are not established.",
+      "status": "resolved",
+      "tests": [
+        "object-local-knowledge",
+        "ownership-local-delete",
+        "object-knowledge-production",
+        "support-go-sdk",
+        "discovery-lock-order"
+      ]
+    },
+    {
+      "id": "ENG-declaration-options",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Active/passive interest, named rate validation and persistence, switch state and inherited interest. No full rate scheduler, attribute relevance producer or lifecycle advisory retry claim.",
+      "status": "resolved",
+      "tests": [
+        "declaration-options",
+        "declaration-options-wire",
+        "declaration-options-go-sdk",
+        "service-option-snapshots",
+        "scope-switch-production"
+      ]
+    },
+    {
+      "id": "ENG-ddm-call-routing",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Per-call region send/update requests, current attribute owners, creator/context checks and partial unsubscribe. No complete DDM callback metadata, routing-space or regional relevance proof.",
+      "status": "resolved",
+      "tests": [
+        "ddm-call-validation",
+        "ddm-call-production",
+        "ddm-malformed-wire"
+      ]
+    },
+    {
+      "id": "ENG-mom-detailed-traffic",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Actual reliable per-class acceptance counters and MIM-shaped binary reports, explicit targets, lifecycle and durable restoration; not physical delivery, mixed transport or the complete MOM catalog.",
+      "status": "resolved",
+      "tests": [
+        "mom-detailed-traffic",
+        "mom-request-catalog",
+        "mom-traffic-snapshots",
+        "mom-traffic-production"
+      ]
+    },
+    {
+      "id": "ENG-target-ceiling-checkpoint",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Bounded same-roster target-ceiling checkpoint with positive lookahead, actual time horizon, no crossing advance and no buffered TSO at or below target. Not full scheduled-save, identity rebinding or transport-epoch conformance.",
+      "status": "resolved",
+      "tests": [
+        "scheduled-checkpoint-time",
+        "scheduled-checkpoint-protocol",
+        "scheduled-checkpoint-production"
+      ]
+    },
+    {
+      "id": "ENG-fom-metadata-extension-preparation",
+      "standard": "IEEE 1516.2-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Update rates, advisory defaults and class ancestry survive loading. Nonmutating diagnostics expose positional reload/cache impacts; real live transactions are covered separately by ENG-live-fom-transaction.",
+      "status": "resolved",
+      "tests": [
+        "fom-service-metadata",
+        "fom-extension-preparation"
+      ]
+    },
+    {
+      "id": "ENG-live-fom-transaction",
+      "standard": "IEEE 1516.2-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product regression for append-only class/member/dimension handles, nonmutating conflict validation, writer-lease commit, exact source/assignment snapshots and authoritative Go SDK refresh. Modeled additive parsing is not complete modular-FOM or OMT conformance.",
+      "status": "resolved",
+      "tests": [
+        "live-fom-repository",
+        "live-fom-parser",
+        "live-fom-manager",
+        "live-fom-production",
+        "live-fom-go-sdk",
+        "live-fom-ddm-restore",
+        "live-fom-restore-candidate"
+      ]
+    },
+    {
+      "id": "ENG-update-rate-services",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Bounded update-rate demand, ownership/routing and support lookup regressions over real wire paths; no full advisory lifecycle or IEEE clause completeness claim.",
+      "status": "resolved",
+      "tests": [
+        "update-rate-domain",
+        "update-rate-wire",
+        "update-rate-production"
+      ]
+    },
+    {
+      "id": "ENG-object-callback-metadata",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Bounded metadata presence, order snapshot and deletion admission checks. Retractable delete remains explicitly rejected before effects; this row does not claim its implementation.",
+      "status": "resolved",
+      "tests": [
+        "object-metadata-domain",
+        "object-metadata-snapshot",
+        "object-metadata-go-sdk"
+      ]
+    },
+    {
+      "id": "ENG-restore-identity",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Bounded changed-handle restore identity validation, production callback routing, and Go SDK identity/FOM publication fencing. Go callers suspend operations during restore; queued admission stays disabled until the separately tested explicit ordered hydration succeeds. Federate application state restoration and complete cross-language restore safety are not established by these tests.",
+      "status": "resolved",
+      "tests": [
+        "restore-identity-domain",
+        "restore-identity-production",
+        "restore-identity-go-sdk"
+      ]
+    },
+    {
+      "id": "ENG-retraction-identity-history",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product-level protection against reusing an accepted sender-local retraction ID across saved/current history. Exact duplicate rejection must preserve unique nonmonotonic caller IDs. The restore next-ID hint is not allocation or a minimum admissible ID; these tests do not establish complete normative retraction semantics.",
+      "status": "resolved",
+      "tests": [
+        "retraction-admission-wire",
+        "retraction-admission-object",
+        "retraction-admission-production",
+        "retraction-history-domain",
+        "retraction-history-snapshot",
+        "retraction-history-restore",
+        "restore-identity-go-sdk",
+        "descriptor-golden"
+      ]
+    },
+    {
+      "id": "ENG-local-validation-hydration",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Authoritative snapshots authenticated inside exclusive operation admission, same-outbox callback barriers and explicit Go LocalLRC reinitialization. Callers suspend their own services but keep consuming callbacks. Old public tickets remain bound to retired work; no automatic replay or full distributed cache consistency claim.",
+      "status": "resolved",
+      "tests": ["local-validation-lease", "local-validation-backend", "local-validation-wire", "local-validation-go-sdk"]
+    },
+    {
+      "id": "ENG-session-lifecycle",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Product session-token authorization and automatic-resign lifecycle including reconnect, retry and membership-incarnation fencing. Legacy unauthenticated streams do not gain cleanup authority; no general security certification claim.",
+      "status": "resolved",
+      "tests": ["session-token-lifecycle", "session-membership-lifecycle", "session-stream-admission", "session-production", "automatic-resign-fom"]
+    },
+    {
+      "id": "ENG-remaining-go-service-bindings",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Bounded Go API transport, exact atomic results, explicit saved-generation presence, defensive callback receipt copies and missing-measurement preservation. Actual invocation reporting is explicit or through the opt-in dispatcher, never inferred from channel delivery.",
+      "status": "resolved",
+      "tests": ["remaining-go-service-bindings"]
+    },
+    {
+      "id": "ENG-crossgeneration-state-graph",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Saved-source to fresh-target identity remapping and RTI state-graph validation in an actual restarted server. Synchronization failure history must be proven. Application-owned state and complete normative save/restore behavior remain outside this engineering regression.",
+      "status": "resolved",
+      "tests": ["crossgeneration-restore-domain", "crossgeneration-state-graph", "crossgeneration-production"]
+    },
+    {
+      "id": "ENG-actual-mom-measurements",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Server-issued callback receipt observation, durable actual-state measurements with unavailable reasons, normalization validation, regional reporting and telemetry recursion prevention. Legacy accepted-fanout counters are not relabeled as actual invocation counts. Eight permanent measurement fields and conditional metadata or baseline gaps remain explicitly unavailable; full MOM reporting coverage is not established.",
+      "status": "resolved",
+      "tests": ["actual-mom-domain", "actual-mom-wire", "actual-mom-composition", "actual-mom-time", "actual-mom-checkpoint", "actual-mom-durable"]
+    },
+    {
+      "id": "ENG-ownership-release-denial",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Atomic owner, knowledge and pending-request validation and grouped unavailable callbacks with rollback, reservation lock ordering and journal failure coverage. Not a universal claim about normative ownership exceptions.",
+      "status": "resolved",
+      "tests": ["ownership-release-denial-domain", "ownership-release-denial-wire"]
+    },
+    {
+      "id": "ENG-atomic-name-release",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "One-operation all-name release validation with caller isolation and concurrent-winner behavior; SDK uses the atomic RPC rather than sequential single-name requests.",
+      "status": "resolved",
+      "tests": ["name-release-atomic-domain", "name-release-atomic-wire", "name-release-atomic-production", "remaining-go-service-bindings"]
+    },
+    {
+      "id": "ENG-deferred-deletion-lifecycle",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Bounded timestamped object deletion lifecycle, late recipients, retraction admission, delivery failure and snapshot restoration. Typed too-late errors preserve the existing exception metadata; no whole time-management conformance claim.",
+      "status": "resolved",
+      "tests": ["deferred-deletion-domain", "deferred-deletion-lock-order", "deferred-deletion-snapshot", "deferred-deletion-production", "deferred-deletion-wire"]
+    },
+    {
+      "id": "ENG-authoritative-mom-source-subset",
+      "standard": "IEEE 1516.1-2010",
+      "clause": null,
+      "applicability": "applicable",
+      "rationale": "Explicit host metadata, strict retained-model FDD export, durable successful-save decisions and server-state elapsed intervals with publication-bound acknowledgement. Missing source fields remain unavailable. Does not close full FDD fidelity, RO/TSO queue accounting, SDK campaigns or normative semantics.",
+      "status": "resolved",
+      "tests": ["mom-completion-production", "mom-host-lifecycle", "mom-host-go-sdk", "checked-creation", "creation-peer-deadline", "fdd-committed-provider", "fdd-retained-export", "save-history-domain", "save-history-persistence", "elapsed-domain", "elapsed-mom-publication", "elapsed-persistence"]
+    },
+    {
+      "id": "Q01-normative-claim-scope",
+      "standard": "IEEE 1516-2010",
+      "clause": null,
+      "applicability": "unresolved",
+      "rationale": "Full-text claim, binding, conditional-obligation and corrections review is not complete; this row is only a blocker example, not the missing normative inventory",
+      "status": "unresolved",
+      "tests": []
+    }
+  ],
+  "tests": [
+    {
+      "id": "fqr-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010FQRGrantMinimum", "TestIEEE2010FQRFlushesAllMessagesBeforeGrant", "TestIEEE2010FQRDoesNotWaitForStationaryPeer", "TestIEEE2010FQRRetryKeepsDeliveredMinimum", "TestIEEE2010FQRUnconstrainedPendingDoesNotLowerPeerGALT", "TestIEEE2010NextMessageFilteredEarliestReevaluatesTarget", "TestIEEE2010NextMessageFilteredRetryKeepsDeliveredPrefix"]
+    },
+    {
+      "id": "safe-activation-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010EnableRegulationMinimumSafeTime", "TestIEEE2010EnableConstrainedWaitsForGALT", "TestIEEE2010EnableRejectsAdvancingState", "TestIEEE2010EnableCallbackFailureDoesNotCommit", "TestIEEE2010EnableRegulationRoundedEqualLookahead", "TestIEEE2010EnableRegulationImplicitTARA", "TestIEEE2010EnableKeepsReceiveGuaranteeSeparate", "TestIEEE2010EnableConstrainedDoesNotInheritUnconstrainedGrant", "TestIEEE2010EnableRegulationProtectsPartialTARDelivery", "TestIEEE2010EnableRegulationRetainsDeliveredPrefixAfterPeerResign", "TestIEEE2010EnableConstrainedResumesAfterPeerDisablesConstraint"]
+    },
+    {
+      "id": "retraction-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010RetractConditions", "TestIEEE2010RetractActualLookaheadReduction", "TestIEEE2010RetractionDeliveredCallbackAtomicRetry"]
+    },
+    {
+      "id": "retraction-object",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestIEEE2010RetractSpeculativeDeletionRestoresOriginalOwnership", "TestIEEE2010RetractionDoesNotRestoreResignedOwner", "TestIEEE2010RemovalKnowledgeBoundary"]
+    },
+    {
+      "id": "timed-save-grant-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010ScheduledSaveStrictEqualityPrecedesGrant", "TestIEEE2010ScheduledSaveAvailableEqualityNeedsLaterAdvance", "TestIEEE2010ScheduledSaveFQRFlushesBeyondFutureSave", "TestIEEE2010ScheduledSaveRegulatingOnlyMemberNeedNotAdvance", "TestIEEE2010ScheduledSaveNextMessageUsesActualGrant", "TestIEEE2010ScheduledSaveIgnoresUnconstrainedCurrentTime", "TestIEEE2010ScheduledSaveRetainsDeliveredNextMessageTarget", "TestIEEE2010ScheduledSaveGrantHoldBoundaries", "TestScheduledSavePendingRegulationImplicitAdvance", "TestScheduledSaveDoesNotHoldUnconstrainedEnable"]
+    },
+    {
+      "id": "activation-flush-persistence",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestPersistentFQRMinimumDetachedAndRestored", "TestPersistentFQRMinimumRejectsMalformed", "TestPersistentPendingEnablesRoundTrip", "TestPersistentPendingEnablesRejectsMalformed", "TestPersistentReceiverHistoryDetached"]
+    },
+    {
+      "id": "retraction-ledger-persistence",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestRetractionV2RoundTripAndLegacy", "TestRetractionV2RejectsMalformedWithoutMutation", "TestRetractionV2RebindsSenderAndRecipientsNotMessageID", "TestRetractionV2RestoreReplacesMessagesButRetainsAcceptedIDs"]
+    },
+    {
+      "id": "retraction-ledger-graph",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestRetractionV2GraphReferencesAndRebind", "TestRetractionV2GraphRecipientLiveness", "TestRetractionV2GraphRejectsQueueLedgerConflicts", "TestRetractionV2SessionMergeKeepsCheckpointMessagesOnly"]
+    },
+    {
+      "id": "delivered-frontier-persistence",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestTimeV5ReceivedTSOFrontierRoundTrip", "TestTimeV5ReceivedTSOFrontierRejectsMalformed", "TestTimeV5RestoredFQRPrefixDoesNotRaiseGrant", "TestTimeV5RestoredEnableUsesDeliveredFrontier", "TestTimeV5RestoredNextMessageDeliveredMinimum"]
+    },
+    {
+      "id": "deletion-knowledge-persistence",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestDeletionTombstoneV3RoundTripAndIdentityRebind", "TestDeletionTombstoneV3RejectsMalformedBeforeMutation", "TestDeletionTombstoneV3GraphKnownStateAndRebind", "TestDeletionTombstoneV3GraphDeadlineAndIdentityChecks", "TestDeletionTombstoneV3GraphQueuedRemovalAndNoRetraction", "TestDeletionTombstoneV3RebindSortsRecipientRecords", "TestDeletionOwnerSnapshotGraphRebindsTypedOwners", "TestDeletionOwnerSnapshotGraphRejectsCorruption"]
+    },
+    {
+      "id": "time-activation-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestTimeEnableCallbacksEncodeActualTime", "TestTimeEnablePendingAndRetractionStatus"]
+    },
+    {
+      "id": "time-activation-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": ["TestTimeEnableCallbacksCompleteRequests", "TestTimeEnablePendingIsNotActivation", "TestTimeEnableCallbackTranslationPreservesReceipt", "TestTimeEnablePendingSDKErrorIdentity"]
+    },
+    {
+      "id": "time-activation-wire-compatibility",
+      "package": "./rti/internal/adapters/protobuf/rti/v1",
+      "required_tests": ["TestTimeEnableCallbackWireChangesAreAdditive", "TestDescriptorAndRPCSurfaceGolden"]
+    },
+    {
+      "id": "retraction-go-sdk-knowledge",
+      "package": "./rti/pkg/federate",
+      "required_tests": ["TestRetractionCallbackRestoresDeletedObjectKnowledge", "TestRetractionCallbackDoesNotInventObjectKnowledge", "TestSenderRetractionRestoresOnlySuccessfulTimestampedDeletion", "TestFQRDeletionKnowledgeRetirement", "TestFQRCallbackBeforeRPCResponseKeepsSpeculativeKnowledge", "TestRetractionKnowledgeClearedByRestore", "TestRetractionKnowledgeClearedByResign", "TestDeletionAcknowledgmentDoesNotMutateRestoredIdentity"]
+    },
+    {
+      "id": "preferred-order-domain",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestPreferredOrderProfilesAndOverrides", "TestPreferredOrderMixedPasselsAtomicRetry", "TestPreferredOrderUntimestampedAndUnknownDefaults", "TestPreferredOrderOnlyROSkipsTSOBound", "TestPreferredOrderMixedUnsubscribedTSOStillValidates", "TestPreferredOrderRORejectsMalformedOriginalTime"]
+    },
+    {
+      "id": "unengaged-advance-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010UnconstrainedAdvanceAllModes", "TestIEEE2010UnengagedInvalidAdvanceDoesNotCreateState"]
+    },
+    {
+      "id": "same-time-tso-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010SameTimeTSOWaitsForAdvance", "TestIEEE2010SameTimeNextMessageTarget", "TestIEEE2010SameTimeTSORetractionBeforeAdvance", "TestIEEE2010SameTimeAvailableBoundaryWithPeer"]
+    },
+    {
+      "id": "advance-state-persistence",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestAdvanceStatePersistence_UnengagedRoundTripRetainsLogicalTime", "TestAdvanceStatePersistence_HeldSameTimeTSOSurvivesRestore", "TestAdvanceStatePersistence_SameTimeNMRGrantAfterRestore"]
+    },
+    {
+      "id": "advance-membership-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestAdvanceMembership_ProductionGRPC"]
+    },
+    {
+      "id": "unengaged-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": ["TestNERWithoutTimeEngagementGrants"]
+    },
+    {
+      "id": "ro-time-eligibility",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestROEligibilityMatrix", "TestROReleaseBeforeEveryAdvanceGrant", "TestROBlockedAdvanceStillReleasesMessages", "TestROAsyncDisableDoesNotRecallAndResignClearsQueue", "TestROFilterRetryRetainsOriginalAndCanDiscard"]
+    },
+    {
+      "id": "ro-time-recovery",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestROReleaseFailureRemainsRetryable", "TestROPersistenceIsIndependentOfTSOBounds", "TestROAndTSODisableDrainIsAtomic", "TestROBacklogLargerThanTransportCapacityRecovers", "TestRODeliveryRetryHintsDoNotSurviveGenerationOrImport", "TestROGrantJournalFailureRetainsQueueForOwnedRetry"]
+    },
+    {
+      "id": "ro-object-routing",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestROObjectMessagesWaitAndRelease", "TestROOriginalTimestampSurvivesOrderChange", "TestROMixedRecipientsAbortAtomically", "TestROMixedAttributeOrdersUseOneReservation", "TestROTimestampExemptAndTSORevalidatedAtReservation", "TestROPendingAdvanceAllowsMessageWithoutEarlyGrant", "TestROGateDoesNotHoldDiscovery", "TestROMixedOrdersFanoutFailureLeavesNeitherQueue", "TestROQueuedInteractionRechecksCurrentSubscription", "TestROQueuedReflectionTrimsWithoutMutatingRetrySource", "TestROQueuedFilterInheritsInteractionsButRetainsKnownObjectClass", "TestROQueuedDDMReflectionRetainsPerAttributeRegions", "TestROQueuedDDMInteractionRechecksOverlap"]
+    },
+    {
+      "id": "ro-persistence",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestROTimeSnapshotRoundTripAndRelease", "TestROTimeSnapshotSchemaAndAtomicRejection", "TestROTimeEventCloneOwnsPayload", "TestROTimeSnapshotRejectsLegacyNullExtension", "TestROTimeSnapshotPreparedImageOwnsPayload", "TestROTimeSnapshotMixedQueuesPrecedeGrant", "TestROTimeSnapshotDoesNotRelaxTSOEncoding", "TestROTimeSnapshotLegacyVersionsRoundTrip", "TestROTimeSnapshotVersionDoesNotDowngrade", "TestRORestoreGraphAllowsDeletedObjectAndDepartedSender", "TestRORestoreGraphRejectsInvalidReferences", "TestRORestoreRebindPreservesObjectRegionAndPayload"]
+    },
+    {
+      "id": "ro-mom-source",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestMOMROQueueCountsOnlyTimeWaitingMessages", "TestMOMROQueueTimeSourceTakesPrecedence", "TestMOMROQueueCustomSourceWithoutTimeManager"]
+    },
+    {
+      "id": "ro-application-retry",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestDeliveryRetryAdmissionOrderAndGenerationFence", "TestDeliveryRetryWorkerLazyStartAndJoinedClose", "TestDeliveryRetryCancellationReleasesAdmission", "TestDeliveryRetryCancellationDoesNotAcquireStaleGeneration", "TestDeliveryRetryWorkerRecoversGrantAfterRPCError", "TestDeliveryRetryWorkerReleasesROBacklogWithBoundedOutbox", "TestDeliveryRetryPublicAdvanceRecoversROAndTSO", "TestDeliveryRetryServeLifecycle"]
+    },
+    {
+      "id": "ro-resign-lifecycle",
+      "package": "./rti/internal/application/lifecycle",
+      "required_tests": ["TestROResignQueuesRemovalAndRetainsMetadata", "TestROResignOwnershipControlIsImmediate", "TestROResignDiscardsSupersededTSOWithoutDroppingRO", "TestROResignAdmissionFailureAndReleasePreserveState"]
+    },
+    {
+      "id": "normative-available-galt",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestGALTAvailablePendingTARUsesRequestedHorizon", "TestGALTAvailableNMRAccountsForEarlyGrant", "TestGALTAvailableUsesProjectedActualLookahead", "TestGALTAvailableZeroLookaheadMatchesFloat64SendBoundary", "TestGALTAvailableQueuedMessageCapsLITSNotTARHorizon", "TestGALTAvailableResignRemovesOnlyOtherRegulator", "TestGALTAvailableRetractionRaisesEarlyGrantBound", "TestGALTAvailableFailedGrantPreservesEarlyGrantBound", "TestGALTAvailableFQRCannotAdvertiseOnlyRequestedHorizon", "TestGALTAvailableQueryWaitsForOutgoingAdmission"]
+    },
+    {
+      "id": "available-galt-review",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010GALTReviewThirdRegulatorFutureArrival", "TestIEEE2010GALTReviewRetractionRaisesChainedPendingBound", "TestIEEE2010GALTReviewGrantDoesNotOvertakeEarlyPeer", "TestIEEE2010GALTReviewFailedGrantAdmissionKeepsQueuedFloor"]
+    },
+    {
+      "id": "normative-strict-range",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": ["TestIEEE2010SetRangeBoundsStrictAdmission"]
+    },
+    {
+      "id": "strict-range-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": ["TestProductionSetRangeBoundsMissingBoundsPreservesPending"]
+    },
+    {
+      "id": "strict-range-legacy",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestDDMLegacyEqualBoundsRestoreCompatibility"]
+    },
+    {
+      "id": "confirmation-checkpoint",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestOwnershipConfirmationCheckpoint", "TestOwnershipConfirmationLegacyAndRebind", "TestOwnershipConfirmationCorruptCheckpointAtomic", "TestRestoreGraphRejectsCrossManagerReferences"]
+    },
+    {
+      "id": "confirmation-wire-errors",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestIEEE2010ConfirmationSentinelMapping", "TestIEEE2010ConfirmationExceptionTrailers"]
+    },
+    {
+      "id": "normative-zero-lookahead",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010ZeroLookaheadPendingAndGranted", "TestIEEE2010ZeroLookaheadAllZeroStrictProgress", "TestIEEE2010ZeroLookaheadSameTimeHistoryAndRestore", "TestIEEE2010ZeroLookaheadProjectedActual", "TestIEEE2010ZeroLookaheadEarlyNextMessageGrant", "TestIEEE2010ZeroLookaheadEnableResetsHistory", "TestIEEE2010ZeroLookaheadValidationUnderEvaluatorLease", "TestIEEE2010ZeroLookaheadPendingSameTimeHistory", "TestIEEE2010ZeroLookaheadSnapshotUsesSameBound", "TestIEEE2010ZeroLookaheadFailedGrantRollsBackHistory"]
+    },
+    {
+      "id": "zero-lookahead-checkpoint",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestTimeStateCodecZeroLookaheadHistory", "TestTimeStateCodecZeroLookaheadPendingAndLegacy", "TestTimeStateCodecZeroLookaheadRejectsOrphanHistory", "TestTimeStateCodecZeroLookaheadVersionAndRebinding", "TestRestoreGraphRejectsCrossManagerReferences"]
+    },
+    {
+      "id": "normative-ddm-empty-overlap",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": ["TestIEEE2010W4ObjectEmptyRegionUnsubscribeNoOp", "TestIEEE2010W4ObjectEmptyRegionUnsubscribeValidation", "TestIEEE2010W4RangeOverlapEqualLower", "TestIEEE2010W4RangeOverlapRoutingAndRestore"]
+    },
+    {
+      "id": "normative-confirmation-preconditions",
+      "package": "./rti/internal/hla/ownership",
+      "required_tests": ["TestIEEE2010ConfirmationNotRequestedRollback", "TestIEEE2010ConfirmationAcquirerWithdrawnRollbackAndRecovery", "TestIEEE2010ConfirmationStateRoundTrip", "TestIEEE2010ConfirmationPendingOfferIsNotPriorRequest", "TestIEEE2010ConfirmationAllWithdrawnReturnToWaiting"]
+    },
+    {
+      "id": "atomic-outgoing-lease",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestOutgoingAdmissionSerializesBoundaryMutations", "TestOutgoingAdmissionFailedValidationReleasesLease", "TestTryGrantPending_ConcurrentTARExactlyOnceAndSorted"]
+    },
+    {
+      "id": "atomic-outgoing-object",
+      "package": "./rti/tests/integration/spec/M37",
+      "required_tests": ["TestOutgoingAdmissionDistinguishesTSOValidationFromRO"]
+    },
+    {
+      "id": "normative-lookahead-followup",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010LookaheadPendingUsesProjectedActual", "TestIEEE2010ModifyLookaheadRejectsPendingAdvance", "TestIEEE2010LookaheadDecreaseTracksGrantedTime", "TestIEEE2010LookaheadRetargetAndRestore", "TestIEEE2010LookaheadDecreaseIndependentOfGrantPartition", "TestIEEE2010OutgoingTSORejectsRepresentableBelowFloor", "TestIEEE2010LookaheadDecreaseRollsBackFailedGrant"]
+    },
+    {
+      "id": "lookahead-mom-observer-followup",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010TimeObserverRefreshesMOMAfterGrant", "TestIEEE2010TimeObserverReportsCurrentTimeWithoutNewGrant", "TestIEEE2010TimeObserverPreservesSuccessfulGrantsBeforeFailure", "TestIEEE2010TimeObserverCanReenterAfterGrant"]
+    },
+    {
+      "id": "lookahead-checkpoint-followup",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestTimeStateCodecPreservesLookaheadReduction", "TestTimeStateCodecPreservesSubULPLookaheadReduction", "TestTimeStateCodecRejectsInvalidLookaheadReduction"]
+    },
+    {
+      "id": "normative-class-admission-followup",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": ["TestIEEE2010CompleteClassMemberAdmission", "TestIEEE2010ScaffoldingCompletionAndNewClasses", "TestIEEE2010IdenticalMemberSetsIgnoreDeclarationOrder", "TestIEEE2010ClassDescriptionsDoNotRejectMerge", "TestIEEE2010ClassOperationalConflictsStillReject"]
+    },
+    {
+      "id": "normative-ddm-followup",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": ["TestIEEE2010W4ProperSubsetEntryPoints", "TestIEEE2010W4OmittedDimensionsRouting", "TestIEEE2010W4OverlapSharedDimensions", "TestIEEE2010W4InvalidSubsetCallsPreserveState", "TestIEEE2010W4InteractionAdditiveOptions", "TestIEEE2010W4InteractionEmptySets", "TestIEEE2010W4InteractionRestoreAndRollback", "TestIEEE2010W4InteractionOrdinaryIndependence", "TestIEEE2010W4InteractionConcurrentAdditions", "TestIEEE2010W4InteractionSnapshotOrder", "TestIEEE2010W4SubsetSaveStateAndTargetedRemoval"]
+    },
+    {
+      "id": "normative-ddm-restore-followup",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestDDMW4RestoreDisjointInteractionRowsAndSubsets", "TestDDMW4RestoreSubsetContexts", "TestDDMW4RestoreRejectsInvalidGraphWithoutMutation"]
+    },
+    {
+      "id": "normative-divest-followup",
+      "package": "./rti/internal/hla/ownership",
+      "required_tests": ["TestIEEE2010DivestValidationRejectsWithoutEffects", "TestIEEE2010DivestFailureDoesNotCreateFederationState", "TestIEEE2010DivestReleasesObjectBeforeObservers"]
+    },
+    {
+      "id": "normative-divest-followup-wire",
+      "package": "./rti/tests/integration/spec/M37",
+      "required_tests": ["TestIEEE2010DivestFollowupRealWire", "TestIEEE2010DivestDoesNotRequirePublicationRealWire", "TestSpec_M37_EB3_ValidateOutgoingTSO_ExactFloatBoundary"]
+    },
+    {
+      "id": "normative-positive-rate-repository",
+      "package": "./rti/internal/application/composition",
+      "required_tests": ["TestFOMUpdateRatesDecimalEquivalence", "TestFOMUpdateRateNonpositiveRejectedBeforeRepositoryMutation"]
+    },
+    {
+      "id": "normative-incoming-time",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIEEE2010AsyncDoesNotReleaseFutureTSO", "TestIEEE2010RegulationDoesNotConstrainIncomingMessages", "TestIEEE2010DisableConstrainedReleasesQueuedMessagesAsRO", "TestIEEE2010LITSIncludesGALT", "TestTimeGateReceivedOrderAfterRejectedTSODelivery", "TestScheduledSaveBuffersFutureAsyncTSOUntilRelease", "TestIEEE2010DisableConstrainedFailureRetriesWithoutReenable", "TestIEEE2010ResumeScheduledSaveFailureFinishesCommittedDeletion"]
+    },
+    {
+      "id": "normative-received-metadata",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestIEEE2010ImmediateROPreservesTSORetractionMetadata", "TestIEEE2010RegulatingOnlyDeleteMarkerRetiresAtGrant"]
+    },
+    {
+      "id": "normative-positive-rate-model",
+      "package": "./rti/pkg/fom/model",
+      "required_tests": ["TestIEEE2010UpdateRateStrictlyPositive", "TestIEEE2010UpdateRatePositivePrecision", "TestIEEE2010UpdateRateMergeRejectsInvalidAtomically", "TestIEEE2010UpdateRateRangeIsNotPositivity"]
+    },
+    {
+      "id": "normative-positive-rate-parser",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": ["TestIEEE2010UpdateRateParserAndCreateAdmission"]
+    },
+    {
+      "id": "normative-positive-rate-export",
+      "package": "./rti/pkg/fom/exporter",
+      "required_tests": ["TestIEEE2010UpdateRateExportRejectsNonpositiveModel", "TestTransportRateOfficialSchemaOracle"]
+    },
+    {
+      "id": "normative-additive-regions",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": ["TestIEEE2010RegionalAdditiveOptions", "TestIEEE2010RegionalGroupedRestoreAndRollback", "TestIEEE2010RegionalConcurrentAdditions"]
+    },
+    {
+      "id": "normative-additive-regions-restore",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestIEEE2010DDMRestoreDisjointOptionRows", "TestTimeStateCodecRoundTripTSOAndDeterminism", "TestTimeStateCodecRestoredQueuePrecedesGrant"]
+    },
+    {
+      "id": "normative-object-ownership-ddm",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestIEEE2010OwnershipRepeatedAcquisitionRealWire",
+        "TestIEEE2010OwnershipIfAvailablePendingRealWire",
+        "TestIEEE2010ObjectDeleteKnowledgeRealWire",
+        "TestIEEE2010ObjectTransferredDeletePrivilegeRealWire",
+        "TestIEEE2010ObjectLocalDeleteRealWire",
+        "TestIEEE2010OwnershipAcquisitionPreconditionsRealWire",
+        "TestIEEE2010OwnershipNegotiatedConfirmationRealWire",
+        "TestIEEE2010DDMRegionalContextRealWire",
+        "TestIEEE2010DDMRegionalSubscriptionSetRealWire",
+        "TestIEEE2010DDMRegionalEmptySetPreservesActiveRealWire"
+      ]
+    },
+    {
+      "id": "normative-fdd-descriptions",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": ["TestFDDTransportationDescriptionsDoNotRejectMerge", "TestFDDUpdateRateDescriptionsDoNotRejectMerge", "TestFDDTransportRateMIMMergeUsesOnlyOperationalFields"]
+    },
+    {
+      "id": "normative-mim-domain",
+      "package": "./rti/internal/hla/federation",
+      "required_tests": ["TestIEEE2010CreateRejectsReservedMIMBeforeLoadingOrPublication"]
+    },
+    {
+      "id": "normative-mim-repository",
+      "package": "./rti/internal/application/composition",
+      "required_tests": ["TestIEEE2010SelectedMIMReservedDesignator"]
+    },
+    {
+      "id": "normative-mim-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestIEEE2010CreateReservedMIMRejectedBeforeStore", "TestIEEE2010FederationMIMAndImmediateJoinedViewRealWire"]
+    },
+    {
+      "id": "normative-mim-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": ["TestIEEE2010SelectedMIMReservedDesignatorBeforeRPC"]
+    },
+    {
+      "id": "normative-outgoing-time-base",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestOutgoingTSOUsesRequestedTimeWhileAdvancing", "TestOutgoingTSOBoundEasesAfterEarlyNextMessageGrant"]
+    },
+    {
+      "id": "ddm-registration-domain",
+      "package": "./rti/tests/unit/ddm",
+      "required_tests": [
+        "TestPrepareObjectRegistrationCommitCopiesBindings",
+        "TestPrepareObjectRegistrationReleaseHasNoMutations",
+        "TestPrepareObjectRegistrationRejectsInvalidBindingsAtomically",
+        "TestPrepareObjectRegistrationDimensionSets",
+        "TestPrepareObjectRegistrationRequiresDimensionContext",
+        "TestPrepareObjectRegistrationEmptyReleaseDoesNotCreateState",
+        "TestPrepareObjectRegistrationCancellation",
+        "TestPrepareObjectRegistrationHoldsLockUntilRelease",
+        "TestForgetObjectReleasesRegistrationRegions",
+        "TestForgetObjectPreservesOtherUses",
+        "TestForgetObjectMissingFederationIsNoop",
+        "TestSetRangeBoundsRejectsInvalidWithoutMutation",
+        "TestSetRangeBoundsAcceptsNonemptyAndDimensionLimit",
+        "TestSetRangeBoundsUsesDimensionSpecificLimit",
+        "TestSetRangeBoundsZeroFOMUpperBound"
+      ]
+    },
+    {
+      "id": "ddm-registration-object",
+      "package": "./rti/tests/unit/object",
+      "required_tests": [
+        "TestRegionRegistrationInitialVisibilityAndHighAttribute",
+        "TestRegionRegistrationFailurePreservesObjectAndName",
+        "TestRegionRegistrationRejectsUnpublishedAttribute",
+        "TestRegionRegistrationDeletionReleasesAssociations",
+        "TestRegionRegistrationUsesOnePublicationSnapshot",
+        "TestRegionRegistrationGeneratedNameSkipsOccupiedCandidates",
+        "TestRegionReflectionRecipientComposition",
+        "TestRegionReflectionDefaultSubscriptionRemovalClearsScope"
+      ]
+    },
+    {
+      "id": "ddm-registration-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestDDMRegistrationUsesSingleObjectTransaction",
+        "TestDDMRegistrationPropagatesFailure",
+        "TestDDMRegistrationRejectsMalformedPairs",
+        "TestDDMRegistrationWithoutCapabilityFailsClosed",
+        "TestDDMValidationErrorIdentity"
+      ]
+    },
+    {
+      "id": "ddm-registration-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": [
+        "TestProductionRegisterObjectInstanceWithRegionsRouting",
+        "TestProductionRegisterObjectInstanceWithRegionsFailureAtomicity",
+        "TestProductionSetRangeBoundsRejectsInvalidPreservesPending",
+        "TestProductionRegisterObjectInstanceWithRegionsSaveRestoreAssociation"
+      ]
+    },
+    {
+      "id": "ddm-fom-composition",
+      "package": "./rti/internal/application/composition",
+      "required_tests": [
+        "TestFOMAttributeDimensionContext",
+        "TestFOMAttributeHandlesComplete"
+      ]
+    },
+    {
+      "id": "ddm-fom-parser",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": [
+        "TestDimensionReferencesOfficialXML",
+        "TestDimensionReferencesInheritedAttributeAndModularCopies",
+        "TestDimensionReferencesModuleCompatibility",
+        "TestDimensionReferencesInteractionContainerExtension",
+        "TestDimensionReferencesValidateAgainstModuleSet",
+        "TestDimensionReferencesStandardMIM",
+        "TestDimensionUpperBounds",
+        "TestDimensionDeclarationsMerge",
+        "TestDuplicateDimensionsProductionRegionContext"
+      ]
+    },
+    {
+      "id": "ddm-fom-model",
+      "package": "./rti/pkg/fom/model",
+      "required_tests": [
+        "TestDimensionReferencesAreDefensiveCopies"
+      ]
+    },
+    {
+      "id": "ddm-fom-mim",
+      "package": "./rti/pkg/fom/mim",
+      "required_tests": [
+        "TestDimensionReferencesStandardMIMHandle",
+        "TestDimensionReferencesMIMMergeCopies",
+        "TestDimensionReferencesMIMMergeCompatibility",
+        "TestDimensionDeclarationsMIMMerge"
+      ]
+    },
+    {
+      "id": "ddm-registration-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestRegisterObjectInstanceWithRegionsAtomicWire"
+      ]
+    },
+    {
+      "id": "ddm-journal-boundary",
+      "package": "./rti/internal/adapters/eventlog",
+      "required_tests": [
+        "TestDDMJournalWriterRejectsScopedRegistrationWithoutMutation",
+        "TestDDMJournalCodecRejectsScopedRegistration",
+        "TestDDMJournalOrdinaryRegistrationPreservesFrozenBytes",
+        "TestDDMJournalFlagDoesNotChangeOtherObjectRecords",
+        "TestDDMJournalMultiplexRejectsBeforeOpeningWriter",
+        "TestDDMJournalMultiplexRejectsWithoutCreatingFileOrHeader",
+        "TestDDMJournalClosedWritersRemainClosed"
+      ]
+    },
+    {
+      "id": "ddm-audit-observer",
+      "package": "./rti/plugins/auditreplay",
+      "required_tests": [
+        "TestScopedRegistrationAuditFailureDoesNotBlockCore"
+      ]
+    },
+    {
+      "id": "checkpoint-production",
+      "package": "./rti/tests/integration/save_restore",
+      "required_tests": [
+        "TestProductionSaveRestoreCompleteState",
+        "TestProductionSaveRestorePendingTSO",
+        "TestProductionRestoreFailureKeepsLiveState",
+        "TestProductionSaveDisabledReturnsUnimplemented"
+      ]
+    },
+    {
+      "id": "checkpoint-mom-state",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": [
+        "TestMOMCompleteStateRoundTrip",
+        "TestMOMCompleteStateNilClearsOnlyTargetFederation",
+        "TestMOMCompleteStateDeepCopiesAndSorts",
+        "TestMOMCompleteStateRetainsDependenciesAndInstanceBehavior"
+      ]
+    },
+    {
+      "id": "checkpoint-protocol",
+      "package": "./rti/tests/unit/save_restore",
+      "required_tests": [
+        "TestCompleteStateRestoreCommitsOnlyAfterAllParticipants",
+        "TestCompleteStateRestoreFailureAndAbortPreserveLiveState",
+        "TestCompleteStateRestoreRejectsIncompleteAndIncompatibleBundles",
+        "TestCompleteStateRestoreRevalidatesRosterAtCommit",
+        "TestCompleteStateRestoreNotificationFailurePreservesLiveState",
+        "TestCompleteStateRequiresExplicitMembersAndAtomicDelivery",
+        "TestWriteBundleRejectsUnreadableManifest",
+        "TestWriteBundleRejectsShortWrites",
+        "TestRestoreTerminalReservationFailurePreservesStateAndAllowsRetry",
+        "TestRestoreTerminalReservationPrecedesStateAndCallbackCommit",
+        "TestRestoreTerminalReservationReleasedOnValidationFailure",
+        "TestRestoreTerminalReservationReleasedOnCancellation",
+        "TestRestoreTerminalFailureFanoutContinuesAfterDeliveryError",
+        "TestRestoreTerminalParticipantFailureAndAbortDoNotReserveSuccess",
+        "TestRestoreTerminalUnexpectedCommitErrorDoesNotClaimRollback",
+        "TestRestoreTerminalProductionOutboxFullRecipientAndRetry",
+        "TestCheckpointAdmissionDrainsAndRejectsActiveProtocol",
+        "TestCheckpointAdmissionRestoreRemainsClosedUntilLastReport"
+      ]
+    },
+    {
+      "id": "checkpoint-admission-lifetime",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": [
+        "TestCheckpointAdmissionReclaimsIdleNames",
+        "TestCheckpointAdmissionRetainsOneLockForWaiters"
+      ]
+    },
+    {
+      "id": "checkpoint-state-codecs",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestDeclarationSnapshotVersionedRoundTrip",
+        "TestDeclarationSnapshotEmptyRestoreClearsState",
+        "TestDeclarationSnapshotRejectsInvalidDataBeforeMutation",
+        "TestObjectSnapshotJSONRoundTripAndDeterminism",
+        "TestObjectSnapshotRejectsCorruptionBeforeMutation",
+        "TestObjectSnapshotEmptyClearsState",
+        "TestTimeStateCodecRoundTripTSOAndDeterminism",
+        "TestTimeStateCodecRestoredQueuePrecedesGrant",
+        "TestTimeStateCodecRejectsCorruptWithoutMutation",
+        "TestTimeStateCodecRejectsUnsupportedOrNilEvents",
+        "TestTimeStateCodecInfinityCurrentAndRequest",
+        "TestTimeStateCodecDeepCopiesCallbackPayloads",
+        "TestTimeStateCodecEmptyClearsOnlyTarget",
+        "TestMOMCompleteSnapshotRoundTripAndPreparedIsolation",
+        "TestMOMCompleteSnapshotPresentEmptyClears",
+        "TestMOMCompleteSnapshotReadsLegacyProtobuf",
+        "TestMOMCompleteSnapshotRejectsInvalidLegacyWithoutMutation",
+        "TestSnapshotJSONAllAdaptersRejectInvalidFraming",
+        "TestSnapshotJSONReviewObjectLongSAlias",
+        "TestSnapshotJSONReviewMOMDuplicateObjectCache",
+        "TestSnapshotJSONTimeKelvinAliases",
+        "TestSnapshotJSONUnicodeValuesAndDataRoundTripUnchanged",
+        "TestSnapshotJSONDepthBound",
+        "TestSnapshotJSONValidationPrecedesTypedDecode",
+        "TestSnapshotJSONNumericPayloadMapKeysAndUnicodeValues"
+      ]
+    },
+    {
+      "id": "checkpoint-time-state",
+      "package": "./rti/internal/hla/time",
+      "required_tests": [
+        "TestPersistentTimeStateRoundTripAndIsolation",
+        "TestPersistentTimeStateStallBudgetAndHalt",
+        "TestPersistentTimeStateAllModesAndInfinity",
+        "TestPersistentTimeStateValidationIsAtomic",
+        "TestPersistentTimeStateSerializesWithEvaluator",
+        "TestPersistentTimeStateConcurrentCopiesAndIdempotentCommit"
+      ]
+    },
+    {
+      "id": "checkpoint-object-state",
+      "package": "./rti/tests/unit/object",
+      "required_tests": [
+        "TestObjectStateRestoresRuntimeBehavior",
+        "TestObjectStateRejectsInvalidRecordsBeforeMutation",
+        "TestObjectStateCopiesInputAndOutput",
+        "TestObjectStateEmptyClearsOnlyTargetFederation",
+        "TestObjectStateRestoresCounterBeyondLastLiveObject",
+        "TestObjectStateAfterDeleteHasNoDanglingTransport",
+        "TestObjectStateCanonicalOrdering",
+        "TestObjectRegisterJournalFailurePreservesNameState",
+        "TestObjectRegisterJournalFailurePreservesReservationRelease",
+        "TestObjectRegisterForeignReservationDoesNotAppendJournal",
+        "TestObjectRegisterJournalFailureAllowsConcurrentReservationRelease"
+      ]
+    },
+    {
+      "id": "checkpoint-declaration-state",
+      "package": "./rti/tests/unit/declaration",
+      "required_tests": [
+        "TestDeclarationStateExportDeterministicAndDetached",
+        "TestDeclarationStatePreparedRestoreReplacesTablesAndCaches",
+        "TestDeclarationStateEmptyRestoreRemovesPostSaveState",
+        "TestDeclarationStateInvalidRestoreIsAtomic",
+        "TestDeclarationStateRestorePreservesHooksWithoutEmittingCallbacks",
+        "TestDeclarationStateConcurrentExportAndRestore",
+        "TestDeclarationStateRestoreAcceptsUnsortedRecords"
+      ]
+    },
+    {
+      "id": "checkpoint-federation-generation",
+      "package": "./rti/internal/hla/federation",
+      "required_tests": [
+        "TestSnapshotCapturesMemberGenerationAcrossRecreation",
+        "TestSnapshotGenerationMatchesMembersDuringLifecycleChurn"
+      ]
+    },
+    {
+      "id": "checkpoint-admission",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestCheckpointUnaryAdmissionPrecedesMembership",
+        "TestCheckpointUnaryDeniesLifecycleAndOrdinaryCalls",
+        "TestCheckpointEverySavepointRPCUsesControlLease",
+        "TestCheckpointMutationStreamsReleaseBeforeSlowACK",
+        "TestCheckpointMutationStreamsDenyEachOperation",
+        "TestCheckpointCallbackStreamRemainsAvailable",
+        "TestCheckpointMembershipFailureReleasesAdmission",
+        "TestCheckpointLocalLRCDeniesEveryFrameShape",
+        "TestCheckpointAdminDeniesLifecycleAndPromotion",
+        "TestCheckpointLocalLRCFenceOrderingAndFailureCleanup",
+        "TestCheckpointDisabledLocalLRCValueLeaseHasNoAllocations",
+        "TestCheckpointLocalLRCWireBatchReleasesBeforeSlowACK",
+        "TestCheckpointLocalLRCWireFailureReleasesAdmission",
+        "TestCheckpointStreamHandlerErrorReleasesBothLeases",
+        "TestAdminDestroyRejectsRecreationBeforeRosterSelection",
+        "TestAdminDestroyNeverRefreshesHandlesAfterRosterSelection",
+        "TestAdminDestroyMatchingRosterGenerationEvictsAndDestroys"
+      ]
+    },
+    {
+      "id": "ownership-acquisition-contracts",
+      "package": "./rti/tests/integration/ownership",
+      "required_tests": [
+        "TestAcquisitionPreconditionsAreAtomic",
+        "TestAcquisitionValidInheritedAttribute",
+        "TestAcquisitionPublicationSetIsCoherent",
+        "TestDeletedObjectCannotBeRecreatedByAcquisition",
+        "TestAcquisitionReleasesObjectBeforeCallbacks",
+        "TestAcquisitionCommitsBeforeObserverAndDoesNotResurrectDeletedObject"
+      ]
+    },
+    {
+      "id": "ownership-query-contracts",
+      "package": "./rti/tests/integration/ownership",
+      "required_tests": [
+        "TestOwnershipQueryPreconditions",
+        "TestOwnershipQueryUnownedAndTransferredInheritedAttribute",
+        "TestOwnershipQueryDoesNotRequirePublicationOrCurrentSubscription",
+        "TestOwnershipQueryDefinedAttributeNeverOwned",
+        "TestOwnershipQueryPreservesPendingTransfer",
+        "TestOwnershipQueryDoesNotAppendOwnershipJournal",
+        "TestOwnershipQueryPinsObjectThroughOwnerSnapshot"
+      ]
+    },
+    {
+      "id": "ownership-tag-result-contracts",
+      "package": "./rti/internal/hla/ownership",
+      "required_tests": [
+        "TestN04AcquisitionBinaryTag",
+        "TestN04ConfirmBinaryTag",
+        "TestN04DivestCommitsBeforeObserver",
+        "TestN04DivestResultIsOperationNotCurrentState",
+        "TestN04CancelledCandidateNotTransferred",
+        "TestN04SelectionCannotRaceCancellationOrCompetingDivest"
+      ]
+    },
+    {
+      "id": "ownership-wire-contracts",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestN04OwnershipWireAdditions",
+        "TestN04OwnershipCallbackWireBinaryTag",
+        "TestN04OwnershipRPCReturnsExactOperationResult"
+      ]
+    },
+    {
+      "id": "standard-mim-target-rpc",
+      "package": "./rti/tests/integration/mom",
+      "required_tests": [
+        "TestMOMReportingTargetWithStandardMIM",
+        "TestStandardMIMReportingOverObjectRPC"
+      ]
+    },
+    {
+      "id": "fom-qualified-identity",
+      "package": "./rti/internal/application/composition",
+      "required_tests": [
+        "TestStandardMIMQualifiedInteractionIdentity",
+        "TestStandardMIMInheritedParameterLookup",
+        "TestFOMQualifiedObjectInheritance",
+        "TestMIMMergeUsesQualifiedIdentity",
+        "TestRepeatedModuleContainersRemainResolvable"
+      ]
+    },
+    {
+      "id": "fom-hierarchy-validation",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": [
+        "TestSpec_Hierarchy_BranchLocalInheritedDuplicates",
+        "TestSpec_Hierarchy_QualifiedParentResolution",
+        "TestSpec_Hierarchy_RepeatedAncestorLeafMembers",
+        "TestSpec_Hierarchy_DuplicateReportsUseQualifiedIdentity",
+        "TestModuleClassMergeRejectsConflicts",
+        "TestModuleClassMergeRejectsDuplicateSiblings",
+        "TestModuleClassMergeChecksInheritedMembers"
+      ]
+    },
+    {
+      "id": "fom-qualified-fixtures",
+      "package": "./tests/spec/M1",
+      "required_tests": [
+        "TestSpec_M1_QualifiedClassIdentity"
+      ]
+    },
+    {
+      "id": "go-sdk-qualified-handles",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestBuildFOMTablesQualifiedHierarchy",
+        "TestBuildFOMTablesRejectsAmbiguousAndIncorrectPaths",
+        "TestBuildFOMTablesPreservesUniqueLeafAliases",
+        "TestBuildFOMTablesStandardMIMInheritedParameters"
+      ]
+    },
+    {
+      "id": "time-target-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": [
+        "TestAdvanceTargetValidation_RawFloat64",
+        "TestAdvanceTargetValidation_InvalidRequestsAreAtomic",
+        "TestAdvanceTargetValidation_PositiveInfinitySentinel"
+      ]
+    },
+    {
+      "id": "time-target-rpc",
+      "package": "./rti/tests/integration/spec/M21",
+      "required_tests": [
+        "TestAdvanceTargetInvalidWireRequests"
+      ]
+    },
+    {
+      "id": "mom-switch-contracts",
+      "package": "./rti/tests/unit/mom",
+      "required_tests": [
+        "TestStandardSwitchEncoding",
+        "TestFederateSwitchesValidateBeforeMutation",
+        "TestSwitchAdjustmentsUseInheritedTarget",
+        "TestSwitchTargetFramedUint64Boundaries",
+        "TestSwitchAdjustmentsRejectInvalidTargetWithoutMutation",
+        "TestTargetedSwitchesValidateAllValuesBeforeMutation",
+        "TestTargetedSwitchesOmittedValuesLeaveStateUnchanged",
+        "TestTargetedSwitchesConcurrentAdjustmentsAndResign"
+      ]
+    },
+    {
+      "id": "mom-handle-encoding",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": [
+        "TestMOMHandleEncodingPreservesUint64",
+        "TestMOMHandleListEncodingFramesEachUint64"
+      ]
+    },
+    {
+      "id": "fdd-metadata-contracts",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": [
+        "TestFDD2010MetadataSchemaFixture",
+        "TestFDD2010MetadataAccepted",
+        "TestFDD2010MetadataRejectsInvalidStructure",
+        "TestFDD2010MetadataValidatesTimeReferences"
+      ]
+    },
+    {
+      "id": "descriptor-golden",
+      "package": "./rti/internal/adapters/protobuf/rti/v1",
+      "required_tests": [
+        "TestDescriptorAndRPCSurfaceGolden",
+        "TestServiceCompletionWireChangesAreAdditive",
+        "TestLiveServiceWireChangesAreAdditive",
+        "TestLiveServiceWireFieldInvariants",
+        "TestRetractionWatermarkWireChangesAreAdditive",
+        "TestRetractionWatermarkWireFieldPresence",
+        "TestHydrationAndRemainingServicesWireChangesAreAdditive",
+        "TestHydrationAndRemainingServicesWireInvariants",
+        "TestMOMMeasurementWireChangesAreAdditive",
+        "TestMOMMeasurementMapInvariants"
+      ]
+    },
+    {
+      "id": "architecture-guards",
+      "package": "./tests/architecture",
+      "required_tests": [
+        "TestHLACoreHasNoInfrastructureImports",
+        "TestProductionCodeHasNoTestOnlyAPI"
+      ]
+    },
+    {
+      "id": "object-local-knowledge",
+      "package": "./rti/tests/unit/object",
+      "required_tests": [
+        "TestLocalDeleteRemovesOnlyCallerKnowledge",
+        "TestLocalDeleteRejectsUnknownAndOwnedObjects",
+        "TestLocalDeleteRediscoveryForContinuingSubscription",
+        "TestDiscoveryKnowledgePrecedesCallback",
+        "TestLocalDeleteRediscoveryAndReflectAdmission"
+      ]
+    },
+    {
+      "id": "ownership-local-delete",
+      "package": "./rti/tests/unit/ownership",
+      "required_tests": [
+        "TestLocalDeleteOwnershipAndPendingAcquisition"
+      ]
+    },
+    {
+      "id": "object-knowledge-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": [
+        "TestProductionLocalDeleteAndCallerKnowledge"
+      ]
+    },
+    {
+      "id": "declaration-options",
+      "package": "./rti/internal/hla/declaration",
+      "required_tests": [
+        "TestRegistrationRelevanceRequiresMatchingRemoteAttribute",
+        "TestRegistrationRelevanceOnLatePublication",
+        "TestSubscriptionOptionsPassiveStillRoutes",
+        "TestSubscriptionOptionsInvalidRateAtomic",
+        "TestSubscriptionOptionsSnapshotAndAdvisoryEdges",
+        "TestSubscriptionResignLastActiveAdvisory",
+        "TestDeclarationDuplicateSwitchAtomic",
+        "TestDeclarationRegionalInterestDoesNotBroadenRouting",
+        "TestDeclarationFOMRatesDefaultsAndInheritedInterest",
+        "TestDeclarationAdvisoryAdmissionFailureRetry",
+        "TestDeclarationResignCleanupWithFullAdvisoryQueue"
+      ]
+    },
+    {
+      "id": "declaration-options-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestDeclarationOptionsRealWire"
+      ]
+    },
+    {
+      "id": "declaration-options-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestDeclarationSDKExplicitOptionsWire"
+      ]
+    },
+    {
+      "id": "service-option-snapshots",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestDeclarationOptionsDurableRoundTrip",
+        "TestDeclarationOptionsLegacySnapshotDefaults",
+        "TestDeclarationOptionsRejectOrphanBeforeMutation",
+        "TestDDMSubscriptionOptionsSnapshotRoundTrip",
+        "TestDDMLegacySubscriptionSnapshotDefaultsActive"
+      ]
+    },
+    {
+      "id": "scope-switch-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": [
+        "TestProductionScopeSwitchPreservesReflectionAndScopeState"
+      ]
+    },
+    {
+      "id": "ddm-call-validation",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": [
+        "TestDDMForeignSubscriptionPreservesState"
+      ]
+    },
+    {
+      "id": "ddm-call-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": [
+        "TestProductionRegionRequestFiltersBeforeCallbacks",
+        "TestProductionRegionSendSelectsPerCallRecipients",
+        "TestProductionUpdateRequestsUseCurrentAttributeOwners",
+        "TestProductionDDMSubscriptionValidationAndPartialRemoval",
+        "TestProductionDDMAssociationValidationHasNoEffects",
+        "TestProductionRegionRequestsIncludeInheritedClassAttributes"
+      ]
+    },
+    {
+      "id": "ddm-malformed-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestDDMMalformedPairsDoNotBecomeClearAll",
+        "TestDDMAdvisoryOverflowRollbackAndRetryRealWire"
+      ]
+    },
+    {
+      "id": "mom-detailed-traffic",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": [
+        "TestMOMTrafficAccumulatorPartitionsAndCopies",
+        "TestMOMTrafficAccumulatorLifecycle",
+        "TestMOMTrafficAccumulatorOverflowAndUnsupportedTransport",
+        "TestMOMTrafficAccumulatorRestoreAtomicDetached",
+        "TestMOMTrafficAccumulatorConcurrent",
+        "TestMOMTrafficManagerLifecycle",
+        "TestMOMTrafficManagerPreparedRestore",
+        "TestMOMTrafficManagerLegacyBaselineUnavailable",
+        "TestMOMTrafficReportsOverObjectAndStreamRPC"
+      ]
+    },
+    {
+      "id": "mom-request-catalog",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": [
+        "TestMOMCatalogRejectsMalformedTargets",
+        "TestMOMCatalogCounterProductionEncoding",
+        "TestMOMCatalogPublicationsProductionEncoding",
+        "TestMOMCatalogPublicationsNullResponse",
+        "TestMOMCatalogMIMDataProductionEncoding",
+        "TestMOMCatalogEmitterMissingClassFails",
+        "TestMOMCatalogUnavailableCounterData",
+        "TestMOMCatalogInvalidCounterSnapshotIsAtomic",
+        "TestMOMCatalogTargetValidationPrecedesSource",
+        "TestMOMCatalogMissingEmitterFails",
+        "TestMOMCatalogMissingPublicationStateFails"
+      ]
+    },
+    {
+      "id": "mom-traffic-snapshots",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestMOMTrafficCodecRoundTripPrepared",
+        "TestMOMTrafficCodecMalformedStateNoMutation",
+        "TestMOMTrafficCodecLegacyMissingBaseline",
+        "TestMOMTrafficCodecOverflowAndClear"
+      ]
+    },
+    {
+      "id": "mom-traffic-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": [
+        "TestProductionMOMReportsActualClassTraffic"
+      ]
+    },
+    {
+      "id": "scheduled-checkpoint-time",
+      "package": "./rti/internal/hla/time",
+      "required_tests": [
+        "TestScheduledCheckpointLogicalTimePendingAndTSO",
+        "TestScheduledCheckpointCeilingAllAdvanceModesAndRelease",
+        "TestScheduledCheckpointRejectsUnsupportedTimesAndZeroLookahead",
+        "TestScheduledCheckpointStateChangeAndStaleRelease",
+        "TestScheduledCheckpointRequiresStrictActualHorizon",
+        "TestScheduledCheckpointRejectsPastAndBeyondBarrierPending"
+      ]
+    },
+    {
+      "id": "scheduled-checkpoint-protocol",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": [
+        "TestScheduledSaveDefersCallbacksAndCheckpointAdmission",
+        "TestScheduledSaveAbortAndRepeat",
+        "TestScheduledSaveParticipantChangeCancels",
+        "TestScheduledSaveInvalidTimesDoNotReserve",
+        "TestScheduledSaveFailureReleasesTimeBarrier",
+        "TestScheduledSaveGenerationChangeCancels",
+        "TestScheduledSaveConcurrentProgressAndAbort",
+        "TestScheduledSaveCancelledRequestAndDestroyRelease"
+      ]
+    },
+    {
+      "id": "scheduled-checkpoint-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": [
+        "TestScheduledCheckpointProductionRPCProgressAndCompletion",
+        "TestScheduledCheckpointProductionRPCResignCancels",
+        "TestScheduledCheckpointProductionCallbackFailureReleasesCeiling"
+      ]
+    },
+    {
+      "id": "fom-service-metadata",
+      "package": "./rti/internal/application/composition",
+      "required_tests": [
+        "TestFOMUpdateRatesRetainedThroughProductionLoad",
+        "TestFOMUpdateRateConflictsRejectBeforeRepositoryMutation",
+        "TestFOMUpdateRateInvalidDecimalRejected",
+        "TestFOMUpdateRatesDecimalEquivalence",
+        "TestFOMAdvisoryDefaultsPreservePresence",
+        "TestFOMAdvisoryInvalidOrConflictingDeclarationsRejected",
+        "TestFOMClassAncestryQualifiedAndDefensive"
+      ]
+    },
+    {
+      "id": "fom-extension-preparation",
+      "package": "./rti/internal/application/composition",
+      "required_tests": [
+        "TestFOMExtensionPreparationReportsHandleMovementWithoutPublishing",
+        "TestFOMExtensionPreparationDetectsInheritedHandleMovement",
+        "TestFOMExtensionPreparationLeavesInitializedDDMUnchanged",
+        "TestFOMExtensionPreparationFailurePreservesState"
+      ]
+    },
+    {
+      "id": "support-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestSupportSDKCallerScopedQueries"
+      ]
+    },
+    {
+      "id": "discovery-lock-order",
+      "package": "./rti/internal/hla/object",
+      "required_tests": [
+        "TestConcurrentRediscoveryAndScopedFanoutLockOrder"
+      ]
+    },
+    {
+      "id": "live-fom-repository",
+      "package": "./rti/internal/application/composition",
+      "required_tests": [
+        "TestLiveFOMExtensionPreservesEveryAssignedHandle",
+        "TestLiveFOMExtensionLeaseAndStaleCAS",
+        "TestLiveFOMExtensionRejectsConflictWithoutMutation",
+        "TestLiveFOMExtensionResolversUseStableEffectiveMembers",
+        "TestLiveFOMSnapshotRoundTripAndFurtherExtension",
+        "TestLiveFOMSnapshotRejectsInvalidAssignmentsWithoutPublication",
+        "TestLiveFOMSlotGenerationPreventsABA"
+      ]
+    },
+    {
+      "id": "live-fom-parser",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": [
+        "TestParseAdditiveMembersAndConflicts",
+        "TestParseAdditiveRejectsInheritedShadowing"
+      ]
+    },
+    {
+      "id": "live-fom-manager",
+      "package": "./rti/internal/hla/federation",
+      "required_tests": [
+        "TestJoinAdditionalFOMAtomicAdmission"
+      ]
+    },
+    {
+      "id": "live-fom-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": [
+        "TestLiveFOMJoinProductionWireAndSnapshot",
+        "TestRestoreGeneratedRateBundleUsesSavedFOMCandidate"
+      ]
+    },
+    {
+      "id": "live-fom-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestAuthoritativeFOMTablesUseWireAssignmentsAndRefresh",
+        "TestAuthoritativeFOMAliasesAndInvalidBindings",
+        "TestAuthoritativeFOMRefreshRejectsRemappingAndIgnoresStale",
+        "TestAuthoritativeFOMConcurrentRefreshAndLookups",
+        "TestAuthoritativeFOMRefreshOnMissAndNilTables",
+        "TestAuthoritativeFOMRestoreRejectsInflightPreRestoreRefresh"
+      ]
+    },
+    {
+      "id": "update-rate-domain",
+      "package": "./rti/internal/hla/declaration",
+      "required_tests": [
+        "TestUpdateRateDefaultDemandAndPassiveEdges",
+        "TestLifecycleAdvisoryRetryAfterQueueDrain",
+        "TestUpdateRateMaximumSwitchOwnershipAndDurableRetry"
+      ]
+    },
+    {
+      "id": "update-rate-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestSupportNamedUpdateRatesRealWire"
+      ]
+    },
+    {
+      "id": "update-rate-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": [
+        "TestUpdateRateProductionRegionalOwnerAndSupport"
+      ]
+    },
+    {
+      "id": "object-metadata-domain",
+      "package": "./rti/internal/hla/object",
+      "required_tests": [
+        "TestOrderStateRoundTripAndValidation",
+        "TestDeleteAdmissionFailurePreservesObject",
+        "TestRetractableDeleteWithoutTimestampRejectedBeforeEffects"
+      ]
+    },
+    {
+      "id": "object-metadata-snapshot",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestTimeCallbackMetadataRoundTripAndValidation"
+      ]
+    },
+    {
+      "id": "object-metadata-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestMetadataPresenceAndRateOverloads"
+      ]
+    },
+    {
+      "id": "restore-identity-domain",
+      "package": "./rti/internal/hla/federation",
+      "required_tests": [
+        "TestRestoreIdentityUnderExistingMemberLease",
+        "TestRestoreIdentityRejectsInvalidGenerationAndBijection"
+      ]
+    },
+    {
+      "id": "restore-identity-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": [
+        "TestRestoreTransitionProductionChangedHandles"
+      ]
+    },
+    {
+      "id": "restore-identity-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestRestoreTerminalRefreshesBeforePublication",
+        "TestRestoreTerminalFailureAndLegacyIdentity",
+        "TestRestoreCancelsOutstandingTransportAndInvalidatesLocalAdmission",
+        "TestRestoreIdentityConcurrentReadersAndEpochValidation",
+        "TestRestoreRetractionHintPresenceAndPublication",
+        "TestRestoreRetractionHintDoesNotRewriteCallerIDs"
+      ]
+    },
+    {
+      "id": "retraction-admission-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestRetractionAdmissionErrorsAreExplicitPreconditions",
+        "TestRestoredRetractionHintPresence"
+      ]
+    },
+    {
+      "id": "live-fom-ddm-restore",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestDDMRestoreRefreshesReusedFOMRevision",
+        "TestDeclarationRestoreValidatesRatesAgainstCandidateOnly"
+      ]
+    },
+    {
+      "id": "retraction-admission-object",
+      "package": "./rti/internal/hla/object",
+      "required_tests": [
+        "TestRetractionAdmissionFailedFanoutRetry",
+        "TestRetractionAdmissionMissingCapabilityAndReceiveOrder",
+        "TestRetractionAdmissionUnsubscribedTimestampAttribute",
+        "TestRetractionAdmissionTimeGateFallback"
+      ]
+    },
+    {
+      "id": "retraction-admission-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": [
+        "TestProductionRetractionIDsSharedAcrossOperations",
+        "TestProductionRetractionIDRecordedWithoutRecipients",
+        "TestProductionRetractionIDSurvivesRetractAndDrain"
+      ]
+    },
+    {
+      "id": "retraction-history-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": [
+        "TestRetractionIDAdmissionExactReuseAndRollback",
+        "TestRetractionIDAdmissionOneConcurrentWinner",
+        "TestRetractionIDAdmissionHistorySurvivesResignButNotDestroy",
+        "TestRetractionHistoryUnionPreservesPostSaveAndDeliveredIDs",
+        "TestRetractionHistorySavedOnlyIDsAndGenerationFence",
+        "TestRetractionHistoryRejectsIncompletePendingAndOverflow"
+      ]
+    },
+    {
+      "id": "retraction-history-snapshot",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestRetractionSnapshotRoundTripMergesAndProvesEmpty",
+        "TestRetractionSnapshotRejectsLegacyAndMalformedHistory"
+      ]
+    },
+    {
+      "id": "retraction-history-restore",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": [
+        "TestRestoreTerminalCarriesMergedRetractionHintBeforeReservation",
+        "TestRestoreRejectsRetractionExhaustionBeforeInitiation"
+      ]
+    },
+    {
+      "id": "live-fom-restore-candidate",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": [
+        "TestSavedFOMCandidatePreparationAndFailureRelease"
+      ]
+    },
+    {
+      "id": "local-validation-lease",
+      "package": "./rti/internal/hla/federation",
+      "required_tests": ["TestLocalValidationSnapshotLeaseExcludesOperations"]
+    },
+    {
+      "id": "local-validation-backend",
+      "package": "./rti/internal/application/server",
+      "required_tests": [
+        "TestLocalValidationSnapshotIncludesAuthoritativeKnowledgeAndBarrier",
+        "TestLocalValidationSnapshotRejectsWithoutMarker",
+        "TestLocalValidationSnapshotDoesNotResurrectLocallyDeletedRegistrant"
+      ]
+    },
+    {
+      "id": "local-validation-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestLocalValidationWireRequiresSourceAndPreservesBarrierIdentity"]
+    },
+    {
+      "id": "local-validation-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestLocalLRCHydrationOrdersSnapshotBetweenCallbacks",
+        "TestLocalLRCHydrationFailureRemainsConfirmed",
+        "TestLocalLRCPublicTicketOverflowRejectedBeforeAdmission",
+        "TestRestoreCancelsLocalLRCOpeningBeforeWaitingForLock"
+      ]
+    },
+    {
+      "id": "remaining-go-service-bindings",
+      "package": "./rti/pkg/federate",
+      "required_tests": [
+        "TestGoOwnershipBindingsPreserveAtomicResultsAndCaller",
+        "TestGoMOMBindingsPreservePresenceAndTargets",
+        "TestGoAtomicNameReleaseAndExplicitRestoreGeneration",
+        "TestGoCallbackReportingIsExplicitAndNeverReplays",
+        "TestGoDispatchEventEmptyErrorPreservesFailureAndIdentity",
+        "TestGoCallbackFailureReportRequiresDetailBeforeRPC",
+        "TestGoResignUsesSessionMetadataAndPreservesLegacy",
+        "TestGoSecureDirectiveAndNormalizationBindings",
+        "TestGoRemoteSupportLookupsPreserveWireResults",
+        "TestGoMOMRawAttributesPreserveUnavailableAndCopies",
+        "TestGoRemainingDeclarationAndTransportationBindings",
+        "TestGoRemainingCallbackVariantsAreDelivered",
+        "TestGoCallbackReceiptSurvivesTranslation"
+      ]
+    },
+    {
+      "id": "session-token-lifecycle",
+      "package": "./rti/internal/adapters/auth/session",
+      "required_tests": [
+        "TestTokenRejectsMissingMalformedAndWrongMember",
+        "TestDisconnectResignsOnlyAfterLastAuthenticatedStream",
+        "TestReconnectCancelsStaleTimerAndRetainsTokenAcrossRebind",
+        "TestRejoinRotatesTokenAndInvalidatesOldStreamClose",
+        "TestLegacyStreamDoesNotArmAutomaticCleanup",
+        "TestAutomaticResignWaitsForCheckpointCompletion",
+        "TestAutomaticResignRetriesTransientCallbackAdmissionFailure"
+      ]
+    },
+    {
+      "id": "session-membership-lifecycle",
+      "package": "./rti/internal/hla/federation",
+      "required_tests": ["TestSessionIdentityDoesNotResignSameNameRejoin", "TestAutomaticResignDirectiveValidatedAndResetOnRejoin"]
+    },
+    {
+      "id": "session-stream-admission",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestAuthenticatedStreamCannotSubscribeAfterMembershipIncarnationChanges", "TestAuthenticatedStreamRequiresRetainedMembershipGuard", "TestAuthenticatedResignUsesMembershipIdentity", "TestAuthenticatedStreamPreservesSessionError"]
+    },
+    {
+      "id": "session-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestAutomaticResignProductionSessionAndCleanup"]
+    },
+    {
+      "id": "automatic-resign-fom",
+      "package": "./rti/pkg/fom/parser",
+      "required_tests": ["TestAutomaticResignFOMSwitch"]
+    },
+    {
+      "id": "crossgeneration-restore-domain",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": ["TestExplicitSourceRestorePinsTargetProvenance", "TestSaveRejectsInconsistentStateGraphBeforePublication", "TestObservationAdmissionDuringCheckpointProtocols"]
+    },
+    {
+      "id": "crossgeneration-state-graph",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestSnapshotFederateRewriteIncludesHistoricalAndNestedIdentity",
+        "TestRestoreGraphRejectsCrossManagerReferences",
+        "TestRestoreGraphChecksActualCallbackReflectedObjectHistory",
+        "TestSynchronizationSnapshotPreservesFailedAchievement",
+        "TestSynchronizationLegacyUnprovenFailureHistoryRejected"
+      ]
+    },
+    {
+      "id": "crossgeneration-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestRestoreRestartFreshGenerationAllManagerState"]
+    },
+    {
+      "id": "actual-mom-domain",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": ["TestMOMMetricsActualInvocationAndPendingCoverage", "TestMOMMetricsOverflowAndLegacyBaseline", "TestMOMRemainingCatalogProductionEncoding", "TestMOMRemainingCatalogUnavailableAndMalformed"]
+    },
+    {
+      "id": "actual-mom-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": [
+        "TestCallbackReceiptReportBeforeSendCommit",
+        "TestCallbackReceiptRollbackOverflowAndLifecycle",
+        "TestCallbackReceiptAuthenticationPrecedesLookup",
+        "TestMOMObserverActualRPCOutcome",
+        "TestMOMObserverNoSecretOrTransportServiceReport",
+        "TestMOMObserverCatalogCoversAllHLARPCsAndCallbacks",
+        "TestMOMObserverLazyArgumentsAndNestedSecretRedaction",
+        "TestMOMNormalizationValidatesFullHandleBeforeLocalIndex",
+        "TestMOMNormalizationExceptionsRealWire",
+        "TestMOMAdapterSeparatesActualCallbackMetricFromLegacyAcceptance",
+        "TestCallbackReceiptRollbackIsAdmittedAndReportedFailureInvalidatesCoverage",
+        "TestCallbackReceiptPendingPortSerializedWithRegistration"
+      ]
+    },
+    {
+      "id": "actual-mom-composition",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestMOMRegionalReportsUseCommittedSubjectRange", "TestMOMRegionalServiceReportFiltersBothDimensions", "TestMOMCallbackReceiptDoesNotReportItsOwnTelemetry"]
+    },
+    {
+      "id": "actual-mom-time",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestMOMMetricsObserveActualStoresWithoutCreatingState"]
+    },
+    {
+      "id": "actual-mom-checkpoint",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": ["TestMOMMetricsPendingSaveAndRestoreAreActualState"]
+    },
+    {
+      "id": "ownership-release-denial-domain",
+      "package": "./rti/internal/hla/ownership",
+      "required_tests": [
+        "TestReleaseDeniedCancelsGroupedRequestsWithoutDivesting",
+        "TestReleaseDeniedValidatesWholeOwnerSetBeforeMutation",
+        "TestReleaseDeniedAdmissionFailurePreservesAllRequests",
+        "TestReleaseDeniedWithoutPendingRequestHasNoCallback",
+        "TestReleaseDeniedPreservesIndependentDivestOffer",
+        "TestReleaseDeniedReservesBeforePinningObjectState",
+        "TestReleaseDeniedRevalidatesPendingSetAfterReservation",
+        "TestReleaseDeniedRevalidatesOwnerAfterReservation",
+        "TestReleaseDeniedJournalFailureAndMissingReservationLeaveStateUntouched"
+      ]
+    },
+    {
+      "id": "ownership-release-denial-wire",
+      "package": "./rti/tests/integration/ownership",
+      "required_tests": ["TestReleaseDeniedRPCValidatesWithoutSideEffects", "TestReleaseDeniedRPCNotifiesAcquirerAndRetainsOwnership"]
+    },
+    {
+      "id": "name-release-atomic-domain",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestReleaseMultipleNamesAtomicValidation", "TestReleaseMultipleNamesSuccessScopeAndConcurrentWinner"]
+    },
+    {
+      "id": "name-release-atomic-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestReleaseMultipleNamesRPCUsesOneAtomicCall"]
+    },
+    {
+      "id": "name-release-atomic-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": ["TestProductionReleaseMultipleNamesIsAtomic"]
+    },
+    {
+      "id": "deferred-deletion-domain",
+      "package": "./rti/internal/hla/object",
+      "required_tests": [
+        "TestTimestampedDeleteRetainsObjectUntilDelivery",
+        "TestDeferredDeleteRealTimeOrderingAndTooLateRetraction",
+        "TestDeferredDeleteRetractionAndNoSubscriberMarker",
+        "TestDeferredDeleteDeliveryFailureAndConstraintBoundary",
+        "TestDeferredDeleteOwnerResignPurgesPendingRemoval",
+        "TestDeferredDeleteLateSubscriberGetsRemoval",
+        "TestDeferredDeleteRecipientResignDoesNotLoseLifecycle",
+        "TestDeferredDeleteUpdateRediscoveryRetainsRemoval",
+        "TestDeferredDeleteNonreservableGrantFailureCannotUndoVisibleRemoval",
+        "TestRetractableDeleteWithoutTimestampRejectedBeforeEffects"
+      ]
+    },
+    {
+      "id": "deferred-deletion-lock-order",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestDeletionGrantDoesNotInvertObjectAndOutboxLocks"]
+    },
+    {
+      "id": "deferred-deletion-snapshot",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestDeferredDeletionSnapshotRestoresLifecycleAndMarker", "TestDeferredDeletionSnapshotRejectsDanglingPendingAndClones"]
+    },
+    {
+      "id": "deferred-deletion-production",
+      "package": "./rti/tests/integration/ddm_registration",
+      "required_tests": ["TestProductionRetractableDeleteLifecycleAndDDMCleanup"]
+    },
+    {
+      "id": "deferred-deletion-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestRetractTooLatePreservesTypedExceptionTrailer"]
+    },
+    {
+      "id": "actual-mom-durable",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": [
+        "TestMOMRuntimeMetricsDurablePreparedRestoreAndLegacyUnknown",
+        "TestMOMRuntimeMetricsRejectMalformedBeforeMutation",
+        "TestMOMRuntimeMetricsRestoredOutstandingReceiptsStayUnavailable"
+      ]
+    },
+    {
+      "id": "mom-completion-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": [
+        "TestMOMHostUsesExplicitJoinMetadata",
+        "TestMOMCompletionSourcesProductionRPC",
+        "TestMOMIncompleteFDDRemainsUnavailable",
+        "TestMOMCompletionReviewCreateHistoryFailureRollsBack",
+        "TestMOMCompletionReviewProvidersAreFederationScoped",
+        "TestMOMCompletionReviewAbortPreservesCompletedHistory",
+        "TestMOMCompletionReviewDynamicFDDPublishesToSubscribers",
+        "TestMOMCompletionReviewSuccessfulSavePublishesHistory",
+        "TestMOMCompletionReviewLateSubscriptionReceivesHostAndFDD"
+      ]
+    },
+    {
+      "id": "mom-host-lifecycle",
+      "package": "./rti/internal/adapters/auth/session",
+      "required_tests": ["TestHostFollowsLiveMembershipNotRestoredHandle", "TestHostReviewCancellationAfterPrepareRollsBackBeforePublication", "TestHostReviewCheckedPrepareFailureDoesNotPublish"]
+    },
+    {
+      "id": "mom-host-go-sdk",
+      "package": "./rti/pkg/federate",
+      "required_tests": ["TestGoJoinSendsOnlyExplicitHost"]
+    },
+    {
+      "id": "checked-creation",
+      "package": "./rti/internal/hla/federation",
+      "required_tests": ["TestCreateCheckedSetupFailureConsumesGenerationAndLeavesNoExecution"]
+    },
+    {
+      "id": "fdd-committed-provider",
+      "package": "./rti/internal/application/composition",
+      "required_tests": ["TestCurrentFDDCommittedCreateAdditiveJoinAndRestore", "TestCurrentFDDErrorsAndCanceledContext", "TestCurrentFDDConcurrentCommittedSnapshots"]
+    },
+    {
+      "id": "creation-peer-deadline",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestBroadcastAssignmentReviewHasTotalBoundAndPreservesShorterDeadline", "TestBroadcastAssignmentExpiredBatchDoesNotDial"]
+    },
+    {
+      "id": "fdd-retained-export",
+      "package": "./rti/pkg/fom/exporter",
+      "required_tests": ["TestRetainedModelSemanticRoundTrip", "TestIndependentMergedMIMXMLAndInheritance", "TestExportDeterministicConcurrentAndDoesNotMutate", "TestExportRejectsUnsupportedWithoutPartialDocument", "TestOfficialFDDSchemaIndependentOracle"]
+    },
+    {
+      "id": "save-history-domain",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": ["TestSaveHistorySuccessfulImmediateAndTimed", "TestSaveHistoryKnownFreshVersusLegacyAbsent", "TestSaveHistoryPreservesPreviousOnFailureAbortAndRetry", "TestSaveHistoryCommitBoundaryAndSimulatedCrashWindows", "TestSaveHistoryBrokenGuaranteedCommitIsExplicit", "TestSaveHistoryRestoreDoesNotRewindOrInventHistory", "TestSaveHistoryDurableStoreRejectsLegacyOutbox", "TestSaveHistoryConcurrentQueriesAndCommits", "TestSaveHistoryOptionalStoreAndFallibleLegacyFanout", "TestSaveHistoryInitializationFailureDoesNotPublishKnownNone", "TestSaveHistoryGenerationIsolationDestroyAndRecovery", "TestSaveHistoryCrossGenerationRestoreKeepsTargetDecision"]
+    },
+    {
+      "id": "save-history-persistence",
+      "package": "./rti/internal/adapters/savebundle/storage",
+      "required_tests": ["TestFSHistoryRestartIdentityAndAbsentLegacy", "TestFSHistoryRejectsCorruptionAndIgnoresUnpublishedTemp", "TestFSHistoryManagerRestartTimedImmediateAndEmptyLabel", "TestFSHistoryPersistenceFailureAllowsSameLabelRetry", "TestFSHistoryActualProcessCrashWindows", "TestFSHistoryConcurrentReaderWriterInstances", "TestHistoryReviewRejectsMissingDecisionFields"]
+    },
+    {
+      "id": "elapsed-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestElapsedJoinReadsDoNotConsume", "TestElapsedAdvanceModesAndIndependentPublication", "TestElapsedRestoreDurationsRebaseAndFenceStaleTokens", "TestElapsedLegacyUnknownResignDestroyAndFreshJoin", "TestElapsedFractionalTransitionsAccumulateAndRejectedRequestIsGranted", "TestElapsedOverflowClockRegressionAndImportValidation", "TestElapsedConcurrentReadAcknowledgeAndRestore", "TestElapsedGrantQueueBoundaryAndFailedEnqueue"]
+    },
+    {
+      "id": "elapsed-mom-publication",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": ["TestElapsedMetricSourceReadAndFailedPublicationDoNotAcknowledge", "TestElapsedMetricSourceRequiresPublicationAcknowledgement", "TestElapsedPublicationFailureRetryAndPeriodicConservation", "TestElapsedPublicationOnlyAcknowledgesRepresentableAttributes", "TestElapsedPublicationAckFailureSurfaces", "TestElapsedPublicationConcurrentQueriesRefreshAndPeriodic"]
+    },
+    {
+      "id": "elapsed-persistence",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestElapsedTimeCodecRoundTripPrecisionBaselinesAndRestart", "TestElapsedTimeCodecLegacyMissingHistoryRemainsUnavailable", "TestElapsedTimeCodecRejectsInvalidHistoryWithoutMutation", "TestElapsedTimeCodecCoverageLossSurvivesRestart"]
+    },
+    {
+      "id": "exact-integer-time-domain",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestIntegerManagerExactAdvance", "TestIntegerManagerAllModesUseExactQueueOrder", "TestIntegerManagerFinalTimeAndUnboundedRemainDistinct", "TestIntegerManagerRetractionAndPersistentDTOExact", "TestIntegerManagerBoundAndEnableOracle"]
+    },
+    {
+      "id": "exact-integer-object-domain",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestIntegerObjectExactMessageTimestamps", "TestIntegerObjectRealQueueDeletionAndSnapshot", "TestIntegerObjectRealDeletionRetraction", "TestIntegerObjectReceiveOrderRetainsOriginalTime"]
+    },
+    {
+      "id": "exact-integer-checkpoint-domain",
+      "package": "./rti/internal/hla/save_restore",
+      "required_tests": ["TestInteger64SavePreservesExactScheduledTime", "TestInteger64BundlePreservesFinalAndLargeTime", "TestInteger64SaveRejectsMixedFactoryBeforeSnapshotPreparation"]
+    },
+    {
+      "id": "exact-integer-persistence",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestInteger64TimeSnapshotCompleteQueuesAndFrontiers", "TestInteger64ObjectSnapshotPendingDeletionAndRebinding", "TestInteger64RetractionSnapshotExactLedger", "TestInteger64RestoreGraphExactAdjacentTimeAndGeneration", "TestInteger64MOMSnapshotRoundtripAndRebind", "TestInteger64SnapshotRejectsMissingRequiredTimeScalars"]
+    },
+    {
+      "id": "exact-integer-unary-transport",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestInteger64TimeServiceExactRequestQueryAndGrant", "TestInteger64TimeServiceRejectsLegacyAndMixedTimeWithoutEffects", "TestIntegerObjectRPCRoundTrip", "TestNewServerOfInteger64ExactUnary", "TestNewServerOfRejectsInteger64Optimizations", "TestReviewFloat64GRPCPreservesLegacyFinalTime"]
+    },
+    {
+      "id": "exact-integer-journal",
+      "package": "./rti/internal/adapters/eventlog",
+      "required_tests": ["TestInteger64JournalAndReplayTimestampRemainExact", "TestReviewGrantJournalLegacyFinalAndExactInteger"]
+    },
+    {
+      "id": "exact-integer-mom",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": ["TestMOMIntegerTimeStateAndSnapshotRemainExact"]
+    },
+    {
+      "id": "exact-integer-mom-transport",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestMOMExactBoundaryInteger64", "TestMOMExactBoundaryLegacyFloat64", "TestMOMExactBoundaryTypedFloat64", "TestMOMExactBoundaryRejectsInvalidSnapshots", "TestMOMExactBoundaryUnknownFederate"]
+    },
+    {
+      "id": "ownership-terminal-lifetime",
+      "package": "./rti/internal/hla/ownership",
+      "required_tests": ["TestTerminalCallbackStrictAdmissionIsNotInvocation", "TestTerminalCallbackEarlyInvocationAndFailedSendRetry", "TestTerminalCallbackCancellationRetainsLocalDeleteObligation", "TestTerminalCallbackOutcomeTransferPathsRetainAfterCommit", "TestTerminalCallbackUnavailableObligationBeforeFailedSend"]
+    },
+    {
+      "id": "ownership-terminal-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestOwnershipReceiptRealWireInvocationAndDuplicateReplay", "TestOwnershipReceiptFailedTransportAndEarlyReport", "TestOwnershipReceiptBatchPreparationRollbackAndDuplicate"]
+    },
+    {
+      "id": "ownership-terminal-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestMandatoryOwnershipReceiptsProductionSaveRestore", "TestOwnershipRestoreReviewRejoinEpochFloorAndStaleReceipt", "TestOwnershipRestoreReviewMalformedScopesDoNotPublish", "TestOwnershipRestoreReviewReleaseBeforeCommitIsStable", "TestOwnershipRestoreReviewUnknownSavedScopeRejectedBeforeReservation", "TestOwnershipScopeAdmissionReviewFailuresReleaseGates"]
+    },
+    {
+      "id": "restore-callback-epoch-floor",
+      "package": "./rti/internal/adapters/delivery",
+      "required_tests": ["TestRestoreEpochFloorIsFreshAndDetached", "TestRestoreEpochFloorRejectsOverflowAndUnknownRecipient"]
+    },
+    {
+      "id": "restore-ownership-scopes",
+      "package": "./rti/internal/hla/ownership",
+      "required_tests": ["TestOwnershipCallbackRestoreScopesValidateAllBeforeMutation", "TestOwnershipCallbackRestoreScopesCommitAtomicAndInfallible", "TestOwnershipCallbackRestoreScopesAbortAndImportedRequirement", "TestOwnershipCallbackScopeRestoreMapKeyAndFreshZeroEpoch"]
+    },
+    {
+      "id": "unpublication-object-ownership",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestUnpublicationRelinquishesOwnedInstanceAttributes", "TestUnpublicationExplicitEmptyAndWholeClassDiffer", "TestUnpublicationMapsRememberedParentAttributes", "TestUnpublicationPendingAcquisitionRequiresTerminalInvocation", "TestUnpublicationEntireObjectSelectionIsAtomic", "TestUnpublicationPinSelectionDetachedAndIdempotent", "TestUnpublicationValidatesFOMEvenForEmptySet", "TestUnpublicationRetainsTerminalRecipientProjection"]
+    },
+    {
+      "id": "unpublication-presence-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestUnpublicationAttributeSetPresenceRealWire"]
+    },
+    {
+      "id": "unpublication-independent-regressions",
+      "package": "./rti/internal/hla/object",
+      "required_tests": ["TestUnpublicationReviewWholeClassIncludesPublicationAddedBeforeObjectPin", "TestUnpublicationReviewUnpublishedAttributeDoesNotBlockPublishedSubset", "TestUnpublicationReviewCapacityFailurePreservesDeclarationAndPin", "TestUnpublicationReviewPostCommitHookCanReenterAllManagers"]
+    },
+    {
+      "id": "unpublication-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestProductionUnpublicationOwnershipAndInvocation"]
+    },
+    {
+      "id": "unsubscription-presence-wire",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestUnsubscriptionAttributeSetPresenceRealWire", "TestUnsubscriptionExplicitEmptyCannotFallBackToDestructiveLegacyPort", "TestUnsubscriptionWrongFOMSetNoEffectsAndIEEEErrorTrailer"]
+    },
+    {
+      "id": "mandatory-callback-entry-and-outcome",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestRequiredCallbackReceiptCapacityRejectsWithoutCoverageFallback", "TestCallbackEntryBeforeSendCommitAllowsReentrantServicesWithoutCompleting", "TestCallbackEntryAuthenticationAndObserverRetry", "TestRequiredCallbackOutcomeRetriesAfterTransientApplicationFailure", "TestRequiredCallbackCompletionDoesNotDependOnOptionalMetrics"]
+    },
+    {
+      "id": "mandatory-callback-queue-and-reconnect",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestMandatoryCallbackReservationRollsBackAllRecipientEvidence", "TestMandatoryCallbackFailedStreamRetainsReceiptAndReconnectOrder", "TestRequiredCallbackRecipientIsNotAuthenticatedAsProducer", "TestMandatoryCallbackDisconnectUsesRestoredHandle", "TestMandatoryCallbackCommitFailureRemainsFailedAndReleasesEvidence", "TestSelectiveMandatoryCallbacksPreserveMixedBatchOrder"]
+    },
+    {
+      "id": "synchronization-strict-domain",
+      "package": "./rti/internal/hla/synchronization",
+      "required_tests": ["TestCompletionDuplicateRegistrationUsesCallback", "TestCompletionOutsiderCannotAchieve", "TestCompletionEmptySetMeansAll", "TestCompletionStrictQueuedAnnouncementCannotAuthorizeAchievement", "TestCompletionLifecycleInvocationRetirementAndEpochReuse", "TestCompletionExplicitSubsetDoesNotExpand", "TestCompletionAdmissionFailureIsAtomic", "TestCompletionStrictAnnouncementEntryAllowsReentrantAchievement"]
+    },
+    {
+      "id": "synchronization-durable-domain",
+      "package": "./rti/internal/hla/synchronization",
+      "required_tests": ["TestCompletionRestoreRequeuesAdmittedCallbacksWithOriginalIdentity", "TestCompletionRestoreKeepsConfirmationAfterLabelRetirement", "TestCompletionRestoreRetriesTerminalWithoutRepeatingCompletedRecipients", "TestCompletionReportsDoNotInventEntryAndRejectMissingDurableImage"]
+    },
+    {
+      "id": "synchronization-durable-codec",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestStrictSynchronizationSharedAdapterPreservesAdmittedConfirmations", "TestStrictSynchronizationRestoreGraphAndCrossGenerationRebind"]
+    },
+    {
+      "id": "synchronization-production-invocation",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestSynchronizationProductionTCPGoSDKReentrantCallbacks", "TestSynchronizationProductionTCPInvocationLifecycle"]
+    },
+    {
+      "id": "ddm-template-contract",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": ["TestTemplateRequiresCompleteInitialCommit", "TestFirstCommitAtomicAcrossTemplates", "TestTemplateRejectedAtEverySpecificationBoundary", "TestFirstCommitAdmissionRollbackKeepsTemplate"]
+    },
+    {
+      "id": "ddm-contextual-realization",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": ["TestContextualRealizationDefaultsAndExcluded", "TestRestoredRealizationsRetainFOMDefaultsAndExcluded", "TestRealizationROAndTSOServicePorts", "TestExcludedDefaultInteractionReceiversServicePorts"]
+    },
+    {
+      "id": "integer-production-composition",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestProductionIntegerCompositionIdleMOMExactTimeAndIsolation", "TestProductionIntegerTimedSaveRestartAndIdentityRebinding", "TestProductionIntegerTwoGoSDKFederatesExactGrants", "TestProductionIntegerResignDeletesSelectedRegistryObjects", "TestProductionIntegerObjectTSOReflectionBeforeExactGrant"]
+    },
+    {
+      "id": "synchronization-retry-admission",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestSynchronizationRetryCannotRecreateReceiptDuringResign", "TestSynchronizationRetryAdmissionFailureAndMemberHookIsolation", "TestSynchronizationRetryAdmissionCheckpointGenerationOrder", "TestSynchronizationProductionRetryAdmissionInstalled", "TestSynchronizationDestroyedRetryDiscardsTerminalMarker", "TestSynchronizationTransientRetryKeepsLiveGeneration", "TestSynchronizationDestroyedRetryDoesNotEraseRecreatedGeneration"]
+    },
+    {
+      "id": "timed-save-production-participants",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestProductionTimedSaveMessageOrderingAndRetentionBothFamilies", "TestProductionTimedSaveIndividualParticipantsBothFamilies"]
+    },
+    {
+      "id": "committed-label-storage-resolution",
+      "package": "./rti/internal/adapters/savebundle/storage",
+      "required_tests": ["TestCommittedCheckpointLabelResolutionBothFamilies"]
+    },
+    {
+      "id": "label-only-production-restore",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestProductionIntegerLabelOnlyRecreatedRestore", "TestProductionLabelOnlyRestoreValidationBothFamilies"]
+    },
+    {
+      "id": "conveyed-region-production-invocation",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestConveyedProductionTCPGoSDKQueryLifetime", "TestConveyedProductionTCPDimensionsRequireAuthenticatedReceiver", "TestConveyedProductionTCPCompletedDeliveryReclaimsCache", "TestConveyedProductionTCPReconnectPreservesPendingCopy", "TestConveyedProductionTCPQueuedSaveRestoreReissuesReceipt"]
+    },
+    {
+      "id": "delayed-subscription-independent-oracles",
+      "package": "./rti/tests/unit/object",
+      "required_tests": ["TestG13EnabledDelaySubscriptionLateInteractionInterest", "TestG13EnabledDelaySubscriptionLateAttributeInterest", "TestG13PreviouslyUnknownObjectLateAttributeInterest", "TestG13PreviouslyUnknownObjectWithoutInterest", "TestG13TypedAdvanceModes", "TestG13TypedRetractionAndEligibility", "TestG13TypedAttributeRestore", "TestG13TypedInheritedProjection", "TestG13TypedFrozenDDMLateInterest"]
+    },
+    {
+      "id": "data-queue-entry-adapter",
+      "package": "./rti/internal/adapters/grpc",
+      "required_tests": ["TestDataQueueCountsUntilEntryWithoutPayloadDeduplication", "TestDataQueueCountsRejectUnknownOrderAndIgnoreControls"]
+    },
+    {
+      "id": "data-queue-entry-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestMOMProductionQueueLengthRetainsDataUntilCallbackEntry", "TestMOMProductionDataQueueIdenticalMessagesAndMultipleRecipients", "TestMOMProductionDataQueueReconnectDoesNotAddStageCopies", "TestMOMProductionDataQueueDiscardRetractionAndInterest", "TestMOMProductionDataQueueRestoreRebindsWaitingAndReadyEvidence", "TestMOMProductionDataQueueReflectAndRemoveExcludeDiscovery"]
+    },
+    {
+      "id": "data-queue-stage-conservation",
+      "package": "./rti/internal/hla/time",
+      "required_tests": ["TestDataQueueMetricsCountsFinalReceivedOrder", "TestDataQueueMetricsErrorsNeverFabricateZeroCoverage", "TestDataQueueMetricsDisjointProductionHandoff", "TestDataQueueStageReviewPartialHandoffRetryConservesCount", "TestDataQueueStageReviewInvalidOrderFailsBeforeReadyObservation", "TestDataQueueStageReviewMissingCoverageNeverSucceedsWithZero"]
+    },
+    {
+      "id": "mom-attribute-point-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestProductionMOMAttributePointGlobalAndRegionalBothFamilies"]
+    },
+    {
+      "id": "ddm-subscription-postcommit",
+      "package": "./rti/internal/hla/ddm",
+      "required_tests": ["TestObjectSubscribedPostCommitReleasesLocksAndAllowsReentry", "TestObjectSubscribedPostCommitSkipsNoOpsAndRollback"]
+    },
+    {
+      "id": "conveyed-region-checkpoint-codec",
+      "package": "./rti/internal/adapters/savebundle",
+      "required_tests": ["TestDDMConveyedSnapshotPrecisionAndLeases", "TestDDMConveyedTypedGraphBothFamilies", "TestDDMConveyedMalformedImportIsAtomic", "TestDDMConveyedCandidateFOMAndRoster", "TestDDMConveyedRebindRejectsReceiverCollision", "TestDDMConveyedLegacyAndNamespace"]
+    },
+    {
+      "id": "mom-incoming-entry-domain",
+      "package": "./rti/internal/hla/mom",
+      "required_tests": ["TestMOMDataEntryAtomicFailureThenRetry", "TestMOMDataEntryPartitionOverflowIsAtomic", "TestMOMDataEntryReflectionCountsInvocationNotAttributes", "TestMOMCallbackCompletionExplicitEntryFlag", "TestMOMDataEntryMetricsPendingOutcomeSnapshot", "TestMOMDataEntryMetricsLegacyAndControlPendingRemainUnavailable", "TestMOMDataEntryMetricsFailuresOverridePendingExemption", "TestMOMDataEntryMetricsCannotChangeAfterJoin"]
+    },
+    {
+      "id": "mom-incoming-entry-production",
+      "package": "./rti/internal/application/server",
+      "required_tests": ["TestMOMEntryAccountingRequiresEntryObserver", "TestMOMReceivedBoundaryReviewCountsOnlyInvokedInteraction", "TestMOMEntryObserverLifecycleFailureRetryAndReceiptDuplicate", "TestMOMEntryObserverMissingTransportDoesNotBlockLifecycle", "TestMOMEntryObserverControlForwardingIsNotReceivedTraffic", "TestMOMEntryObserverTelemetryFailureDoesNotBlockCallbackBody"]
+    }
+  ],
+  "independent_evidence": []
+}

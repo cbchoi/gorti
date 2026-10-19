@@ -22,7 +22,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 // eventLineCap caps the in-memory tail buffer at 500 lines — the

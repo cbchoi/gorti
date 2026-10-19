@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "source_id": "S1516.1",
+  "reviewed_units": ["7.1.4", "7.1.5", "9.1.2", "9.1.3.1", "9.1.4"],
+  "coverage_complete": false,
+  "requirements": [
+    {
+      "id": "OWN2010-STATE-LEGALITY",
+      "source_id": "S1516.1", "clause": "7.1", "pdf_pages": [154, 155],
+      "subject": "rti", "applicability": "unresolved",
+      "statement": "Enforce the legal ownership transitions and reject transitions absent from the ownership state chart.",
+      "conditions": "Per instance attribute and joined federate; Figure 16 also depends on publication and distinguishes acquiring, cancellation and negotiated-divestiture substates.",
+      "review_status": "candidate",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/known_command.go"],
+      "tests": [],
+      "open_items": ["Figure 16 was visually inspected at PDF page 155, but its complete transition/guard inventory is not decomposed here. This unresolved inventory is not a finding that the ownership service is inapplicable.", "The whole of 7.1 is not reviewed. Existing final Go, Python and Java records are trusted historical execution evidence, not a whole-clause or whole-conformance verdict; no new execution was performed."]
+    },
+    {
+      "id": "OWN2010-INITIAL-OWNER-AND-UPDATE-GATE",
+      "source_id": "S1516.1", "clause": "7.1", "pdf_pages": [154],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Initialize published registered-class attributes to the registrant and enforce owner-only updates; discovery alone does not confer ownership.",
+      "conditions": "Other registered instance attributes start unowned; a nonowner becomes entitled to update after acquisition notification. Ownership consent has the separately enumerated MOM exceptions.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/object/ownership_acquisition.go", "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks", "oracle": "After registration/discovery the owner query is true only at the registrant; following confirmed transfer the former owner update throws AttributeNotOwned, the peer update succeeds, and the reflected bytes and producing federate equal the peer's values."}],
+      "open_items": ["The Java fixture publishes a single ordinary attribute at both participants; initial unpublished attributes, owner-only Provide Attribute Value Update and update-on/off callbacks need separate mapping.", "Consent exceptions, concurrent transfers, resignation, deletion and restore are not exhausted by this two-participant case."]
+    },
+    {
+      "id": "OWN2010-KNOWN-CLASS-PUBLICATION",
+      "source_id": "S1516.1", "clause": "7.1.1", "pdf_pages": [155, 156],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Determine acquisition eligibility using publication at the caller's known object class, not merely at the registered class.",
+      "conditions": "Inherited attributes can have different handles at the ancestor known class; nonpublishers must not be solicited. Unpublication loses ownership but is prohibited while applicable acquisition outcomes remain outstanding.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/known_command.go", "rti/internal/hla/object/ownership_acquisition.go", "rti/internal/hla/core/ownership_unpublication.go"],
+      "tests": [{"path": "rti/internal/application/server/ownership_known_class_test.go", "name": "TestKnownClassOwnershipProduction", "oracle": "A nonpublisher receives no assumption; ancestor publication produces exactly one assumption/acquisition in ancestor coordinates, changes the registered inherited attribute owner, preserves the child-only owner, permits the ancestor owner's update and maps denial back to the original owner."}],
+      "open_items": ["Go production-composition evidence is not standard-Java binding evidence for inherited handle collisions.", "Map independently isolated unpublication guards through actual notification invocation, including acquisition-if-available overridden by intrusive acquisition; RPC completion alone is not the terminal callback."]
+    },
+    {
+      "id": "OWN2010-TRANSFER-TAG-PROVENANCE",
+      "source_id": "S1516.1", "clause": "7.1.4", "pdf_pages": [159, 160],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Preserve negotiated-offer, acquisition-request and confirmation tags on the corresponding assumption, release-request and acquisition-notification callbacks.",
+      "conditions": "Tags convey user information without RTI interpretation; each callback uses its triggering service's tag, not another pending request's tag.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java", "javasdk/client/src/main/java/org/gorti/rti/OwnershipCallbacks.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks", "oracle": "Callback check compares object, attribute set and byte array exactly for acquisitionTag on release, offerTag on assumption and confirmTag on acquisition, including embedded zero and signed high-byte values."}, {"path": "rti/internal/hla/ownership/ieee2010_confirmation_test.go", "name": "TestIEEE2010ConfirmationAcquirerWithdrawnRollbackAndRecovery", "oracle": "After a withdrawn acquirer is replaced, both acquisition notifications must contain the explicit confirmation bytes {0, 0x80, 0xff}, while ownership goes to the two intended acquirers."}],
+      "open_items": ["Map detached tag lifetime and separate concurrent requests through the standard Java binding; single-session request sequencing does not establish every provenance path."]
+    },
+    {
+      "id": "OWN2010-UNTRIGGERED-MANDATORY-TAGS",
+      "source_id": "S1516.1", "clause": "7.1.4", "pdf_pages": [160],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Supply a present empty tag when a mandatory-tag callback has no triggering federate service tag.",
+      "conditions": "Applies beyond ownership, including MOM report receive callbacks; Java requires a zero-length array rather than an absent tag.",
+      "review_status": "source-reviewed",
+      "implementation": ["javasdk/client/src/main/java/org/gorti/rti/OwnershipCallbacks.java", "rti/internal/hla/ownership/assumption.go"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks", "oracle": "After unconditional divestiture and acquisition-if-available, the Java acquisition callback is checked against new byte[0], which distinguishes an empty byte array from null."}, {"path": "rti/internal/hla/ownership/ieee2010_unconditional_test.go", "name": "TestIEEE2010UnconditionalProgressesSeparatePendingRequests", "oracle": "Acquisition callbacks following unconditional divestiture have tag length zero; later release requests retain the remaining acquirer's binary tag."}],
+      "open_items": ["Go length-zero checks alone do not distinguish nil from a present Java array.", "No inspected MOM-report test is linked for the cross-service empty-tag obligation; this row is not a complete callback-tag verification."]
+    },
+    {
+      "id": "OWN2010-WHOLE-SET-REJECTION",
+      "source_id": "S1516.1", "clause": "7.1.5", "pdf_pages": [160],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Reject the entire ownership service invocation if any requested attribute violates a precondition.",
+      "conditions": "Requests operate per attribute after whole-request validation; neither an earlier valid member nor a reordered mixed set may cause partial ownership, request or callback changes.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/divest_validation.go", "rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/known_command.go"],
+      "tests": [{"path": "rti/internal/hla/ownership/ieee2010_cancellation_followup_test.go", "name": "TestIEEE2010CancellationValidatesWholeSet", "oracle": "Acquisition/divestiture cancellation with invalid-first and invalid-last sets asserts the isolated expected error, exact exported-state equality, unchanged callback/log counts and released preparation pins."}, {"path": "rti/internal/hla/ownership/ieee2010_unconditional_test.go", "name": "TestIEEE2010UnconditionalMixedOwnershipDoesNotProgressAnyRequest", "oracle": "Mixed attributes owned by different federates throw ErrAttributeNotOwned in either order and preserve the entire state plus callback count."}],
+      "open_items": ["Complete all service-specific connection, membership, save/restore, publication, known-class and pending-state preconditions rather than extrapolating from cancellation and unconditional-divestiture tests."]
+    },
+    {
+      "id": "OWN2010-REQUEST-BOUNDARIES",
+      "source_id": "S1516.1", "clause": "7.1.5", "pdf_pages": [160],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Permit disjoint-subset replies to one ownership request but never combine information from separate federate requests in one response or solicitation.",
+      "conditions": "The request boundary remains meaningful even when separate requests have equal tags and share object, recipient or transfer phase.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/assumption.go"],
+      "tests": [{"path": "rti/internal/hla/ownership/ieee2010_unconditional_test.go", "name": "TestIEEE2010UnconditionalProgressesSeparatePendingRequests", "oracle": "Separate single-attribute acquisition requests with the same tag produce single-attribute acquisition and subsequent release callbacks, preserve the remaining waiter/tag, and allow the second handoff."}, {"path": "rti/internal/hla/ownership/publication_test.go", "name": "TestOwnershipPublicationRechecksEachAttributeAndPreservesRequests", "oracle": "Later publication emits three separate assumption callbacks with exact per-request attribute and tag, not a merged offer; completed, canceled and acquiring offers are not solicited again."}],
+      "open_items": ["This behavior is not absent in current Go manager tests. A standard-Java multiattribute/multi-request callback oracle remains unlinked."]
+    },
+    {
+      "id": "OWN2010-UNCONDITIONAL-SOLICITATION",
+      "source_id": "S1516.1", "clause": "7.2", "pdf_pages": [160, 161, 163],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Unconditional divestiture removes the owner's rights and seeks eligible owners without soliciting the former owner or already pending acquirers unnecessarily.",
+      "conditions": "Solicitation is required when no acquiring/willing recipient exists, optional otherwise, and must stop once the attribute is owned; eligibility requires object knowledge and publication for each attribute.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/assumption.go", "rti/internal/hla/ownership/assumption_resolver.go"],
+      "tests": [{"path": "rti/internal/hla/ownership/ieee2010_unconditional_test.go", "name": "TestIEEE2010AssumptionsValidateEachAttributeAndExcludePendingAcquirers", "oracle": "Per-attribute eligibility rejects unknown/nonpublishing recipients, former owner, invalid handles and duplicate candidates; the exact assumption map excludes already acquiring recipients and checks offer tag bytes."}, {"path": "rti/internal/hla/ownership/ieee2010_unconditional_test.go", "name": "TestIEEE2010UnconditionalStopsAssumptionsAfterAcquisition", "oracle": "The first assumption recipient reentrantly acquires; exactly an assumption and acquisition notification are sent, with no subsequent solicitation to the second candidate."}],
+      "open_items": ["Manager callbacks are concrete local evidence; map equivalent standard-Java late-publication and resignation solicitation cases, RID-controlled retries and service-specific exceptions before declaring 7.2 or 7.4 complete."]
+    },
+    {
+      "id": "OWN2010-NEGOTIATION-CONFIRMATION",
+      "source_id": "S1516.1", "clause": "7.6", "pdf_pages": [161, 162, 164, 165, 166],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Retain ownership through negotiated offer and confirmation request, transfer only on valid confirmation, and return a withdrawn-acquirer attribute to waiting without partial transfer.",
+      "conditions": "Confirm requires ownership, a prior confirmation request and a willing/pending acquirer for every supplied attribute; a mere pending offer is not a prior confirmation request.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/divest_validation.go", "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"],
+      "tests": [{"path": "rti/internal/hla/ownership/ieee2010_confirmation_test.go", "name": "TestIEEE2010ConfirmationNotRequestedRollback", "oracle": "A confirmation without prior request, including canceled-offer mixed sets in both orders, yields ErrOwnershipConfirmationNotRequested and preserves exported state, callback/log counts and observer count."}, {"path": "rti/internal/hla/ownership/ieee2010_confirmation_test.go", "name": "TestIEEE2010ConfirmationAcquirerWithdrawnRollbackAndRecovery", "oracle": "No-acquirer confirmation yields ErrOwnershipNoAcquisitionPending, keeps ownership and other requests, clears only the withdrawn attribute's confirmation-request flag, then permits a replacement request and correct two-recipient transfer."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks", "oracle": "The original owner remains owner and the peer has no acquisition callback before confirmation; after cancellation, confirmation throws NoAcquisitionPending and still retains ownership, then a replacement acquisition and confirmation transfer it."}],
+      "open_items": ["The local mixed-attribute recovery oracle is stronger than the Java single-attribute case; complete Java mixed-set recovery and all membership/save/restore exceptions.", "These mappings do not exhaust 7.3, 7.5 or 7.6."]
+    },
+    {
+      "id": "OWN2010-IF-AVAILABLE-NONINTRUSIVE",
+      "source_id": "S1516.1", "clause": "7.9", "pdf_pages": [158, 159, 169, 170],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Acquisition-if-available must not request release from an owner and must conclude via acquisition or unavailable notification.",
+      "conditions": "Applicable to unowned or divesting attributes; intrusive acquisition overrides willing-to-acquire, and acquisition-if-available is illegal during an outstanding intrusive request. Repeated willing requests preserve state.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks", "oracle": "An owned attribute produces an unavailable callback; later intrusive acquisition produces the first release callback with the acquisition tag. After unconditional divestiture the reverse acquisition-if-available produces an acquired callback and true ownership."}],
+      "open_items": ["The Java test does not independently drain/assert zero release callbacks immediately after the first if-available request; later count checks are only partial negative evidence.", "Link willing-to-acquire override, repeated requests, mixed sets and pending-intrusive rejection oracles; no keyword-based mapping is claimed."]
+    },
+    {
+      "id": "OWN2010-DIVEST-EXACT-RETURN-SET",
+      "source_id": "S1516.1", "clause": "7.13", "pdf_pages": [173, 174],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Return precisely the requested attributes actually divested and conclude the attempt for requested attributes not returned.",
+      "conditions": "Only wanted attributes transfer; the returned set is a subset of the supplied set. A completed transfer must not subsequently request negotiated confirmation.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/known_command.go", "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"],
+      "tests": [{"path": "rti/internal/hla/ownership/ieee2010_cancellation_followup_test.go", "name": "TestIEEE2010DivestIfWantedNeverRequestsConfirmationAfterTransfer", "oracle": "Request {1,2} with a waiter only for 1 returns exactly {1}, emits exactly one acquisition callback to that waiter, transfers 1 and leaves 2 with the original owner."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/OwnershipInProcessTest.java", "name": "transportResultsAreQueuedAndExactDivestResultUsesNoFollowupQuery", "oracle": "A fake backend returns only attribute 51; the Java API returns exactly that set and recorded RPC sequence contains divest-result without a followup ownership query. This is a binding transport oracle, not a real-server transfer oracle."}],
+      "open_items": ["The exact Go subset oracle and Java transport oracle are not absent; Java real-server multiattribute subset and concurrent reownership cases remain unlinked.", "Connection/member/save/restore and unavailable-at-known-class rejection facets are not completely decomposed."]
+    },
+    {
+      "id": "OWN2010-CANCEL-NEGOTIATED",
+      "source_id": "S1516.1", "clause": "7.14", "pdf_pages": [157, 174, 175],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Cancel a still-pending negotiated divestiture successfully, retain ownership and stop that offer's solicitation.",
+      "conditions": "Caller owns the attributes and each is a negotiated-divestiture candidate; other divestiture methods are not cancelable through this service.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/assumption.go"],
+      "tests": [{"path": "rti/internal/hla/ownership/ieee2010_unconditional_test.go", "name": "TestIEEE2010NegotiatedStopsAssumptionsAfterCancellation", "oracle": "Cancellation during the first assumption callback succeeds; only the first recipient is solicited and original ownership remains."}, {"path": "rti/internal/hla/ownership/ieee2010_cancellation_followup_test.go", "name": "TestIEEE2010CancellationValidatesWholeSet", "oracle": "Invalid cancellation candidates or ownership in mixed sets cause the isolated expected error and no partial cancellation/state/callback/log change."}],
+      "open_items": ["A canceled request is not a completed transfer. Map the Java race between confirmation request and cancellation plus all common service gates; this is not complete 7.14 coverage."]
+    },
+    {
+      "id": "OWN2010-CANCEL-ACQUIRE-TERMINALS",
+      "source_id": "S1516.1", "clause": "7.15", "pdf_pages": [175, 176, 177],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Conclude intrusive acquisition cancellation through cancellation confirmation, already-achieved acquisition, or already-achieved unavailability, potentially on disjoint subsets.",
+      "conditions": "Cancellation is not guaranteed to win the race; acquisition-if-available cannot be explicitly canceled. PDF page 175 visually confirms the added third unavailable reply, which must not be dropped using the older overview's two-outcome wording.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/terminal_callbacks.go", "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks", "oracle": "Cancellation of a pending intrusive request yields no inline callback, then exactly one evoked cancellation with the correct object/set; a second cancel throws AttributeAcquisitionWasNotRequested and cancellation after acquisition throws AttributeAlreadyOwned."}, {"path": "rti/internal/hla/ownership/terminal_callbacks_test.go", "name": "TestTerminalCallbackCancellationRetainsLocalDeleteObligation", "oracle": "Cancellation moves the request into a pending cancellation callback; local deletion is rejected until authenticated callback invocation is reported, then permitted."}],
+      "open_items": ["Highest-risk missing linked oracle: a controlled transfer/denial-vs-cancel race over multiple attributes asserting all three terminal types, exact disjoint subsets, no duplicate outcomes and retained publication obligations through actual Java invocation.", "Existing cancellation receipt/lifetime coverage must not be described as missing simply because older fixtures used RPC completion. No new failure is reproduced here."]
+    },
+    {
+      "id": "OWN2010-QUERY-DISPOSITIONS",
+      "source_id": "S1516.1", "clause": "7.18", "pdf_pages": [178, 179],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Answer an ownership query with the owner federate, RTI ownership, or unowned disposition through the appropriate callback.",
+      "conditions": "One outstanding query for an available attribute of a known object; response identifies the same object/attribute, and must not execute inline in the evoked callback model.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/ownership_query.go", "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks", "oracle": "Queries after peer transfer and unconditional divestiture are initially not delivered, then report the peer owner and unowned respectively, with exact object/attribute checks."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java", "name": "predefinedMomAttributeIsReportedAsRtiOwnedAndCannotBeAcquired", "oracle": "MOM federation-name attribute reports RTI-owned, never federate-owned; both acquisition modes yield unavailable, no acquired callback occurs, and another query still reports RTI-owned."}],
+      "open_items": ["Complete known-class/unknown-object, connection/member/save/restore and multi-query response accounting independently; these cases do not fully decompose 7.17-7.19."]
+    },
+    {
+      "id": "DDM2010-CONTEXT-AVAILABLE-DIMENSIONS",
+      "source_id": "S1516.1", "clause": "9.1.2", "pdf_pages": [221],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Use FDD attribute and interaction dimensions as the context for regional operations and reject DDM use when no dimensions are available.",
+      "conditions": "Instance attribute dimensions are inherited from the corresponding class attribute; sent interaction dimensions come from its sent class. Regional specified dimensions must be within the applicable available set.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/operations.go", "rti/internal/hla/ddm/registration.go"],
+      "tests": [{"path": "rti/internal/hla/ddm/realization_test.go", "name": "TestContextualRealizationDefaultsAndExcluded", "oracle": "Dimensionless attribute and interaction regional subscriptions return ErrInvalidRegionContext even with an empty committed specification."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/LiveDdmTest.java", "name": "regionsRouteByAttributePairsAndCommittedBoundsAcrossThreeSessions", "oracle": "Available dimensions equal the FOM's X set for attribute/interaction; using a Y region for the X-only interaction throws InvalidRegionContext."}],
+      "open_items": ["No-dimension behavior must be mapped across all regional service boundaries, including empty products and known ancestor classes; the inspected cases cover subscription/context examples only."]
+    },
+    {
+      "id": "DDM2010-FDD-DIMENSION-DECLARATIONS",
+      "source_id": "S1516.1", "clause": "9.1.2", "pdf_pages": [221],
+      "subject": "federation", "applicability": "not-applicable",
+      "statement": "Specify a valid default range or an exclusion indicator for each FDD dimension.",
+      "conditions": "Disposition is limited to authoring arbitrary federation models, which is outside this RTI-only assessment; interpreting admitted declarations remains an applicable RTI duty in the next row.",
+      "review_status": "source-reviewed", "implementation": [], "tests": [],
+      "open_items": ["Do not convert RTI parser/routing tests into proof of arbitrary federation model correctness.", "RTI model admission/combination obligations must be reconciled with the separate FOM/OMT review; product fallback for omitted declarations is not a normative FDD default."]
+    },
+    {
+      "id": "DDM2010-REALIZATION-DEFAULTS-EXCLUSIONS",
+      "source_id": "S1516.1", "clause": "9.1.3.1", "pdf_pages": [221, 222],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Derive contextual realizations from explicit ranges plus nonexcluded FDD defaults for available unspecified dimensions, including on later specification changes.",
+      "conditions": "Unspecified means available minus explicitly specified dimensions. Empty specifications realize only contextual nonexcluded defaults; an all-excluded zero-dimension realization overlaps nothing, including the default region. Explicit specification ranges are retained for their dimensions.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/operations.go", "rti/internal/hla/ddm/manager.go", "rti/internal/hla/core/region_realization.go"],
+      "tests": [{"path": "rti/internal/hla/ddm/realization_test.go", "name": "TestContextualRealizationDefaultsAndExcluded", "oracle": "Empty specifications with narrow X defaults reject a low X sender but admit a matching X sender; all-excluded realizations reject object and interaction overlap even against default, while absence of a publisher association is recognized as default."}, {"path": "rti/internal/hla/ddm/realization_test.go", "name": "TestRestoredRealizationsRetainFOMDefaultsAndExcluded", "oracle": "After export/import, exact recipients remain {2} for the default-bearing interaction and empty for the excluded interaction; contextual sender overlap is preserved."}],
+      "open_items": ["The 20261002 defect-corrections record identifies the old no-shared-axis fixture as stale: omitted defaults introduced a shared axis. Corrected explicit Excluded input preserves the nondelivery assertion; no missing production overlap algorithm is inferred.", "Map a specification modification with multiple existing object/interaction realizations and different available-dimension contexts, asserting default reinsertion in each; restore alone does not cover that mutation."]
+    },
+    {
+      "id": "DDM2010-TEMPLATE-FIRST-COMMIT",
+      "source_id": "S1516.1", "clause": "9.1.3.1", "pdf_pages": [221, 222, 223],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Create only a template initially and convert it to a specification only after all explicit dimensions have bounds and a successful commit.",
+      "conditions": "Incomplete commit throws InvalidRegion and preserves pending draft ranges; all-bounds-set without commit is still a template. Empty dimension templates can become empty specifications by commit. Realization-creating services require a specification.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/manager.go", "rti/internal/hla/ddm/operations.go", "rti/internal/hla/ddm/registration.go"],
+      "tests": [{"path":"rti/internal/hla/ddm/template_test.go","name":"TestTemplateRequiresCompleteInitialCommit","oracle":"Queries/subscription reject a template; committing after only X initialization returns ErrRegionNotFound and preserves exact exported state, including across restore. Initializing Y still leaves a template until commit, after which subscription succeeds."},{"path":"rti/internal/hla/ddm/template_test.go","name":"TestTemplateRejectedAtEverySpecificationBoundary","oracle":"Ten local operations including register, associate/unassociate, subscribe/unsubscribe, send, regional update request and get-bounds reject the template with unchanged state; template deletion succeeds."},{"path":"rti/internal/hla/ddm/template_test.go","name":"TestFirstCommitAtomicAcrossTemplates","oracle":"A batch with one complete and one incomplete template changes neither; an empty template is rejected before commit and accepted for subscription after commit."},{"path":"rti/internal/hla/ddm/completion_bounds_test.go","name":"TestCompletionDDMMixedCommitPreservesEveryRegion","oracle":"Against the pinned real RTI, a mixed commit with an X-initialized/X-Y-incomplete template in either handle order throws InvalidRegion; two committed siblings retain old bounds. Completing Y later commits the template with its original pending X bounds intact."}],
+      "open_items": ["Strong local template rejection is already present. Map standard-Java empty-template/partial-initialization exception classes and recovery, not just committed-region routing."]
+    },
+    {
+      "id": "DDM2010-DIMENSION-IDENTITY-AND-REALIZATIONS",
+      "source_id": "S1516.1", "clause": "9.1.3.1", "pdf_pages": [222],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Keep a specification's explicit dimension set fixed and derive undesignated realizations when the specification is used in regional registration, association, subscription, sending or update requests.",
+      "conditions": "Set Range Bounds and Commit do not change the specified dimension set. Commit either creates the specification or changes bounds of it and derived existing realizations; callback-conveyed copies are a separate designator mechanism under 9.1.7.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/manager.go", "rti/internal/hla/ddm/operations.go", "rti/internal/hla/core/region_realization.go"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveDdmTest.java", "name": "regionsRouteByAttributePairsAndCommittedBoundsAcrossThreeSessions", "oracle": "getDimensionHandleSet initially returns X; requesting bounds for absent Y throws RegionDoesNotContainSpecifiedDimension. After moving near by commit, interaction recipients and associated-attribute recipients change to the far subscriber."}],
+      "open_items": ["No linked test explicitly asserts dimension-set equality both before and after repeated setters/commits, or absence of public designators for ordinary derived realizations. The observed Java routing change is partial evidence, not complete identity coverage."]
+    },
+    {
+      "id": "DDM2010-PENDING-LAST-WRITE",
+      "source_id": "S1516.1", "clause": "9.1.3.1", "pdf_pages": [223],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Keep range modifications pending until commit and use the last supplied bounds for each dimension when committing.",
+      "conditions": "Applies to both templates and specifications; repeated setters do not change realized routing before a successful commit.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/manager.go"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveDdmTest.java","name":"regionsRouteByAttributePairsAndCommittedBoundsAcrossThreeSessions","oracle":"After setting near to [80,100), Java getRangeBounds returns pending bounds but interaction tag 5 still routes near; after commit tag 6 routes far and attribute tag 7 follows the changed associations."},{"path":"rti/internal/hla/ddm/ieee2010_range_bounds_test.go","name":"TestIEEE2010SetRangeBoundsStrictAdmission","oracle":"Valid pending bounds remain invisible to committed manager QueryBounds before commit; invalid setters preserve exported pending/committed state and do not overwrite a valid pending draft."},{"path":"rti/internal/hla/ddm/completion_bounds_test.go","name":"TestCompletionDDMRepeatedSettersLastValue","oracle":"Against the pinned real RTI, two valid setters per X/Y before first commit leave the template unqueryable; commit exposes each last value. Two subsequent X setters leave product QueryBounds at old committed bounds until commit, after which the last X wins and Y stays unchanged; a no-draft commit preserves X."}],
+      "open_items": ["Product QueryBounds observes committed state; Java getRangeBounds draft visibility and committed routing remain different observables.","Repeated valid setters are now directly covered for templates and specifications on the pinned product wire. A standard-Java repeated-setter oracle and routing after multiple pending setters remain unlinked; no full binding-conformance claim is made."]
+    },
+    {
+      "id": "DDM2010-ATTRIBUTE-OWNERSHIP-LIFECYCLE",
+      "source_id": "S1516.1", "clause": "9.1.3.2", "pdf_pages": [223, 224],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Keep preacquisition update associations inactive until ownership arrives, remove active associations on ownership loss, and do not resurrect them on reacquisition.",
+      "conditions": "Association creation is permitted for another owner's or an unowned attribute, using the caller's known coordinates; absent active associations use the default region for attributes with available dimensions.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/association_lifecycle.go", "rti/internal/hla/object/ddm_association.go", "rti/internal/hla/ddm/default_interaction.go"],
+      "tests": [{"path": "pysdk/tests/test_ddm_association_lifecycle_live.py", "name": "test_ddm_preacquisition_known_attribute_activation_and_loss", "oracle": "String/numeric inherited-coordinate variants keep the candidate region inactive before transfer, change actual delivered attributes when it activates, reject deleting an active region, allow deleting the former owner's region, and route via default after loss/reacquisition without resurrecting the obsolete region."}, {"path": "rti/internal/hla/ddm/association_lifecycle_test.go", "name": "TestDDMLifecycleAdmissionRollbackDoesNotUndoOwnership", "oracle": "Ownership changes during rejected association admission; the new owner's regions remain active and no consumed inactive association is restored by rollback."}],
+      "open_items": ["Python is a product-interface oracle, not a standard-language binding. Standard-Java preacquisition/loss/reacquisition and inherited known-class cases remain unlinked.", "Existing lifecycle recovery is not missing merely because historical reports predate it; 9.1.3.2 subscription and empty-input facets are separately incomplete."]
+    },
+    {
+      "id": "DDM2010-EMPTY-SUBSCRIPTION-NOOP",
+      "source_id": "S1516.1", "clause": "9.1.3.2", "pdf_pages": [224],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "An empty regional object-subscription region set changes no subscriptions or regional options.",
+      "conditions": "Both subscribe and unsubscribe are no-ops on the region associations, but remaining class/attribute arguments still require validation; empty regional inputs are not a reference to the default region.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/operations.go", "rti/internal/hla/ddm/groups.go"],
+      "tests": [{"path": "rti/internal/hla/ddm/ieee2010_w4_empty_overlap_test.go", "name": "TestIEEE2010W4ObjectEmptyRegionUnsubscribeNoOp", "oracle": "Nil/empty unsubscribe, live/restored, preserves exact DDM and declaration snapshots; retained regions still route to recipient 2 and cannot be deleted as unused."}, {"path": "rti/internal/hla/ddm/ieee2010_w4_empty_overlap_test.go", "name": "TestIEEE2010W4ObjectEmptyRegionUnsubscribeValidation", "oracle": "Unknown class, zero attribute and invalid later attribute still yield exact expected errors for both nil/empty region sets with unchanged state."}],
+      "open_items": ["Map Java and interaction empty-input behavior independently; do not generalize the object-unsubscribe body to every regional service."]
+    },
+    {
+      "id": "DDM2010-OVERLAP-PREDICATE",
+      "source_id": "S1516.1", "clause": "9.1.4", "pdf_pages": [225],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Overlap exists when some update/subscription region pair shares dimensions and every shared dimension's ranges satisfy the specified overlap predicate; pairs without shared dimensions do not overlap.",
+      "conditions": "Evaluate contextual realizations after inserting applicable FDD defaults. Range overlap includes equal lower bounds or mutual strict intersection; touching semi-open endpoints do not overlap. Default overlaps every nonempty realization.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/overlap.go", "rti/internal/hla/ddm/manager.go"],
+      "tests": [{"path": "rti/internal/hla/ddm/ieee2010_w4_empty_overlap_test.go", "name": "TestIEEE2010W4RangeOverlapEqualLower", "oracle": "Table assertions check forward/reverse and shared-dimension overlap for equal-lower, touching, separated and maximum-bound inputs. Zero-width rows test the pure predicate only, not acceptance by Set Range Bounds."}, {"path": "rti/internal/hla/ddm/realization_test.go", "name": "TestContextualRealizationDefaultsAndExcluded", "oracle": "Narrow defaults create or reject contextual overlap and all-excluded empty realizations do not overlap even the default; absent associations remain default."}],
+      "open_items": ["Do not label zero-width range setter acceptance verified from pure predicate cases: separate strict-admission tests reject it.", "Complete independent region-set existential and no-shared-axis oracles through Java with explicit Excluded FDD declarations; omitted product-default fixtures are not a valid no-shared-axis control."]
+    },
+    {
+      "id": "DDM2010-TIME-INDEPENDENCE",
+      "source_id": "S1516.1", "clause": "9.1.4", "pdf_pages": [225],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Apply DDM effects independently of logical-time progression and time-management services.",
+      "conditions": "Region admission/commit and overlap are not scheduled changes on the HLA time axis; timestamped delivery remains governed by separate time-management obligations.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/manager.go", "rti/internal/hla/ddm/operations.go"], "tests": [{"path":"rti/internal/hla/ddm/applicable_r1_time_independence_test.go","name":"TestApplicableR1DDMCommitIndependentOfConstrainedLogicalTime","oracle":"Pinned real server, Float64 constrained federate at logical times 0 and 100: owner-authenticated bounds query retains committed values while drafts are edited, commit immediately exposes new bounds, and edits/commit do not change logical time. Corrected review-oracles.jsonl PASS; first attempt queried another federate's region and failed admission before this oracle."}],
+      "open_items": ["Only Float64 committed-bound visibility and logical-time nonmutation are linked. Immediate real overlap/routing changes at multiple time states, Integer64, pending blocked advance, queued timestamped callback timing and all DDM services remain open.","First run was a fixture error: region owner index 1 queried with index 0, yielding PermissionDenied (region is not owned by this federate). Corrected queries use owner index 1; same bounds/time assertions pass. Both evidence logs retained outside Git under applicable-requirements-20261003-r1/declaration. No production fix or whole-requirement verification claim."]
+    },
+    {
+      "id": "DDM2010-FEDERATION-NORMALIZATION",
+      "source_id": "S1516.1", "clause": "9.1.4", "pdf_pages": [225],
+      "subject": "federation", "applicability": "not-applicable",
+      "statement": "The federation supplies the mapping of simulation data into the dimension's numeric range.",
+      "conditions": "Arbitrary application normalization is outside the RTI-only claim; RTI range admission and overlap interpretation remain applicable, separate obligations.",
+      "review_status": "source-reviewed", "implementation": [], "tests": [],
+      "open_items": ["Do not demand a proof of user simulation-coordinate semantics from RTI range tests or treat this exclusion as permission to omit bounds validation."]
+    },
+    {
+      "id": "DDM2010-ORDINARY-REGIONAL-INDEPENDENCE",
+      "source_id": "S1516.1", "clause": "9.1.5", "pdf_pages": [226, 227, 228],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Maintain ordinary and regional subscription effects independently and deliver each matching update or interaction at most once.",
+      "conditions": "Subscriptions use available attributes/parameters and recipient known class; ordinary/default subscription must not erase regional triples, or vice versa, even when both match a single send.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/groups.go", "rti/internal/hla/declaration/regional_interest.go", "rti/internal/hla/object/regions.go"],
+      "tests": [{"path": "pysdk/tests/test_ieee2010_ddm_live.py", "name": "test_ieee2010_ddm_additive_delivery_and_ordinary_independence", "oracle": "Adding ordinary Fast subscription changes object rates to [10,10,10]; removing it reveals preserved regional rates [2.5,None,2.5], and changing/removing one regional subscription affects only its objects. Invalid mixed regions preserve rates."}],
+      "open_items": ["The linked Python test checks routing payload and rates, not an exact duplicate-callback count after overlapping ordinary and regional subscriptions. Map Java exact-once update and interaction oracles.", "Expanded declaration rules in 9.1.5 are not fully decomposed, so this unit is not listed as reviewed."]
+    },
+    {
+      "id": "DDM2010-CONVEYED-COPY-LIFETIME",
+      "source_id": "S1516.1", "clause": "9.1.7", "pdf_pages": [228, 229],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Convey copies of the routing-time update realizations and preserve their dimensions and ranges through completion of the recipient callback.",
+      "conditions": "Only when the recipient switch is enabled and the class/attribute has available dimensions; a default-side conveyance is present and empty. Copies are read-only query targets for bounds/dimensions, not mutable specifications.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/conveyed_regions.go", "rti/internal/hla/ddm/conveyed_lifecycle.go", "rti/internal/hla/object/region_realization.go"],
+      "tests": [{"path": "rti/internal/hla/ddm/conveyed_lifecycle_test.go", "name": "TestConveyedRegionReceiverLeases", "oracle": "Pending queries reject; active recipient queries succeed; releasing one receiver leaves another's exact [12,15) copy intact; foreign queries, copy mutation and deletion reject."}, {"path": "rti/internal/hla/ddm/conveyed_lifecycle_test.go", "name": "TestConveyedRegionCaptureAndOverlapAreAtomic", "oracle": "Concurrent source commits alternate matching/nonmatching ranges; each captured realization's exact bounds agree with whether recipient 2 was selected for that same snapshot."}, {"path": "rti/internal/hla/ddm/conveyed_lifecycle_test.go", "name": "TestConveyedRegionSourceResignPreservesReceiverValues", "oracle": "Source resignation does not alter receiver copy bounds/dimensions; federation destruction invalidates the copy."}],
+      "open_items": ["Map actual Java callback-entry/exit queries while the source modifies/deletes its region, plus present-empty default sets and FDD-initial/MOM-updated switch behavior.", "Local explicit leases are partial evidence, not proof of complete Java callback lifetime or switch implementation; 9.1.7 is not fully reviewed."]
+    },
+    {
+      "id": "DDM2010-COMMIT-GATES",
+      "source_id": "S1516.1", "clause": "9.3", "pdf_pages": [230, 231],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Commit only valid caller-created regions, modify derived update realizations and inform subscription-realization changes.",
+      "conditions": "Connection, existing execution, membership and no save/restore are required; invalid handles and foreign creator have distinct exceptions. A template must have bounds set for all explicit dimensions before its first commit.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/manager.go", "rti/internal/adapters/grpc/ddm.go"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveDdmTest.java","name":"regionsRouteByAttributePairsAndCommittedBoundsAcrossThreeSessions","oracle":"A commit changes both interaction recipients and the attributes delivered to each associated-region subscriber; the preceding setter alone does not change interaction routing."},{"path":"rti/internal/hla/ddm/template_test.go","name":"TestFirstCommitAtomicAcrossTemplates","oracle":"An invalid incomplete template in a multi-region first commit prevents any complete sibling becoming a specification."},{"path":"rti/internal/hla/ddm/completion_bounds_test.go","name":"TestCompletionDDMMixedCommitPreservesEveryRegion","oracle":"Eight real-wire cases mix two staged specifications with unknown, deleted, foreign or incomplete regions, each in both orders. Exact InvalidRegion or RegionNotCreatedByThisFederate trailers accompany unchanged committed sibling bounds; a valid retry exposes preserved last drafts. The foreign owner's committed and pending bounds remain independently recoverable."}],
+      "open_items": ["Unknown, deleted, foreign and incomplete mixed commits now have independent real-wire rejection/recovery oracles in both argument orders. Standard-Java exception controls and service-specific NotConnected, FederateNotExecutionMember, SaveInProgress and RestoreInProgress remain unlinked.","The mixed-commit checks observe committed query state and later recovery, not every internal realization or notification. Multi-realization effects require fuller decomposition; 9.3 is not claimed complete. 9.2 invalid/empty dimension service facets remain outside this increment."]
+    },
+    {
+      "id": "DDM2010-DELETE-GATES",
+      "source_id": "S1516.1", "clause": "9.4", "pdf_pages": [231, 232],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Delete only caller-created templates or specifications that have no derived realization in use for update or subscription.",
+      "conditions": "Connection, execution existence, membership and no save/restore are required. Distinguish region-in-use, foreign creator and invalid region exceptions; success removes the region.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ddm/manager.go", "rti/internal/adapters/grpc/ddm.go"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/LiveDdmTest.java","name":"regionsRouteByAttributePairsAndCommittedBoundsAcrossThreeSessions","oracle":"Deleting near while associated throws RegionInUseForUpdateOrSubscription; after its update associations move, deletion succeeds and getDimensionHandleSet throws InvalidRegion."},{"path":"rti/internal/hla/ddm/template_test.go","name":"TestTemplateRejectedAtEverySpecificationBoundary","oracle":"After specification-only operations reject a template, DeleteRegion accepts that same unused template."},{"path":"rti/internal/hla/ddm/completion_bounds_test.go","name":"TestCompletionDDMRegionSubscriptionDeletionLifecycle","oracle":"A real interaction subscription prevents deletion with exact RegionInUseForUpdateOrSubscription. Bounds remain mutable/committable while subscribed; unsubscribe permits deletion, queries reject the deleted handle, and a distinct replacement commits successfully without reviving the old handle."}],
+      "open_items": ["Product-wire interaction-subscription deletion protection and post-unsubscribe invalidation are covered. Foreign creator, each common service gate and object-versus-interaction subscription controls through standard Java remain unlinked; 9.4 is not claimed complete.","The replacement-handle distinctness assertion is an additional product lifecycle regression check, not a standalone claim that 9.4 mandates globally nonreused region handles."]
+    }
+  ]
+}

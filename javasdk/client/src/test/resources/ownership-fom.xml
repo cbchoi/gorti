@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>GoRTI Java Ownership</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-09-22</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Two-session negotiated attribute ownership transfer.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <sharing>Neither</sharing>
+      <objectClass>
+        <name>Asset</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>value</name>
+          <dataType>HLAinteger32BE</dataType>
+          <updateType>Conditional</updateType>
+          <updateCondition>On change</updateCondition>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAreliable</transportation>
+          <order>Receive</order>
+          <semantics>Transferable integer asset value.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="true"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>

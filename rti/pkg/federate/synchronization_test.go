@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 type captureSyncClient struct {
@@ -65,7 +65,7 @@ func TestTranslateSynchronizationCallbacksCopiesPayloads(t *testing.T) {
 	fed := &Federate{}
 	announcedProto := &rtiv1.SynchronizationPointAnnounced{
 		Label:             "VERIFY_READY",
-		Tag:               []byte("tag"),
+		Tag:               []byte(testUserTag),
 		RequiredFederates: []uint64{2, 1},
 	}
 	announced, ok := fed.translate(&rtiv1.FederateEvent{
@@ -76,7 +76,7 @@ func TestTranslateSynchronizationCallbacksCopiesPayloads(t *testing.T) {
 	}
 	announcedProto.Tag[0] = 'X'
 	announcedProto.RequiredFederates[0] = 99
-	if string(announced.Tag) != "tag" ||
+	if string(announced.Tag) != testUserTag ||
 		!reflect.DeepEqual(announced.RequiredFederates, []uint64{2, 1}) {
 		t.Fatalf("announced callback aliases protobuf storage: %#v", announced)
 	}

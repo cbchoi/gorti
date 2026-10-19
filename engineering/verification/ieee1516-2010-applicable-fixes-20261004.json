@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-04",
+  "kind": "bounded-implementation-and-evidence-increment",
+  "coverage_complete": false,
+  "full_conformance": false,
+  "report": "engineering/verification/ieee1516-2010-applicable-fixes-20261004.md",
+  "inventory": {
+    "records": 712,
+    "applicable": 639,
+    "not_applicable": 48,
+    "unresolved_applicability": 25,
+    "atomic_normative_inventory_complete": false
+  },
+  "linkage": {
+    "scope": "reviewed-applicable-records-only",
+    "unlinked_before": 229,
+    "unlinked_after": 0,
+    "linked_applicable": 639,
+    "test_references": 873,
+    "passing_execution_references": 872,
+    "nonpassing_execution_references": 1,
+    "missing_execution_references": 0,
+    "references_are_not_unique_tests": true,
+    "linkage_is_not_semantic_satisfaction": true
+  },
+  "source_census": {
+    "supplied_pages": 793,
+    "candidate_units": 1856,
+    "direct_body_declarations": 210,
+    "candidate_only": true
+  },
+  "campaigns": [
+    {
+      "name": "Go rti and conformance",
+      "passed": 3344,
+      "failed": 0,
+      "skipped_tests": 0,
+      "nested_passed": 6665,
+      "passed_packages": 72,
+      "scope": "./rti/... ./tests/conformance/rti/...; real DDM endpoint and independent FDD XSD enabled",
+      "artifact": "go-final-r2/go-reconciled.jsonl"
+    },
+    {
+      "name": "Go actual SDK restart and callback outcomes",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "nested_passed": 4,
+      "scope": "runtime_checkpoint_live build tag; Float64 and Integer64",
+      "artifact": "go-final-r2/go-sdk-reconciled.jsonl"
+    },
+    {
+      "name": "Linux focused integration race",
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0,
+      "nested_passed": 126,
+      "race_warnings": 0,
+      "repetitions": 2,
+      "scope": "Selected callback, checkpoint, loss, atomic fanout and reconnect tests; not whole-repository race",
+      "artifact": "integration-race-final.jsonl"
+    },
+    {
+      "name": "Java broad SDK",
+      "passed": 581,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "scope": "All selected *Test classes except explicit MIM source diagnostic; fresh settled-callback-broad campaign",
+      "artifact": "java/settled-callback-broad/work/javasdk/client/target/surefire-reports"
+    },
+    {
+      "name": "Python core",
+      "passed": 2160,
+      "failed": 4,
+      "skipped": 4,
+      "scope": "Single non-RL core invocation; test_rl_*.py excluded for optional RL dependencies; joined-reference and lint failures retained",
+      "artifact": "python-core-post-callback/results.xml"
+    },
+    {
+      "name": "Python actual save confirmation",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "Separate current-server live run; Float64/Integer64, saved/not-saved terminals, HLA_EVOKED",
+      "artifact": "python-live-final/results.xml"
+    },
+    {
+      "name": "IVCT subset",
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "Internal subset, not external certification",
+      "artifact": "fm-save/python-ivct35-final.xml"
+    },
+    {
+      "name": "Requirement tooling",
+      "passed": 133,
+      "failed": 0,
+      "skipped": 0,
+      "subtests_passed": 112,
+      "warnings": 1,
+      "scope": "Unknown asyncio_mode configuration warning with plugins disabled",
+      "artifact": "scripts-reconciled.xml"
+    }
+  ],
+  "selected_current_server": {
+    "sha256": "c4272e212e51dcd44fb4d4d1dad44520b0f8ada55c1f5d3ada64553d1dfdda10",
+    "used_by": [
+      "final Go SDK and DDM endpoint",
+      "Java settled broad",
+      "separate settled MIM diagnostic",
+      "Python final four-case live"
+    ],
+    "python_core_server_sha256": "e8306b800c7bcf2a7c97aa2186749604c2b7f42fbc90439f8a3c4304b0155629",
+    "note": "Core Python predates final checkpoint history and joint-fault admission refinements. Campaigns are not one frozen whole-tree execution."
+  },
+  "python_failures": [
+    "two joined-reference tests: numpy missing",
+    "mypy strict: mypy missing",
+    "whole-SDK Ruff violations; changed Python callback files pass scoped lint"
+  ],
+  "source_diagnostic": {
+    "requirement": "JAVA2010-MIM-TABLE-PRECEDENCE",
+    "passed": 0,
+    "errors": 1,
+    "artifact": "java/settled-callback-mim-diagnostic/work/javasdk/client/target/surefire-reports",
+    "note": "Fresh explicit source-conditional diagnostic on the settled server: Table 6 HLAAnnexSaveName versus supplied MIM HLAnextSaveName; not a passing acceptance result."
+  },
+  "special_link_boundaries": [
+    "FM2010-FAULT-ONE-SEGMENT: architecture context, not viable-partition selection",
+    "FM2010-S3-PRE-A and FM2010-S3-EXCEPTION-B: source/canonical-Java diagnostic",
+    "SM-CONFORMANCE-CERTIFIED-LABEL: conservative product claim guard, not certificate",
+    "FM2010-INITIAL-EMPTY-EXECUTION: required MOM instance and unresolved initial timing interpretation"
+  ],
+  "implementation_limits": [
+    "capacity one cannot atomically admit the two fault callbacks for a survivor; loss/save remains pending without partial output",
+    "later resign preparation or journal failure after joint fault publication remains outside the atomic boundary",
+    "full fault detection, reliable-TSO last-known-good guarantee, all callback interleavings and complete normative inventory remain open"
+  ],
+  "unlinked_applicable_ids": [],
+  "all_applicable_semantic_verdicts": "open",
+  "evidence_root": "D:/workspace/gorti/applicable-fixes-20261004",
+  "artifacts": [
+    {
+      "path": "final-reconciliation.json",
+      "sha256": "8e9541be96ed3e059b6e63db41337cc44f31c5be15d363bc9275217dee3f1610"
+    },
+    {
+      "path": "go-final-r2/go-reconciled.jsonl",
+      "sha256": "941ef6b8788c3ea6c48c5d6add87b3e50e2906acee5e3915dc937dd8e153c759"
+    },
+    {
+      "path": "go-final-r2/go-sdk-reconciled.jsonl",
+      "sha256": "d35c818671c4830ad651e828516bab37a5659aaa1f133d1bf63cef59592c4563"
+    },
+    {
+      "path": "go-final-r2/go-reconciled-completion.json",
+      "sha256": "a9cd55fe780f5ab8b89eb6544facaf3e667da2d029d14112eda3aae99b0c12da"
+    },
+    {
+      "path": "integration-race-final.jsonl",
+      "sha256": "f83c8e92d6d619e34c053d6ad0ea08479d0697a2de2d29687cb8521e24cea4cd"
+    },
+    {
+      "path": "scripts-reconciled.xml",
+      "sha256": "c96dcf2b97263e5a94e3f8d6ab2a3f92f271ec92fd3bcf54c9ad89e7e7889ebb"
+    },
+    {
+      "path": "python-core-post-callback/results.xml",
+      "sha256": "47c8bd7adf3e79772286c2a4bc78ae4fd2931c1d88ff2558260d2c9659f98a12"
+    },
+    {
+      "path": "python-live-final/results.xml",
+      "sha256": "6e5d0c7da4e4ea8652a955d576ee66a659ca29c84f97097eb952d11c66962c44"
+    },
+    {
+      "path": "fm-save/python-ivct35-final.xml",
+      "sha256": "365c5798f02785cd958a905d8756c490e795364bc0c964e0c04166dc0d219a9a"
+    },
+    {
+      "path": "java/settled-callback-broad/completion.json",
+      "sha256": "34cb8ca53d67323b59040440407aa1c7a82e64448ffd4acc60f75eef8f0fb5cf"
+    },
+    {
+      "path": "fault-admission/summary.json",
+      "sha256": "5b7a6d3e91e7ab039764fe8feb2ea73193df629d44aa2e1125436b138b8a09ef"
+    },
+    {
+      "path": "fm-early/final-linkage-review.json",
+      "sha256": "bf27e6a068143643718bf73a4c3c11a4399e32651bd5cf86e8013d91d00da4b5"
+    },
+    {
+      "path": "java/settled-callback-manifest.json",
+      "sha256": "08e19d9bfce9cccf90b6cda6da81655cd61065a148a4d95cbabfb13114bb1877"
+    },
+    {
+      "path": "java/settled-callback-mim-diagnostic/completion.json",
+      "sha256": "df841bd4a2cdad3e9fc66ce1bf9e27b9674b9a9561f1e5b155f7eafc4a34487b"
+    }
+  ],
+  "review_inputs": [
+    {
+      "path": "engineering/verification/requirements2010/declaration-object.json",
+      "sha256": "aa0c4af5115672f9dc90afa51f0d621ed1cedb9c8c7b4c3ef1a695b69b7dd16c"
+    },
+    {
+      "path": "engineering/verification/requirements2010/fm.json",
+      "sha256": "3adf55c1270b9c834560cfe8b6a39d5f9fd6cd03c0e8d04ba4abb892fd09e3fa"
+    },
+    {
+      "path": "engineering/verification/requirements2010/framework.json",
+      "sha256": "c15f8bf1934ab93d6404eb0cab613365caeda76d0ec9ab02ff12e696db181379"
+    },
+    {
+      "path": "engineering/verification/requirements2010/java-annex.json",
+      "sha256": "5c90e98674584364e36ee00aa80f72ea5ab975df4cd5ab6a548272ccdf9f8ee8"
+    },
+    {
+      "path": "engineering/verification/requirements2010/omt.json",
+      "sha256": "be0fcd3dda115d0e2a5309da4b2a6b524232f71fd0e8fa0bef68f5cc91390367"
+    },
+    {
+      "path": "engineering/verification/requirements2010/ownership-ddm.json",
+      "sha256": "942515e6d088a2ae28d37c297cb2e689ae7b8a5589e636c3dee6fcca50d25305"
+    },
+    {
+      "path": "engineering/verification/requirements2010/support-mom.json",
+      "sha256": "1242ddbf7908e82bff30e789a8128685006e3d426023861e71bc8887c6e4656d"
+    },
+    {
+      "path": "engineering/verification/requirements2010/time-mapping.json",
+      "sha256": "098eb44eb8202d2eda3c310c5bb443bd14eda765a145537a56339e26db2a82e3"
+    }
+  ],
+  "git_actions": "No commit, push, branch reset or history rewrite performed."
+}

@@ -7,7 +7,7 @@ import (
 
 func testLocalStateTables() *fomTables {
 	return &fomTables{
-		objectByHandle:      map[uint64]string{10: "Vehicle"},
+		objectByHandle:      map[uint64]string{10: testVehicleClass},
 		attrByHandle:        map[uint64]map[uint64]string{10: {2: "Position", 3: "Speed"}},
 		interactionByHandle: map[uint64]string{12: "Move", 13: "HLAmanager.HLAfederate.HLArequest.HLArequestPublications"},
 		paramByHandle: map[uint64]map[uint64]string{

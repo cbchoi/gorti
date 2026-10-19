@@ -1,0 +1,459 @@
+{
+  "schema_version": 1,
+  "source_id": "S1516.1",
+  "coverage_complete": false,
+  "kind": "requirement-link-merge-proposal",
+  "target": "engineering/verification/requirements2010/fm.json",
+  "scope": "Seven-ID Java follow-up: six previously unlinked rows plus FM2010-S2-EXCEPTION-A as the paired connection-failure control. No claim that this adds seven new behavioral links.",
+  "counts": {
+    "assessed_records": 7,
+    "previously_unlinked_records": 6,
+    "behavioral_partial_rows": 5,
+    "new_behavioral_partial_rows": 4,
+    "diagnostic_only_rows": 2,
+    "test_links": 7,
+    "unique_literal_tests": 6,
+    "semantic_complete_records": 0
+  },
+  "merge_instructions": [
+    "Append nonduplicate test path/name links by id while retaining current shared-slice edits.",
+    "For the two disconnected-Disconnect rows, retain source-binding-diagnostic-only and the ambiguity in open_items. Do not report their diagnostic pass as proof of either normative rule.",
+    "Preserve existing links for FM2010-S2-EXCEPTION-A; it is a regression control, not a seventh previously unlinked row.",
+    "Do not remove any prior failure artifacts. All seven semantic statuses remain open."
+  ],
+  "source_snapshot": {
+    "source_id": "S1516.1",
+    "pdf_sha256": "789780a38898bd513fe1dbdb877433e6518dac8d0eb577056fc0bbe9e5b5a9d4",
+    "projection": "D:/workspace/gorti/ieee2010-source-intake-20260921/1516.1-pages.jsonl",
+    "binding_signature": {
+      "path": "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+      "line": 72,
+      "sha256": "e110a9d2d433d36e257f22a0cd22219a687bb04a4b9db3f29fde78489a5103d9",
+      "declared_checked_exceptions": [
+        "FederateIsExecutionMember",
+        "CallNotAllowedFromWithinCallback",
+        "RTIinternalError"
+      ]
+    }
+  },
+  "source_binding_diagnostic": {
+    "canonical_signature": {
+      "path": "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+      "line": 72,
+      "sha256": "e110a9d2d433d36e257f22a0cd22219a687bb04a4b9db3f29fde78489a5103d9",
+      "declared_checked_exceptions": [
+        "FederateIsExecutionMember",
+        "CallNotAllowedFromWithinCallback",
+        "RTIinternalError"
+      ]
+    },
+    "source_reading": {
+      "source_id": "S1516.1",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "clauses": [
+        "4.3.3(a)",
+        "4.3.5(b)"
+      ],
+      "paraphrase": "The service text requires a connected caller and lists a not-connected exception."
+    },
+    "observed_behavior": "Public disconnect returns normally both before first connection and when called again after disconnection; list still rejects with NotConnected and no extra RPC is issued. A subsequent connect succeeds.",
+    "conflict": "NotConnected is a checked RTIexception, but is absent from the canonical Java disconnect throws list. The diagnostic confirms the generated provider's list matches the canonical list; adding an incompatible checked exception or hiding it through an unchecked throw is not a resolution.",
+    "disposition": "Open source-versus-Java-binding interpretation. Observed idempotence is recorded, not declared normatively correct. No canonical signature or disconnected-disconnect policy was changed."
+  },
+  "changed_paths": [
+    "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java",
+    "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+    "engineering/verification/fm-java-fault-links-20261004.json"
+  ],
+  "execution_evidence": [
+    {
+      "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/red.log",
+      "classification": "setup failure, no tests",
+      "cause": "Unquoted dotted Maven property did not select the supplied offline cache; corrected invocation used the existing cache with no download."
+    },
+    {
+      "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/red-initial/results.xml",
+      "tests": 6,
+      "passed": 2,
+      "failed": 4,
+      "errors": 0,
+      "skipped": 0,
+      "classification": "three reproduced implementation defects plus one corrected test-oracle error",
+      "detail": "The initial List test mistook evokeCallback's remaining-callback boolean for delivery success. Corrected assertions retain exact report content/count checks."
+    },
+    {
+      "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/red-corrected/results.xml",
+      "tests": 6,
+      "passed": 3,
+      "failed": 3,
+      "errors": 0,
+      "skipped": 0,
+      "classification": "pre-fix semantic red",
+      "failed_methods": [
+        "suppliedModuleUrlsAndBytesAreExactInCreateAndJoinRequests",
+        "connectInternalFailureIsDistinctAndDoesNotCommitConnection",
+        "disconnectInterruptedTransportTeardownIsTypedAndRetiresConnection"
+      ]
+    },
+    {
+      "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/green.log",
+      "classification": "post-fix focused regression",
+      "tests": 38,
+      "passed": 38,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reports": [
+        {
+          "name": "FMJavaFaultOracle20261004Test",
+          "tests": 6,
+          "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/green/TEST-org.gorti.rti.FMJavaFaultOracle20261004Test.xml"
+        },
+        {
+          "name": "FMEarlyOracle20261004Test",
+          "tests": 5,
+          "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/green/TEST-org.gorti.rti.FMEarlyOracle20261004Test.xml"
+        },
+        {
+          "name": "ProviderLifecycleTest",
+          "tests": 12,
+          "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/green/TEST-org.gorti.rti.ProviderLifecycleTest.xml"
+        },
+        {
+          "name": "FederationTimeSelectionTest",
+          "tests": 15,
+          "path": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/green/TEST-org.gorti.rti.FederationTimeSelectionTest.xml"
+        }
+      ],
+      "execution": {
+        "working_directory": "D:/workspace/gorti/applicable-fixes-20261004/fm-java-followup/work/javasdk",
+        "java_home": "C:/Program Files/Eclipse Adoptium/jdk-11.0.31.11-hotspot",
+        "command": "D:/workspace/gorti/java-tools/apache-maven-3.9.16/bin/mvn.cmd -o -Dmaven.repo.local=D:/workspace/gorti/java-m2 -pl client -am -Dtest=FMJavaFaultOracle20261004Test,FMEarlyOracle20261004Test,ProviderLifecycleTest,FederationTimeSelectionTest -Dsurefire.failIfNoSpecifiedTests=false -Dstyle.color=never test",
+        "cleanup": "Maven completed; each owned loopback fixture shuts down its channel/server and awaits termination. No standalone RTI process was started."
+      },
+      "executed_source_correspondence": [
+        {
+          "path": "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java",
+          "sha256": "c60e98bdb5e8aa8828d075a359f9b7600d824a485808f20fba453e92d8e0eddf"
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "sha256": "dbe7c2e76356e21dadc2e63b732c5cf10bdebb9c29a3ee046ee0915f1a082787"
+        },
+        {
+          "path": "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+          "sha256": "e110a9d2d433d36e257f22a0cd22219a687bb04a4b9db3f29fde78489a5103d9"
+        }
+      ],
+      "correspondence_note": "Each listed repository source hash equals its executed isolated-work copy. The canonical API hash is unchanged from the pre-fix diagnostic."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "FM2010-FDD-ACCESS-DESIGNATOR-EXACT",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.2",
+      "pdf_pages": [
+        49
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Preserve supplied filename or URL string as module designator.",
+      "conditions": "MOM access to the current execution FDD and source modules.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/application/composition/fom_repository.go",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "semantic_status": "open",
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "name": "suppliedModuleUrlsAndBytesAreExactInCreateAndJoinRequests",
+          "oracle": "Public Java create and join transmit each supplied URL's exact external form, including distinct directory names, spaces and escaped percent characters, with byte-identical XML preserved. Two identical-content FOM files retain distinct designators and argument order; selected MIM input is also checked. This tests SDK-to-wire serialization against a loopback service, not the server's MOM request/report implementation."
+        }
+      ],
+      "assessment": "partial-executable-evidence",
+      "remaining_conditions": [
+        "End-to-end standard MOM reflection and module-data request/report with these exact Java URLs remain separate from the inspected outbound requests.",
+        "Only local file URLs are supported by this Java profile; remote URL schemes and every Java URL lexical variant are not proven."
+      ],
+      "open_items": [
+        "End-to-end standard MOM reflection and module-data request/report with these exact Java URLs remain separate from the inspected outbound requests.",
+        "Only local file URLs are supported by this Java profile; remote URL schemes and every Java URL lexical variant are not proven."
+      ]
+    },
+    {
+      "id": "FM2010-S2-EXCEPTION-A",
+      "source_id": "S1516.1",
+      "clause": "4.2.5(a)",
+      "pdf_pages": [
+        50,
+        51
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Connect reports an exception when connection failed.",
+      "conditions": "Federate-initiated invocation of Connect; the listed failure condition holds; no universal ordering among simultaneous errors is inferred.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/federation/manager.go",
+        "rti/internal/adapters/grpc/federation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "semantic_status": "open",
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "name": "connectUnavailableRemainsConnectionFailedNotInternalError",
+          "oracle": "The reachable loopback service rejects the connection-admission handshake with UNAVAILABLE. Public Connect raises ConnectionFailed with the actual status/cause retained; no session is installed, subsequent List rejects locally without RPC, and the same ambassador connects successfully after recovery. This is the distinct connection-failure control, not evidence of an RTI internal fault."
+        }
+      ],
+      "assessment": "partial-executable-evidence",
+      "remaining_conditions": [
+        "UNAVAILABLE during handshake is covered; endpoint setup, TLS, deadlines and every partial-initialization failure site are not exhaustively tested."
+      ],
+      "open_items": [
+        "UNAVAILABLE during handshake is covered; endpoint setup, TLS, deadlines and every partial-initialization failure site are not exhaustively tested."
+      ]
+    },
+    {
+      "id": "FM2010-S2-EXCEPTION-E",
+      "source_id": "S1516.1",
+      "clause": "4.2.5(e)",
+      "pdf_pages": [
+        50,
+        51
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Connect reports an exception when RTI internal error.",
+      "conditions": "Federate-initiated invocation of Connect; the listed failure condition holds; no universal ordering among simultaneous errors is inferred.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/federation/manager.go",
+        "rti/internal/adapters/grpc/federation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "semantic_status": "open",
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "name": "connectInternalFailureIsDistinctAndDoesNotCommitConnection",
+          "oracle": "A reachable service returns INTERNAL at the actual gRPC connection-handshake response boundary. Public Connect must raise RTIinternalError with the INTERNAL status and diagnostic preserved, not ConnectionFailed. No session commits; subsequent List rejects without another RPC; same-ambassador recovery returns exactly one fresh report. The old implementation reproduced the wrong exception type."
+        }
+      ],
+      "assessment": "partial-executable-evidence",
+      "remaining_conditions": [
+        "The injected boundary is the Java client's received INTERNAL RPC failure, not a proof that every Go backend internal fault emits the correct status/trailer.",
+        "Local transport construction, cleanup failure concurrent with handshake failure, DATA_LOSS and all other runtime-failure sites are not covered by this literal test."
+      ],
+      "open_items": [
+        "The injected boundary is the Java client's received INTERNAL RPC failure, not a proof that every Go backend internal fault emits the correct status/trailer.",
+        "Local transport construction, cleanup failure concurrent with handshake failure, DATA_LOSS and all other runtime-failure sites are not covered by this literal test."
+      ]
+    },
+    {
+      "id": "FM2010-S3-PRE-A",
+      "source_id": "S1516.1",
+      "clause": "4.3.3(a)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Disconnect requires that caller is connected.",
+      "conditions": "Federate-initiated invocation of Disconnect; operative pre/postcondition in this service's lifecycle.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/federation/manager.go",
+        "rti/internal/adapters/grpc/federation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "semantic_status": "open",
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "name": "disconnectedDisconnectDocumentsCanonicalSignatureAndObservedIdempotence",
+          "oracle": "Diagnostic only: reflectively assert the exact canonical and generated disconnect checked-exception lists, verify NotConnected is checked but absent, then observe public disconnected disconnect returning normally with no RPC before first connect and after normal disconnect. List continues to reject with NotConnected and reconnect works. Passing this diagnostic records the mismatch; it does not prove the source requirement."
+        }
+      ],
+      "assessment": "source-binding-diagnostic-only",
+      "source_binding_diagnostic": {
+        "canonical_signature": {
+          "path": "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+          "line": 72,
+          "sha256": "e110a9d2d433d36e257f22a0cd22219a687bb04a4b9db3f29fde78489a5103d9",
+          "declared_checked_exceptions": [
+            "FederateIsExecutionMember",
+            "CallNotAllowedFromWithinCallback",
+            "RTIinternalError"
+          ]
+        },
+        "source_reading": {
+          "source_id": "S1516.1",
+          "pdf_pages": [
+            51,
+            52
+          ],
+          "clauses": [
+            "4.3.3(a)",
+            "4.3.5(b)"
+          ],
+          "paraphrase": "The service text requires a connected caller and lists a not-connected exception."
+        },
+        "observed_behavior": "Public disconnect returns normally both before first connection and when called again after disconnection; list still rejects with NotConnected and no extra RPC is issued. A subsequent connect succeeds.",
+        "conflict": "NotConnected is a checked RTIexception, but is absent from the canonical Java disconnect throws list. The diagnostic confirms the generated provider's list matches the canonical list; adding an incompatible checked exception or hiding it through an unchecked throw is not a resolution.",
+        "disposition": "Open source-versus-Java-binding interpretation. Observed idempotence is recorded, not declared normatively correct. No canonical signature or disconnected-disconnect policy was changed."
+      },
+      "remaining_conditions": [
+        "Resolve the source service precondition/NotConnected wording against the canonical Java signature before asserting conformance or changing disconnected-disconnect behavior. This diagnostic is deliberately not a passing semantic oracle for the row."
+      ],
+      "open_items": [
+        "Resolve the source service precondition/NotConnected wording against the canonical Java signature before asserting conformance or changing disconnected-disconnect behavior. This diagnostic is deliberately not a passing semantic oracle for the row."
+      ]
+    },
+    {
+      "id": "FM2010-S3-EXCEPTION-B",
+      "source_id": "S1516.1",
+      "clause": "4.3.5(b)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Disconnect reports an exception when caller not connected.",
+      "conditions": "Federate-initiated invocation of Disconnect; the listed failure condition holds; no universal ordering among simultaneous errors is inferred.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/federation/manager.go",
+        "rti/internal/adapters/grpc/federation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "semantic_status": "open",
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "name": "disconnectedDisconnectDocumentsCanonicalSignatureAndObservedIdempotence",
+          "oracle": "Diagnostic only: reflectively assert the exact canonical and generated disconnect checked-exception lists, verify NotConnected is checked but absent, then observe public disconnected disconnect returning normally with no RPC before first connect and after normal disconnect. List continues to reject with NotConnected and reconnect works. Passing this diagnostic records the mismatch; it does not prove the source requirement."
+        }
+      ],
+      "assessment": "source-binding-diagnostic-only",
+      "source_binding_diagnostic": {
+        "canonical_signature": {
+          "path": "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+          "line": 72,
+          "sha256": "e110a9d2d433d36e257f22a0cd22219a687bb04a4b9db3f29fde78489a5103d9",
+          "declared_checked_exceptions": [
+            "FederateIsExecutionMember",
+            "CallNotAllowedFromWithinCallback",
+            "RTIinternalError"
+          ]
+        },
+        "source_reading": {
+          "source_id": "S1516.1",
+          "pdf_pages": [
+            51,
+            52
+          ],
+          "clauses": [
+            "4.3.3(a)",
+            "4.3.5(b)"
+          ],
+          "paraphrase": "The service text requires a connected caller and lists a not-connected exception."
+        },
+        "observed_behavior": "Public disconnect returns normally both before first connection and when called again after disconnection; list still rejects with NotConnected and no extra RPC is issued. A subsequent connect succeeds.",
+        "conflict": "NotConnected is a checked RTIexception, but is absent from the canonical Java disconnect throws list. The diagnostic confirms the generated provider's list matches the canonical list; adding an incompatible checked exception or hiding it through an unchecked throw is not a resolution.",
+        "disposition": "Open source-versus-Java-binding interpretation. Observed idempotence is recorded, not declared normatively correct. No canonical signature or disconnected-disconnect policy was changed."
+      },
+      "remaining_conditions": [
+        "Resolve the source service precondition/NotConnected wording against the canonical Java signature before asserting conformance or changing disconnected-disconnect behavior. This diagnostic is deliberately not a passing semantic oracle for the row."
+      ],
+      "open_items": [
+        "Resolve the source service precondition/NotConnected wording against the canonical Java signature before asserting conformance or changing disconnected-disconnect behavior. This diagnostic is deliberately not a passing semantic oracle for the row."
+      ]
+    },
+    {
+      "id": "FM2010-S3-EXCEPTION-C",
+      "source_id": "S1516.1",
+      "clause": "4.3.5(c)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Disconnect reports an exception when RTI internal error.",
+      "conditions": "Federate-initiated invocation of Disconnect; the listed failure condition holds; no universal ordering among simultaneous errors is inferred.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/federation/manager.go",
+        "rti/internal/adapters/grpc/federation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "semantic_status": "open",
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "name": "disconnectInterruptedTransportTeardownIsTypedAndRetiresConnection",
+          "oracle": "After real public Connect and a queued List report, the test interrupts the calling thread immediately before actual WireSession channel shutdown/awaitTermination. Public Disconnect raises RTIinternalError retaining the IllegalStateException/InterruptedException cause chain and interrupt flag. The channel terminates, the session is retired, List rejects without RPC, reconnect succeeds and no old report leaks into the new connection. The old implementation leaked IllegalStateException."
+        }
+      ],
+      "assessment": "partial-executable-evidence",
+      "remaining_conditions": [
+        "This covers real interrupted channel teardown after shutdown begins, not every possible close failure or a universal rollback rule.",
+        "Joined-disconnect rejection is tested elsewhere; callback-stream teardown with active membership is not a legal Disconnect precondition."
+      ],
+      "open_items": [
+        "This covers real interrupted channel teardown after shutdown begins, not every possible close failure or a universal rollback rule.",
+        "Joined-disconnect rejection is tested elsewhere; callback-stream teardown with active membership is not a legal Disconnect precondition."
+      ]
+    },
+    {
+      "id": "FM2010-S7-EXCEPTION-B",
+      "source_id": "S1516.1",
+      "clause": "4.7.5(b)",
+      "pdf_pages": [
+        54
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "List Federation Executions reports an exception when RTI internal error.",
+      "conditions": "Federate-initiated invocation of List Federation Executions; the listed failure condition holds; no universal ordering among simultaneous errors is inferred.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/federation/manager.go",
+        "rti/internal/adapters/grpc/federation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "semantic_status": "open",
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FMJavaFaultOracle20261004Test.java",
+          "name": "listInternalFailurePreservesConnectionAndAlreadyQueuedReport",
+          "oracle": "On an established connection, a second List invocation receives an injected INTERNAL enumeration response. Public List raises RTIinternalError with actual wire status/cause; the same session remains, the prior successful report is delivered exactly once and no success report is fabricated for the failed call. Recovery yields exactly the new report with no extra callbacks. No failed Connect is credited here."
+        }
+      ],
+      "assessment": "partial-executable-evidence",
+      "remaining_conditions": [
+        "Server-side enumeration failure generation is injected at the loopback RPC response boundary; this does not demonstrate all production repository fault sources.",
+        "Local allocation/encoding failures and concurrent execution-list mutations remain outside this bounded oracle."
+      ],
+      "open_items": [
+        "Server-side enumeration failure generation is injected at the loopback RPC response boundary; this does not demonstrate all production repository fault sources.",
+        "Local allocation/encoding failures and concurrent execution-list mutations remain outside this bounded oracle."
+      ]
+    }
+  ]
+}

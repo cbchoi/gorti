@@ -19,14 +19,10 @@ The ``fed.ddm`` accessor (see :class:`Federate.ddm` in
 federate, bound to the same gRPC channel + federation_name +
 federate_handle the federate already holds.
 
-User-facing two-step (M12 W1 handoff): the cut-3
-``RegisterObjectInstanceWithRegions`` Go-side handler accepts the
-request shape but does NOT mint the object handle on its own — the
-SDK is responsible for calling :class:`ObjectService.RegisterObject`
-first to mint a handle, then forwarding to
-:class:`DDMService.RegisterObjectInstanceWithRegions` to record the
-per-attribute region bindings. The :meth:`register_object_instance_with_regions`
-helper performs both calls and returns the minted handle.
+The :meth:`register_object_instance_with_regions` helper atomically
+registers an object and its per-attribute region bindings through one
+``DDMService.RegisterObjectInstanceWithRegions`` RPC and returns the
+object handle assigned by the server.
 """
 
 from __future__ import annotations
@@ -35,6 +31,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeAlias
 
 from rti1516e._grpc_errors import translate_rpc_error
+from rti1516e.errors import RtiError
 from rti1516e.handles import (
     AttributeHandle,
     DimensionHandle,
@@ -87,16 +84,20 @@ class DDMClient:
         *,
         federation_name: str,
         federate_handle: int,
+        session_token: bytes = b"",
+        logical_time_implementation_name: str = "",
     ) -> None:
-        from rti.v1 import ddm_pb2_grpc, object_pb2_grpc
+        from rti.v1 import ddm_pb2_grpc
 
         self._stub = ddm_pb2_grpc.DDMServiceStub(channel)
-        # ObjectServiceStub is needed for the
-        # register_object_instance_with_regions two-step (mint handle
-        # via ObjectService, then record region bindings via DDMService).
-        self._object_stub = object_pb2_grpc.ObjectServiceStub(channel)
         self._federation_name = federation_name
         self._federate_handle = int(federate_handle)
+        self._session_token = bytes(session_token)
+        self._logical_time_implementation_name = logical_time_implementation_name
+
+    def _query_options(self) -> dict[str, tuple[tuple[str, bytes], ...]]:
+        token = getattr(self, "_session_token", b"")
+        return {"metadata": (("gorti-session-token-bin", token),)} if token else {}
 
     # --- Routing-space + dimension handle lookup (§6.4) -----------------------
 
@@ -233,7 +234,7 @@ class DDMClient:
             dimension_handle=int(dimension_handle),
         )
         try:
-            resp = await self._stub.QueryBounds(req)
+            resp = await self._stub.QueryBounds(req, **self._query_options())
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
         if not resp.found:
@@ -247,9 +248,16 @@ class DDMClient:
         object_class_handle: _ObjectClassRef,
         attribute_handles: _AttributeRefList,
         region_handles: _RegionRefList,
+        *,
+        active: bool = True,
+        update_rate_designator: str = "",
     ) -> None:
         """§6.10 — region-scoped subscription to object-class attributes."""
         from rti.v1 import common_pb2, ddm_pb2
+
+        from .declaration import validate_subscription_options
+
+        validate_subscription_options(active, update_rate_designator)
 
         req = ddm_pb2.SubscribeOCAWithRegionsRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
@@ -258,6 +266,8 @@ class DDMClient:
             object_class_handle=int(object_class_handle),
             attribute_handles=[int(h) for h in attribute_handles],
             region_handles=[int(h) for h in region_handles],
+            active=active,
+            update_rate_designator=update_rate_designator,
         )
         try:
             await self._stub.SubscribeObjectClassAttributesWithRegions(req)
@@ -268,9 +278,15 @@ class DDMClient:
         self,
         interaction_class_handle: _InteractionClassRef,
         region_handles: _RegionRefList,
+        *,
+        active: bool = True,
     ) -> None:
         """§6.13 — region-scoped subscription to an interaction class."""
         from rti.v1 import common_pb2, ddm_pb2
+
+        from .declaration import validate_subscription_options
+
+        validate_subscription_options(active, "")
 
         req = ddm_pb2.SubscribeICWithRegionsRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
@@ -278,6 +294,7 @@ class DDMClient:
             federate_handle=self._federate_handle,
             interaction_class_handle=int(interaction_class_handle),
             region_handles=[int(h) for h in region_handles],
+            active=active,
         )
         try:
             await self._stub.SubscribeInteractionClassWithRegions(req)
@@ -295,46 +312,17 @@ class DDMClient:
     ) -> int:
         """§6.7 — register an instance with per-attribute region bindings.
 
-        Implements the M12 W1 two-step handoff: the cut-3 Go-side
-        ``DDMService.RegisterObjectInstanceWithRegions`` does NOT mint
-        the object handle (its response carries handle 0 by design,
-        see ``rti/internal/transport/grpc/ddm.go``). The SDK first
-        invokes :class:`ObjectService.RegisterObjectInstance` to mint
-        the handle, then calls the DDM RPC to record the bindings.
-
-        Returns the minted object handle.
+        Uses one ``DDMService.RegisterObjectInstanceWithRegions`` RPC
+        and returns the object handle assigned by the server.
         """
-        from rti.v1 import common_pb2, ddm_pb2, object_pb2
+        from rti.v1 import common_pb2, ddm_pb2
 
-        # Step 1: mint the object handle via ObjectService.
-        register_req = object_pb2.RegisterObjectRequest(
-            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
-            federation_name=self._federation_name,
-            federate_handle=self._federate_handle,
-            object_class_handle=int(object_class_handle),
-            object_name=object_name,
-        )
-        try:
-            register_resp = await self._object_stub.RegisterObjectInstance(register_req)
-        except Exception as exc:  # noqa: BLE001
-            translate_rpc_error(exc)
-        object_handle = int(register_resp.object_handle)
-        # Echo back the actually-assigned name (rtid generates one if
-        # the caller passed an empty string). The user-facing return
-        # is just the handle; the name is recorded on the wire by
-        # ObjectService and again by DDMService for symmetry.
-        actual_name = register_resp.object_name or object_name
-
-        # Step 2: record per-attribute region bindings on DDMService.
-        # The proto's response carries handle 0 (the manager records
-        # bindings but does not re-mint a handle); we ignore the
-        # response since the authoritative handle is already in hand.
         ddm_req = ddm_pb2.RegisterObjectWithRegionsRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name,
             federate_handle=self._federate_handle,
             object_class_handle=int(object_class_handle),
-            object_name=actual_name,
+            object_name=object_name,
             attribute_regions=[
                 ddm_pb2.AttributeRegions(
                     attribute_handle=int(ar.attribute_handle),
@@ -344,9 +332,12 @@ class DDMClient:
             ],
         )
         try:
-            await self._stub.RegisterObjectInstanceWithRegions(ddm_req)
+            resp = await self._stub.RegisterObjectInstanceWithRegions(ddm_req)
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
+        object_handle = int(resp.object_handle)
+        if object_handle == 0:
+            raise RtiError("RegisterObjectInstanceWithRegions returned zero object handle")
         return object_handle
 
     # --- M23 W5 — §9 missing services -----------------------------------
@@ -448,11 +439,14 @@ class DDMClient:
         parameters: _ParameterValueDict,
         region_handles: _RegionRefList,
         timestamp: float | None = None,
+        *, tag: bytes = b"", retraction_handle: int = 0,
     ) -> None:
         """§9.12 — region-scoped interaction send."""
         from rti.v1 import common_pb2, ddm_pb2
 
         req = ddm_pb2.SendInteractionWithRegionsRequest(
+            user_supplied_tag=bytes(tag),
+            message_retraction_handle=int(retraction_handle),
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name,
             federate_handle=self._federate_handle,
@@ -461,7 +455,12 @@ class DDMClient:
             region_handles=[int(h) for h in region_handles],
         )
         if timestamp is not None:
-            req.logical_time = float(timestamp)
+            from ._logical_time import write_time
+
+            write_time(
+                req, "logical_time", timestamp,
+                getattr(self, "_logical_time_implementation_name", "HLAfloat64Time"),
+            )
         try:
             await self._stub.SendInteractionWithRegions(req)
         except Exception as exc:  # noqa: BLE001

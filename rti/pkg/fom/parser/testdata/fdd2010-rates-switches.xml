@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <objects><objectClass><name>HLAobjectRoot</name></objectClass></objects>
+  <interactions><interactionClass><name>HLAinteractionRoot</name><transportation>HLAreliable</transportation><order>Receive</order></interactionClass></interactions>
+  <dimensions/>
+  <transportations><transportation><name>HLAreliable</name><reliable>Yes</reliable></transportation></transportations>
+  <switches>
+    <autoProvide/>
+    <conveyRegionDesignatorSets/>
+    <conveyProducingFederate/>
+    <attributeScopeAdvisory isEnabled="true"/>
+    <attributeRelevanceAdvisory isEnabled="0"/>
+    <objectClassRelevanceAdvisory isEnabled="1"/>
+    <interactionRelevanceAdvisory/>
+    <serviceReporting/>
+    <exceptionReporting/>
+    <delaySubscriptionEvaluation/>
+  </switches>
+  <updateRates>
+    <updateRate><name>Fast</name><rate>12.5</rate><semantics>Test metadata.</semantics></updateRate>
+    <updateRate><name>Slow</name><rate>.25</rate></updateRate>
+    <updateRate><name>Small</name><rate>0.00000000000000000000000000000000000001</rate></updateRate>
+    <updateRate><name>Positive</name><rate>1</rate></updateRate>
+  </updateRates>
+</objectModel>

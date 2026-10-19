@@ -1,4 +1,8 @@
-# C++ IEEE 1516e smoke
+# Legacy C++ IEEE 1516e smoke
+
+This example is retained for the old C++ SDK and is outside the current example
+catalog. Use [java-exchange](../java-exchange/README.md) for the supported Java
+standard API, or the Go/Python examples listed in [Examples](../README.md).
 
 This C++17 publisher uses the gorti IEEE 1516-2010 ambassador-shaped SDK. It
 connects to `rtid`, creates and joins a federation, resolves FOM handles,

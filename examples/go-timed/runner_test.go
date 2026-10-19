@@ -7,14 +7,13 @@
 //
 //   go test -timeout 60s ./examples/go-timed
 //
-// Skipped when the rtid binary isn't available (CI without `go build
-// ./rti/cmd/rtid` first); the runner does NOT auto-build to keep the
-// test fast on local-loop iterations. Build via `make build` or the
-// Makefile's bin/rtid target before running.
+// Builds private binaries and runs on Windows and Linux. Build, child-process,
+// and protocol failures are test failures, not unavailable prerequisites.
 
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net"
@@ -55,16 +54,17 @@ type federateSpec struct {
 }
 
 func TestGoTimedEndToEnd(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("subprocess teardown semantics differ on Windows; skipped here")
-	}
-
 	repoRoot, err := findRepoRoot()
 	if err != nil {
 		t.Fatalf("findRepoRoot: %v", err)
 	}
-	rtidBin := filepath.Join(repoRoot, "bin", "rtid")
-	regBin := filepath.Join(repoRoot, "bin", "go-timed-regulator")
+	binDir := t.TempDir()
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	rtidBin := filepath.Join(binDir, "rtid"+ext)
+	regBin := filepath.Join(binDir, "go-timed-regulator"+ext)
 
 	// Build both binaries fresh — keeps the test self-contained.
 	if err := goBuild(t, repoRoot, rtidBin, "./rti/cmd/rtid"); err != nil {
@@ -105,13 +105,18 @@ func TestGoTimedEndToEnd(t *testing.T) {
 		"--log-level", "warn",
 		"--save-dir", filepath.Join(tmpdir, "saves"),
 	)
+	rtidCmd.Env = append(os.Environ(), "GORTI_RESEARCH_CONFIG=")
 	rtidCmd.Stdout = logF
 	rtidCmd.Stderr = logF
 	if err := rtidCmd.Start(); err != nil {
 		t.Fatalf("start rtid: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = rtidCmd.Process.Signal(os.Interrupt)
+		if runtime.GOOS == "windows" {
+			_ = rtidCmd.Process.Kill()
+		} else {
+			_ = rtidCmd.Process.Signal(os.Interrupt)
+		}
 		done := make(chan struct{})
 		go func() { _ = rtidCmd.Wait(); close(done) }()
 		select {
@@ -119,6 +124,12 @@ func TestGoTimedEndToEnd(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			_ = rtidCmd.Process.Kill()
 			<-done
+		}
+		data, err := os.ReadFile(logF.Name())
+		if err != nil {
+			t.Errorf("read rtid log: %v", err)
+		} else if bytes.Contains(data, []byte("WARNING: DATA RACE")) {
+			t.Errorf("race detected in rtid subprocess:\n%s", data)
 		}
 	})
 
@@ -150,6 +161,8 @@ func TestGoTimedEndToEnd(t *testing.T) {
 	}
 
 	// Spawn federates concurrently.
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(specs))
 	for _, s := range specs {
@@ -165,13 +178,14 @@ func TestGoTimedEndToEnd(t *testing.T) {
 			}
 			defer fedLog.Close()
 
-			cmd := exec.Command(regBin,
+			cmd := exec.CommandContext(ctx, regBin,
 				"--url", url,
 				"--federation", federation,
 				"--name", s.Name,
 				"--lookahead", strconv.FormatFloat(s.Lookahead, 'f', -1, 64),
 				"--primitive", s.Primitive,
 				"--constrained=true",
+				"--participants", strconv.Itoa(len(specs)),
 				"--cycles", strconv.Itoa(cycles),
 				"--tick-step", strconv.FormatFloat(tickStep, 'f', -1, 64),
 				"--result", resultPath,
@@ -179,6 +193,11 @@ func TestGoTimedEndToEnd(t *testing.T) {
 			)
 			cmd.Stdout = fedLog
 			cmd.Stderr = fedLog
+			// Exercise a late join: the other participants must remain at
+			// their startup barrier rather than advancing before normal joins.
+			if s.Name == "normal" {
+				time.Sleep(time.Second)
+			}
 			if err := cmd.Run(); err != nil {
 				errCh <- err
 			}
@@ -207,6 +226,9 @@ func TestGoTimedEndToEnd(t *testing.T) {
 		if err := json.Unmarshal(b, &r); err != nil {
 			t.Fatalf("decode %s: %v", path, err)
 		}
+		if r.Name != s.Name || r.Lookahead != s.Lookahead || r.Primitive != s.Primitive || !r.Constrained || r.TicksSent != cycles {
+			t.Errorf("%s: result identity/configuration/tick count mismatch: %+v", s.Name, r)
+		}
 		results[s.Name] = r
 	}
 
@@ -217,34 +239,24 @@ func TestGoTimedEndToEnd(t *testing.T) {
 		if len(r.Grants) != cycles {
 			t.Errorf("%s: %d grants, want %d", name, len(r.Grants), cycles)
 		}
+		for cycle, grant := range r.Grants {
+			if want := float64(cycle+1) * tickStep; grant != want {
+				t.Errorf("%s: TAR cycle %d grant=%v, want exact requested time %v", name, cycle+1, grant, want)
+			}
+		}
 	}
 
-	// 211.3 — per-federate grant times non-decreasing.
-	//
-	// Plan-level intent was "strictly monotonic," but the manager's
-	// TAR incremental-grant path can emit consecutive grants at the
-	// same time when LBTS doesn't advance between cycles (a peer
-	// hasn't moved past its current floor yet). The federation-wide
-	// invariant — grants don't go backwards — still holds. This is
-	// the practical observability bound, and the strict-monotonic
-	// claim should only be made for federations where every cycle
-	// requests t > peer-LBTS (which requires a different cycle
-	// pattern than this demo's fixed tickStep). Adjusting the plan
-	// rather than fighting the manager's correct behavior.
+	// 211.3: TAR grants must strictly increase with these requested targets.
 	for name, r := range results {
 		for i := 1; i < len(r.Grants); i++ {
-			if r.Grants[i] < r.Grants[i-1] {
+			if r.Grants[i] <= r.Grants[i-1] {
 				t.Errorf("%s: grant %d (%v) regressed below grant %d (%v)",
 					name, i, r.Grants[i], i-1, r.Grants[i-1])
 			}
 		}
 	}
 
-	// 211.4 — per-cycle minimum grant time bounded by min(t_requested, LBTS).
-	// With NER strict + cycles, LBTS evolves by min(currentTime+lookahead).
-	// The simplest invariant we can pin without re-simulating: the smallest
-	// grant time across all federates per cycle is monotonically
-	// non-decreasing across cycles (LBTS only goes up).
+	// The cycle minimum is a diagnostic summary, not a measured LBTS bound.
 	cycleMins := make([]float64, cycles)
 	for c := 0; c < cycles; c++ {
 		min := -1.0
@@ -264,8 +276,7 @@ func TestGoTimedEndToEnd(t *testing.T) {
 		}
 	}
 
-	// 211.1 — overall completion (test reaching this point under the
-	// 60s test timeout already proves "within 30s end-to-end").
+	// Completion is bounded by the child context, not a performance assertion.
 	t.Logf("go-timed end-to-end OK: %d federates × %d cycles, cycle-mins=%v",
 		len(results), cycles, cycleMins)
 }
@@ -325,7 +336,9 @@ func sortedKeys(m map[string]federateResult) []string {
 
 func goBuild(t *testing.T, repoRoot, output, pkg string) error {
 	t.Helper()
-	cmd := exec.Command("go", "build", "-o", output, pkg)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", output, pkg)
 	cmd.Dir = repoRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Logf("go build %s output:\n%s", pkg, out)

@@ -1,9 +1,7 @@
 # DEVStone-HLA Portico/gorti benchmark
 
 This directory separates performance measurement from the service-semantic
-checks in `verification/`. The requested name `DEVSOne` is resolved here to
-DEVStone, the established synthetic benchmark for DEVS simulation engines. The
-repository implements a DEVStone-HLA mapping. A deterministic graph traversal
+checks in `verification/`. It implements a DEVStone-HLA mapping: a deterministic graph traversal
 materializes every atomic event-value delivery into a versioned binary plan;
 each plan record becomes one receive-order object update and one receive-order
 interaction between a producer and a consumer. The benchmark measures RTI
@@ -17,7 +15,18 @@ choreography, and measurement boundaries. The tracked default workload is HI,
 width 10, depth 10, 100 injected events, 40,600 expected interactions, and
 40,600 expected object updates.
 
-## Experiment design
+## Runners
+
+- `portico-gorti/` runs the paired container experiment described below.
+- `callback-reporting/` runs native callback-reporting comparisons, including
+  ABBA/BAAB crossover blocks and before/after Go SDK experiments.
+
+See [Performance](../docs/performance.md) for the latest recorded comparisons.
+The design, container requirements, and four-file retention policy below apply
+to the paired `portico-gorti` runner. The callback-reporting runner documents
+its own manifest and external trial-evidence policy.
+
+## Paired experiment design
 
 The confirmed experiment contract is `environment/experiment.json`; the
 LocalLRC experiment is `environment/experiment-local-lrc.json`. Portico 2.1.4

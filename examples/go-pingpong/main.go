@@ -60,7 +60,7 @@ type exampleArgs struct {
 	FederationName string
 	Rounds         int
 	LogDir         string
-	// Deterministic forces rtid to use a FakeClock so the captured
+	// Deterministic forces rtid to use a ManualClock so the captured
 	// event-log body is byte-identical across runs. The determinism
 	// harness sets this; production runs leave it false.
 	Deterministic bool

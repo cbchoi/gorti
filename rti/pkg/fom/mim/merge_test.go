@@ -289,11 +289,11 @@ func TestSpec_Merge_UserDimensionsPreserved(t *testing.T) {
 		t.Fatal("merged FOM is nil")
 	}
 	got := merged.Dimensions()
-	if len(got) != 2 {
-		t.Fatalf("merged FOM has %d dimensions; want 2", len(got))
+	if len(got) != len(base.Dimensions())+2 {
+		t.Fatalf("merged FOM has %d dimensions; want base dimensions plus 2", len(got))
 	}
-	if got[0].Name != "BearingDeg" || got[1].Name != "RangeKm" {
-		t.Errorf("merged dimensions = %+v; want [BearingDeg RangeKm] (sorted)", got)
+	if got[0].Name != "BearingDeg" || got[len(got)-1].Name != "RangeKm" {
+		t.Errorf("merged dimensions = %+v; want BearingDeg and RangeKm around the sorted MIM dimensions", got)
 	}
 }
 

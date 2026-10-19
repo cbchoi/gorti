@@ -12,8 +12,9 @@ package federate
 
 import (
 	"context"
+	"errors"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 // AttributeRegions binds an attribute handle to a set of region
@@ -64,7 +65,7 @@ func (f *Federate) CreateRegion(ctx context.Context, space uint64, dimensions []
 	resp, err := f.conn.ddm.CreateRegion(ctx, &rtiv1.CreateRegionRequest{
 		WireVersion:        rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:     f.federationName,
-		FederateHandle:     f.federateHandle,
+		FederateHandle:     f.CurrentHandle(),
 		RoutingSpaceHandle: space,
 		DimensionHandles:   dimensions,
 	})
@@ -80,7 +81,7 @@ func (f *Federate) SetRangeBounds(ctx context.Context, region, dimension uint64,
 	_, err := f.conn.ddm.SetRangeBounds(ctx, &rtiv1.SetRangeBoundsRequest{
 		WireVersion:     rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:  f.federationName,
-		FederateHandle:  f.federateHandle,
+		FederateHandle:  f.CurrentHandle(),
 		RegionHandle:    region,
 		DimensionHandle: dimension,
 		Bounds:          &rtiv1.Range{Lower: lower, Upper: upper},
@@ -94,7 +95,7 @@ func (f *Federate) CommitRegionModifications(ctx context.Context, regions []uint
 	_, err := f.conn.ddm.CommitRegionModifications(ctx, &rtiv1.CommitRegionRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName: f.federationName,
-		FederateHandle: f.federateHandle,
+		FederateHandle: f.CurrentHandle(),
 		RegionHandles:  regions,
 	})
 	return wrapStatusErr(err)
@@ -106,7 +107,7 @@ func (f *Federate) DeleteRegion(ctx context.Context, region uint64) error {
 	_, err := f.conn.ddm.DeleteRegion(ctx, &rtiv1.DeleteRegionRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName: f.federationName,
-		FederateHandle: f.federateHandle,
+		FederateHandle: f.CurrentHandle(),
 		RegionHandle:   region,
 	})
 	return wrapStatusErr(err)
@@ -116,7 +117,7 @@ func (f *Federate) DeleteRegion(ctx context.Context, region uint64) error {
 // (region, dimension) pair. found=false when the pair has no bounds.
 // IEEE 1516.1 §9.14 (getRangeBounds).
 func (f *Federate) QueryBounds(ctx context.Context, region, dimension uint64) (lower, upper uint64, found bool, err error) {
-	resp, rerr := f.conn.ddm.QueryBounds(ctx, &rtiv1.QueryBoundsRequest{
+	resp, rerr := f.conn.ddm.QueryBounds(f.sessionContext(ctx), &rtiv1.QueryBoundsRequest{
 		WireVersion:     rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:  f.federationName,
 		RegionHandle:    region,
@@ -142,7 +143,7 @@ func (f *Federate) SubscribeObjectClassAttributesWithRegions(
 	_, err := f.conn.ddm.SubscribeObjectClassAttributesWithRegions(ctx, &rtiv1.SubscribeOCAWithRegionsRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
+		FederateHandle:    f.CurrentHandle(),
 		ObjectClassHandle: cls,
 		AttributeHandles:  attributes,
 		RegionHandles:     regions,
@@ -159,7 +160,7 @@ func (f *Federate) SubscribeInteractionClassWithRegions(
 	_, err := f.conn.ddm.SubscribeInteractionClassWithRegions(ctx, &rtiv1.SubscribeICWithRegionsRequest{
 		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:         f.federationName,
-		FederateHandle:         f.federateHandle,
+		FederateHandle:         f.CurrentHandle(),
 		InteractionClassHandle: cls,
 		RegionHandles:          regions,
 	})
@@ -168,32 +169,15 @@ func (f *Federate) SubscribeInteractionClassWithRegions(
 
 // RegisterObjectInstanceWithRegions — IEEE 1516.1 §9.5.
 //
-// Two-step pattern (matches pysdk): mints the object handle via
-// ObjectService.RegisterObjectInstance, then forwards the per-attribute
-// region bindings to DDMService.RegisterObjectInstanceWithRegions.
-// Returns the minted object handle.
+// Atomically registers the object and its per-attribute region bindings
+// through DDMService.RegisterObjectInstanceWithRegions. Returns the
+// object handle assigned by the server.
 func (f *Federate) RegisterObjectInstanceWithRegions(
 	ctx context.Context,
 	cls uint64,
 	bindings []AttributeRegions,
 	objectName string,
 ) (uint64, error) {
-	regResp, err := f.conn.obj.RegisterObjectInstance(ctx, &rtiv1.RegisterObjectRequest{
-		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
-		ObjectClassHandle: cls,
-		ObjectName:        objectName,
-	})
-	if err != nil {
-		return 0, wrapStatusErr(err)
-	}
-	objHandle := regResp.GetObjectHandle()
-	actualName := regResp.GetObjectName()
-	if actualName == "" {
-		actualName = objectName
-	}
-
 	pbBindings := make([]*rtiv1.AttributeRegions, 0, len(bindings))
 	for _, b := range bindings {
 		pbBindings = append(pbBindings, &rtiv1.AttributeRegions{
@@ -202,16 +186,20 @@ func (f *Federate) RegisterObjectInstanceWithRegions(
 		})
 	}
 
-	_, err = f.conn.ddm.RegisterObjectInstanceWithRegions(ctx, &rtiv1.RegisterObjectWithRegionsRequest{
+	resp, err := f.conn.ddm.RegisterObjectInstanceWithRegions(ctx, &rtiv1.RegisterObjectWithRegionsRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
+		FederateHandle:    f.CurrentHandle(),
 		ObjectClassHandle: cls,
-		ObjectName:        actualName,
+		ObjectName:        objectName,
 		AttributeRegions:  pbBindings,
 	})
 	if err != nil {
 		return 0, wrapStatusErr(err)
+	}
+	objHandle := resp.GetObjectHandle()
+	if objHandle == 0 {
+		return 0, errors.New("federate: RegisterObjectInstanceWithRegions returned zero object handle")
 	}
 	f.rememberRegisteredObject(objHandle, cls)
 	return objHandle, nil
@@ -235,7 +223,7 @@ func (f *Federate) AssociateRegionsForUpdates(ctx context.Context, obj uint64, b
 	_, err := f.conn.ddm.AssociateRegionsForUpdates(ctx, &rtiv1.AssociateRegionsForUpdatesRequest{
 		WireVersion:      rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:   f.federationName,
-		FederateHandle:   f.federateHandle,
+		FederateHandle:   f.CurrentHandle(),
 		ObjectHandle:     obj,
 		AttributeRegions: f.attrRegionsToWire(bindings),
 	})
@@ -248,7 +236,7 @@ func (f *Federate) UnassociateRegionsForUpdates(ctx context.Context, obj uint64,
 	_, err := f.conn.ddm.UnassociateRegionsForUpdates(ctx, &rtiv1.UnassociateRegionsForUpdatesRequest{
 		WireVersion:      rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:   f.federationName,
-		FederateHandle:   f.federateHandle,
+		FederateHandle:   f.CurrentHandle(),
 		ObjectHandle:     obj,
 		AttributeRegions: f.attrRegionsToWire(bindings),
 	})
@@ -262,7 +250,7 @@ func (f *Federate) UnsubscribeObjectClassAttributesWithRegions(
 	_, err := f.conn.ddm.UnsubscribeObjectClassAttributesWithRegions(ctx, &rtiv1.UnsubscribeOCAWithRegionsRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
+		FederateHandle:    f.CurrentHandle(),
 		ObjectClassHandle: cls,
 		AttributeHandles:  attributes,
 		RegionHandles:     regions,
@@ -275,7 +263,7 @@ func (f *Federate) UnsubscribeInteractionClassWithRegions(ctx context.Context, c
 	_, err := f.conn.ddm.UnsubscribeInteractionClassWithRegions(ctx, &rtiv1.UnsubscribeICWithRegionsRequest{
 		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:         f.federationName,
-		FederateHandle:         f.federateHandle,
+		FederateHandle:         f.CurrentHandle(),
 		InteractionClassHandle: cls,
 		RegionHandles:          regions,
 	})
@@ -283,9 +271,8 @@ func (f *Federate) UnsubscribeInteractionClassWithRegions(ctx context.Context, c
 }
 
 // SendInteractionWithRegions — IEEE 1516.1-2010 §9.12 (M23 W5).
-// M23 simplification: regions are recorded on the wire but the existing
-// DDM filter (M10) applies via object.Registry; per-call region filter
-// is a follow-up.
+// Regions are validated and applied to this send. Use the Options variant
+// to supply a binary tag and a sender-local retraction ID.
 func (f *Federate) SendInteractionWithRegions(
 	ctx context.Context,
 	cls uint64,
@@ -296,7 +283,7 @@ func (f *Federate) SendInteractionWithRegions(
 	req := &rtiv1.SendInteractionWithRegionsRequest{
 		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:         f.federationName,
-		FederateHandle:         f.federateHandle,
+		FederateHandle:         f.CurrentHandle(),
 		InteractionClassHandle: cls,
 		Parameters:             parameters,
 		RegionHandles:          regions,
@@ -319,7 +306,7 @@ func (f *Federate) RequestAttributeValueUpdateWithRegions(
 	_, err := f.conn.ddm.RequestAttributeValueUpdateWithRegions(ctx, &rtiv1.RequestAttributeValueUpdateWithRegionsRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
+		FederateHandle:    f.CurrentHandle(),
 		ObjectClassHandle: cls,
 		AttributeHandles:  attributes,
 		RegionHandles:     regions,

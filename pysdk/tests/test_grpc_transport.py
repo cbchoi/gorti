@@ -48,6 +48,161 @@ def test_grpc_transport_constructs_against_a_dead_channel() -> None:
     asyncio.run(transport.close())
 
 
+def test_grpc_transport_close_propagates_channel_failure() -> None:
+    from rti1516e._transport import GrpcTransport
+
+    class FailingChannel:
+        async def close(self) -> None:
+            raise RuntimeError("channel close failed")
+
+    transport = object.__new__(GrpcTransport)
+    transport._stream_tasks = {}  # noqa: SLF001
+    transport._event_sinks = {}  # noqa: SLF001
+    transport.channel = FailingChannel()
+
+    with pytest.raises(RuntimeError, match="channel close failed"):
+        asyncio.run(transport.close())
+
+
+def test_grpc_transport_close_drains_channel_after_failed_stream_task() -> None:
+    from rti1516e._transport import GrpcTransport
+
+    class Channel:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def close(self) -> None:
+            self.close_calls += 1
+
+    async def exercise() -> None:
+        async def failed_stream() -> None:
+            raise RuntimeError("stream failed before close")
+
+        stream = asyncio.create_task(failed_stream())
+        await asyncio.gather(stream, return_exceptions=True)
+        channel = Channel()
+        transport = object.__new__(GrpcTransport)
+        transport._stream_tasks = {7: stream}  # noqa: SLF001
+        transport._event_sinks = {}  # noqa: SLF001
+        transport.channel = channel
+
+        with pytest.raises(RuntimeError, match="stream failed before close"):
+            await transport.close()
+        assert channel.close_calls == 1
+        assert transport._stream_tasks == {}  # noqa: SLF001
+        await transport.close()
+        assert channel.close_calls == 2
+
+    asyncio.run(exercise())
+
+
+def test_grpc_transport_resign_propagates_rpc_failure() -> None:
+    pytest.importorskip("grpc")
+    from rti1516e._transport import GrpcTransport
+
+    class FailingFederation:
+        async def ResignFederation(self, request: object) -> None:  # noqa: N802
+            del request
+            raise RuntimeError("resign rpc failed")
+
+    transport = object.__new__(GrpcTransport)
+    transport._federation_name = "demo"  # noqa: SLF001
+    transport._stream_tasks = {}  # noqa: SLF001
+    transport.federation = FailingFederation()
+
+    with pytest.raises(RuntimeError, match="resign rpc failed"):
+        asyncio.run(transport._resign_federation(7))  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rpc_fails", [False, True])
+async def test_grpc_transport_resign_sends_session_metadata(rpc_fails):
+    from rti.v1 import common_pb2
+
+    from rti1516e._transport import GrpcTransport
+
+    calls = []
+    failure = RuntimeError("resign rejected")
+
+    class Federation:
+        async def ResignFederation(self, request, *, metadata=()):  # noqa: N802
+            calls.append((request, metadata))
+            if rpc_fails:
+                raise failure
+
+    transport = object.__new__(GrpcTransport)
+    transport._federation_name = "demo"  # noqa: SLF001
+    transport._stream_tasks = {}  # noqa: SLF001
+    transport._session_tokens = {7: b"t" * 32, 9: b"other" * 6}  # noqa: SLF001
+    transport.federation = Federation()
+    if rpc_fails:
+        with pytest.raises(RuntimeError) as caught:
+            await transport._resign_federation(7, "NO_ACTION")  # noqa: SLF001
+        assert caught.value is failure
+        assert transport.session_token(7) == b"t" * 32
+    else:
+        await transport._resign_federation(7, "NO_ACTION")  # noqa: SLF001
+        assert transport.session_token(7) == b""
+    assert transport.session_token(9) == b"other" * 6
+    assert len(calls) == 1
+    request, metadata = calls[0]
+    assert metadata == (("gorti-session-token-bin", b"t" * 32),)
+    assert request.federation_name == "demo"
+    assert request.federate_handle == 7
+    assert request.action == common_pb2.RESIGN_ACTION_NO_ACTION
+    assert "session_token" not in request.DESCRIPTOR.fields_by_name
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("token", [None, b""])
+async def test_grpc_transport_resign_legacy_without_session_metadata(token):
+    from rti1516e._transport import GrpcTransport
+
+    calls = []
+
+    class LegacyFederation:
+        async def ResignFederation(self, request):  # noqa: N802
+            calls.append(request)
+
+    transport = object.__new__(GrpcTransport)
+    transport._federation_name = "demo"  # noqa: SLF001
+    transport._stream_tasks = {}  # noqa: SLF001
+    if token is not None:
+        transport._session_tokens = {7: token}  # noqa: SLF001
+    transport.federation = LegacyFederation()
+    await transport._resign_federation(7)  # noqa: SLF001
+    assert len(calls) == 1
+    assert calls[0].federate_handle == 7
+
+
+def test_build_failure_closes_channel_before_propagating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    grpc = pytest.importorskip("grpc")
+    import rti1516e._transport as transport_module
+
+    class RetainedChannel:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def close(self) -> None:
+            self.close_calls += 1
+
+    channel = RetainedChannel()
+    monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: channel)
+
+    class BrokenTransport:
+        def __init__(self, candidate: object, *, url: str) -> None:
+            assert candidate is channel
+            del url
+            raise RuntimeError("stub construction failed")
+
+    monkeypatch.setattr(transport_module, "GrpcTransport", BrokenTransport)
+    with pytest.raises(RuntimeError, match="stub construction failed"):
+        asyncio.run(transport_module.build_grpc_transport("grpc://broken"))
+    assert channel.close_calls == 1
+
+
 def test_grpc_transport_payload_coercion_round_trip() -> None:
     """The wire payload coercion handles bytes / str / int / arbitrary
     objects deterministically. Used for the bridge's opaque payloads."""

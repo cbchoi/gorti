@@ -12,6 +12,9 @@ message Empty {}
 enum WireVersion {
   WIRE_VERSION_UNSPECIFIED = 0;
   WIRE_VERSION_V1 = 1;
+  // Create/JoinFederation only: required for explicit MIM selection/expectation.
+  // All other RPCs and omitted-MIM create/join continue to use V1.
+  WIRE_VERSION_V2 = 2;
 }
 
 // Mode is the federation operating mode, fixed at federation create time.
@@ -24,10 +27,22 @@ enum Mode {
   MODE_BEST_EFFORT = 2;
 }
 
-// LogicalTime is HLA logical time. IEEE 1516.2-2010 leaves the representation
-// implementation-defined; this RTI uses IEEE 754 double.
+// LogicalTime retains the legacy Float64 scalar alongside an exact value.
+// The federation's selected implementation determines the permitted selector.
 message LogicalTime {
   double value = 1;
+  LogicalTimeValue logical_time_value = 2;
+}
+
+// LogicalTimeValue preserves the selected representation without numeric coercion.
+// The containing field determines whether this is a time or an interval. Presence
+// of a selector is required even for zero. This message alone does not advertise
+// Integer64 federation or service support; activation requires every boundary.
+message LogicalTimeValue {
+  oneof value {
+    double float64_value = 1;
+    sint64 integer64_value = 2;
+  }
 }
 
 // ResignAction — IEEE 1516.1-2010 §4.10. M24 expanded the accepted

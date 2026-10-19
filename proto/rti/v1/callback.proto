@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/common.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// Internal authenticated SDK protocol, not new HLA services. Enable explicitly
+// negotiates invocation receipts before ownership work; legacy clients retain
+// their existing delivery-only behavior.
+service OwnershipCallbackService {
+  rpc EnableOwnershipCallbackReceipts(OwnershipCallbackScopeRequest) returns (Empty);
+  rpc ReportOwnershipCallbackInvocation(ReportOwnershipCallbackInvocationRequest) returns (Empty);
+  rpc RetryOwnershipCallbacks(OwnershipCallbackScopeRequest) returns (Empty);
+}
+
+message OwnershipCallbackScopeRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 federation_generation = 4;
+  // Initial epoch zero is valid; authenticated generation must be nonzero.
+  uint64 callback_epoch = 5;
+}
+
+// A stable semantic callback ID is distinct from an outbox sequence and an
+// optional MOM callback receipt. Attempts fence reports to a successful send.
+message OwnershipCallbackReceipt {
+  uint64 federation_generation = 1;
+  uint64 callback_epoch = 2;
+  uint64 callback_id = 3;
+  uint64 delivery_attempt = 4;
+}
+
+message ReportOwnershipCallbackInvocationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  OwnershipCallbackReceipt receipt = 4;
+}

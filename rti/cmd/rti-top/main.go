@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cbchoi/gorti/rti/cmd/rti-top/internal/client"
-	"github.com/cbchoi/gorti/rti/internal/buildinfo"
+	"github.com/cbchoi/gorti/rti/internal/application/buildinfo"
 )
 
 const (

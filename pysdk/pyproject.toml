@@ -85,7 +85,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+# Check the active interpreter used for SDK validation.
 strict = true
 warn_unused_configs = true
 warn_unused_ignores = true

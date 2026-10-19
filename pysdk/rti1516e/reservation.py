@@ -100,3 +100,16 @@ class ReservationClient:
             await self._stub.ReserveMultipleObjectInstanceNames(req)
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
+
+    async def release_multiple(self, object_names: list[str]) -> None:
+        """Release the complete set atomically in one server transaction."""
+        from rti.v1 import object_pb2
+
+        req = object_pb2.ReleaseMultipleObjectInstanceNamesRequest(
+            wire_version=1, federation_name=self._federation_name,
+            federate_handle=self._federate_handle, object_names=list(object_names),
+        )
+        try:
+            await self._stub.ReleaseMultipleObjectInstanceNames(req)
+        except Exception as exc:
+            translate_rpc_error(exc)

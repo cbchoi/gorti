@@ -27,9 +27,10 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 
+from tests._legacy_server import build_rtid as _build_shared_rtid
+from tests._legacy_server import spawn_rtid
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
-BIN_DIR = REPO_ROOT / "bin"
-RTID_BINARY = BIN_DIR / "rtid"
 
 _PYSDK = REPO_ROOT / "pysdk"
 if str(_PYSDK) not in sys.path:
@@ -55,10 +56,7 @@ def build_rtid() -> Path:
     Builds via ``go build`` resolved through PATH so the helper runs
     on contributor laptops + CI without an env-var dance.
     """
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    argv = ["go", "build", "-o", str(RTID_BINARY), "./rti/cmd/rtid"]  # noqa: S607
-    subprocess.run(argv, cwd=REPO_ROOT, check=True)  # noqa: S603
-    return RTID_BINARY
+    return _build_shared_rtid()
 
 
 def _spawn_rtid(
@@ -75,20 +73,7 @@ def _spawn_rtid(
     cleaned up via the tempdir lifecycle. --log-dir is similarly
     isolated; --log-level=warn suppresses noise.
     """
-    return subprocess.Popen(  # noqa: S603 — controlled args
-        [
-            str(binary),
-            "--listen", f":{listen_port}",
-            "--metrics-listen", f":{metrics_port}",
-            "--log-level", "warn",
-            "--audit-replay-plugin", "event-journal",
-            "--log-dir", str(log_dir),
-            "--save-dir", str(save_dir),
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    return spawn_rtid(binary, listen_port, metrics_port, save_dir=save_dir, log_dir=log_dir)
 
 
 # noqa: ASYNC109 — ``timeout`` is the deadline for the entire poll
@@ -301,6 +286,7 @@ def write_ddm_fom() -> Path:
           <updateCondition>NA</updateCondition>
           <ownership>NoTransfer</ownership>
           <sharing>PublishSubscribe</sharing>
+          <dimensions><dimension>X</dimension><dimension>Y</dimension></dimensions>
           <transportation>HLAreliable</transportation>
           <order>TimeStamp</order>
           <semantics>Position scalar.</semantics>

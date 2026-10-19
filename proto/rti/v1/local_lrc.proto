@@ -3,6 +3,7 @@ syntax = "proto3";
 package rti.v1;
 
 import "rti/v1/common.proto";
+import "rti/v1/federation.proto";
 
 option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
 
@@ -11,6 +12,38 @@ option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1"
 // sequence numbers; each ACK commits every request through committed_through.
 service LocalLRCService {
   rpc Exchange(stream LocalLRCRequest) returns (stream LocalLRCAck);
+  rpc GetLocalValidationState(GetLocalValidationStateRequest) returns (LocalValidationState);
+}
+
+message GetLocalValidationStateRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 expected_federation_generation = 4;
+  uint64 expected_callback_epoch = 5;
+  uint64 snapshot_id = 6;
+}
+
+message LocalValidationState {
+  uint64 federation_generation = 1;
+  uint64 federate_handle = 2;
+  uint64 callback_epoch = 3;
+  FOMView fom_view = 4;
+  repeated PublishedObjectClass publications = 5;
+  repeated uint64 published_interaction_classes = 6;
+  repeated KnownObjectState objects = 7;
+  uint64 snapshot_id = 8;
+}
+
+message PublishedObjectClass {
+  uint64 object_class_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+message KnownObjectState {
+  uint64 object_handle = 1;
+  uint64 object_class_handle = 2;
+  repeated uint64 owned_attribute_handles = 3;
 }
 
 message LocalLRCRequest {

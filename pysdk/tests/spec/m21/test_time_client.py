@@ -5,9 +5,8 @@ TimeService RPCs (was no-op short-circuit pre-M21). The 3 method
 bindings exposed in connection.py — enable_time_regulation,
 enable_time_constrained, next_message_request — are tested here.
 
-End-to-end cases that need a real rtid subprocess (cross-language
-Go-regulator + Python-constrained, etc.) move to TASK-215 where the
-spawn-rtid harness is set up.
+End-to-end cases use separate Go and Python federate processes and an
+isolated RTI server through the test-owned _processes harness.
 """
 
 from __future__ import annotations
@@ -109,24 +108,28 @@ def test_209_translate_recognizes_time_details() -> None:
             ge.translate_rpc_error(exc)
 
 
-# Cross-language end-to-end cases (Python ↔ Go rtid) live in TASK-215;
-# they require a real rtid subprocess + cross-process orchestration.
-# Placeholders kept here for traceability:
+# The historical IDs now execute separate Go and Python federate processes.
 
 
 @pytest.mark.spec
 @pytest.mark.integration
 def test_209_2_go_regulator_python_constrained() -> None:
-    pytest.skip("Cross-language end-to-end — coverage at TASK-215 (cross_language test).")
+    from tests.spec.m21._processes import assert_cross_language_delivery
+
+    assert_cross_language_delivery("go", "python")
 
 
 @pytest.mark.spec
 @pytest.mark.integration
 def test_209_3_python_regulator_go_constrained() -> None:
-    pytest.skip("Cross-language end-to-end — coverage at TASK-215.")
+    from tests.spec.m21._processes import assert_cross_language_delivery
+
+    assert_cross_language_delivery("python", "go")
 
 
 @pytest.mark.spec
 @pytest.mark.integration
 def test_209_4_mixed_primitives_cross_language() -> None:
-    pytest.skip("Cross-language end-to-end — coverage at TASK-215.")
+    from tests.spec.m21._processes import assert_mixed_primitives
+
+    assert_mixed_primitives()

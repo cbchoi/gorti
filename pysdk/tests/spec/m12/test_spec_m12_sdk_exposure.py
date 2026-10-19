@@ -1,75 +1,55 @@
-"""M12 — Python SDK exposure for cut-2 service groups.
+"""Live Python service contracts for synchronization, ownership, DDM and save.
 
-After M12 W1 (Go side) lands, the rtid binary serves SyncService /
-OwnershipService / DDMService / SavepointService over gRPC. M12 W2
-(Python side) extends the SDK's Federate with cut-3 service-group
-clients (``fed.sync`` / ``.ownership`` / ``.ddm`` / ``.savepoint``).
-
-Each test below spawns a fresh rtid subprocess, dials a real gRPC
-channel via ``RtiConnection``, and exercises the matching service
-group end-to-end. Subprocess teardown is robust (terminate → wait →
-kill) to avoid zombies on test failure.
-
-Cut-3 wire limitations (see per-client module docstrings for detail):
-the proto ``FederateEvent`` oneof does not yet carry sync /
-ownership-transfer / save-restore callback variants. Tests observe
-state transitions via Query RPCs (where exposed) or via the absence
-of error returns from the protocol round-trip; the placeholder
-``OutboundEvents`` the Go-side managers emit are dropped at the
-gRPC translation boundary (``toFederateEvent`` rejects them as
-non-convertible).
+Each test connects to a real RTI server. Synchronization achievement follows
+authenticated announcement entry, and restore completion follows validated
+initiation. Callback delivery and terminal service state are checked separately.
 """
 
 from __future__ import annotations
 
 import asyncio
 import shutil
-import sys
 
 import pytest
 
+from rti1516e.errors import SynchronizationPointLabelNotAnnounced
+from rti1516e.events import (
+    FederationRestored,
+    FederationSaved,
+    FederationSynchronized,
+    InitiateFederateRestore,
+    InitiateFederateSave,
+    SynchronizationPointAnnounced,
+)
 from tests.spec.m12._helpers import (
     RtidProcess,
     two_federates,
     write_ddm_fom,
     write_minimal_fom,
 )
+from tests.spec.m12.test_spec_m12_callback_delivery import _drain_until
 
 
 def _go_or_skip() -> None:
     """Skip the test when the go toolchain is not on PATH."""
     if shutil.which("go") is None:
         pytest.skip("go toolchain not on PATH; cannot build rtid for the smoke test")
-    if sys.platform == "win32":  # pragma: no cover - CI is linux/mac
-        pytest.skip("rtid subprocess harness is POSIX-only at this cut")
 
 
 @pytest.mark.spec
 @pytest.mark.integration
 def test_spec_m12_sync_register_and_achieve() -> None:
-    """SDK Sync exposure: register sync point + 2 federates achieve.
-
-    Drives the protocol via ``fed.sync``:
-      1. fed_a registers a sync point with both federates as required
-      2. fed_a achieves it
-      3. fed_b achieves it
-      4. (cut-3 wire limit) federationSynchronized is emitted by the
-         manager as a placeholder OutboundEvent — not deliverable on
-         the wire because the FederateEvent oneof has no synchronized
-         variant. Successful completion of all four RPCs without
-         error is the observable evidence the manager ran the
-         allRequiredAchieved → emit-synchronized path. A cut-4
-         follow-up (proto evolution) makes the callback observable.
-    """
+    """Raw announcement is insufficient; entry permits achievement and terminal delivery."""
     _go_or_skip()
     asyncio.run(_run_sync())
 
 
 async def _run_sync() -> None:
     fom_path = write_minimal_fom()
-    async with RtidProcess() as rtid, two_federates(
-        rtid.url, federation_name="m12-sync", fom_path=fom_path
-    ) as (fed_a, fed_b):
+    async with (
+        RtidProcess() as rtid,
+        two_federates(rtid.url, federation_name="m12-sync", fom_path=fom_path) as (fed_a, fed_b),
+    ):
         # required_federates pinned to both handles so the test does
         # not depend on the dynamic-mode auto-promotion path.
         await fed_a.sync.register_synchronization_point(
@@ -77,11 +57,27 @@ async def _run_sync() -> None:
             tag=b"hello",
             required_federates=[fed_a.handle, fed_b.handle],
         )
-        # Achieve from both federates. The manager closes out the
-        # sync point + emits federationSynchronized after the second
-        # achieve; we assert no error from either RPC.
-        await fed_a.sync.synchronization_point_achieved("phase1")
-        await fed_b.sync.synchronization_point_achieved("phase1")
+        announcements = await asyncio.gather(
+            *(
+                _drain_until(fed, lambda event: isinstance(event, SynchronizationPointAnnounced))
+                for fed in (fed_a, fed_b)
+            )
+        )
+        for fed, announcement in zip((fed_a, fed_b), announcements, strict=True):
+            assert announcement.label == "phase1" and announcement.tag == b"hello"
+            with pytest.raises(SynchronizationPointLabelNotAnnounced):
+                await fed.sync.synchronization_point_achieved("phase1")
+
+            async def achieve(event, participant=fed):
+                await participant.sync.synchronization_point_achieved(event.label)
+
+            await fed.dispatch_event(announcement, achieve)
+        for fed in (fed_a, fed_b):
+            synchronized = await _drain_until(
+                fed, lambda event: isinstance(event, FederationSynchronized)
+            )
+            assert synchronized.label == "phase1"
+            await fed.dispatch_event(synchronized, lambda event: None)
 
 
 @pytest.mark.spec
@@ -108,9 +104,10 @@ def test_spec_m12_ownership_negotiated_transfer() -> None:
 
 async def _run_ownership() -> None:
     fom_path = write_minimal_fom()
-    async with RtidProcess() as rtid, two_federates(
-        rtid.url, federation_name="m12-own", fom_path=fom_path
-    ) as (fed_a, fed_b):
+    async with (
+        RtidProcess() as rtid,
+        two_federates(rtid.url, federation_name="m12-own", fom_path=fom_path) as (fed_a, fed_b),
+    ):
         # Publish the object class on fed_a so the registry accepts
         # the subsequent register_object_instance call. Without this,
         # rtid returns ErrObjectClassNotPublished. The pysdk
@@ -118,15 +115,14 @@ async def _run_ownership() -> None:
         # DeclarationService.PublishObjectClassAttributes RPC at this
         # cut (M12 W2; previously record-only).
         await fed_a.publish_object_class("Vehicle", attributes=["position"])
+        await fed_b.publish_object_class("Vehicle", attributes=["position"])
         await fed_b.subscribe_object_class("Vehicle", attributes=["position"])
 
         # Register the object instance directly via the cut-1
         # Federate.register_object_instance helper (now wired to
         # ObjectService.RegisterObject under M12 W2). The minted
         # handle is what subsequent ownership RPCs operate on.
-        obj_handle = await fed_a.register_object_instance(
-            "Vehicle", instance_name="vehicle-1"
-        )
+        obj_handle = await fed_a.register_object_instance("Vehicle")
         assert obj_handle != 0, "ObjectService.RegisterObject should mint a non-zero handle"
 
         # Resolve the position attribute handle the same way the
@@ -138,9 +134,7 @@ async def _run_ownership() -> None:
         # fed_a starts as the owner (Registry.OnRegister populates
         # initial ownership for all class attributes — see
         # rti/cmd/rtid/main.go OnRegister hook).
-        owner, owned = await fed_a.ownership.query_attribute_ownership(
-            obj_handle, position_attr
-        )
+        owner, owned = await fed_a.ownership.query_attribute_ownership(obj_handle, position_attr)
         assert owned is True, "initial ownership should be populated by OnRegister hook"
         assert owner == fed_a.handle, (
             f"initial owner should be fed_a (handle={fed_a.handle}); got {owner}"
@@ -148,12 +142,8 @@ async def _run_ownership() -> None:
 
         # fed_a divests; fed_b acquires. The two-phase protocol
         # transfers ownership from fed_a to fed_b.
-        await fed_a.ownership.negotiated_divest(
-            obj_handle, [position_attr], tag=b"please-take"
-        )
-        await fed_b.ownership.acquire(
-            obj_handle, [position_attr], tag=b"i-will-take"
-        )
+        await fed_a.ownership.negotiated_divest(obj_handle, [position_attr], tag=b"please-take")
+        await fed_b.ownership.acquire(obj_handle, [position_attr], tag=b"i-will-take")
 
         # Confirm the transfer landed: query reports fed_b as owner.
         owner_after, owned_after = await fed_b.ownership.query_attribute_ownership(
@@ -166,16 +156,10 @@ async def _run_ownership() -> None:
 
         # Symmetric: is_attribute_owned_by_federate from each side.
         assert (
-            await fed_b.ownership.is_attribute_owned_by_federate(
-                obj_handle, position_attr
-            )
-            is True
+            await fed_b.ownership.is_attribute_owned_by_federate(obj_handle, position_attr) is True
         )
         assert (
-            await fed_a.ownership.is_attribute_owned_by_federate(
-                obj_handle, position_attr
-            )
-            is False
+            await fed_a.ownership.is_attribute_owned_by_federate(obj_handle, position_attr) is False
         )
 
 
@@ -260,7 +244,8 @@ async def _run_ddm() -> None:
                 if region_dims:  # pragma: no cover - alt path
                     for d, lo, hi in [(region_dims[0], 10, 20), (region_dims[1], 100, 200)]:
                         await fed.ddm.set_range_bounds(region, d, lower=lo, upper=hi)
-                    await fed.ddm.commit_region_modifications([region])
+                await fed.ddm.commit_region_modifications([region])
+                if region_dims:  # pragma: no cover - alt path
                     assert await fed.ddm.query_bounds(region, region_dims[0]) == (10, 20)
                     assert await fed.ddm.query_bounds(region, region_dims[1]) == (100, 200)
 
@@ -299,7 +284,6 @@ async def _run_ddm() -> None:
                             region_handles=[region],
                         )
                     ],
-                    object_name="vehicle-with-region",
                 )
                 assert obj_handle != 0, "two-step registration should mint a handle"
 
@@ -318,20 +302,15 @@ def test_spec_m12_savepoint_save_and_restore_round_trip() -> None:
 
     Drives the protocol via ``fed.savepoint``:
       1. Federate joins, calls request_federation_save("checkpoint-1").
-      2. Federate calls federate_save_complete; in dynamic-mode (the
-         production rtid wiring runs without a MembersResolver) this
-         single Complete closes the save out — state transitions to
-         SAVED, bundle is written under --save-dir.
+      2. Federate explicitly begins saving and then reports complete;
+         this fixture has one participant, so the bundle is written.
       3. Query the save state — expect SAVED.
       4. Request a restore for the same label.
       5. Federate calls federate_restore_complete; state transitions
          to COMPLETED.
 
-    Cut-3 single-federate aggregation note: see ``rti1516e/savepoint.py``
-    docstring for why one federate is sufficient at this cut. A
-    cut-4 MembersResolver wiring extends this to true multi-federate
-    aggregation. The proto / SDK shape is already multi-federate-
-    capable; only the rtid-side membership snapshot is missing.
+    The reconnect uses the saved federate name so restore can map the
+    current handle to its saved identity.
     """
     _go_or_skip()
     asyncio.run(_run_savepoint())
@@ -349,6 +328,7 @@ async def _run_savepoint() -> None:
         # Phase 1: save.
         async with RtiConnection.connect(rtid.url) as rti:
             async with rti.join_federation(spec, federate_name="save-fed") as fed:
+                saved_handle = fed.handle
                 # Initial state for an unknown label is IDLE.
                 pre = await fed.savepoint.query_save_state(label)
                 assert pre == SaveState.IDLE, (
@@ -358,59 +338,55 @@ async def _run_savepoint() -> None:
                 await fed.savepoint.request_federation_save(label)
                 # State should be INITIATED after the request lands.
                 mid = await fed.savepoint.query_save_state(label)
-                assert mid == SaveState.INITIATED, (
-                    f"post-request state: got {mid}, want INITIATED"
-                )
+                assert mid == SaveState.INITIATED, f"post-request state: got {mid}, want INITIATED"
 
-                # Federate signals success; manager closes out the save
-                # (dynamic mode: this single complete is sufficient).
-                await fed.savepoint.federate_save_complete()
-                post = await fed.savepoint.query_save_state(label)
-                assert post == SaveState.SAVED, (
-                    f"post-complete state: got {post}, want SAVED"
+                initiated = await _drain_until(
+                    fed, lambda event: isinstance(event, InitiateFederateSave)
                 )
+                assert initiated.label == label
+                await fed.dispatch_event(initiated, lambda event: None)
+
+                await fed.savepoint.federate_save_begun()
+                await fed.savepoint.federate_save_complete()
+                saved = await _drain_until(fed, lambda event: isinstance(event, FederationSaved))
+                assert saved.label == label
+                await fed.dispatch_event(saved, lambda event: None)
+                post = await fed.savepoint.query_save_state(label)
+                assert post == SaveState.SAVED, f"post-complete state: got {post}, want SAVED"
 
         # Phase 2: restore. Reconnect (closing the connection above
         # auto-resigns the federate; the bundle is on-disk under
         # rtid's --save-dir).
         async with RtiConnection.connect(rtid.url) as rti:
-            async with rti.join_federation(
-                spec, federate_name="restore-fed"
-            ) as fed:
+            async with rti.join_federation(spec, federate_name="save-fed") as fed:
                 pre_restore = await fed.savepoint.query_restore_state(label)
                 assert pre_restore == RestoreState.IDLE, (
                     f"pre-restore state: got {pre_restore}, want IDLE"
                 )
 
                 await fed.savepoint.request_federation_restore(label)
+                initiated = await _drain_until(
+                    fed, lambda event: isinstance(event, InitiateFederateRestore)
+                )
+                assert initiated.label == label and initiated.federate_handle == saved_handle
+                await fed.dispatch_event(initiated, lambda event: None)
                 mid_restore = await fed.savepoint.query_restore_state(label)
                 assert mid_restore == RestoreState.INITIATED, (
                     f"post-restore-request state: got {mid_restore}, want INITIATED"
                 )
 
-                # The manifest's federate list is the federate handles
-                # that were active at save time (one federate, our
-                # save-fed handle). Calling federate_restore_complete
-                # under a different handle (restore-fed in the new
-                # connection) would normally fail the membership check,
-                # but the manifest may not match — see the cut-3 caveat
-                # below.
-                #
-                # Cut-3 caveat: in the production rtid wiring the save
-                # path runs in dynamic mode without MembersResolver,
-                # so the manifest records whatever federates called
-                # FederateSaveComplete. The restore path then enforces
-                # that EXACT membership. Joining as restore-fed (a new
-                # handle) and calling FederateRestoreComplete(new_handle)
-                # therefore returns ErrFederateNotInRestore.
-                #
-                # To keep the test green at this cut, we observe the
-                # transition INITIATED via the query above and then
-                # rejoin under a save-mirroring scenario: the restore
-                # is in-flight and queryable, which is the round-trip
-                # observation the spec scaffold asks for. A cut-4
-                # follow-up wires MembersResolver so federate-handle
-                # parity across save/restore is automatic.
+                await fed.savepoint.federate_restore_complete()
+                # Completion is asynchronous: observe the terminal callback before
+                # querying with the restored identity or starting resignation.
+                async with asyncio.timeout(10):
+                    async for event in fed.events():
+                        if isinstance(event, FederationRestored):
+                            assert event.label == label
+                            assert event.federate_handle == fed.handle
+                            assert fed.handle == saved_handle
+                            await fed.dispatch_event(event, lambda event: None)
+                            break
+                assert await fed.savepoint.query_restore_state(label) == RestoreState.COMPLETED
 
 
 @pytest.mark.spec
@@ -441,9 +417,10 @@ async def _run_mom() -> None:
     from rti1516e.mom import CLASS_HLA_FEDERATE, CLASS_HLA_FEDERATION
 
     fom_path = write_minimal_fom()
-    async with RtidProcess() as rtid, two_federates(
-        rtid.url, federation_name="m12-mom", fom_path=fom_path
-    ) as (fed_a, fed_b):
+    async with (
+        RtidProcess() as rtid,
+        two_federates(rtid.url, federation_name="m12-mom", fom_path=fom_path) as (fed_a, fed_b),
+    ):
         # publish so the subsequent send_interaction does not get
         # ErrInteractionClassNotPublished. The HLAinteractionRoot
         # base class is always available; subscribe so the receive
@@ -492,16 +469,13 @@ async def _run_mom() -> None:
 
         # Unknown federate handle returns found=False, zero-valued.
         unknown = await fed_a.mom.query_federate_attributes(99999)
-        assert unknown.found is False, (
-            f"unknown handle should report found=False, got {unknown}"
-        )
+        assert unknown.found is False, f"unknown handle should report found=False, got {unknown}"
 
         # Step 3: enumerate. The federation singleton appears first,
         # followed by per-federate entries in handle-sorted order.
         instances = await fed_a.mom.enumerate_mom_instances()
         assert len(instances) >= 3, (
-            f"want federation + 2 federates = 3 instances, got {len(instances)}: "
-            f"{instances}"
+            f"want federation + 2 federates = 3 instances, got {len(instances)}: {instances}"
         )
         # First entry: HLAfederation singleton.
         assert instances[0].class_name == CLASS_HLA_FEDERATION, (

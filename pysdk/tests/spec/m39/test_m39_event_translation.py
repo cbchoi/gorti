@@ -19,7 +19,9 @@ Contract asserted here (IEEE 1516.1-2010 § references per callback):
 
 from __future__ import annotations
 
+import asyncio
 import warnings
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -288,14 +290,21 @@ def test_reflect_carries_typed_attribute_values() -> None:
 # --- 2: exhaustiveness + warn-once default ----------------------------------
 
 
+INTERNAL_WIRE_MARKERS = {
+    # proto/rti/v1/stream.proto: internal SDK snapshot marker, not an HLA callback.
+    "local_validation_barrier": "rti.v1.LocalValidationBarrier",
+}
+
+
 def test_every_wire_variant_translates() -> None:
-    """No silent drops: EVERY FederateEvent oneof variant in the current
-    generated stubs must yield a typed event. When the wire grows a new
-    tag and stubs are regenerated, this test fails until the branch is
-    added."""
+    """Every non-internal wire variant must translate; new variants are not waived."""
     oneof = stream_pb2.FederateEvent.DESCRIPTOR.oneofs_by_name["event"]
+    wire_types = {field.name: field.message_type.full_name for field in oneof.fields}
+    assert {name: wire_types[name] for name in INTERNAL_WIRE_MARKERS} == INTERNAL_WIRE_MARKERS
     missing: list[str] = []
     for field in oneof.fields:
+        if field.name in INTERNAL_WIRE_MARKERS:
+            continue
         event = stream_pb2.FederateEvent(seq=100)
         getattr(event, field.name).SetInParent()
         with warnings.catch_warnings():
@@ -309,6 +318,39 @@ def test_every_wire_variant_translates() -> None:
     assert not missing, (
         f"FederateEvent variants dropped by _translate_event: {missing}"
     )
+
+
+@pytest.mark.asyncio
+async def test_internal_validation_marker_never_delivers_an_hla_callback(monkeypatch):
+    marker = stream_pb2.FederateEvent(seq=100, callback_receipt=b"internal-not-a-callback")
+    marker.local_validation_barrier.snapshot_id = 13
+    marker.local_validation_barrier.federate_handle = 7
+    marker.local_validation_barrier.callback_epoch = 2
+    grant = stream_pb2.FederateEvent(seq=101)
+    grant.grant.logical_time = 5
+
+    async def stream():
+        yield marker
+        yield grant
+        raise asyncio.CancelledError
+
+    transport = _transport()
+    transport._federation_name = "internal-marker-test"
+    transport.streams = SimpleNamespace(Events=lambda _: stream())
+    queue = asyncio.Queue()
+    delivered = []
+    monkeypatch.setattr(transport, "events_for", lambda _: queue)
+    monkeypatch.setattr(transport, "session_token", lambda _: "")
+    monkeypatch.setattr(
+        transport, "_deliver_event", lambda handle, event: delivered.append((handle, event))
+    )
+    with warnings.catch_warnings(record=True) as diagnostic:
+        warnings.simplefilter("always")
+        assert transport._translate_event(marker) is None
+        with pytest.raises(asyncio.CancelledError):
+            await transport._drain_events(7)
+    assert all("local_validation_barrier" in str(w.message) for w in diagnostic)
+    assert delivered == [(7, ev.TimeAdvanceGrant(time=5))]
 
 
 def test_unknown_variant_warns_once_then_drops_quietly() -> None:

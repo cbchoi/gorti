@@ -16,6 +16,8 @@ from typing import Any
 
 import pytest
 
+from tests._legacy_server import build_rtid
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_DIR = REPO_ROOT / "examples" / "pyjevsim"
 if str(EXAMPLE_DIR) not in sys.path:
@@ -43,7 +45,7 @@ def _witness(result: dict[str, object]) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
-def test_pyjevsim_runner_is_deterministic_across_10_runs() -> None:
+def test_pyjevsim_runner_is_deterministic_across_10_runs(tmp_path: Path) -> None:
     """10× same-input run -> identical sha256.
 
     M27 Phase E: the runner is deterministic by construction (no
@@ -52,24 +54,35 @@ def test_pyjevsim_runner_is_deterministic_across_10_runs() -> None:
     satisfies the original spec intent ("same inputs → same outputs").
     """
     run_once = _import_run_once()
-    sigs = [_witness(asyncio.run(run_once(ticks=8))) for _ in range(10)]
+    binary = build_rtid()
+    sigs = [
+        _witness(asyncio.run(run_once(
+            ticks=8, rtid_binary=binary, workdir=tmp_path / f"run-{index}",
+        )))
+        for index in range(10)
+    ]
     assert all(sig == sigs[0] for sig in sigs), (
         "non-deterministic — distinct sha256s observed:\n  "
         + "\n  ".join(sorted(set(sigs)))
     )
 
 
-def test_pyjevsim_runner_witness_distinguishes_tick_counts() -> None:
+def test_pyjevsim_runner_witness_distinguishes_tick_counts(tmp_path: Path) -> None:
     """Witness function must depend on the workload — guards against
     collapsing to a constant in a future refactor."""
     run_once = _import_run_once()
-    short = _witness(asyncio.run(run_once(ticks=2)))
-    longer = _witness(asyncio.run(run_once(ticks=4)))
+    binary = build_rtid()
+    short = _witness(asyncio.run(run_once(
+        ticks=2, rtid_binary=binary, workdir=tmp_path / "short",
+    )))
+    longer = _witness(asyncio.run(run_once(
+        ticks=4, rtid_binary=binary, workdir=tmp_path / "longer",
+    )))
     assert short != longer
 
 
 @pytest.mark.parametrize("ticks", [1, 3, 7])
-def test_pyjevsim_runner_consumer_count_matches_producer(ticks: int) -> None:
+def test_pyjevsim_runner_consumer_count_matches_producer(ticks: int, tmp_path: Path) -> None:
     """Every ``Producer.published`` element shows up exactly once in
     ``Consumer.received`` (no drops, no duplicates).
 
@@ -80,7 +93,7 @@ def test_pyjevsim_runner_consumer_count_matches_producer(ticks: int) -> None:
     published item is received exactly once" — assert that directly.
     """
     run_once = _import_run_once()
-    result = asyncio.run(run_once(ticks=ticks))
+    result = asyncio.run(run_once(ticks=ticks, rtid_binary=build_rtid(), workdir=tmp_path))
     published = list(result["published"])
     received = list(result["received"])
     assert len(published) >= ticks, (

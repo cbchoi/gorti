@@ -12,8 +12,8 @@ Python style would use snake_case but that defeats the porting purpose.
 The ambassador presents a synchronous API to the caller. Internally it
 runs a private asyncio event loop in a background thread; each public
 call schedules its async equivalent on that loop and waits for the
-result. Callbacks (``discoverObjectInstance`` etc.) are dispatched from
-the event-pump task that drains ``Federate.events()``.
+result. Immediate callbacks run on a serialized delivery thread; evoked
+callbacks run only on the thread calling an evoke method.
 """
 
 from __future__ import annotations
@@ -22,12 +22,21 @@ import asyncio
 import contextlib
 import inspect
 import threading
-from collections.abc import Callable, Coroutine
+from collections import deque
+from collections.abc import Callable, Collection, Coroutine
 from concurrent.futures import Future, InvalidStateError
 from typing import TYPE_CHECKING, Any, TypeAlias, cast
 
 from rti1516e import _transport
+from rti1516e._callbacks import HLA_IMMEDIATE, CallbackDispatcher, CallbackModel, ServiceCallback
+from rti1516e._services import FederationExecutionInformation, list_federation_executions
 from rti1516e.connection import FederationSpec, RtiConnection
+from rti1516e.errors import (
+    AlreadyConnected,
+    FederateNotExecutionMember,
+    RestoreInProgress,
+    SaveInProgress,
+)
 from rti1516e.events import (
     AttributeOwnershipAcquisitionNotification,
     AttributeOwnershipUnavailable,
@@ -45,6 +54,7 @@ from rti1516e.events import (
     InitiateFederateSave,
     MultipleObjectInstanceNameReservationFailed,
     MultipleObjectInstanceNameReservationSucceeded,
+    ObjectCallbackMetadata,
     ObjectInstanceNameReservationFailed,
     ObjectInstanceNameReservationSucceeded,
     ProvideAttributeValueUpdate,
@@ -64,8 +74,12 @@ from rti1516e.events import (
     SynchronizationPointRegistrationFailed,
     SynchronizationPointRegistrationSucceeded,
     TimeAdvanceGrant,
+    TimeConstrainedEnabled,
+    TimeRegulationEnabled,
     TurnInteractionsOff,
     TurnInteractionsOn,
+    TurnUpdatesOffForObjectInstance,
+    TurnUpdatesOnForObjectInstance,
 )
 from rti1516e.factories import (
     AttributeHandleSetFactory,
@@ -75,6 +89,7 @@ from rti1516e.factories import (
     ParameterHandleValueMapFactory,
     RegionHandleSetFactory,
 )
+from rti1516e.fom.modules import MIMInput
 from rti1516e.handles import (
     AttributeHandle,
     DimensionHandle,
@@ -85,6 +100,12 @@ from rti1516e.handles import (
     ObjectInstanceHandle,
     ParameterHandle,
     RegionHandle,
+)
+from rti1516e.savepoint import (
+    FederateRestoreStatus,
+    FederateSaveStatus,
+    RestoreStatusResponse,
+    SaveStatusResponse,
 )
 from rti1516e.sets import (
     AttributeHandleSet,
@@ -117,12 +138,8 @@ ParameterRefList: TypeAlias = "list[int | str | ParameterHandle] | ParameterHand
 FederateRefList: TypeAlias = "list[int | FederateHandle] | FederateHandleSet"
 DimensionRefList: TypeAlias = "list[int | str | DimensionHandle] | DimensionHandleSet"
 RegionRefList: TypeAlias = "list[int | RegionHandle] | RegionHandleSet"
-AttributeValueDict: TypeAlias = (
-    "dict[int | str | AttributeHandle, Any] | AttributeHandleValueMap"
-)
-ParameterValueDict: TypeAlias = (
-    "dict[int | str | ParameterHandle, Any] | ParameterHandleValueMap"
-)
+AttributeValueDict: TypeAlias = "dict[int | str | AttributeHandle, Any] | AttributeHandleValueMap"
+ParameterValueDict: TypeAlias = "dict[int | str | ParameterHandle, Any] | ParameterHandleValueMap"
 
 
 class Rti1516eAmbassador:
@@ -151,6 +168,8 @@ class Rti1516eAmbassador:
         self._connection_cm_open = False
         self._federation_name: str | None = None
         self._fom_modules: list[str] = []
+        self._mim_module: MIMInput | None = None
+        self._logical_time_implementation_name = ""
         self._federate_cm: _FederateContextManager | None = None
         self._federate: Federate | None = None
         self._event_pump_task: Future[None] | None = None
@@ -179,6 +198,10 @@ class Rti1516eAmbassador:
         # the buffer through the normal dispatch path.
         self._callbacks_enabled: bool = True
         self._callback_buffer: list[Any] = []
+        self._local_notification_order = 0
+        self._local_notification_lock = threading.RLock()
+        self._callback_dispatcher = CallbackDispatcher(self._dispatch_callback, HLA_IMMEDIATE)
+        self._callback_report_failures: deque[Exception] = deque(maxlen=32)
         # M28 — IEEE 1516 service-style factory singletons. Stateless; one instance per
         # ambassador per IEEE 1516 API convention.
         self._attribute_handle_set_factory = AttributeHandleSetFactory()
@@ -189,19 +212,27 @@ class Rti1516eAmbassador:
         self._region_handle_set_factory = RegionHandleSetFactory()
         # M39 — per-(class, callback) cache of which optional kwargs an
         # override accepts (see _invoke_compat).
-        self._accepted_kwargs_cache: dict[
-            tuple[type, str], frozenset[str] | None
-        ] = {}
+        self._accepted_kwargs_cache: dict[tuple[type, str], frozenset[str] | None] = {}
 
     # --- Connection / federation lifecycle ---
 
-    def connect(self, callback_target: Rti1516eAmbassador, url: str) -> None:
+    def connect(
+        self, callback_target: Rti1516eAmbassador, url: str,
+        *, callback_model: CallbackModel | str = HLA_IMMEDIATE,
+    ) -> None:
         """Open the connection. Wraps RtiConnection.connect.
 
         ``callback_target`` is the object whose ``discover*``/``reflect*`` etc.
         methods are invoked when events arrive. In the common case it's
         ``self`` (subclass override pattern).
         """
+        self._callback_dispatcher.guard_reentrant()
+        if self._connection is not None:
+            raise AlreadyConnected("ambassador is already connected")
+        dispatcher = CallbackDispatcher(self._dispatch_callback, callback_model)
+        self._callback_dispatcher.close()
+        self._callback_dispatcher = dispatcher
+        self._callback_error: BaseException | None = None
         # Spin up a private event loop in a background thread. All Layer 1
         # asyncio work runs there; the caller stays sync.
         self._callback_target = callback_target if callback_target is not None else self
@@ -210,11 +241,18 @@ class Rti1516eAmbassador:
             self._async_closing = False
         self._start_loop()
         connection = RtiConnection.connect(url)
-        self._connection = self._run(connection.__aenter__())
+        try:
+            self._connection = self._run(connection.__aenter__())
+        except BaseException:
+            dispatcher.close()
+            self._stop_loop()
+            raise
         self._connection_cm_open = True
 
     def disconnect(self) -> None:
         """Tear down the connection. Idempotent."""
+        self._callback_dispatcher.guard_reentrant()
+        self._callback_dispatcher.close()
         pending_error: BaseException | None = None
         with self._async_submission_gate:
             with self._async_operations_changed:
@@ -232,10 +270,18 @@ class Rti1516eAmbassador:
         if pending_error is not None:
             raise pending_error
 
-    def createFederationExecution(self, name: str, fom_modules: list[str]) -> None:  # noqa: N802
+    def createFederationExecution(  # noqa: N802
+        self,
+        name: str,
+        fom_modules: list[str],
+        *,
+        logical_time_implementation_name: str = "",
+        mim_module: MIMInput | None = None,
+    ) -> None:
         """§4.5 — create the federation execution.
 
-        M39 HA-2: when connected, the create RPC is issued EAGERLY and a
+        Requires an open connection; disconnected calls do not cache inputs.
+        M39 HA-2: the create RPC is issued EAGERLY and a
         duplicate name raises the typed
         :class:`rti1516e.errors.FederationExecutionAlreadyExists`
         (IEEE §4.5) — the standard HLA pattern is::
@@ -250,12 +296,24 @@ class Rti1516eAmbassador:
         create-on-join path stays idempotent — federates that skip
         ``createFederationExecution`` entirely keep working (Layer 1's
         ``join_federation`` creates with ``exist_ok=True``).
+
+        ``logical_time_implementation_name`` is keyword-only. Empty selects
+        the default ``HLAfloat64Time``, the only implementation supported by
+        the current transport. Other designators raise
+        ``CouldNotCreateLogicalTimeFactory`` before creation or caching.
+        ``mim_module`` selects an explicit MIM path or ``MIMModule`` value,
+        separate from the FOM modules. The server validates its supported
+        structural profile. Explicit selection requires the V2 create contract.
         """
+        if self._connection is None or not self._connection_cm_open:
+            raise RuntimeError("connect() must be called before createFederationExecution()")
+        spec = FederationSpec(name=name, fom_modules=fom_modules, mim_module=mim_module,
+                              logical_time_implementation_name=logical_time_implementation_name)
+        self._run(self._connection.create_federation(spec))
         self._federation_name = name
-        self._fom_modules = list(fom_modules)
-        if self._connection is not None and self._connection_cm_open:
-            spec = FederationSpec(name=name, fom_modules=list(fom_modules))
-            self._run(self._connection.create_federation(spec))
+        self._fom_modules = list(spec.fom_modules)
+        self._mim_module = spec.mim_module
+        self._logical_time_implementation_name = spec.logical_time_implementation_name
 
     def destroyFederationExecution(self, name: str) -> None:  # noqa: N802
         """§4.6 — destroy the federation execution.
@@ -267,9 +325,7 @@ class Rti1516eAmbassador:
         unknown name.
         """
         if self._connection is None:
-            raise RuntimeError(
-                "connect() must be called before destroyFederationExecution()"
-            )
+            raise RuntimeError("connect() must be called before destroyFederationExecution()")
         self._run(self._connection.destroy_federation(name))
 
     def joinFederationExecution(  # noqa: N802
@@ -277,36 +333,59 @@ class Rti1516eAmbassador:
         federate_name: str,
         federation_name: str,
         additional_fom_modules: list[str] | None = None,
+        *,
+        federate_type: str = "",
     ) -> None:
-        """§4.9 — join an existing federation.
+        """Join an existing federation, optionally extending its live FOM.
 
-        M27 Phase D: ``additional_fom_modules`` matches reference_rti's
-        IEEE 1516.1 ``additionalFomModules`` parameter. A federate
-        that joins an already-created federation should pass the
-        same FOM modules the creator used, so the local handle
-        cache is populated. Without this, event translation falls
-        back to stringified handles (Discover / Reflect / Receive
-        callbacks see the handle as a decimal string instead of
-        the FOM class name).
-
-        If a prior ``createFederationExecution`` recorded modules,
-        those are used unless ``additional_fom_modules`` is passed
-        explicitly (the explicit form wins, matching reference_rti).
+        The legacy positions remain ``(federate_name, federation_name,
+        additional_fom_modules=None)``. Supply the type explicitly, for
+        example ``joinFederationExecution("alice", "demo", federate_type="Vehicle")``.
+        It is forwarded unchanged to Layer 1; omitted type stays empty.
+        A three-string C++/Java-style call is rejected rather than treating
+        the type as a federation name and the name as a sequence of modules.
         """
+        self._callback_dispatcher.guard_reentrant()
         if self._connection is None:
             raise RuntimeError("connect() must be called before joinFederationExecution()")
+        if isinstance(additional_fom_modules, (str, bytes)):
+            raise TypeError(
+                "additional_fom_modules must be a sequence of module paths, not a string; "
+                "pass federate_type as a keyword"
+            )
+        if not isinstance(federate_type, str):
+            raise TypeError("federate_type must be a string")
         # Honor a prior createFederationExecution; otherwise default to the
         # passed federation_name with no FOM modules.
-        name = self._federation_name if self._federation_name is not None else federation_name
-        modules: list[str]
-        if additional_fom_modules is not None:
-            modules = list(additional_fom_modules)
-        else:
-            modules = list(self._fom_modules)
-        spec = FederationSpec(name=name, fom_modules=modules)
-        cm = self._connection.join_federation(spec, federate_name=federate_name)
+        spec = FederationSpec(
+            name=federation_name,
+            fom_modules=list(self._fom_modules) if self._federation_name == federation_name else [],
+            additional_fom_modules=list(additional_fom_modules or []),
+            mim_module=self._mim_module if self._federation_name == federation_name else None,
+            logical_time_implementation_name=(self._logical_time_implementation_name
+                                               if self._federation_name == federation_name else ""),
+        )
+        cm = self._connection.join_federation(
+            spec, federate_name=federate_name, federate_type=federate_type,
+        )
         self._federate_cm = cm
         self._federate = self._run(cm.__aenter__())
+        self._ownership_receipt_profile = "legacy-delivery-only"
+        transport = getattr(self._federate, "_transport", None)
+        generation = getattr(transport, "_generation_by_federation", {}).get(federation_name, 0)
+        if generation:
+            try:
+                self._run(self._federate.enable_ownership_callback_receipts())
+                self._ownership_receipt_profile = "actual-invocation"
+            except Exception as exc:
+                from ._grpc_errors import _grpc_code_name
+                if _grpc_code_name(exc) != "UNIMPLEMENTED":
+                    try:
+                        self._run(cm.__aexit__(type(exc), exc, exc.__traceback__))
+                    finally:
+                        self._federate = None
+                        self._federate_cm = None
+                    raise
         if self._direct_callback_delivery and self._run(
             self._federate.set_event_sink(self._dispatch_event)
         ):
@@ -316,13 +395,16 @@ class Rti1516eAmbassador:
             self._event_pump_task = asyncio.run_coroutine_threadsafe(
                 self._pump_events(), self._loop_required()
             )
+        sources = getattr(self._federate._transport, "_checkpoint_sources", None)
+        if sources is not None:
+            sources[self._federate.handle] = self._checkpoint_pending_callbacks
 
     def setDirectCallbackDelivery(self, enabled: bool) -> None:  # noqa: N802
         """Select direct stream-to-callback delivery before joining.
 
         Direct delivery removes the intermediate asyncio queue and pump task.
-        The callback still runs on the ambassador loop and preserves stream
-        order. Transports without sink support retain the queue fallback.
+        Delivery still obeys the selected callback model and stream order.
+        Transports without sink support retain the queue fallback.
         """
         if not isinstance(enabled, bool):
             raise TypeError("direct callback delivery requires a bool")
@@ -342,32 +424,181 @@ class Rti1516eAmbassador:
         Unknown designators raise ``ValueError`` before any state is
         torn down (§4.10 InvalidResignAction).
         """
+        self._callback_dispatcher.guard_reentrant()
         if action not in _transport.RESIGN_ACTION_NAMES:
             valid = ", ".join(sorted(_transport.RESIGN_ACTION_NAMES))
-            raise ValueError(
-                f"invalid resign action {action!r}; expected one of: {valid}"
-            )
+            raise ValueError(f"invalid resign action {action!r}; expected one of: {valid}")
         pending_error: BaseException | None = None
         with self._async_submission_gate:
             try:
                 self._flush_async_operations_locked()
             except BaseException as exc:
                 pending_error = exc
+            # Rejection leaves membership and its callback delivery usable.
+            if self._federate_cm is not None:
+                self._federate_cm.resign_action = action
+                self._run(self._federate_cm.__aexit__(None, None, None))
+                self._federate_cm = None
             if self._event_pump_task is not None:
                 self._event_pump_task.cancel()
                 self._event_pump_task = None
             if self._direct_event_sink_installed and self._federate is not None:
                 self._run(self._federate.set_event_sink(None))
                 self._direct_event_sink_installed = False
-            if self._federate_cm is not None:
-                self._federate_cm.resign_action = action
-                self._run(self._federate_cm.__aexit__(None, None, None))
-                self._federate_cm = None
             self._federate = None
+        self._callback_dispatcher.clear()
         if pending_error is not None:
             raise pending_error
 
     # --- Declaration management ---
+
+    def listFederationExecutions(self) -> tuple[FederationExecutionInformation, ...]:  # noqa: N802
+        if self._connection is None:
+            raise RuntimeError("connect() must be called before listFederationExecutions()")
+        rows = cast("tuple[FederationExecutionInformation, ...]",
+                    self._run(list_federation_executions(self._connection)))
+        self._dispatch_event(ServiceCallback("reportFederationExecutions", (rows,)))
+        return rows
+
+    def reportFederationExecutions(  # noqa: N802
+        self, executions: tuple[FederationExecutionInformation, ...],
+    ) -> None:
+        """Override to receive the available execution-list fields."""
+
+    def unpublishObjectClass(self, class_handle: ObjectClassRef) -> None:  # noqa: N802
+        self._run(self._fed().unpublish_object_class(class_handle))
+
+    def unpublishObjectClassAttributes(  # noqa: N802
+        self, class_handle: ObjectClassRef, attributes: AttributeRefList,
+    ) -> None:
+        self._run(self._fed().unpublish_object_class(class_handle, attributes=list(attributes)))
+
+    def unsubscribeObjectClass(self, class_handle: ObjectClassRef) -> None:  # noqa: N802
+        self._run(self._fed().unsubscribe_object_class(class_handle))
+
+    def unsubscribeObjectClassAttributes(  # noqa: N802
+        self, class_handle: ObjectClassRef, attributes: AttributeRefList,
+    ) -> None:
+        self._run(self._fed().unsubscribe_object_class(class_handle, attributes=list(attributes)))
+
+    def unpublishInteractionClass(self, class_handle: InteractionClassRef) -> None:  # noqa: N802
+        self._run(self._fed().unpublish_interaction_class(class_handle))
+
+    def unsubscribeInteractionClass(self, class_handle: InteractionClassRef) -> None:  # noqa: N802
+        self._run(self._fed().unsubscribe_interaction_class(class_handle))
+
+    def setAutomaticResignDirective(self, action: int | str) -> None:  # noqa: N802
+        self._run(self._fed().set_automatic_resign_directive(action))
+
+    def getAutomaticResignDirective(self) -> int:  # noqa: N802
+        return int(self._run(self._fed().get_automatic_resign_directive()))
+
+    def getFederateHandle(self, name: str) -> FederateHandle:  # noqa: N802
+        return FederateHandle(self._run(self._fed().get_federate_handle(name)))
+
+    def getFederateName(self, handle: int) -> str:  # noqa: N802
+        return str(self._run(self._fed().get_federate_name(handle)))
+
+    def normalizeFederateHandle(self, handle: int) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.normalize_federate_handle(handle)))
+
+    def normalizeServiceGroup(self, group: int) -> int:  # noqa: N802
+        return int(self._run(self._fed().support.normalize_service_group(group)))
+
+    def queryGALT(self) -> tuple[float, bool]:  # noqa: N802
+        return cast("tuple[float, bool]", self._run(self._fed().query_galt()))
+
+    def queryLITS(self) -> tuple[float, bool]:  # noqa: N802
+        return cast("tuple[float, bool]", self._run(self._fed().query_lits()))
+
+    def retract(self, handle: int) -> None:
+        self._run_after_async_barrier(lambda: self._fed().retract(handle))
+
+    def changeAttributeOrderType(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int], order_type: int,
+    ) -> None:
+        self._run(self._fed().change_attribute_order_type(
+            object_handle, list(attribute_handles), order_type))
+
+    def changeInteractionOrderType(self, class_handle: int, order_type: int) -> None:  # noqa: N802
+        self._run(self._fed().change_interaction_order_type(class_handle, order_type))
+
+    def requestAttributeTransportationTypeChange(  # noqa: N802
+        self, object_handle: int, attributes: list[int], transport_type: int,
+    ) -> None:
+        copied = list(attributes)
+        self._run(self._fed().request_attribute_transportation_type_change(
+            object_handle, copied, transport_type))
+        self._dispatch_event(ServiceCallback(
+            "confirmAttributeTransportationTypeChange", (object_handle, copied, transport_type)))
+
+    def queryAttributeTransportationType(  # noqa: N802
+        self, object_handle: int, attribute_handle: int,
+    ) -> None:
+        result = self._run(self._fed().query_attribute_transportation_type(
+            object_handle, attribute_handle))
+        self._dispatch_event(ServiceCallback(
+            "reportAttributeTransportationType", (object_handle, attribute_handle, result)))
+
+    def requestInteractionTransportationTypeChange(  # noqa: N802
+        self, class_handle: int, transport_type: int,
+    ) -> None:
+        self._run(self._fed().request_interaction_transportation_type_change(
+            class_handle, transport_type))
+        self._dispatch_event(ServiceCallback(
+            "confirmInteractionTransportationTypeChange", (class_handle, transport_type)))
+
+    def queryInteractionTransportationType(  # noqa: N802
+        self, federate_handle: int, class_handle: int,
+    ) -> None:
+        result = self._run(self._fed().query_interaction_transportation_type(
+            federate_handle, class_handle))
+        self._dispatch_event(ServiceCallback(
+            "reportInteractionTransportationType", (federate_handle, class_handle, result)))
+
+    def confirmAttributeTransportationTypeChange(  # noqa: N802
+        self, object_handle: int, attributes: Collection[int], transport_type: int,
+    ) -> None:
+        """Override to receive a completed attribute transportation change."""
+
+    def reportAttributeTransportationType(  # noqa: N802
+        self, object_handle: int, attribute_handle: int, transport_type: int,
+    ) -> None:
+        """Override to receive the attribute transportation query result."""
+
+    def confirmInteractionTransportationTypeChange(  # noqa: N802
+        self, class_handle: int, transport_type: int,
+    ) -> None:
+        """Override to receive a completed interaction transportation change."""
+
+    def reportInteractionTransportationType(  # noqa: N802
+        self, federate_handle: int, class_handle: int, transport_type: int,
+    ) -> None:
+        """Override to receive the interaction transportation query result."""
+
+    def attributeOwnershipReleaseDenied(  # noqa: N802
+        self, object_handle: int, attribute_handles: list[int],
+    ) -> None:
+        self._run(self._fed().ownership.release_denied(object_handle, list(attribute_handles)))
+
+    def abortFederationSave(self) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.abort_federation_save())
+
+    def abortFederationRestore(self) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.abort_federation_restore())
+
+    def getRangeBounds(self, region_handle: int, dimension_handle: int) -> tuple[int, int] | None:  # noqa: N802
+        return cast("tuple[int, int] | None", self._run(
+            self._fed().ddm.query_bounds(region_handle, dimension_handle)))
+
+    def reserveMultipleObjectInstanceName(self, names: list[str]) -> None:  # noqa: N802
+        self.reserveMultipleObjectInstanceNames(names)
+
+    def releaseMultipleObjectInstanceName(self, names: list[str]) -> None:  # noqa: N802
+        self._run(self._fed().reservation.release_multiple(list(names)))
+
+    def releaseMultipleObjectInstanceNames(self, names: list[str]) -> None:  # noqa: N802
+        self.releaseMultipleObjectInstanceName(names)
 
     def publishObjectClassAttributes(  # noqa: N802
         self, class_name: ObjectClassRef, attributes: AttributeRefList
@@ -378,32 +609,73 @@ class Rti1516eAmbassador:
         self._run(self._fed().publish_object_class(class_name, attributes=list(attributes)))
 
     def subscribeObjectClassAttributes(  # noqa: N802
-        self, class_name: ObjectClassRef, attributes: AttributeRefList
+        self,
+        class_name: ObjectClassRef,
+        attributes: AttributeRefList,
+        active: bool = True,
+        updateRateDesignator: str = "",  # noqa: N803
     ) -> None:
         """See :meth:`publishObjectClassAttributes` for the M27 Phase B
         int|str semantics."""
-        self._run(self._fed().subscribe_object_class(class_name, attributes=list(attributes)))
+        self._run(
+            self._fed().subscribe_object_class(
+                class_name,
+                attributes=list(attributes),
+                active=active,
+                update_rate_designator=updateRateDesignator,
+            )
+        )
 
     def publishInteractionClass(self, class_name: InteractionClassRef) -> None:  # noqa: N802
         """M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or ``str``."""
         self._run(self._fed().publish_interaction_class(class_name))
 
-    def subscribeInteractionClass(self, class_name: InteractionClassRef) -> None:  # noqa: N802
+    def subscribeInteractionClass(  # noqa: N802
+        self, class_name: InteractionClassRef, active: bool = True
+    ) -> None:
         """M27 Phase D: ``class_name`` accepts ``int`` (FOM handle) or ``str``."""
-        self._run(self._fed().subscribe_interaction_class(class_name))
+        self._run(self._fed().subscribe_interaction_class(class_name, active=active))
+
+    def enableObjectClassRelevanceAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(1, True))
+
+    def disableObjectClassRelevanceAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(1, False))
+
+    def enableAttributeRelevanceAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(2, True))
+
+    def disableAttributeRelevanceAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(2, False))
+
+    def enableAttributeScopeAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(3, True))
+
+    def disableAttributeScopeAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(3, False))
+
+    def enableInteractionRelevanceAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(4, True))
+
+    def disableInteractionRelevanceAdvisorySwitch(self) -> None:  # noqa: N802
+        self._run(self._fed().set_advisory_switch(4, False))
 
     # --- Object management ---
 
     def registerObjectInstance(  # noqa: N802
         self, class_name: ObjectClassRef, instance_name: str | None = None
     ) -> ObjectInstanceHandle:
-        """M27 Phase B: ``class_name`` accepts ``int`` (IEEE 1516 service-style FOM
-        handle) or ``str`` (FOM name). The parameter is still named
-        ``class_name`` for source-compat with pre-M27 callers."""
+        """Register using an object-class handle or FOM class name.
+
+        An explicit instance name requires a successful
+        ``objectInstanceNameReservationSucceeded`` callback from a prior
+        ``reserveObjectInstanceName`` call. Registration does not reserve it
+        implicitly. Registration and deletion retain that reservation until
+        it is explicitly released or the reserving federate resigns.
+        Omit ``instance_name`` to request an automatically assigned name.
+        """
         result = self._run_after_async_barrier(
-            lambda: self._fed().register_object_instance(
-                class_name, instance_name=instance_name
-            )
+            lambda: self._fed().register_object_instance(class_name, instance_name=instance_name)
         )
         return ObjectInstanceHandle(result)
 
@@ -417,9 +689,7 @@ class Rti1516eAmbassador:
         attribute handle) or ``str`` (FOM attribute name)."""
         copied_values = dict(values)
         self._run_after_async_barrier(
-            lambda: self._fed().update_attributes(
-                object_handle, copied_values, timestamp=timestamp
-            )
+            lambda: self._fed().update_attributes(object_handle, copied_values, timestamp=timestamp)
         )
 
     def updateAttributeValuesAsync(  # noqa: N802
@@ -454,9 +724,7 @@ class Rti1516eAmbassador:
         accept ``int`` (handle) or ``str`` (FOM name)."""
         copied_parameters = dict(parameters)
         self._run_after_async_barrier(
-            lambda: self._fed().send_interaction(
-                class_name, copied_parameters, timestamp=timestamp
-            )
+            lambda: self._fed().send_interaction(class_name, copied_parameters, timestamp=timestamp)
         )
 
     def sendInteractionAsync(  # noqa: N802
@@ -502,9 +770,7 @@ class Rti1516eAmbassador:
         self._run_after_async_barrier(lambda: self._fed().next_message_request(time))
 
     def nextMessageRequestAvailable(self, time: float) -> None:  # noqa: N802
-        self._run_after_async_barrier(
-            lambda: self._fed().next_message_request_available(time)
-        )
+        self._run_after_async_barrier(lambda: self._fed().next_message_request_available(time))
 
     def timeAdvanceRequest(self, time: float) -> None:  # noqa: N802
         self._run_after_async_barrier(lambda: self._fed().time_advance_request(time))
@@ -519,9 +785,7 @@ class Rti1516eAmbassador:
         """
         with self._async_submission_gate:
             self._flush_async_operations_locked()
-            future = self._submit_async_operation(
-                lambda: self._fed().time_advance_request(time)
-            )
+            future = self._submit_async_operation(lambda: self._fed().time_advance_request(time))
             self._async_ordering_barrier_pending = True
             return future
 
@@ -563,18 +827,20 @@ class Rti1516eAmbassador:
             raise first_error
 
     def timeAdvanceRequestAvailable(self, time: float) -> None:  # noqa: N802
-        self._run_after_async_barrier(
-            lambda: self._fed().time_advance_request_available(time)
-        )
+        self._run_after_async_barrier(lambda: self._fed().time_advance_request_available(time))
 
     def flushQueueRequest(self, time: float) -> None:  # noqa: N802
         self._run_after_async_barrier(lambda: self._fed().flush_queue_request(time))
 
-    def queryLogicalTime(self) -> float:  # noqa: N802
-        return float(self._run(self._fed().query_logical_time()))
+    def getLogicalTimeImplementationName(self) -> str:  # noqa: N802
+        """SDK inspection accessor for the joined execution's selected time type."""
+        return self._fed().logical_time_implementation_name
 
-    def queryLookahead(self) -> float:  # noqa: N802
-        return float(self._run(self._fed().query_lookahead()))
+    def queryLogicalTime(self) -> int | float:  # noqa: N802
+        return cast("int | float", self._run(self._fed().query_logical_time()))
+
+    def queryLookahead(self) -> int | float:  # noqa: N802
+        return cast("int | float", self._run(self._fed().query_lookahead()))
 
     def queryLBTS(self) -> tuple[float, bool]:  # noqa: N802
         return cast("tuple[float, bool]", self._run(self._fed().query_lbts()))
@@ -598,9 +864,16 @@ class Rti1516eAmbassador:
         )
 
     def localDeleteObjectInstance(self, object_handle: ObjectInstanceRef) -> None:  # noqa: N802
-        self._run_after_async_barrier(
-            lambda: self._fed().local_delete_object_instance(object_handle)
-        )
+        with self._fed()._ownership_callback_state().dispatch_fence:
+            self._run_after_async_barrier(
+                lambda: self._fed().local_delete_object_instance(object_handle)
+            )
+
+    def enableOwnershipCallbackReceipts(self) -> None:  # noqa: N802
+        self._run(self._fed().enable_ownership_callback_receipts())
+
+    def retryOwnershipCallbacks(self) -> None:  # noqa: N802
+        self._run(self._fed().retry_ownership_callbacks())
 
     def requestAttributeValueUpdate(  # noqa: N802
         self,
@@ -610,7 +883,9 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(
             self._fed().request_attribute_value_update(
-                object_handle, list(attribute_handles), tag,
+                object_handle,
+                list(attribute_handles),
+                tag,
             )
         )
 
@@ -622,7 +897,9 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(
             self._fed().request_class_attribute_value_update(
-                object_class_handle, list(attribute_handles), tag,
+                object_class_handle,
+                list(attribute_handles),
+                tag,
             )
         )
 
@@ -634,16 +911,21 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(
             self._fed().change_attribute_transportation_type(
-                object_handle, list(attribute_handles), transport,
+                object_handle,
+                list(attribute_handles),
+                transport,
             )
         )
 
     def changeInteractionTransportationType(  # noqa: N802
-        self, interaction_class_handle: InteractionClassRef, transport: int,
+        self,
+        interaction_class_handle: InteractionClassRef,
+        transport: int,
     ) -> None:
         self._run(
             self._fed().change_interaction_transportation_type(
-                interaction_class_handle, transport,
+                interaction_class_handle,
+                transport,
             )
         )
 
@@ -653,9 +935,7 @@ class Rti1516eAmbassador:
     # from reference_rti use these directly.
 
     def getObjectClassHandle(self, class_name: str) -> ObjectClassHandle:  # noqa: N802
-        return ObjectClassHandle(
-            self._run(self._fed().support.get_object_class_handle(class_name))
-        )
+        return ObjectClassHandle(self._run(self._fed().support.get_object_class_handle(class_name)))
 
     def getObjectClassName(self, class_handle: ObjectClassRef) -> str:  # noqa: N802
         return str(self._run(self._fed().support.get_object_class_name(class_handle)))
@@ -697,15 +977,48 @@ class Rti1516eAmbassador:
         )
 
     def getDimensionHandle(self, dimension_name: str) -> DimensionHandle:  # noqa: N802
-        return DimensionHandle(
-            self._run(self._fed().support.get_dimension_handle(dimension_name))
-        )
+        return DimensionHandle(self._run(self._fed().support.get_dimension_handle(dimension_name)))
 
     def getDimensionName(self, dimension_handle: DimensionRef) -> str:  # noqa: N802
         return str(self._run(self._fed().support.get_dimension_name(dimension_handle)))
 
     def getDimensionUpperBound(self, dimension_handle: DimensionRef) -> int:  # noqa: N802
         return int(self._run(self._fed().support.get_dimension_upper_bound(dimension_handle)))
+
+    def getUpdateRateValue(self, designator: str) -> float:  # noqa: N802
+        return float(self._run(self._fed().support.get_update_rate_value(designator)))
+
+    def getUpdateRateValueForAttribute(self, object_handle: int, attribute_handle: int) -> float:  # noqa: N802
+        return float(
+            self._run(
+                self._fed().support.get_update_rate_value_for_attribute(
+                    object_handle, attribute_handle
+                )
+            )
+        )
+
+    def getAvailableDimensionsForClassAttribute(  # noqa: N802
+        self, class_handle: int, attribute_handle: int
+    ) -> DimensionHandleSet:  # noqa: N802
+        return DimensionHandleSet(
+            self._run(
+                self._fed().support.get_available_dimensions_for_class_attribute(
+                    class_handle, attribute_handle
+                )
+            )
+        )
+
+    def getAvailableDimensionsForInteractionClass(self, class_handle: int) -> DimensionHandleSet:  # noqa: N802
+        return DimensionHandleSet(
+            self._run(
+                self._fed().support.get_available_dimensions_for_interaction_class(class_handle)
+            )
+        )
+
+    def getDimensionHandleSet(self, region_handle: int) -> DimensionHandleSet:  # noqa: N802
+        return DimensionHandleSet(
+            self._run(self._fed().support.get_dimension_handle_set(region_handle))
+        )
 
     def getOrderType(self, order_name: str) -> int:  # noqa: N802
         return int(self._run(self._fed().support.get_order_type(order_name)))
@@ -729,6 +1042,11 @@ class Rti1516eAmbassador:
     def getObjectInstanceName(self, object_handle: ObjectInstanceRef) -> str:  # noqa: N802
         """§6.31 — resolve a runtime object instance handle to its name."""
         return str(self._run(self._fed().support.get_object_instance_name(object_handle)))
+
+    def getKnownObjectClassHandle(self, object_handle: ObjectInstanceRef) -> ObjectClassHandle:  # noqa: N802
+        return ObjectClassHandle(
+            self._run(self._fed().support.get_known_object_class_handle(object_handle))
+        )
 
     # --- §10.6 Handle factory accessors (M28 W2) ---
 
@@ -771,7 +1089,8 @@ class Rti1516eAmbassador:
         ``failed_to_sync`` set on federationSynchronized."""
         self._run(
             self._fed().sync.synchronization_point_achieved(
-                label, successfully=successfully,
+                label,
+                successfully=successfully,
             )
         )
 
@@ -781,9 +1100,7 @@ class Rti1516eAmbassador:
         self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
     ) -> None:
         self._run(
-            self._fed().ownership.unconditional_divest(
-                object_handle, list(attribute_handles)
-            )
+            self._fed().ownership.unconditional_divest(object_handle, list(attribute_handles))
         )
 
     def negotiatedAttributeOwnershipDivestiture(  # noqa: N802
@@ -802,12 +1119,15 @@ class Rti1516eAmbassador:
         )
 
     def confirmDivestiture(  # noqa: N802
-        self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
+        self,
+        object_handle: ObjectInstanceRef,
+        attribute_handles: AttributeRefList,
+        tag: bytes = b"",
     ) -> None:
         """§7.6 — complete a parked two-phase negotiated divest (M39 HA-2)."""
         self._run(
             self._fed().ownership.confirm_divestiture(
-                object_handle, list(attribute_handles)
+                object_handle, list(attribute_handles), tag=tag
             )
         )
 
@@ -817,9 +1137,7 @@ class Rti1516eAmbassador:
         attribute_handles: AttributeRefList,
         tag: bytes = b"",
     ) -> None:
-        self._run(
-            self._fed().ownership.acquire(object_handle, list(attribute_handles), tag=tag)
-        )
+        self._run(self._fed().ownership.acquire(object_handle, list(attribute_handles), tag=tag))
 
     def attributeOwnershipAcquisitionIfAvailable(  # noqa: N802
         self,
@@ -840,23 +1158,24 @@ class Rti1516eAmbassador:
         self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
     ) -> None:
         self._run(
-            self._fed().ownership.cancel_negotiated_divest(
-                object_handle, list(attribute_handles)
-            )
+            self._fed().ownership.cancel_negotiated_divest(object_handle, list(attribute_handles))
         )
 
     def cancelAttributeOwnershipAcquisition(  # noqa: N802
         self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
     ) -> None:
-        self._run(
-            self._fed().ownership.cancel_acquire(object_handle, list(attribute_handles))
-        )
+        self._run(self._fed().ownership.cancel_acquire(object_handle, list(attribute_handles)))
 
     def attributeOwnershipDivestitureIfWanted(  # noqa: N802
         self, object_handle: ObjectInstanceRef, attribute_handles: AttributeRefList
-    ) -> None:
-        self._run(
-            self._fed().ownership.divest_if_wanted(object_handle, list(attribute_handles))
+    ) -> tuple[int, ...]:
+        return cast(
+            "tuple[int, ...]",
+            self._run(
+                self._fed().ownership.divest_if_wanted_with_result(
+                    object_handle, list(attribute_handles)
+                )
+            ),
         )
 
     def queryAttributeOwnership(  # noqa: N802
@@ -887,23 +1206,45 @@ class Rti1516eAmbassador:
     ) -> None:
         self._run(self._fed().savepoint.request_federation_save(label, save_time=save_time))
 
+    def federateSaveBegun(self) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.federate_save_begun())
+
     def federateSaveComplete(self) -> None:  # noqa: N802
         self._run(self._fed().savepoint.federate_save_complete())
 
     def federateSaveNotComplete(self) -> None:  # noqa: N802
         self._run(self._fed().savepoint.federate_save_not_complete())
 
-    def queryFederationSaveStatus(self, label: str) -> Any:  # noqa: N802
-        return self._run(self._fed().savepoint.query_save_state(label))
+    def queryFederationSaveStatus(self, label: str = "") -> SaveStatusResponse:  # noqa: N802
+        async def query() -> SaveStatusResponse:
+            response = await self._fed().savepoint.query_federation_save_status(label)
+            self._dispatch_event(response)
+            return cast("SaveStatusResponse", response)
 
-    def requestFederationRestore(self, label: str) -> None:  # noqa: N802
-        self._run(self._fed().savepoint.request_federation_restore(label))
+        return cast("SaveStatusResponse", self._run(query()))
+
+    def requestFederationRestore(  # noqa: N802
+        self, label: str, *, saved_federation_generation: int | None = None,
+    ) -> None:
+        if saved_federation_generation is None:
+            self._run(self._fed().savepoint.request_federation_restore(label))
+        else:
+            self._run(self._fed().savepoint.request_federation_restore(
+                label, saved_federation_generation=saved_federation_generation))
 
     def federateRestoreComplete(self) -> None:  # noqa: N802
         self._run(self._fed().savepoint.federate_restore_complete())
 
-    def queryFederationRestoreStatus(self, label: str) -> Any:  # noqa: N802
-        return self._run(self._fed().savepoint.query_restore_state(label))
+    def federateRestoreNotComplete(self) -> None:  # noqa: N802
+        self._run(self._fed().savepoint.federate_restore_not_complete())
+
+    def queryFederationRestoreStatus(self, label: str = "") -> RestoreStatusResponse:  # noqa: N802
+        async def query() -> RestoreStatusResponse:
+            response = await self._fed().savepoint.query_federation_restore_status(label)
+            self._dispatch_event(response)
+            return cast("RestoreStatusResponse", response)
+
+        return cast("RestoreStatusResponse", self._run(query()))
 
     # --- §9 Data Distribution Management (M25 Phase C) ---
 
@@ -911,11 +1252,7 @@ class Rti1516eAmbassador:
         self, routing_space_handle: int, dimension_handles: DimensionRefList
     ) -> RegionHandle:
         return RegionHandle(
-            self._run(
-                self._fed().ddm.create_region(
-                    routing_space_handle, list(dimension_handles)
-                )
-            )
+            self._run(self._fed().ddm.create_region(routing_space_handle, list(dimension_handles)))
         )
 
     def setRangeBounds(  # noqa: N802
@@ -942,19 +1279,30 @@ class Rti1516eAmbassador:
         object_class_handle: ObjectClassRef,
         attribute_handles: AttributeRefList,
         region_handles: RegionRefList,
+        active: bool = True,
+        updateRateDesignator: str = "",  # noqa: N803
     ) -> None:
         self._run(
             self._fed().ddm.subscribe_object_class_attributes_with_regions(
-                object_class_handle, list(attribute_handles), list(region_handles)
+                object_class_handle,
+                list(attribute_handles),
+                list(region_handles),
+                active=active,
+                update_rate_designator=updateRateDesignator,
             )
         )
 
     def subscribeInteractionClassWithRegions(  # noqa: N802
-        self, interaction_class_handle: InteractionClassRef, region_handles: RegionRefList
+        self,
+        interaction_class_handle: InteractionClassRef,
+        region_handles: RegionRefList,
+        active: bool = True,
     ) -> None:
         self._run(
             self._fed().ddm.subscribe_interaction_class_with_regions(
-                interaction_class_handle, list(region_handles)
+                interaction_class_handle,
+                list(region_handles),
+                active=active,
             )
         )
 
@@ -1005,9 +1353,7 @@ class Rti1516eAmbassador:
             bindings = None
         else:
             bindings = [
-                AttributeRegions(
-                    attribute_handle=int(a), region_handles=[int(r) for r in regs]
-                )
+                AttributeRegions(attribute_handle=int(a), region_handles=[int(r) for r in regs])
                 for a, regs in attributes_and_regions.items()
             ]
         self._run(self._fed().ddm.unassociate_regions_for_updates(object_handle, bindings))
@@ -1138,6 +1484,8 @@ class Rti1516eAmbassador:
         values: dict[str, Any],
         timestamp: float | None,
         attribute_values: dict[AttributeHandle, bytes] | None = None,
+        tag: bytes = b"",
+        metadata: ObjectCallbackMetadata | None = None,
     ) -> None:
         """Override to handle ReflectAttributeValues.
 
@@ -1153,121 +1501,77 @@ class Rti1516eAmbassador:
         class_name: str,
         parameters: dict[str, Any],
         timestamp: float | None,
+        tag: bytes = b"",
+        metadata: ObjectCallbackMetadata | None = None,
     ) -> None:
         """Override to handle ReceiveInteraction."""
+
+    def turnUpdatesOnForObjectInstance(  # noqa: N802
+        self,
+        object_handle: int,
+        attribute_handles: list[int],
+        update_rate_designator: str | None = None,
+    ) -> None:
+        """Override to handle publisher update demand and its optional rate."""
+
+    def turnUpdatesOffForObjectInstance(  # noqa: N802
+        self,
+        object_handle: int,
+        attribute_handles: Collection[int],
+    ) -> None:
+        """Override when no active subscriber demands these attributes."""
 
     def timeAdvanceGrant(self, time: float) -> None:  # noqa: N802
         """Override to handle TimeAdvanceGrant."""
 
+    def timeRegulationEnabled(self, time: float) -> None:  # noqa: N802
+        """Override when regulation becomes active at the supplied logical time."""
+
+    def timeConstrainedEnabled(self, time: float) -> None:  # noqa: N802
+        """Override when constraint becomes active at the supplied logical time."""
+
     def federationHalted(self, cause: str, stalled_federate_handle: int) -> None:  # noqa: N802
         """Override to handle FederationHalted."""
 
-    # --- §10.4 Callback evocation (M26 Phase E, cheap variant) ---
-    # gorti's native callback model is HLA_IMMEDIATE: _pump_events runs
-    # on a background task and fires overrides as events arrive. reference_rti
-    # federates port more easily if the ambassador also accepts the
-    # HLA_EVOKED-style `evokeCallback` API. Cheap implementation: yield
-    # to the asyncio loop for approxMinTime seconds (up to approxMaxTime
-    # if no callback has fired by then), and report whether any callback
-    # was dispatched since the previous evoke or in the current window.
-    # This is observable parity for
-    # federate ports that drive their main loop via evoke, even though
-    # the strict §10.4 HLA_EVOKED semantics (buffered drain, no
-    # immediate dispatch) are not enforced. See docs/COMMERCIAL_RTI_PARITY.md.
+    # --- Callback evocation ---
 
     def evokeCallback(  # noqa: N802
         self, approx_min_time: float = 0.0, approx_max_time: float | None = None
     ) -> bool:
-        """§10.4 — yield to the callback pump for ≥ approx_min_time seconds.
+        """Deliver at most one evoked callback on this calling thread.
 
-        Returns True if an unreported callback fired before or during the
-        window. If
-        approx_max_time is None, the wait is exactly approx_min_time
-        and the return value reflects whether a callback fired in
-        that interval.
-
-        Behaviour note: callbacks may fire OUTSIDE the window too —
-        gorti is HLA_IMMEDIATE-flavored. This method observes
-        firings within the window for spec-test compatibility.
+        In immediate mode this observes completed callbacks for compatibility.
+        The boolean retains this SDK's did-dispatch convention; full normative
+        return-value/timing equivalence is not established by the API headers.
         """
-        observed_count = self._callback_observed_count
-        deadline_min = approx_min_time
-        deadline_max = approx_max_time if approx_max_time is not None else approx_min_time
-        if deadline_max < deadline_min:
-            deadline_max = deadline_min
-
-        async def _wait() -> bool:
-            # Sleep at least approx_min_time. If a callback fires in
-            # that window, return immediately after the minimum has
-            # elapsed (matches reference_rti's "deliver promptly but respect
-            # the floor" intent).
-            await asyncio.sleep(deadline_min)
-            if self._callback_fired_count != observed_count:
-                self._callback_observed_count = self._callback_fired_count
-                return True
-            # No callback yet — wait up to approx_max_time for one.
-            remaining = deadline_max - deadline_min
-            if remaining <= 0:
-                return False
-            # Poll cheaply rather than parking on a Condition; the
-            # event pump runs in the same loop so a brief sleep loop
-            # is enough.
-            slept = 0.0
-            tick = min(0.005, remaining)
-            while slept < remaining:
-                await asyncio.sleep(tick)
-                if self._callback_fired_count != observed_count:
-                    self._callback_observed_count = self._callback_fired_count
-                    return True
-                slept += tick
-            return False
-
-        return bool(self._run(_wait()))
+        self._callback_dispatcher.guard_reentrant()
+        if getattr(self, "_callback_error", None) is not None:
+            raise RuntimeError("callback stream failed") from self._callback_error
+        return self._callback_dispatcher.evoke(approx_min_time, approx_max_time, multiple=False)
 
     def evokeMultipleCallbacks(  # noqa: N802
         self, approx_min_time: float = 0.0, approx_max_time: float | None = None
     ) -> bool:
-        """§10.4 — multi-callback variant of evokeCallback.
-
-        Same window semantics; returns True if at least one callback
-        fired. reference_rti federates typically loop on this:
-        ``while running: rtiAmb.evokeMultipleCallbacks(0.1, 1.0)``.
-        """
-        return self.evokeCallback(approx_min_time, approx_max_time)
+        """Deliver a bounded batch in evoked mode; preserve FIFO order."""
+        self._callback_dispatcher.guard_reentrant()
+        if getattr(self, "_callback_error", None) is not None:
+            raise RuntimeError("callback stream failed") from self._callback_error
+        return self._callback_dispatcher.evoke(approx_min_time, approx_max_time, multiple=True)
 
     def enableCallbacks(self) -> None:  # noqa: N802
-        """§10.4 — resume callback dispatch.
-
-        M27 Phase C. While disabled, _pump_events buffered events
-        instead of firing override slots; calling enableCallbacks
-        flushes the buffered events through the normal dispatch
-        path. Idempotent — calling enable while already enabled is
-        a no-op.
-        """
-        if self._callbacks_enabled:
-            return
+        """Enable delivery; evoked callbacks still require an evoke call."""
+        guard = getattr(self._federate, "_guard_service", None)
+        if callable(guard):
+            guard()
+        if getattr(self, "_callback_error", None) is not None:
+            raise RuntimeError("callback stream failed") from self._callback_error
         self._callbacks_enabled = True
-        # Drain the buffer through the normal dispatch path. We bump
-        # _callback_fired_count via _dispatch_event, but since we
-        # already counted these events on the way IN to the buffer
-        # (the disabled path also bumps the counter), avoid double-
-        # counting: subtract the buffer length from the counter
-        # before dispatching, then let dispatch re-bump it.
-        buffered = self._callback_buffer
-        self._callback_buffer = []
-        self._callback_fired_count -= len(buffered)
-        for event in buffered:
-            self._dispatch_event(event)
+        self._callback_dispatcher.enable(wait=threading.current_thread() is not self._loop_thread)
 
     def disableCallbacks(self) -> None:  # noqa: N802
-        """§10.4 — suspend callback dispatch.
-
-        M27 Phase C. While disabled, events from the event pump are
-        buffered. Re-enable via enableCallbacks to drain. Buffer is
-        unbounded — federates that disable for long stretches under
-        high event rates should consider memory impact.
-        """
+        """Suspend delivery without discarding or counting queued callbacks."""
         self._callbacks_enabled = False
+        self._callback_dispatcher.disable()
 
     # --- M25 Phase D — additional FederateAmbassador callbacks ---
     # Each is a no-op by default; federates ported from reference_rti
@@ -1335,10 +1639,27 @@ class Rti1516eAmbassador:
     ) -> None:
         """§7.4 — this federate's acquisition succeeded; it now owns the attrs."""
 
+    def attributeOwnershipAcquisitionNotificationWithTag(  # noqa: N802
+        self,
+        object_handle: int,
+        attribute_handles: tuple[int, ...],
+        owning_federate: int,
+        tag: bytes,
+    ) -> None:
+        """Tagged callback; the default preserves legacy callback overrides."""
+        self.attributeOwnershipAcquisitionNotification(
+            object_handle, attribute_handles, owning_federate
+        )
+
     def requestDivestitureConfirmation(  # noqa: N802
         self, object_handle: int, attribute_handles: tuple[int, ...]
     ) -> None:
         """§7.3 (divester half) — pending divest was matched and transferred."""
+
+    def confirmAttributeOwnershipAcquisitionCancellation(  # noqa: N802
+        self, object_handle: int, attribute_handles: tuple[int, ...]
+    ) -> None:
+        """Cancellation callback; this facade is also its default callback target."""
 
     def initiateFederateSave(  # noqa: N802
         self, label: str, save_time: float | None
@@ -1350,6 +1671,16 @@ class Rti1516eAmbassador:
 
     def federationNotSaved(self, label: str) -> None:  # noqa: N802
         """§4.9 — federation save was aborted; bundle was NOT written."""
+
+    def federationSaveStatusResponse(  # noqa: N802
+        self, statuses: tuple[FederateSaveStatus, ...]
+    ) -> None:
+        """Receive the per-federate vector returned by a save-status query."""
+
+    def federationRestoreStatusResponse(  # noqa: N802
+        self, statuses: tuple[FederateRestoreStatus, ...]
+    ) -> None:
+        """Receive the pre/post-handle vector returned by a restore-status query."""
 
     # --- M26 Phase F — object instance name reservation callbacks ---
 
@@ -1478,13 +1809,15 @@ class Rti1516eAmbassador:
 
     def _run(self, coro: Any) -> Any:
         """Schedule ``coro`` on the background loop and block until done."""
+        if threading.current_thread() is self._loop_thread:
+            if inspect.iscoroutine(coro):
+                coro.close()
+            raise RuntimeError("a synchronous SDK call cannot block its asyncio I/O loop")
         loop = self._loop_required()
         future: Future[Any] = asyncio.run_coroutine_threadsafe(coro, loop)
         return future.result()
 
-    def _run_after_async_barrier(
-        self, factory: Callable[[], Coroutine[Any, Any, Any]]
-    ) -> Any:
+    def _run_after_async_barrier(self, factory: Callable[[], Coroutine[Any, Any, Any]]) -> Any:
         with self._async_submission_gate:
             self._flush_async_operations_locked()
             return self._run(factory())
@@ -1502,9 +1835,7 @@ class Rti1516eAmbassador:
                     if self._async_closing:
                         raise RuntimeError("ambassador is disconnecting")
                     if threading.current_thread() is self._loop_thread:
-                        raise RuntimeError(
-                            "async backpressure cannot block the ambassador loop"
-                        )
+                        raise RuntimeError("async backpressure cannot block the ambassador loop")
                     self._async_operations_changed.wait()
                 if self._async_closing:
                     raise RuntimeError("ambassador is disconnecting")
@@ -1522,9 +1853,7 @@ class Rti1516eAmbassador:
             )
             return proxy
 
-    def _async_operation_finished(
-        self, internal: Future[Any], proxy: Future[Any]
-    ) -> None:
+    def _async_operation_finished(self, internal: Future[Any], proxy: Future[Any]) -> None:
         try:
             result = internal.result()
         except BaseException as exc:
@@ -1542,7 +1871,7 @@ class Rti1516eAmbassador:
 
     def _fed(self) -> Federate:
         if self._federate is None:
-            raise RuntimeError("not joined — call joinFederationExecution() first")
+            raise FederateNotExecutionMember("not joined — call joinFederationExecution() first")
         return self._federate
 
     def _invoke_compat(self, method_name: str, *args: Any, **optional: Any) -> None:
@@ -1574,9 +1903,7 @@ class Rti1516eAmbassador:
             return self._accepted_kwargs_cache[key]
         try:
             params = inspect.signature(method).parameters
-            if any(
-                p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
-            ):
+            if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
                 result: frozenset[str] | None = None
             else:
                 result = frozenset(params)
@@ -1586,24 +1913,193 @@ class Rti1516eAmbassador:
         return result
 
     def _dispatch_event(self, event: Any) -> bool:
-        """Dispatch one event to its callback. Return True if recognized.
+        """Receive an event without invoking user callbacks on the I/O loop."""
+        from ._local_notifications import kind_of, prepare
 
-        Factored out of _pump_events so evokeCallback (M26 Phase E) can
-        share the dispatch path, and so the callback-fired counter is
-        bumped exactly once per recognized event regardless of source.
+        restored_locals = []
+        transport = getattr(self._federate, "_transport", None)
+        if (isinstance(event, FederationRestored) and event.federate_handle is not None
+                and not getattr(event, "_callback_recovered", False)
+                and not getattr(event, "_callback_outcome_only", False)):
+            self._callback_dispatcher.clear()
+            self._callback_buffer.clear()
+            self._generic_callback_invocations = None
+            restored_locals = getattr(transport, "_restored_local_notifications", {}).pop(
+                event.federate_handle, [])
+            with self._local_notification_lock:
+                self._local_notification_order = max(
+                    (local._local_notification_order for local in restored_locals), default=0)
+            self._local_notification_state = None
+        if kind_of(event) is not None and getattr(event, "_wire_carrier", None) is None:
+            with self._local_notification_lock:
+                order = self._local_notification_order + 1
+                event = prepare(event, order, getattr(transport, "_restore_serial", 0))
+                self._local_notification_order = max(order, event._local_notification_order)
+        for local in restored_locals:
+            object.__setattr__(local, "_restore_serial", getattr(transport, "_restore_serial", 0))
+        return self._callback_dispatcher.submit_many(
+            [event, *restored_locals], wait=threading.current_thread() is not self._loop_thread
+        )
 
-        M27 Phase C: when callbacks are disabled, buffer the event for
-        later replay via enableCallbacks. Returns True (buffered counts
-        as recognized) so evokeCallback's counter still increments —
-        the federate sees "a callback fired" semantically even though
-        the override slot didn't run yet.
-        """
-        if not self._callbacks_enabled:
-            self._callback_buffer.append(event)
+    def _checkpoint_pending_callbacks(self) -> list[Any]:
+        from ._generic_callbacks import callback_state
+
+        state = callback_state(self)
+        state.checkpoint_outcomes()
+        return self._callback_dispatcher.snapshot_pending()
+
+    def _dispatch_callback(self, event: Any) -> bool:
+        from ._generic_callbacks import callback_state, validate_event_scope
+
+        validate_event_scope(self, event)
+        if hasattr(event, "_local_notification_id"):
+            from ._local_notifications import notification_state
+
+            local = notification_state(self)
+            if not local.begin(event):
+                return False
+            try:
+                return self._invoke_event(event)
+            except BaseException:
+                self._callback_fired_count += 1
+                raise
+            finally:
+                local.finish(event)
+        if getattr(event, "_callback_outcome_only", False):
+            generic = callback_state(self)
+            outcome = generic.recover(event)
+            if outcome is not None:
+                try:
+                    self._run(self._fed().report_callback_invocation(*outcome))
+                except Exception:
+                    self._callback_dispatcher.retain_current_admission()
+                    raise
+                generic.acknowledged(outcome[0])
+            return False
+        if self._federate is None or not hasattr(self._federate, "_ownership_callback_state"):
+            return self._dispatch_callback_unfenced(event)
+        state = self._federate._ownership_callback_state()
+        with state.dispatch_fence:
+            if not state.begin(event):
+                self._run(self._federate.flush_ownership_callback_receipts())
+                return False
+            return self._dispatch_callback_unfenced(event)
+
+    def _dispatch_callback_unfenced(self, event: Any) -> bool:
+        from ._generic_callbacks import callback_state
+        from .events import (
+            ConfirmAttributeOwnershipAcquisitionCancellation,
+            TransportationChangeConfirmed,
+        )
+
+        tracked_types = (
+            ServiceCallback, TransportationChangeConfirmed, FederationHalted,
+            DiscoverObjectInstance,
+            ReflectAttributeValues, ReceiveInteraction,
+            RemoveObjectInstance, ProvideAttributeValueUpdate, SynchronizationPointAnnounced,
+            FederationSynchronized, SynchronizationPointRegistrationSucceeded,
+            SynchronizationPointRegistrationFailed, RequestAttributeOwnershipAssumption,
+            RequestAttributeOwnershipRelease, RequestDivestitureConfirmation,
+            AttributeOwnershipAcquisitionNotification, AttributeOwnershipUnavailable,
+            ConfirmAttributeOwnershipAcquisitionCancellation, TimeAdvanceGrant,
+            TimeRegulationEnabled, TimeConstrainedEnabled, InitiateFederateSave,
+            FederationSaved, FederationNotSaved, InitiateFederateRestore, FederationRestored,
+            FederationNotRestored, RequestFederationRestoreSucceeded,
+            RequestFederationRestoreFailed, FederationRestoreBegun,
+            ObjectInstanceNameReservationSucceeded, ObjectInstanceNameReservationFailed,
+            MultipleObjectInstanceNameReservationSucceeded,
+            MultipleObjectInstanceNameReservationFailed,
+            StartRegistrationForObjectClass, StopRegistrationForObjectClass,
+            TurnInteractionsOn, TurnInteractionsOff, TurnUpdatesOnForObjectInstance,
+            TurnUpdatesOffForObjectInstance, AttributesInScope, AttributesOutOfScope,
+            RequestRetraction, SaveStatusResponse, RestoreStatusResponse,
+        )
+        receipt = (
+            getattr(event, "_callback_receipt", b"") if isinstance(event, tracked_types) else b""
+        )
+        state = callback_state(self)
+        if receipt and self._federate is not None and not state.claim(
+                receipt, getattr(event, "_callback_invocation_identity", None)):
+            self._flush_generic_callback_reports(state)
+            return False
+        admitted = event
+        try:
+            if isinstance(event, TransportationChangeConfirmed):
+                admitted = self._run(self._fed()._activate_transportation_confirmation(event))
+            if (receipt and self._federate is not None
+                    and getattr(self._federate, "callback_invocation_entry_supported", False)):
+                self._run(self._federate.report_callback_invocation(
+                    receipt, True, "", invocation_entry=True))
+        except BaseException as exc:
+            if receipt:
+                state.entry_failed(receipt)
+                if (self._federate is not None
+                        and hasattr(self._federate, "_ownership_callback_state")):
+                    self._federate._ownership_callback_state().entry_failed(event)
+            if (isinstance(event, (SynchronizationPointRegistrationSucceeded,
+                                   SynchronizationPointRegistrationFailed))
+                    and isinstance(exc, (SaveInProgress, RestoreInProgress))
+                    and self._callback_dispatcher.defer_current_checkpoint_admission()):
+                return False
+            if isinstance(event, TransportationChangeConfirmed) and isinstance(exc, Exception):
+                self._callback_dispatcher.retain_current_admission()
+            raise
+        recognized = False
+        failure: BaseException | None = None
+        try:
+            recognized = self._invoke_event(admitted)
+            return recognized  # noqa: RET504 - finally needs the invocation result.
+        except BaseException as exc:
+            recognized = True
+            failure = exc
+            self._callback_fired_count += 1
+            raise
+        finally:
+            if (recognized and self._federate is not None
+                    and hasattr(self._federate, "flush_ownership_callback_receipts")):
+                try:
+                    self._run(self._federate.flush_ownership_callback_receipts())
+                except Exception as exc:
+                    self._callback_report_failures.append(exc)
+            if recognized and receipt and self._federate is not None:
+                state.complete(receipt, failure is None,
+                               "" if failure is None else f"{type(failure).__name__}: {failure}")
+                self._flush_generic_callback_reports(state)
+
+    def _flush_generic_callback_reports(self, state: Any) -> None:
+        for receipt, success, exception in state.pending():
+            try:
+                self._run(self._fed().report_callback_invocation(receipt, success, exception))
+                state.acknowledged(receipt)
+            except Exception as exc:
+                self._callback_report_failures.append(exc)
+
+    def _invoke_event(self, event: Any) -> bool:
+        from .events import (
+            ConfirmAttributeOwnershipAcquisitionCancellation,
+            TransportationChangeConfirmed,
+        )
+
+        if isinstance(event, BaseException):
+            self._callback_error = event
+            callback = getattr(self._callback_target, "connectionLost", None)
+            if callable(callback):
+                callback(str(event))
             self._callback_fired_count += 1
             return True
         target = self._callback_target
-        if isinstance(event, DiscoverObjectInstance):
+        if isinstance(event, TransportationChangeConfirmed):
+            kind = int(event.transportation_type)
+            if event.object_handle:
+                target.confirmAttributeTransportationTypeChange(
+                    ObjectInstanceHandle(event.object_handle),
+                    {AttributeHandle(value) for value in event.attribute_handles}, kind)
+            else:
+                target.confirmInteractionTransportationTypeChange(
+                    InteractionClassHandle(event.interaction_class_handle), kind)
+        elif isinstance(event, ServiceCallback):
+            getattr(target, event.method)(*event.args)
+        elif isinstance(event, DiscoverObjectInstance):
             # M39 §6.9 — the typed object_class rides as an optional
             # kwarg so legacy 3-argument overrides keep working.
             self._invoke_compat(
@@ -1621,18 +2117,33 @@ class Rti1516eAmbassador:
                 event.values,
                 event.timestamp,
                 attribute_values=event.attribute_values,
+                tag=event.tag,
+                metadata=event.metadata,
             )
         elif isinstance(event, ReceiveInteraction):
-            target.receiveInteraction(
-                event.class_name, event.parameters, event.timestamp
+            self._invoke_compat(
+                "receiveInteraction",
+                event.class_name,
+                event.parameters,
+                event.timestamp,
+                tag=event.tag,
+                metadata=event.metadata,
             )
         elif isinstance(event, TimeAdvanceGrant):
             target.timeAdvanceGrant(event.time)
+        elif isinstance(event, TimeRegulationEnabled):
+            target.timeRegulationEnabled(event.time)
+        elif isinstance(event, TimeConstrainedEnabled):
+            target.timeConstrainedEnabled(event.time)
         elif isinstance(event, FederationHalted):
             target.federationHalted(event.cause, event.stalled_federate_handle)
         elif isinstance(event, RemoveObjectInstance):
-            target.removeObjectInstance(
-                event.object_handle, event.tag, event.timestamp
+            self._invoke_compat(
+                "removeObjectInstance",
+                event.object_handle,
+                event.tag,
+                event.timestamp,
+                metadata=event.metadata,
             )
         elif isinstance(event, ProvideAttributeValueUpdate):
             target.provideAttributeValueUpdate(
@@ -1659,13 +2170,16 @@ class Rti1516eAmbassador:
                 event.tag,
             )
         elif isinstance(event, AttributeOwnershipAcquisitionNotification):
-            target.attributeOwnershipAcquisitionNotification(
+            target.attributeOwnershipAcquisitionNotificationWithTag(
                 event.object_handle,
                 event.attribute_handles,
                 event.owning_federate,
+                event.tag,
             )
         elif isinstance(event, RequestDivestitureConfirmation):
-            target.requestDivestitureConfirmation(
+            target.requestDivestitureConfirmation(event.object_handle, event.attribute_handles)
+        elif isinstance(event, ConfirmAttributeOwnershipAcquisitionCancellation):
+            target.confirmAttributeOwnershipAcquisitionCancellation(
                 event.object_handle, event.attribute_handles
             )
         elif isinstance(event, InitiateFederateSave):
@@ -1674,6 +2188,10 @@ class Rti1516eAmbassador:
             target.federationSaved(event.label)
         elif isinstance(event, FederationNotSaved):
             target.federationNotSaved(event.label)
+        elif isinstance(event, SaveStatusResponse):
+            target.federationSaveStatusResponse(event.federate_statuses)
+        elif isinstance(event, RestoreStatusResponse):
+            target.federationRestoreStatusResponse(event.federate_statuses)
         elif isinstance(event, ObjectInstanceNameReservationSucceeded):
             target.objectInstanceNameReservationSucceeded(event.object_name)
         elif isinstance(event, ObjectInstanceNameReservationFailed):
@@ -1690,13 +2208,9 @@ class Rti1516eAmbassador:
                 event.object_handle, event.attribute_handles, event.tag
             )
         elif isinstance(event, AttributeOwnershipUnavailable):
-            target.attributeOwnershipUnavailable(
-                event.object_handle, event.attribute_handles
-            )
+            target.attributeOwnershipUnavailable(event.object_handle, event.attribute_handles)
         elif isinstance(event, InitiateFederateRestore):
-            target.initiateFederateRestore(
-                event.label, event.federate_handle, event.federate_name
-            )
+            target.initiateFederateRestore(event.label, event.federate_handle, event.federate_name)
         elif isinstance(event, FederationRestored):
             target.federationRestored(event.label)
         elif isinstance(event, FederationNotRestored):
@@ -1708,21 +2222,22 @@ class Rti1516eAmbassador:
         elif isinstance(event, FederationRestoreBegun):
             target.federationRestoreBegun()
         elif isinstance(event, StartRegistrationForObjectClass):
-            target.startRegistrationForObjectClass(
-                ObjectClassHandle(event.object_class_handle)
-            )
+            target.startRegistrationForObjectClass(ObjectClassHandle(event.object_class_handle))
         elif isinstance(event, StopRegistrationForObjectClass):
-            target.stopRegistrationForObjectClass(
-                ObjectClassHandle(event.object_class_handle)
-            )
+            target.stopRegistrationForObjectClass(ObjectClassHandle(event.object_class_handle))
         elif isinstance(event, TurnInteractionsOn):
-            target.turnInteractionsOn(
-                InteractionClassHandle(event.interaction_class_handle)
-            )
+            target.turnInteractionsOn(InteractionClassHandle(event.interaction_class_handle))
         elif isinstance(event, TurnInteractionsOff):
-            target.turnInteractionsOff(
-                InteractionClassHandle(event.interaction_class_handle)
+            target.turnInteractionsOff(InteractionClassHandle(event.interaction_class_handle))
+        elif isinstance(event, TurnUpdatesOnForObjectInstance):
+            self._invoke_compat(
+                "turnUpdatesOnForObjectInstance",
+                event.object_handle,
+                event.attribute_handles,
+                update_rate_designator=event.update_rate_designator,
             )
+        elif isinstance(event, TurnUpdatesOffForObjectInstance):
+            target.turnUpdatesOffForObjectInstance(event.object_handle, event.attribute_handles)
         elif isinstance(event, AttributesInScope):
             target.attributesInScope(event.object_handle, event.attribute_handles)
         elif isinstance(event, AttributesOutOfScope):
@@ -1747,3 +2262,5 @@ class Rti1516eAmbassador:
                 self._dispatch_event(event)
         except asyncio.CancelledError:
             return
+        except Exception as exc:
+            self._dispatch_event(exc)

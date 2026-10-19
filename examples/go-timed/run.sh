@@ -104,6 +104,7 @@ start_federate() {
         --lookahead="${lookahead}" \
         --primitive=TAR \
         --constrained=true \
+        --participants=3 \
         --cycles="${CYCLES}" \
         --tick-step="${TICK_STEP}" \
         --result="${WORK_DIR}/results/${name}-result.json" \

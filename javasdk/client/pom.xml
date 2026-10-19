@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>io.github.cbchoi.gorti</groupId><artifactId>gorti-java</artifactId><version>0.1.0-SNAPSHOT</version></parent>
+  <artifactId>gorti-java-client</artifactId>
+  <dependencies>
+    <dependency>
+      <groupId>com.google.code.gson</groupId><artifactId>gson</artifactId><version>2.14.0</version>
+      <exclusions><exclusion><groupId>com.google.errorprone</groupId><artifactId>error_prone_annotations</artifactId></exclusion></exclusions>
+    </dependency>
+    <dependency><groupId>io.github.cbchoi.gorti</groupId><artifactId>gorti-ieee1516e-api</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.github.cbchoi.gorti</groupId><artifactId>gorti-java-wire</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.grpc</groupId><artifactId>grpc-netty-shaded</artifactId></dependency>
+    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>io.grpc</groupId><artifactId>grpc-inprocess</artifactId><scope>test</scope></dependency>
+  </dependencies>
+  <build><plugins><plugin><groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.5.0</version></plugin></plugins></build>
+</project>

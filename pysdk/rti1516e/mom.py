@@ -32,7 +32,7 @@ fan-out), not from federate calls. See ``rti/internal/mom/manager.go``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from rti1516e._grpc_errors import translate_rpc_error
@@ -52,6 +52,8 @@ class FederationAttributes:
     federation_name: str
     federate_handles: tuple[int, ...] = ()
     fom_module_names: tuple[str, ...] = ()
+    attribute_values: dict[str, bytes] = field(default_factory=dict)
+    unavailable_attributes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -70,12 +72,16 @@ class FederateAttributes:
     federate_type: str = ""
     time_regulating: bool = False
     time_constrained: bool = False
-    logical_time: float = 0.0
-    lookahead: float = 0.0
+    logical_time: int | float = 0.0
+    lookahead: int | float = 0.0
     interactions_sent: int = 0
     interactions_received: int = 0
     updates_sent: int = 0
     reflections_received: int = 0
+    attribute_values: dict[str, bytes] = field(default_factory=dict)
+    unavailable_attributes: dict[str, str] = field(default_factory=dict)
+    logical_time_value: int | float | None = None
+    lookahead_value: int | float | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +117,7 @@ class MomClient:
         *,
         federation_name: str,
         federate_handle: int,
+        logical_time_implementation_name: str = "",
     ) -> None:
         # Lazy import — the generated stubs live under
         # rti1516e/_generated/ and are only on sys.path after the
@@ -120,6 +127,7 @@ class MomClient:
         self._stub = mom_pb2_grpc.MomServiceStub(channel)
         self._federation_name = federation_name
         self._federate_handle = int(federate_handle)
+        self._logical_time_implementation_name = logical_time_implementation_name
 
     async def query_federation_attributes(self) -> FederationAttributes:
         """Return the HLAfederation MOM object snapshot (§10.2).
@@ -145,11 +153,11 @@ class MomClient:
             federation_name=str(resp.federation_name),
             federate_handles=tuple(int(h) for h in resp.federate_handles),
             fom_module_names=tuple(str(n) for n in resp.fom_module_names),
+            attribute_values=dict(getattr(resp, "attribute_values", {})),
+            unavailable_attributes=dict(getattr(resp, "unavailable_attributes", {})),
         )
 
-    async def query_federate_attributes(
-        self, federate_handle: int
-    ) -> FederateAttributes:
+    async def query_federate_attributes(self, federate_handle: int) -> FederateAttributes:
         """Return one HLAfederate MOM object snapshot (§10.3).
 
         ``federate_handle`` may be any handle the runtime currently
@@ -170,10 +178,18 @@ class MomClient:
             translate_rpc_error(exc)
         if not resp.found:
             return FederateAttributes(found=False)
-        # logical_time / lookahead are nested LogicalTime messages; the
-        # generated proto returns the nested message even when the
-        # field is absent on the wire (proto3 default). Reading .value
-        # on the nested object returns 0.0 in that case.
+        from ._logical_time import read_time
+
+        logical_time = (
+            read_time(resp.logical_time, "value", self._logical_time_implementation_name)
+            if resp.HasField("logical_time")
+            else None
+        )
+        lookahead = (
+            read_time(resp.lookahead, "value", self._logical_time_implementation_name)
+            if resp.HasField("lookahead")
+            else None
+        )
         return FederateAttributes(
             found=True,
             federate_handle=int(resp.federate_handle),
@@ -181,12 +197,16 @@ class MomClient:
             federate_type=str(resp.federate_type),
             time_regulating=bool(resp.time_regulating),
             time_constrained=bool(resp.time_constrained),
-            logical_time=float(resp.logical_time.value),
-            lookahead=float(resp.lookahead.value),
+            logical_time=logical_time if logical_time is not None else 0,
+            lookahead=lookahead if lookahead is not None else 0,
+            logical_time_value=logical_time,
+            lookahead_value=lookahead,
             interactions_sent=int(resp.interactions_sent),
             interactions_received=int(resp.interactions_received),
             updates_sent=int(resp.updates_sent),
             reflections_received=int(resp.reflections_received),
+            attribute_values=dict(getattr(resp, "attribute_values", {})),
+            unavailable_attributes=dict(getattr(resp, "unavailable_attributes", {})),
         )
 
     async def enumerate_mom_instances(self) -> list[MomInstance]:

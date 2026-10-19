@@ -18,6 +18,7 @@ Contract asserted here:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -31,6 +32,7 @@ from rti1516e.handles import (
     InteractionClassHandle,
     MessageRetractionHandle,
     ObjectClassHandle,
+    ObjectInstanceHandle,
 )
 
 # Spec-test-only fake (same consumption pattern as tests/spec/m4).
@@ -163,7 +165,9 @@ def _drive(fake_rti: FakeRtiServer, amb: Rti1516eAmbassador, events: list[Any]) 
         assert fed is not None
         handle = fed.handle
         for event in events:
-            fake_rti.push_event(handle, event)
+            amb._loop_required().call_soon_threadsafe(  # noqa: SLF001
+                fake_rti.push_event, handle, event
+            )
         deadline = time.monotonic() + 5.0
         recorder_calls = getattr(amb, "calls", None)
         while time.monotonic() < deadline:
@@ -175,6 +179,23 @@ def _drive(fake_rti: FakeRtiServer, amb: Rti1516eAmbassador, events: list[Any]) 
         amb.resignFederationExecution()
     finally:
         amb.disconnect()
+
+
+def test_fixture_injects_events_on_the_owning_loop(fake_rti, monkeypatch):
+    amb = _Recorder()
+    push_event = fake_rti.push_event
+
+    def checked_push(handle, event):
+        assert asyncio.get_running_loop() is amb._loop_required()  # noqa: SLF001
+        push_event(handle, event)
+
+    monkeypatch.setattr(fake_rti, "push_event", checked_push)
+    _drive(
+        fake_rti,
+        amb,
+        [ev.DiscoverObjectInstance(object_handle=7, class_name="2", instance_name="V1")],
+    )
+    assert dict(amb.calls)["discover"][:3] == (7, "2", "V1")
 
 
 def test_all_m39_events_reach_their_ieee_callbacks(fake_rti: FakeRtiServer) -> None:
@@ -238,6 +259,44 @@ def test_all_m39_events_reach_their_ieee_callbacks(fake_rti: FakeRtiServer) -> N
     assert got["retract"] == (41, 2)
     assert isinstance(got["retract"][0], MessageRetractionHandle)
     assert isinstance(got["retract"][1], FederateHandle)
+
+
+@pytest.mark.parametrize("enabled", [True, False], ids=["on", "off"])
+def test_interaction_advisory_dispatch_without_transportation_branch(enabled):
+    amb = _Recorder()
+    event_type = ev.TurnInteractionsOn if enabled else ev.TurnInteractionsOff
+    assert amb._invoke_event(event_type(interaction_class_handle=5))
+    assert amb.calls == [("intOn" if enabled else "intOff", (InteractionClassHandle(5),))]
+    assert isinstance(amb.calls[0][1][0], InteractionClassHandle)
+    assert amb._callback_fired_count == 1
+
+
+@pytest.mark.parametrize("object_handle", [0, 7], ids=["interaction", "attributes"])
+def test_transportation_confirmation_dispatch_preserves_typed_handles(object_handle):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    amb = _Recorder()
+    target = SimpleNamespace(confirmAttributeTransportationTypeChange=Mock(),
+                             confirmInteractionTransportationTypeChange=Mock())
+    amb._callback_target = target
+    event = ev.TransportationChangeConfirmed(
+        ticket=b"confirmation", federation_generation=1, callback_epoch=1,
+        object_handle=object_handle, attribute_handles=(2, 3),
+        interaction_class_handle=5, transportation_type=1,
+    )
+    assert amb._invoke_event(event)
+    if object_handle:
+        args = target.confirmAttributeTransportationTypeChange.call_args.args
+        assert args == (ObjectInstanceHandle(7), {AttributeHandle(2), AttributeHandle(3)}, 1)
+        assert isinstance(args[0], ObjectInstanceHandle)
+        assert all(isinstance(handle, AttributeHandle) for handle in args[1])
+        target.confirmInteractionTransportationTypeChange.assert_not_called()
+    else:
+        args = target.confirmInteractionTransportationTypeChange.call_args.args
+        assert args == (InteractionClassHandle(5), 1)
+        assert isinstance(args[0], InteractionClassHandle)
+        target.confirmAttributeTransportationTypeChange.assert_not_called()
 
 
 def test_typed_discover_and_reflect_reach_new_overrides(

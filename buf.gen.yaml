@@ -3,19 +3,36 @@ inputs:
   - directory: proto
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.11
-    out: rti/internal/genproto
-    opt:
+    out: rti/internal/adapters/protobuf
+    # Map imports without changing the historical descriptor's go_package options.
+    opt: &go_options
       - paths=source_relative
+      - Mrti/v1/admin.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/admin_mutating.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/callback.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/callback_report.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/cluster.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/common.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/confirmed_object.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/ddm.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/declaration.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/errors.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/eventlog.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/federation.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/local_lrc.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/mom.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/object.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/ownership.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/savepoint.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/stream.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/support.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/sync.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
+      - Mrti/v1/time.proto=github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1;rtiv1
   - remote: buf.build/grpc/go:v1.6.2
-    out: rti/internal/genproto
-    opt:
-      - paths=source_relative
+    out: rti/internal/adapters/protobuf
+    opt: *go_options
   - remote: buf.build/protocolbuffers/python
     out: pysdk/rti1516e/_generated
   - remote: buf.build/grpc/python
     out: pysdk/rti1516e/_generated
-  # C++ stubs are generated below cppsdk/_generated/ and remain untracked.
-  - remote: buf.build/protocolbuffers/cpp
-    out: cppsdk/_generated
-  - remote: buf.build/grpc/cpp
-    out: cppsdk/_generated
+# Java bindings use the same proto/ inputs through javasdk/wire/pom.xml.

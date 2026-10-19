@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <objects><objectClass><name>HLAobjectRoot</name>
+    <objectClass><name>Sensor</name><sharing>PublishSubscribe</sharing><semantics>  A &amp; B sensor.  </semantics>
+      <attribute><name>Reading</name><dataType>Record</dataType><updateType>Conditional</updateType><updateCondition>when x &lt; 2</updateCondition><ownership>DivestAcquire</ownership><sharing>PublishSubscribe</sharing><dimensions><dimension>Area</dimension></dimensions><transportation>HLAreliable</transportation><order>Receive</order><semantics></semantics></attribute>
+      <attribute><name>Quiet</name><dataType>Scalar</dataType><updateCondition/><transportation>HLAreliable</transportation><order>Receive</order></attribute>
+    </objectClass>
+  </objectClass></objects>
+  <interactions><interactionClass><name>HLAinteractionRoot</name><transportation>HLAreliable</transportation><order>Receive</order>
+    <interactionClass><name>Event</name><transportation>HLAbestEffort</transportation><order>TimeStamp</order><semantics>Event description</semantics><parameter><name>Payload</name><dataType>Variant</dataType><semantics>  Payload details  </semantics></parameter><parameter><name>Empty</name><dataType>Scalar</dataType><semantics/></parameter></interactionClass>
+  </interactionClass></interactions>
+  <dimensions>
+    <dimension><name>Area</name><dataType>Scalar</dataType><upperBound>100</upperBound><normalization>  identity map  </normalization><value>[2..8)</value></dimension>
+    <dimension><name>ExcludedArea</name><dataType>Scalar</dataType><value>Excluded</value></dimension>
+    <dimension><name>Single</name><value>0</value></dimension>
+    <dimension><name>Open</name><value>[8)</value></dimension>
+    <dimension><name>Absent</name></dimension>
+  </dimensions>
+  <switches><autoProvide isEnabled="true"/><conveyRegionDesignatorSets isEnabled="false"/><conveyProducingFederate isEnabled="true"/><attributeScopeAdvisory isEnabled="true"/><attributeRelevanceAdvisory isEnabled="false"/><objectClassRelevanceAdvisory isEnabled="true"/><interactionRelevanceAdvisory isEnabled="false"/><serviceReporting isEnabled="true"/><exceptionReporting isEnabled="false"/><delaySubscriptionEvaluation isEnabled="true"/></switches>
+  <dataTypes>
+    <basicDataRepresentations><basicData><name>Scalar</name><size>32</size><interpretation>integer</interpretation><endian>Big</endian><encoding>32 bits</encoding></basicData></basicDataRepresentations>
+    <simpleDataTypes><simpleData><name>Distance</name><representation>Scalar</representation><units>m</units><semantics>Measured distance</semantics></simpleData></simpleDataTypes>
+    <enumeratedDataTypes><enumeratedData><name>Choice</name><representation>Scalar</representation><semantics/><enumerator><name>First</name><value>1</value></enumerator><enumerator><name>Second</name><value>2</value></enumerator></enumeratedData></enumeratedDataTypes>
+    <arrayDataTypes><arrayData><name>List</name><dataType>Distance</dataType><cardinality>Dynamic</cardinality><encoding>HLAvariableArray</encoding><semantics>Ordered observations</semantics></arrayData></arrayDataTypes>
+    <fixedRecordDataTypes><fixedRecordData><name>Record</name><encoding>HLAfixedRecord</encoding><semantics>Record description</semantics><field><name>Values</name><dataType>List</dataType><semantics>  all samples  </semantics></field><field><name>Empty</name><dataType>Scalar</dataType><semantics/></field></fixedRecordData></fixedRecordDataTypes>
+    <variantRecordDataTypes><variantRecordData><name>Variant</name><discriminant>Kind</discriminant><dataType>Choice</dataType><alternative><enumerator>First</enumerator><name>One</name><dataType>Record</dataType><semantics>Record alternative</semantics></alternative><alternative><enumerator>Second</enumerator><name>Two</name><dataType>List</dataType><semantics/></alternative><encoding>HLAvariantRecord</encoding><semantics>Variant description</semantics></variantRecordData></variantRecordDataTypes>
+  </dataTypes>
+</objectModel>

@@ -5,6 +5,11 @@ The `fast`, `normal`, and `slow` federates use lookaheads 0.5, 1.0, and 2.0,
 respectively. Each cycle waits for a time-advance grant and emits a timestamped
 `Tick` at `grant + lookahead`.
 
+The launchers use `--participants=3`. After joining and enabling time
+management, the federates complete the `go-timed-ready` HLA synchronization
+point before requesting their first advance. A late-starting process cannot
+be left behind by an earlier participant.
+
 ## Prerequisites
 
 - Go 1.22 or later on `PATH`.

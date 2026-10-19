@@ -1,81 +1,99 @@
 # Performance
 
-## Measurements
+## What is measured
 
-The comparison harness reports caller latency for `sendInteraction` and
-`updateAttributeValues`, completed delivery latency to the subscriber, object
-attribute synchronization time, and interaction/object throughput. Semantic
-and accounting checks gate every performance sample.
+DEVStone-HLA turns a deterministic model hierarchy into receive-order object
+updates and interactions. The HI width/depth 10 workload with 100 external
+events produces 40,600 attribute reflections and 40,600 received interactions
+per measured trial.
 
-The publication benchmark uses the [DEVStone-HLA profile](benchmark.md). Its
-results describe the complete tested stacks and deployment topologies. They
-must not be reported as a standard DEVStone simulator-engine score.
+The primary metrics are receiver completion time and received-callback
+throughput. Caller return, local queue admission, server acknowledgement, and
+callback-report drain are separate measurements. Choose the boundary before
+comparing implementations.
 
-## Current Portico comparison
+## October 2026 Portico comparisons
 
-The July 23, 2026 DEVStone-HLA run used five warmup and thirty measured AB/BA
-pairs, two independent federate processes, identical FOM and workload-plan
-bytes, and a common subscriber callback-arrival boundary. For the tested
-receive-order OM profile, Portico 2.1.4 completed the 81,200-callback batch in a
-median 0.696 s (95% CI 0.664--0.734 s) and gorti LocalLRC in 0.808 s
-(95% CI 0.791--0.820 s). Median throughput was 116,606 deliveries/s for Portico
-and 100,552 deliveries/s for gorti.
+Both campaigns used Portico 2.1.4 with Java federates and gorti with Go federates
+on Windows 11, an Intel Core i7-12700, and loopback TCP. Each RTI ran two
+independent federate processes; gorti also ran its standalone server. gorti
+used the HLA core profile, the `callback_async` build, and LocalLRC batches of 32.
 
-The paired median gorti/Portico completion-time ratio was 1.167 (deterministic
-bootstrap 95% CI 1.097--1.194); the order-adjusted ratio was 1.161 (95% CI
-1.076--1.200). The central estimates favor Portico, and Portico was faster in
-29 of 30 pairs. The predeclared decision rule nevertheless classifies the
-result as inconclusive because the paired confidence interval crosses the 1.1
-practical-superiority boundary. All 60 measured runs completed on their first
-attempt with exact callback accounting and matching callback and terminal-state
-digests.
+Five warm-up seed blocks preceded 20 measured blocks. Each ABBA or BAAB block
+ran both RTIs twice, giving 40 measured trials per RTI. Both campaigns completed
+100/100 trials, including warm-ups. Confidence intervals resample whole seed
+blocks within execution-order strata.
 
-The result is bounded to the same-host, two-federate DEVStone-HLA OM workload.
-It does not rank TM, DDM, larger federations, resource efficiency, or caller API
-latency. The LocalLRC queue-admission boundary is intentionally excluded from
-the published comparison because it is not equivalent to Portico's service
-return boundary.
+| Campaign | Portico mean time (s) | gorti mean time (s) | Portico callbacks/s | gorti callbacks/s | gorti/Portico throughput ratio, 95% CI |
+|---|---:|---:|---:|---:|---|
+| 7 October, FOM metadata cache | 0.920 | 1.162 | 88,284 | 69,862 | 0.791 [0.581, 1.045] |
+| 8 October, lazy report signals | 2.272 | 1.413 | 35,742 | 57,462 | 1.608 [1.320, 1.924] |
 
-This run supersedes the July 22 comparison. The verifier and callback transport
-changed during the intervening performance milestones, so the two campaigns
-should not be treated as an uninterrupted timing series or used to attribute
-the complete difference to one code change.
+Throughput is total received callbacks divided by total measured time.
+The 8 October campaign favored gorti in mean and median completion time and
+in 17 of 20 seed-block means. The preceding session favored Portico in its
+central estimates. Portico's JAR, JVM, compiled participants, and FOM were
+unchanged between these sessions; the gorti server was also unchanged.
+Session variability therefore matters when interpreting the ranking.
 
-## Separate reference RTI result
+The isolated, same-session old/new Go SDK experiment measured a 4.88%
+throughput improvement from lazy callback-report completion signals
+(95% ratio interval 1.014--1.088). That result measures the SDK change;
+the 60.8% cross-RTI difference on 8 October measures the complete tested stacks.
 
-The five-warmup, twenty-pair v14 result in the
-[verification summary](https://github.com/cbchoi/gorti/blob/main/verification/RESULTS.md)
-compares gorti with an anonymized commercial reference RTI, not Portico. It also
-uses a smaller service-level workload and different lifecycle controls. Its
-favorable completed-delivery result for gorti is valid only for that contract
-and cannot be used to infer gorti/Portico performance.
+Source reports contain manifests, artifact hashes, individual-run summaries,
+and exact commands:
 
-## Synchronous interaction latency
+- [7 October comparison](https://github.com/cbchoi/gorti/blob/main/engineering/verification/portico-fom-static-metadata-20261007.md)
+- [8 October comparison](https://github.com/cbchoi/gorti/blob/main/engineering/verification/portico-report-signal-20261008.md)
+- [Isolated SDK change](https://github.com/cbchoi/gorti/blob/main/engineering/design/consistent-performance-plan-20261007.md)
 
-gorti uses Go's structured `slog` package for human-readable diagnostic
-records. The optional audit/replay plugin is a separate mechanism: it
-constructs semantic records, copies payloads, assigns sequence numbers,
-encodes Protobuf, and writes through a per-federation sink.
+### Timing and execution conditions
 
-The default `gorti-hla-core` profile does not load this plugin. Local registry
-screens show materially fewer allocations for receive-order updates and
-interactions on the core path. Plugin-enabled results are therefore reported
-as `gorti-audit-replay` and are not mixed with the core benchmark profile.
+The receiver starts its timer before `VERIFY_START` and stops at the last
+subsequently validated data receive timestamp. Go timestamps event-pump dequeue
+before `DispatchEvent`; Java timestamps callback entry before payload
+validation. Final validation, successful teardown, and gorti report-ACK drain
+are required, with the final drain outside the primary interval.
 
-Most remaining synchronous caller latency comes from the persistent gRPC
-request/ACK round trip and scheduler interaction with callbacks and time
-advance traffic. Go execution speed alone does not remove that transport and
-return-boundary cost.
+Every trial starts fresh processes and performs 128 warm-up operations per
+channel. Portico logging is off, gorti logs errors, and participants write
+compact summaries rather than per-message diagnostics. These are same-host,
+two-federate receive-order measurements. Long-lived JVM, multi-host, TM, and
+larger-federation measurements require separate workloads.
 
-## Future optimization
+## Implemented optimizations
 
-The strict synchronous API remains unchanged because its return boundary
-provides exact error and ACK semantics. Go LocalLRC and the Python pipelined
-extension already provide bounded asynchronous admission for selected
-receive-order paths. Future work is to expose consistent ordered completion
-handles and server-failure reporting across SDKs. It must be compared only
-with an equivalent asynchronous reference RTI choreography.
+- Go LocalLRC queues receive-order operations, batches requests, and receives
+  cumulative acknowledgements. Explicit confirmed methods remain available.
+- The `callback_async` build admits eligible data callbacks locally and sends
+  ordered entry/outcome reports through a bounded pipeline.
+- A session-owned worker processes report completion; completion signals are
+  allocated when a waiter needs them.
+- Eligible server report batches share validation and accounting work.
+- Static FOM metadata and handle-oriented callbacks reduce repeated lookups
+  and name-map projection.
 
-Runtime tuning, shared gRPC write buffers, and experimental prepared ACK frames
-were screened and rejected because they did not produce a stable gain. The
-remaining improvement directions are summarized in the [roadmap](roadmap.md).
+Callbacks retain identity, outcome reporting, backpressure, and restore state.
+The [LocalLRC guide](local-lrc.md) describes eligibility and drain behavior.
+
+## Runtime profiles
+
+Human-readable diagnostics use Go `slog`. The default `gorti-hla-core` profile
+does not load the audit journal. The optional `auditreplay` plugin adds semantic
+event encoding and storage and is measured separately as `gorti-audit-replay`.
+
+Confirmed calls wait for the server's result. Local admission returns earlier
+and reports remote failures through completion/drain operations. Neither
+boundary is a substitute for the receiver's completion time.
+
+## Earlier measurements
+
+The July 2026 paired DEVStone-HLA campaigns and the anonymized reference-RTI
+service comparison remain in dated engineering and
+[verification records](https://github.com/cbchoi/gorti/blob/main/verification/RESULTS.md).
+They used earlier builds or different workloads. Use their own manifests and
+measurement definitions when reproducing them.
+
+See [reproducibility](reproducibility.md) for paired and crossover execution,
+and the [roadmap](roadmap.md) for further measurements.

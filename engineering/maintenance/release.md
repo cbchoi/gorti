@@ -6,7 +6,7 @@
 |---|---|---|---|
 | `rtid` and `rti-top` | Linux, macOS, Windows | amd64 and arm64 | GitHub Releases |
 | Python `rti1516e` | Platform independent | wheel and source distribution | PyPI |
-| C++ SDK | Source build | C++17 | Repository source |
+| Java SDK | JVM with JDK 11+ | Maven source build | Repository source |
 
 GoReleaser builds the Go binaries with `CGO_ENABLED=0`; the experimental DDS
 binary is not released. Each platform archive contains both Go binaries plus
@@ -20,9 +20,12 @@ Use an `X.Y.Z` package version and a matching `vX.Y.Z` tag. The metadata check
 requires the same version in:
 
 - `pysdk/pyproject.toml`;
-- `cppsdk/CMakeLists.txt`;
 - `CITATION.cff`; and
 - `codemeta.json`.
+
+Java has a separate Maven artifact version. The same script checks every
+reactor module against the version in `javasdk/pom.xml`. C++ metadata is not
+part of release validation.
 
 Also update `CHANGELOG.md`, the applicable page under `docs/releases/`, and the
 `mkdocs.yml` release navigation before tagging. Update other version examples
@@ -42,13 +45,13 @@ then run the release workflow's local equivalents:
 
 ```bash
 buf generate
-git diff --exit-code -- rti/internal/genproto
+git diff --exit-code -- rti/internal/adapters/protobuf
 
 go test ./...
 
-python -m pip install -e "./pysdk[dev]"
-python -m pytest pysdk/tests
-(cd pysdk && python -m mypy --strict .)
+python -m pip install -e "./pysdk[dev,rl]" -r scripts/validation-requirements.txt
+python scripts/validate_sdks.py python java ivct
+(cd pysdk && python -m mypy --strict rti1516e pyjevsim_bridge)
 
 python -m pip install -r docs/requirements.txt
 python -m mkdocs build --strict
@@ -57,16 +60,17 @@ python scripts/check_release_metadata.py --tag vX.Y.Z
 goreleaser release --snapshot --clean
 ```
 
-Run the manually dispatched validation and conformance workflows for the
-release commit, or reproduce the full conformance gate locally:
+Run manual validation and the selected service checks for the release commit:
 
 ```bash
 bash scripts/ci-gates.sh
 ```
 
-The conformance path requires Conan-generated C++ dependencies and can take
-substantially longer on an empty cache. Review any change to
-`EXPECTED_VERDICTS.txt` rather than accepting it as routine test output.
+The SDK runner builds current `rtid` source and enables live Python/Java tests.
+Reports are stored outside Git. The default conformance stages cover
+Go/Python/Java; no Conan or C++ build is required. External IEEE source/schema
+diagnostics and cross-binding checkpoint fixtures remain separate checks; use
+the [STD](../specifications/current/STD.md) to select release evidence.
 
 The PyPI workflow copies the root `LICENSE` into `pysdk/`, runs
 `python -m build pysdk --outdir dist`, and inspects the wheel for generated
@@ -87,7 +91,8 @@ git push origin vX.Y.Z
 A pushed `v*` tag starts two independent workflows:
 
 1. `release.yml` regenerates bindings, checks tag metadata, tests all Go
-   packages, tests and type-checks the Python SDK, builds docs, and then runs
+   packages, runs Python/Java live SDK tests and the internal IVCT-derived subset,
+   type-checks Python, builds docs, and then runs
    GoReleaser v2.
 2. `pypi.yml` regenerates bindings, checks the tag against the Python version,
    builds and inspects the sdist and wheel, and publishes through the `pypi`

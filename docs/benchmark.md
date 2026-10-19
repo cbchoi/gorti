@@ -20,7 +20,7 @@ Both implementations therefore process 40,600 updates and 40,600 interactions
 per measured execution. Payloads are generated deterministically from the
 paired run seed.
 
-## Experiment design
+## Paired experiment design
 
 Each implementation runs five warm-up executions followed by 30 measured
 executions. The measured runs form 30 matched pairs. Pair 1 runs Portico then
@@ -101,7 +101,7 @@ boundary, then validate the complete combined update/interaction callback
 trace. Local queue-admission and server-confirmed return times are diagnostic
 boundaries, not interchangeable performance claims.
 
-The official Portico comparison fixes gorti to the `gorti-hla-core` profile.
+The paired Portico comparison fixes gorti to the `gorti-hla-core` profile.
 The optional audit/replay module is not loaded, matching the benchmark's
 disabled traffic-auditing condition. Every accepted run records a versioned
 runtime profile, and the orchestrator rejects missing or mislabeled profiles.
@@ -114,3 +114,17 @@ Its primary statistic is the paired `core/audit` completed-batch ratio with a
 deterministic, order-stratified bootstrap interval. This result measures event
 journal overhead; it is not a full-semantic-equivalence or cross-product
 ranking.
+
+## Callback-reporting crossover
+
+The separate `benchmark/callback-reporting/compare_portico.py` runner uses
+the same DEVStone-HLA traffic projection and supports ABBA/BAAB crossover
+blocks. The October 2026 experiments used five warm-up blocks and 20 measured
+blocks, giving 40 measured trials per RTI, with `callback_async` Go builds.
+It validates callback-entry/outcome accounting and requires a final report
+drain after the receiver timing interval.
+
+See [performance](performance.md) for results and
+[reproducibility](reproducibility.md) for the designs. The paired runner's
+four-file output policy above applies to that runner; the crossover runner
+retains its own external trial evidence and manifest.

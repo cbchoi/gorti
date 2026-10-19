@@ -1,0 +1,3 @@
+**/target/
+.maven-repository/
+*.log

@@ -34,9 +34,7 @@ from rti1516e.events import (
     ObjectInstanceNameReservationFailed,
     ObjectInstanceNameReservationSucceeded,
 )
-
-BIN_DIR = REPO_ROOT / "bin"
-RTID_BINARY = BIN_DIR / "rtid"
+from tests._legacy_server import build_rtid, spawn_rtid
 
 _FOM_XML = """<?xml version="1.0" encoding="utf-8"?>
 <objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
@@ -80,24 +78,11 @@ def _free_port() -> int:
 
 
 def _build_rtid() -> Path:
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    argv = ["go", "build", "-o", str(RTID_BINARY), "./rti/cmd/rtid"]  # noqa: S607
-    subprocess.run(argv, cwd=REPO_ROOT, check=True)  # noqa: S603
-    return RTID_BINARY
+    return build_rtid()
 
 
 def _spawn_rtid(binary: Path, listen_port: int, metrics_port: int) -> subprocess.Popen[bytes]:
-    return subprocess.Popen(  # noqa: S603
-        [
-            str(binary),
-            "--listen", f":{listen_port}",
-            "--metrics-listen", f":{metrics_port}",
-            "--log-level", "warn",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    return spawn_rtid(binary, listen_port, metrics_port)
 
 
 async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109

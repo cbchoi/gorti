@@ -9,6 +9,7 @@ option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1"
 // ObjectService — object/interaction operations.
 // See docs/srs.md §5.3.
 service ObjectService {
+  rpc ReleaseMultipleObjectInstanceNames(ReleaseMultipleObjectInstanceNamesRequest) returns (Empty);
   rpc RegisterObjectInstance(RegisterObjectRequest) returns (RegisterObjectResponse);
   rpc UpdateAttributeValues(UpdateAttributeValuesRequest) returns (Empty);
   rpc SendInteraction(SendInteractionRequest) returns (Empty);
@@ -16,10 +17,21 @@ service ObjectService {
   // M23 — IEEE 1516.1-2010 §6 additions (append-only).
   rpc DeleteObjectInstance(DeleteObjectInstanceRequest) returns (Empty);
   rpc LocalDeleteObjectInstance(LocalDeleteObjectInstanceRequest) returns (Empty);
+  // Internal SDK dispatch fence; the HLA local-delete operation is unchanged.
+  rpc LocalDeleteObjectInstanceFenced(LocalDeleteObjectInstanceRequest) returns (LocalDeleteObjectInstanceFence);
   rpc RequestAttributeValueUpdate(RequestAttributeValueUpdateRequest) returns (Empty);
   rpc RequestClassAttributeValueUpdate(RequestClassAttributeValueUpdateRequest) returns (Empty);
   rpc ChangeAttributeTransportationType(ChangeAttributeTransportRequest) returns (Empty);
   rpc ChangeInteractionTransportationType(ChangeInteractionTransportRequest) returns (Empty);
+
+  // Legacy immediate-commit operations. Evoked IEEE bindings use the additive
+  // prepare/activate operations below for confirmation-entry activation.
+  rpc RequestAttributeTransportationTypeChange(ChangeAttributeTransportRequest) returns (Empty);
+  rpc QueryAttributeTransportationType(QueryAttributeTransportationTypeRequest) returns (TransportationTypeResponse);
+  rpc RequestInteractionTransportationTypeChange(ChangeInteractionTransportRequest) returns (Empty);
+  rpc QueryInteractionTransportationType(QueryInteractionTransportationTypeRequest) returns (TransportationTypeResponse);
+  rpc ChangeAttributeOrderType(ChangeAttributeOrderRequest) returns (Empty);
+  rpc ChangeInteractionOrderType(ChangeInteractionOrderRequest) returns (Empty);
 
   // M26 — IEEE 1516.1-2010 §6.1-6.5 object instance name reservation.
   rpc ReserveObjectInstanceName(ReserveObjectInstanceNameRequest) returns (Empty);
@@ -32,6 +44,46 @@ service ObjectService {
   // original SendInteraction / UpdateAttributeValues call.
   // Returns NotFound if no buffered message matches.
   rpc Retract(RetractRequest) returns (Empty);
+
+  // Preparation reserves the change without affecting outgoing messages.
+  // All three calls require the joined session token. Activation is invoked at
+  // callback entry, before application code, with the returned opaque ticket.
+  rpc PrepareAttributeTransportationTypeChange(ChangeAttributeTransportRequest) returns (TransportationChange);
+  rpc PrepareInteractionTransportationTypeChange(ChangeInteractionTransportRequest) returns (TransportationChange);
+  rpc ActivateTransportationTypeChange(ActivateTransportationTypeChangeRequest) returns (TransportationChange);
+}
+
+// This is an operation result, not a stream event or callback receipt. The
+// ticket is bound to the authenticated membership incarnation, generation and
+// callback epoch. It is retired on restore, resignation or object deletion,
+// and is never saved. Ownership loss permanently removes affected attributes
+// from a pending result (which may become empty), even if later reacquired.
+// Successful activation replays
+// return the original result without applying it again (bounded replay cache).
+message TransportationChange {
+  bytes ticket = 1;
+  uint64 federation_generation = 2;
+  uint64 callback_epoch = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  uint64 interaction_class_handle = 6;
+  TransportationType transport_type = 7;
+}
+
+message ActivateTransportationTypeChangeRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  bytes ticket = 4;
+  uint64 expected_federation_generation = 5;
+  uint64 expected_callback_epoch = 6;
+}
+
+message ReleaseMultipleObjectInstanceNamesRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  repeated string object_names = 4;
 }
 
 // §8.21 (M20.2) — Retract identifies the message by the
@@ -70,6 +122,7 @@ message UpdateAttributeValuesRequest {
   map<uint64, bytes> attributes = 5;
   // Optional. If absent, message is RO; if present, TSO with this timestamp.
   optional double logical_time = 6;
+  LogicalTimeValue logical_time_value = 9;
   // §8.21 (M20.2) — federate-allocated MessageRetractionHandle.
   // Gorti convention: federate uses a per-federate monotonic
   // counter; the server stores the (fed, handle) tuple alongside
@@ -78,6 +131,7 @@ message UpdateAttributeValuesRequest {
   // delivered immediately (no buffering happens). Zero (default)
   // = "no handle, can't retract".
   uint64 message_retraction_handle = 7;
+  bytes user_supplied_tag = 8;
 }
 
 message SendInteractionRequest {
@@ -89,8 +143,10 @@ message SendInteractionRequest {
   map<uint64, bytes> parameters = 5;
   // Optional. If absent, RO; if present, TSO with this timestamp.
   optional double logical_time = 6;
+  LogicalTimeValue logical_time_value = 9;
   // §8.21 (M20.2) — see UpdateAttributeValuesRequest.
   uint64 message_retraction_handle = 7;
+  bytes user_supplied_tag = 8;
 }
 
 // DeleteObjectInstance — IEEE 1516.1-2010 §6.16 (M23).
@@ -105,8 +161,33 @@ message DeleteObjectInstanceRequest {
   uint64 object_handle = 4;
   // Optional TSO timestamp; absent → RO delete.
   optional double logical_time = 5;
+  LogicalTimeValue logical_time_value = 8;
   // User-supplied tag passed through to RemoveObjectInstance.tag.
   bytes user_supplied_tag = 6;
+  uint64 message_retraction_handle = 7;
+}
+
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  ORDER_TYPE_RECEIVE = 1;
+  ORDER_TYPE_TIMESTAMP = 2;
+}
+
+message ChangeAttributeOrderRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
+  OrderType order_type = 6;
+}
+
+message ChangeInteractionOrderRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 interaction_class_handle = 4;
+  OrderType order_type = 5;
 }
 
 // LocalDeleteObjectInstance — IEEE 1516.1-2010 §6.18 (M23).
@@ -114,6 +195,12 @@ message DeleteObjectInstanceRequest {
 // event but cut-1 simplification keeps the global instance live
 // for other subscribers — the requester is expected to drop their
 // own local view.
+message LocalDeleteObjectInstanceFence {
+  uint64 retired_knowledge_epoch = 1;
+  uint64 federation_generation = 2;
+  uint64 callback_epoch = 3;
+}
+
 message LocalDeleteObjectInstanceRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
@@ -168,6 +255,26 @@ message ChangeInteractionTransportRequest {
   uint64 federate_handle = 3;
   uint64 interaction_class_handle = 4;
   TransportationType transport_type = 5;
+}
+
+message QueryAttributeTransportationTypeRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  uint64 attribute_handle = 5;
+}
+
+message QueryInteractionTransportationTypeRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 target_federate_handle = 4;
+  uint64 interaction_class_handle = 5;
+}
+
+message TransportationTypeResponse {
+  TransportationType transport_type = 1;
 }
 
 // ReserveObjectInstanceName — IEEE 1516.1-2010 §6.1 (M26 Phase F).

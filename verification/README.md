@@ -39,7 +39,12 @@ Performance values are reported separately from semantic acceptance. LocalLRC
 queue admission and server-confirmed calls have different completion boundaries
 and must not be compared as equivalent latency samples.
 
-The 30-run publication performance experiment is maintained under
-[`benchmark/`](../benchmark/). Verification remains the semantic gate; the
-benchmark owns workload generation, environment pins, balanced execution,
-structured measurements, statistics, and manuscript tables.
+Performance experiments are maintained under [`benchmark/`](../benchmark/).
+The paired runner uses five warm-ups and 30 measured pairs; the callback-reporting
+runner also supports ABBA/BAAB crossover blocks. Benchmark results retain
+callback and terminal-state checks alongside their timing samples.
+
+The current Go/Python/Java service campaign and clause-level traceability are
+summarized in [Verification](../docs/verification.md). Portico comparisons are
+summarized in [Performance](../docs/performance.md); a cross-RTI workload run is
+separate from the full internal service-test selection.

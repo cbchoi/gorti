@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-03",
+  "overall_verdict": "NOT_PASSED",
+  "coverage_complete": false,
+  "full_conformance": false,
+  "evidence_root": "D:/workspace/gorti/full-consistency-20261003-r1",
+  "server_sha256": "fc2bd04a5e64970e2dd0f6cb37f98741a257a578e273cae6458d4fd9602d75e8",
+  "repository": "D:/workspace/gorti/gorti",
+  "production_sdk_test_source_changes": false,
+  "owned_campaign_servers_stopped": true,
+  "counts_are_overlapping_and_must_not_be_summed": true,
+  "campaigns": {
+    "windows_go": {
+      "pass": 3258,
+      "fail": 0,
+      "skip": 0,
+      "nested_pass": 6531,
+      "default_build_tags": true
+    },
+    "linux_race_initial": {
+      "pass": 3257,
+      "fail": 1,
+      "skip": 0,
+      "nested_pass": 6531,
+      "race_warnings": 0,
+      "failed_test": "TestIntegration_SpawnRtidAndRenderEmptySnapshot",
+      "boundary": "Internal server build exceeded 120-second deadline; live assertions not reached."
+    },
+    "linux_race_separate_retry": {
+      "pass": 3258,
+      "fail": 0,
+      "skip": 0,
+      "nested_pass": 6531,
+      "race_warnings": 0,
+      "replaces_initial": false
+    },
+    "windows_go_tagged": {
+      "top_level_pass": 1,
+      "top_level_fail": 1,
+      "subtest_pass": 2,
+      "subtest_fail": 2,
+      "skip": 0,
+      "passing_test": "TestGoSDKControlOutcomesActualServer",
+      "failing_test": "TestGoSDKCrossGenerationRuntimeActualServer",
+      "boundary": "Both logical-time families receive InitiateFederateSave at final empty-queue assertion; root cause not isolated."
+    },
+    "windows_go_tagged_separate_retry": {
+      "top_level_pass": 0,
+      "top_level_fail": 1,
+      "subtest_pass": 0,
+      "subtest_fail": 2,
+      "skip": 0,
+      "reproduced": true,
+      "replaces_initial": false
+    },
+    "python_hla_sdk": {
+      "pass": 2068,
+      "fail": 0,
+      "errors": 0,
+      "skip": 1,
+      "files": 139,
+      "skipped_reason": "Optional C++ publisher unavailable; external configure attempt could not find Protobuf headers/libraries."
+    },
+    "java_initial": {
+      "pass": 537,
+      "fail": 3,
+      "errors": 0,
+      "skip": 0,
+      "suites": 57,
+      "failed_method": "LiveControlOutcomeRestoreTest.pendingControlAndKnownOutcomeSurviveServerRestartAndFreshJvm",
+      "failed_variants": [
+        "Float64/success",
+        "Float64/failure",
+        "Integer64/success"
+      ],
+      "boundary": "55-second child exit deadline; cause not isolated."
+    },
+    "java_separate_restart_retry": {
+      "pass": 6,
+      "fail": 0,
+      "errors": 0,
+      "skip": 0,
+      "replaces_initial": false
+    },
+    "ivct_inspired_subset": {
+      "pass": 30,
+      "fail": 5,
+      "errors": 0,
+      "skip": 0,
+      "official_ivct": false,
+      "observations": [
+        "Three raw Destroy helpers omit required federation generation; joined-member status oracle is also confounded.",
+        "Pending acquisition remains during invalid default-resign teardown.",
+        "Duplicate-label test expects synchronous error rather than registration-failure callback."
+      ]
+    },
+    "independent_live": {
+      "pass": 26,
+      "fail": 0,
+      "skip": 0
+    },
+    "independent_support": {
+      "pass": 2,
+      "fail": 0,
+      "skip": 0
+    },
+    "evidence_tools": {
+      "pass": 127,
+      "fail": 0,
+      "subtest_pass": 112,
+      "warnings": 1
+    },
+    "supported_profile_actual_run": {
+      "verdict": "PASS",
+      "groups": 226,
+      "required_references": 985,
+      "unique_package_test_pairs": 978,
+      "full_conformance": false
+    }
+  },
+  "requirement_coverage": {
+    "records": 712,
+    "applicable": 639,
+    "excluded": 48,
+    "unresolved": 25,
+    "applicable_without_oracle_links": 402,
+    "total_without_oracle_links": 472,
+    "existing_oracle_links": 347,
+    "all_applicable_semantic_assessments_open": true,
+    "readiness_failure_entries": 43,
+    "readiness_started_test_commands": 0,
+    "passing_link_records_not_verified_requirements": true,
+    "java_ivct_failure_invocations": 8,
+    "java_ivct_failed_literal_methods": 6,
+    "none_of_these_failures_linked": true,
+    "reconciliation_excludes_later_tagged_go_and_linux_runs": true
+  },
+  "scope_exclusions": [
+    "39 Python RL application files, six bridge application files and one static-quality file not collected in HLA/SDK campaign.",
+    "Broad Go runs use default tags; Windows runtime_checkpoint_live cases executed separately.",
+    "Four optional generated-SDK fixture-exchange tests return early without fixture-input variables; their pass events do not prove exchanges.",
+    "No full IEEE certification or complete normative-obligation inventory is claimed."
+  ],
+  "evidence": [
+    {
+      "path": "rtid.exe",
+      "sha256": "fc2bd04a5e64970e2dd0f6cb37f98741a257a578e273cae6458d4fd9602d75e8"
+    },
+    {
+      "path": "go/full.jsonl",
+      "sha256": "173bdbcf54b08b33b99af7e45304f25abf2d10032e7be88fe6661cf41fada746"
+    },
+    {
+      "path": "python/results.xml",
+      "sha256": "e0b9dae92886196ced84cd76d8145d1d13eb8d8940313e95449524e23f87efda"
+    },
+    {
+      "path": "java/results-summary.json",
+      "sha256": "619f462052a3534748bfb02d35dd63a332f22273b00c59c744c8f762ec315467"
+    },
+    {
+      "path": "java/restart-recheck/results-summary.json",
+      "sha256": "d44b41bd676f947540af04122a3b302fe05c493307561acbd2fdaa46c2853586"
+    },
+    {
+      "path": "ivct-subset-final.xml",
+      "sha256": "13bd3922de9191a24b42eae9a34a3568e7395f6dd2bf3adaec6782516a02ff0c"
+    },
+    {
+      "path": "independent-live.xml",
+      "sha256": "adcf6f0e5ffc0302b899fc63dce89a0369db254eb94586ec8217e27a2ced9e14"
+    },
+    {
+      "path": "independent-support.xml",
+      "sha256": "2bd756bbe421860033e320eb5ceb92404bf0818b8aba149ff7df070ab5bbb63c"
+    },
+    {
+      "path": "evidence-tools.xml",
+      "sha256": "020a81824904283dbee3ed2ddc35beb706c3ce75b289abcaf9c958091f740c3f"
+    },
+    {
+      "path": "supported-quality-gate.json",
+      "sha256": "06fcfdab3bb81110d70cfb11910fa7bc88b037658bb701eb8589a7535abcd984"
+    },
+    {
+      "path": "coverage/current-assessment.json",
+      "sha256": "210af7ce8686ac48df3ab95e77f69939618703ba84dcad24d7fcd6d070195a00"
+    },
+    {
+      "path": "coverage/failure-index-proof.json",
+      "sha256": "f574a5978af27eec7e8478392b434270994962ad2158aa5496993d83b756777e"
+    },
+    {
+      "path": "race/full.jsonl",
+      "sha256": "ca78c5203cf4994cf9e0f52d4662c57f67c9ee05ed66565e49c8b0f53b2c9904"
+    },
+    {
+      "path": "go-tagged.jsonl",
+      "sha256": "ea36abd6ba05e43fd4eeee05a30f8bf6d416265007504ab22d205d3a511605fb"
+    },
+    {
+      "path": "go-tagged-recheck.jsonl",
+      "sha256": "60ea62df4f042843f7b2387ef65bfe950654a1c9e499b189a37ab273aabb27cc"
+    },
+    {
+      "path": "race/retry/full.jsonl",
+      "sha256": "0f399b17f5b1d16c1cbc7b5ca3f9bb3222b2a1acc090715712fe0279183bc398"
+    },
+    {
+      "path": "race/retry/summary.json",
+      "sha256": "2e640351edf731e5b8084750648f4344bd02aabaa576184c3fa7082b4543ef66"
+    },
+    {
+      "path": "go/summary.json",
+      "sha256": "304dc238d4d7ea2c78348d7dd09e174416eb20c712098629843c01bd84e0f0fd"
+    },
+    {
+      "path": "race/first-attempt-summary.json",
+      "sha256": "40825e7782987c1f51381f1b07dc1ce243b058ccc25626eacea6ebdca449a485"
+    },
+    {
+      "path": "python/evidence-manifest.json",
+      "sha256": "3aa7e1140bde0633fd8a9737c731259fa3404d3525914ca7961d5de308a15c81"
+    },
+    {
+      "path": "coverage/current-assessment.md",
+      "sha256": "37844b84bc95717365a6c80686801ae9e14e83421d583cb744e68b5476145443"
+    }
+  ]
+}

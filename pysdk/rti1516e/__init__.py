@@ -7,6 +7,7 @@ Public API:
     from rti1516e import (
         # Layer 1 — idiomatic asyncio (primary)
         RtiConnection, FederationSpec, Federate,
+        FederationJoinCommitUnknownError, RtiConnectionPoisonedError,
         # Layer 2 — standard-shaped ambassador (Java/C++ port-friendly)
         Rti1516eAmbassador,
         # M28 — IEEE 1516 service-style typed handles + typed collections
@@ -40,6 +41,7 @@ __version__ = "0.1.0"
 # importable, so each submodule's symbols are placeholders raising
 # NotImplementedError at call time, not at import time.
 
+from rti1516e._callbacks import HLA_EVOKED, HLA_IMMEDIATE, CallbackModel
 from rti1516e._grpc_errors import (
     InvalidOwnershipState,
     InvalidSaveState,
@@ -51,11 +53,20 @@ from rti1516e._grpc_errors import (
     SyncPointAlreadyExists,
     SyncPointNotFound,
 )
-from rti1516e.connection import Federate, FederationSpec, RtiConnection
+from rti1516e.connection import (
+    Federate,
+    FederationJoinCommitUnknownError,
+    FederationSpec,
+    RtiConnection,
+    RtiConnectionPoisonedError,
+)
 from rti1516e.ddm import AttributeRegions, DDMClient
 from rti1516e.errors import (
+    AlreadyConnected,
     AttributeNotDefined,
     AttributeNotOwned,
+    CallNotAllowedFromWithinCallback,
+    CouldNotCreateLogicalTimeFactory,
     EncodingInsufficientBytes,
     EncodingPaddingViolation,
     EncodingTypeMismatch,
@@ -64,6 +75,7 @@ from rti1516e.errors import (
     FederatesCurrentlyJoined,
     FederationAlreadyExists,
     FederationAlreadyJoined,
+    FederationCreationResponseError,
     FederationExecutionAlreadyExists,
     FederationExecutionDoesNotExist,
     FederationHaltedError,
@@ -73,27 +85,38 @@ from rti1516e.errors import (
     FomMimRedefinition,
     FomValidationFailed,
     InteractionClassNotPublished,
+    InvalidInteractionClassHandle,
     InvalidLogicalTime,
+    InvalidObjectClassHandle,
+    NameNotFound,
+    NameSetWasEmpty,
     ObjectAttributeNotOwned,
     ObjectClassNotDefined,
     ObjectClassNotPublished,
     ObjectInstanceNotKnown,
     ObjectNotFound,
+    OwnershipAcquisitionPending,
     RtiError,
+    RTIinternalError,
     TimeAlreadyConstrained,
     TimeAlreadyRegulating,
     TimeInvalidLookahead,
     TimeNotConstrained,
     TimeNotRegulating,
     TimeRequestInPast,
+    UnsupportedCallbackModel,
 )
 from rti1516e.events import (
+    ConfirmAttributeOwnershipAcquisitionCancellation,
     DiscoverObjectInstance,
     FederationHalted,
     ReceiveInteraction,
     ReflectAttributeValues,
     TimeAdvanceGrant,
+    TimeConstrainedEnabled,
+    TimeRegulationEnabled,
 )
+from rti1516e.fom.modules import MIMModule
 from rti1516e.handles import (
     AttributeHandle,
     DimensionHandle,
@@ -106,7 +129,17 @@ from rti1516e.handles import (
     RegionHandle,
 )
 from rti1516e.ownership import OwnershipClient
-from rti1516e.savepoint import RestoreState, SavepointClient, SaveState
+from rti1516e.savepoint import (
+    FederateRestoreStatus,
+    FederateSaveStatus,
+    RestoreState,
+    RestoreStatus,
+    RestoreStatusResponse,
+    SavepointClient,
+    SaveState,
+    SaveStatus,
+    SaveStatusResponse,
+)
 from rti1516e.sets import (
     AttributeHandleSet,
     AttributeHandleValueMap,
@@ -121,6 +154,23 @@ from rti1516e.standard import Rti1516eAmbassador
 from rti1516e.sync import SyncClient
 
 __all__ = [
+    "NameSetWasEmpty",
+    "ConfirmAttributeOwnershipAcquisitionCancellation",
+    "AlreadyConnected",
+    "CallbackModel",
+    "CallNotAllowedFromWithinCallback",
+    "CouldNotCreateLogicalTimeFactory",
+    "FederationCreationResponseError",
+    "RTIinternalError",
+    "HLA_EVOKED",
+    "HLA_IMMEDIATE",
+    "UnsupportedCallbackModel",
+    "FederateRestoreStatus",
+    "FederateSaveStatus",
+    "RestoreStatus",
+    "RestoreStatusResponse",
+    "SaveStatus",
+    "SaveStatusResponse",
     "AttributeHandle",
     "AttributeHandleSet",
     "AttributeNotDefined",
@@ -148,14 +198,18 @@ __all__ = [
     "FederationHalted",
     "FederationHaltedError",
     "FederationHasFederatesJoined",
+    "FederationJoinCommitUnknownError",
     "FederationNotFound",
     "FederationNotJoined",
     "FederationSpec",
+    "MIMModule",
     "FomMimRedefinition",
     "FomValidationFailed",
     "InteractionClassHandle",
     "InteractionClassNotPublished",
+    "InvalidInteractionClassHandle",
     "InvalidLogicalTime",
+    "InvalidObjectClassHandle",
     "InvalidOwnershipState",
     "InvalidSaveState",
     "InvalidSyncState",
@@ -163,10 +217,12 @@ __all__ = [
     "ObjectAttributeNotOwned",
     "ObjectClassHandle",
     "ObjectClassNotDefined",
+    "NameNotFound",
     "ObjectClassNotPublished",
     "ObjectInstanceHandle",
     "ObjectInstanceNotKnown",
     "ObjectNotFound",
+    "OwnershipAcquisitionPending",
     "OwnershipClient",
     "OwnershipNotPermitted",
     "ParameterHandle",
@@ -180,6 +236,7 @@ __all__ = [
     "RestoreState",
     "Rti1516eAmbassador",
     "RtiConnection",
+    "RtiConnectionPoisonedError",
     "RtiError",
     "SaveBundleAlreadyExists",
     "SaveBundleNotFound",
@@ -189,6 +246,8 @@ __all__ = [
     "SyncPointAlreadyExists",
     "SyncPointNotFound",
     "TimeAdvanceGrant",
+    "TimeConstrainedEnabled",
+    "TimeRegulationEnabled",
     "TimeAlreadyConstrained",
     "TimeAlreadyRegulating",
     "TimeInvalidLookahead",

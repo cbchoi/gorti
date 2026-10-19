@@ -115,6 +115,9 @@ message SubscribeOCAWithRegionsRequest {
   uint64 object_class_handle = 4;
   repeated uint64 attribute_handles = 5;
   repeated uint64 region_handles = 6;
+  optional bool active = 7; // absent preserves the legacy active subscription
+  string update_rate_designator = 8;
+  AttributeRegionGroups attribute_region_groups = 9;
 }
 
 message SubscribeICWithRegionsRequest {
@@ -123,6 +126,7 @@ message SubscribeICWithRegionsRequest {
   uint64 federate_handle = 3;  // subscriber
   uint64 interaction_class_handle = 4;
   repeated uint64 region_handles = 5;
+  optional bool active = 6; // absent preserves the legacy active subscription
 }
 
 // AttributeRegions associates an attribute handle with the publisher's
@@ -132,6 +136,19 @@ message AttributeRegions {
   repeated uint64 region_handles = 2;
 }
 
+// Each group denotes the cross product of its two sets; groups are unioned.
+// Empty sets remain present so every supplied handle can be validated.
+message AttributeRegionGroup {
+  repeated uint64 attribute_handles = 1;
+  repeated uint64 region_handles = 2;
+}
+
+// Presence selects grouped semantics, including an explicitly empty collection.
+// Do not combine this field with the legacy flattened fields of a request.
+message AttributeRegionGroups {
+  repeated AttributeRegionGroup groups = 1;
+}
+
 message RegisterObjectWithRegionsRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
@@ -139,6 +156,7 @@ message RegisterObjectWithRegionsRequest {
   uint64 object_class_handle = 4;
   string object_name = 5;  // optional
   repeated AttributeRegions attribute_regions = 6;
+  AttributeRegionGroups attribute_region_groups = 7;
 }
 
 message RegisterObjectWithRegionsResponse {
@@ -147,24 +165,28 @@ message RegisterObjectWithRegionsResponse {
 }
 
 // AssociateRegionsForUpdates — IEEE 1516.1-2010 §9.6 (M23).
-// Wires the existing manager method AssociateRegionsWithObjectInstance.
+// Adds to existing associations for both legacy and grouped requests.
+// Empty inputs no longer clear or replace existing associations.
 message AssociateRegionsForUpdatesRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
   uint64 federate_handle = 3;
   uint64 object_handle = 4;
   repeated AttributeRegions attribute_regions = 5;
+  AttributeRegionGroups attribute_region_groups = 6;
 }
 
 // UnassociateRegionsForUpdates — IEEE 1516.1-2010 §9.7 (M23).
 // Drops associations matching the supplied (attr, regions) pairs.
-// Empty attribute_regions drops ALL associations for the object.
+// Legacy empty attribute_regions drops ALL associations for the object.
+// A present attribute_region_groups uses IEEE empty-as-no-op semantics.
 message UnassociateRegionsForUpdatesRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
   uint64 federate_handle = 3;
   uint64 object_handle = 4;
   repeated AttributeRegions attribute_regions = 5;
+  AttributeRegionGroups attribute_region_groups = 6;
 }
 
 // UnsubscribeObjectClassAttributesWithRegions — §9.9 (M23).
@@ -175,6 +197,7 @@ message UnsubscribeOCAWithRegionsRequest {
   uint64 object_class_handle = 4;
   repeated uint64 attribute_handles = 5;
   repeated uint64 region_handles = 6;
+  AttributeRegionGroups attribute_region_groups = 7;
 }
 
 // UnsubscribeInteractionClassWithRegions — §9.11 (M23).
@@ -195,7 +218,10 @@ message SendInteractionWithRegionsRequest {
   uint64 interaction_class_handle = 4;
   map<uint64, bytes> parameters = 5;
   optional double logical_time = 6;
+  LogicalTimeValue logical_time_value = 10;
   repeated uint64 region_handles = 7;
+  bytes user_supplied_tag = 8;
+  uint64 message_retraction_handle = 9;
 }
 
 // RequestAttributeValueUpdateWithRegions — §9.13 (M23). Class-scoped
@@ -208,6 +234,7 @@ message RequestAttributeValueUpdateWithRegionsRequest {
   repeated uint64 attribute_handles = 5;
   repeated uint64 region_handles = 6;
   bytes user_supplied_tag = 7;
+  AttributeRegionGroups attribute_region_groups = 8;
 }
 
 // =============================================================================
@@ -231,6 +258,7 @@ message DDMRegionEntry {
   // Sorted by dimension_handle ascending for determinism.
   repeated DDMRangeEntry committed = 5;
   repeated DDMRangeEntry pending = 6;
+  bool template = 7; // absent retains legacy concrete-region semantics
 }
 
 // DDMSubscriptionEntry is one (class, attribute, subscriber) entry.
@@ -239,6 +267,8 @@ message DDMSubscriptionEntry {
   uint64 attribute_handle = 2;
   uint64 subscriber_federate = 3;
   repeated uint64 region_handles = 4;
+  bool passive = 5; // false preserves legacy active subscriptions
+  string update_rate_designator = 6;
 }
 
 // DDMInteractionSubscriptionEntry is one (interaction_class, subscriber).
@@ -246,6 +276,7 @@ message DDMInteractionSubscriptionEntry {
   uint64 interaction_class_handle = 1;
   uint64 subscriber_federate = 2;
   repeated uint64 region_handles = 3;
+  bool passive = 4; // false preserves legacy active subscriptions
 }
 
 // DDMObjectPublicationEntry is one (object, attribute) → regions
@@ -254,6 +285,27 @@ message DDMObjectPublicationEntry {
   uint64 object_handle = 1;
   uint64 attribute_handle = 2;
   repeated uint64 region_handles = 3;
+}
+
+// An inactive association retains the federate that made the association.
+message DDMInactiveAssociationEntry {
+  uint64 object_handle = 1;
+  uint64 attribute_handle = 2;
+  uint64 associating_federate = 3;
+  repeated uint64 region_handles = 4;
+}
+
+// Copied designators retain exact geometry and each recipient's lease state.
+message DDMConveyedRegionEntry {
+  uint64 designator = 1;
+  uint64 source_region_handle = 2;
+  repeated DDMRangeEntry realization = 3;
+  repeated DDMConveyedRegionRecipientEntry recipients = 4;
+}
+
+message DDMConveyedRegionRecipientEntry {
+  uint64 federate_handle = 1;
+  bool active = 2;
 }
 
 // DDMManagerState is the per-federation snapshot persisted into the
@@ -276,4 +328,6 @@ message DDMManagerState {
   repeated DDMInteractionSubscriptionEntry interaction_subscriptions = 4;
   // Sorted by (object, attribute) ascending.
   repeated DDMObjectPublicationEntry object_publications = 5;
+  repeated DDMInactiveAssociationEntry inactive_associations = 6;
+  repeated DDMConveyedRegionEntry conveyed_regions = 7;
 }

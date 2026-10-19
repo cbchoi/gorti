@@ -21,7 +21,7 @@ body:
         - rtid
         - Go federate SDK
         - Python SDK
-        - C++ SDK
+        - Java SDK
         - verification harness
         - documentation
     validations:

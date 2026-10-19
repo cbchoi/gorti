@@ -3,8 +3,9 @@
 When the federation is created with ``mode="best-effort"`` AND a
 published interaction class (or attribute) is declared
 ``<order>Receive</order>`` in the FOM, the Python SDK transmits the
-update with RO (Receive Order) semantics — the subscriber's
-``ReceiveInteraction.timestamp`` field arrives as ``None``. In
+update with RO (Receive Order) semantics. The subscriber's
+``ReceiveInteraction.timestamp`` still preserves the supplied timestamp;
+its presence does not imply timestamp-order delivery. In
 ``mode="verbose"`` the federation operating mode forces TSO regardless
 of the per-class order declaration: the subscriber sees the publisher's
 timestamp unchanged.
@@ -77,7 +78,7 @@ PROBE_TIMESTAMP = 42.0
 @pytest.mark.spec
 @pytest.mark.integration
 def test_spec_m5_best_effort_attribute_delivers_ro() -> None:
-    """In best-effort mode, a Receive-order class delivers RO (timestamp=None).
+    """A best-effort Receive-order delivery retains the supplied timestamp.
 
     End-to-end:
       1. Build the rtid binary if needed.
@@ -88,7 +89,7 @@ def test_spec_m5_best_effort_attribute_delivers_ro() -> None:
       5. Federate A sends ``ModesProbe`` WITH a logical timestamp.
       6. Subscriber drains its event stream and captures the first
          ``ReceiveInteraction``.
-      7. Assert ``event.timestamp is None`` (RO semantics).
+      7. Assert the original timestamp is preserved even for RO delivery.
 
     Status (M6 W1C, 2026-05-03): both blockers fixed and this test is
     LIVE. W1A landed cross-language handle alignment
@@ -120,9 +121,9 @@ def test_spec_m5_best_effort_attribute_delivers_ro() -> None:
     )
 
     received_ts = result["received_timestamp"]
-    assert received_ts is None, (
-        "best-effort + Receive-order interaction must deliver RO; "
-        f"got timestamp={received_ts!r}"
+    assert received_ts == PROBE_TIMESTAMP, (
+        "best-effort + Receive-order delivery must preserve the supplied timestamp; "
+        f"got {received_ts!r}, expected {PROBE_TIMESTAMP!r}"
     )
 
 

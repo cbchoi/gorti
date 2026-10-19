@@ -363,10 +363,20 @@ def raw_resign(stub: Any, federation: str, federate_handle: int) -> None:
 def raw_destroy(stub: Any, federation: str) -> None:
     from rti.v1 import common_pb2, federation_pb2
 
+    summary = stub.ListFederations(
+        federation_pb2.ListFederationsRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+        )
+    )
+    generation = next(
+        (item.federation_generation for item in summary.federations if item.name == federation),
+        0,
+    )
     stub.DestroyFederation(
         federation_pb2.DestroyFederationRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=federation,
+            expected_federation_generation=generation,
         )
     )
 

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>GoRTI Java Support Services</name><type>FOM</type><version>1.0</version>
+    <modificationDate>2026-09-29</modificationDate><securityClassification>Unclassified</securityClassification>
+    <description>Update-rate metadata and advisory callback tests.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name><sharing>Neither</sharing>
+      <objectClass>
+        <name>SupportAsset</name><sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>value</name><dataType>HLAinteger32BE</dataType>
+          <updateType>Conditional</updateType><updateCondition>On change</updateCondition>
+          <ownership>DivestAcquire</ownership><sharing>PublishSubscribe</sharing>
+          <dimensions><dimension>X</dimension></dimensions>
+          <transportation>HLAreliable</transportation><order>Receive</order>
+          <semantics>Support-service test value.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name><sharing>Neither</sharing>
+      <transportation>HLAreliable</transportation><order>Receive</order>
+      <interactionClass>
+        <name>SupportPulse</name><sharing>PublishSubscribe</sharing>
+        <transportation>HLAreliable</transportation><order>Receive</order>
+        <semantics>Interaction relevance test.</semantics>
+        <parameter><name>stamp</name><dataType>HLAinteger32BE</dataType><semantics>Lookup test parameter.</semantics></parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <dimensions>
+    <dimension><name>X</name><dataType>HLAinteger32BE</dataType><upperBound>100</upperBound><normalization>None</normalization><value>Excluded</value></dimension>
+  </dimensions>
+  <updateRates>
+    <updateRate><name>slow</name><rate>2.5</rate><semantics>Slow updates.</semantics></updateRate>
+    <updateRate><name>fast</name><rate>20</rate><semantics>Fast updates.</semantics></updateRate>
+  </updateRates>
+  <switches>
+    <autoProvide isEnabled="false"/><conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="true"/><attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/><objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/><serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/><delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>

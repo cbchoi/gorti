@@ -65,8 +65,6 @@ def test_parse_bad_fom_returns_none_fom_with_diagnostics() -> None:
     ("fixture_name", "expected_code"),
     [
         ("FOM-001-undefined-datatype.xml", "FOM-001"),
-        ("FOM-002-cyclic-class-hierarchy.xml", "FOM-002"),
-        ("FOM-003-multiple-parents.xml", "FOM-003"),
         ("FOM-004-duplicate-attribute.xml", "FOM-004"),
         ("FOM-005-duplicate-parameter.xml", "FOM-005"),
         ("FOM-009-unknown-element.xml", "FOM-009"),
@@ -91,6 +89,26 @@ def test_parse_diagnostic_is_frozen_dataclass() -> None:
     with pytest.raises(Exception):  # noqa: B017 - dataclasses.FrozenInstanceError
         d.code = "FOM-002"  # type: ignore[misc]
     assert hash(d) == hash(Diagnostic(code="FOM-001", message="x", source="y", line=3))
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "second_class"),
+    [
+        ("repeated-ancestor-local-name.xml", "HLAobjectRoot.A.B.A"),
+        ("repeated-branch-local-name.xml", "HLAobjectRoot.B.A"),
+    ],
+)
+def test_repeated_local_names_are_distinct_classes(
+    fixture_name: str, second_class: str
+) -> None:
+    result = parse([FOMS_GOOD_DIR / fixture_name])
+    assert not result.diagnostics, result.diagnostics
+    assert result.fom is not None
+    first = result.fom.find_object_class("HLAobjectRoot.A")
+    second = result.fom.find_object_class(second_class)
+    assert first is not None and second is not None and first != second
+    assert first.name == second.name == "A"
+    assert result.fom.find_object_class("A") is None
 
 
 def test_parse_unknown_path_records_internal_diagnostic() -> None:

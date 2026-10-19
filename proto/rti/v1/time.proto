@@ -78,6 +78,7 @@ message EnableRegulationRequest {
   uint64 federate_handle = 3;
   // Lookahead. Must be >= 0 and finite.
   double lookahead = 4;
+  LogicalTimeValue lookahead_value = 5;
 }
 
 message DisableRegulationRequest {
@@ -104,6 +105,7 @@ message NERRequest {
   uint64 federate_handle = 3;
   // Time at which the federate wishes to advance to (or earlier if a message arrives).
   double logical_time = 4;
+  LogicalTimeValue logical_time_value = 5;
 }
 
 // NextMessageRequestAvailable — like NER but the grant gate is
@@ -115,6 +117,7 @@ message NMRARequest {
   string federation_name = 2;
   uint64 federate_handle = 3;
   double logical_time = 4;
+  LogicalTimeValue logical_time_value = 5;
 }
 
 // TimeAdvanceRequest — advance to t once LBTS allows; messages at
@@ -125,6 +128,7 @@ message TARRequest {
   string federation_name = 2;
   uint64 federate_handle = 3;
   double logical_time = 4;
+  LogicalTimeValue logical_time_value = 5;
 }
 
 // TimeAdvanceRequestAvailable — TAR's "available" variant, LBTS >= t
@@ -135,6 +139,7 @@ message TARARequest {
   string federation_name = 2;
   uint64 federate_handle = 3;
   double logical_time = 4;
+  LogicalTimeValue logical_time_value = 5;
 }
 
 // FlushQueueRequest — drain queued events for this federate, then
@@ -146,6 +151,7 @@ message FQRRequest {
   string federation_name = 2;
   uint64 federate_handle = 3;
   double logical_time = 4;
+  LogicalTimeValue logical_time_value = 5;
 }
 
 // ModifyLookaheadRequest — update the regulating federate's lookahead
@@ -157,6 +163,7 @@ message ModifyLookaheadRequest {
   uint64 federate_handle = 3;
   // New lookahead. Must be >= 0 and finite.
   double lookahead = 4;
+  LogicalTimeValue lookahead_value = 5;
 }
 
 // Per-federate query addressing.
@@ -169,6 +176,7 @@ message QueryFederateTimeRequest {
 message QueryFederateTimeResponse {
   // Federate's current logical time.
   double logical_time = 1;
+  LogicalTimeValue logical_time_value = 2;
 }
 
 message QueryLookaheadResponse {
@@ -176,6 +184,7 @@ message QueryLookaheadResponse {
   // is regulating; the SDKs raise time_regulation_not_enabled when
   // the federate is not regulating rather than returning 0.
   double lookahead = 1;
+  LogicalTimeValue lookahead_value = 2;
 }
 
 // Federation-wide LBTS query.
@@ -187,6 +196,7 @@ message QueryLBTSRequest {
 message QueryLBTSResponse {
   // LBTS over the regulating set. Meaningful only when finite is true.
   double lbts = 1;
+  LogicalTimeValue lbts_value = 3;
   // false when no federate is regulating (manager returns
   // PositiveInfinity internally; the wrapper translates so clients
   // don't have to handle +Inf in language-specific ways).
@@ -199,6 +209,7 @@ message QueryLBTSResponse {
 // their own advance).
 message QueryGALTResponse {
   double galt = 1;
+  LogicalTimeValue galt_value = 3;
   // false when no OTHER federate is regulating (GALT is
   // positive-infinity from the caller's perspective).
   bool finite = 2;
@@ -208,6 +219,7 @@ message QueryGALTResponse {
 // Smallest timestamp of any TSO message buffered for this federate.
 message QueryLITSResponse {
   double lits = 1;
+  LogicalTimeValue lits_value = 3;
   // false when no TSO messages are buffered (LITS is
   // positive-infinity).
   bool finite = 2;

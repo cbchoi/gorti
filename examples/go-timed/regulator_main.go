@@ -29,16 +29,17 @@ func main() {
 }
 
 type mainArgs struct {
-	url         string
-	federation  string
-	name        string
-	lookahead   float64
-	primitive   string // "NER" or "TAR"
-	constrained bool
-	cycles      int
-	tickStep    float64 // logical time advance per cycle
-	resultPath  string
-	fomPath     string
+	url          string
+	federation   string
+	name         string
+	lookahead    float64
+	primitive    string // "NER" or "TAR"
+	constrained  bool
+	cycles       int
+	tickStep     float64 // logical time advance per cycle
+	resultPath   string
+	fomPath      string
+	participants int
 }
 
 func mainErr() error {
@@ -87,6 +88,12 @@ func mainErr() error {
 		if err := fed.EnableTimeConstrained(ctx); err != nil {
 			return fmt.Errorf("EnableTimeConstrained: %w", err)
 		}
+	}
+	readyCtx, cancelReady := context.WithTimeout(ctx, 30*time.Second)
+	err = waitForStartup(readyCtx, fed, args.participants)
+	cancelReady()
+	if err != nil {
+		return fmt.Errorf("startup synchronization: %w", err)
 	}
 
 	r := &regulator{name: args.name, lookahead: args.lookahead}
@@ -205,6 +212,7 @@ func parseArgs() mainArgs {
 	flag.Float64Var(&a.tickStep, "tick-step", 1.0, "logical time advance per cycle")
 	flag.StringVar(&a.resultPath, "result", "/tmp/go-timed/result.json", "result JSON path")
 	flag.StringVar(&a.fomPath, "fom", "examples/go-timed/time-advance-fom.xml", "FOM XML path")
+	flag.IntVar(&a.participants, "participants", 1, "number of federates to synchronize before advancing")
 	flag.Parse()
 	return a
 }

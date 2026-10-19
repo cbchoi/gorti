@@ -63,6 +63,20 @@ class OwnershipClient:
 
     # --- Divest / acquire (§7.2-7.7) ----------------------------------------
 
+    async def release_denied(self, object_handle: int, attribute_handles: list[int]) -> None:
+        from rti.v1 import ownership_pb2
+
+        request = ownership_pb2.ReleaseDeniedRequest(
+            wire_version=1, federation_name=self._federation_name,
+            federate_handle=self._federate_handle, object_handle=object_handle,
+            attribute_handles=list(attribute_handles),
+        )
+        try:
+            await self._stub.AttributeOwnershipReleaseDenied(request)
+        except Exception as exc:
+            translate_rpc_error(exc)
+            raise
+
     async def unconditional_divest(
         self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
     ) -> None:
@@ -146,7 +160,11 @@ class OwnershipClient:
             translate_rpc_error(exc)
 
     async def confirm_divestiture(
-        self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
+        self,
+        object_handle: _ObjectInstanceRef,
+        attribute_handles: _AttributeRefList,
+        *,
+        tag: bytes = b"",
     ) -> None:
         """§7.6 confirmDivestiture (M37 RPC, M39 HA-2 surface).
 
@@ -162,6 +180,7 @@ class OwnershipClient:
             federate_handle=self._federate_handle,
             object_handle=int(object_handle),
             attribute_handles=[int(h) for h in attribute_handles],
+            tag=tag,
         )
         try:
             await self._stub.ConfirmDivestiture(req)
@@ -222,6 +241,25 @@ class OwnershipClient:
         except Exception as exc:  # noqa: BLE001
             translate_rpc_error(exc)
 
+    async def divest_if_wanted_with_result(
+        self, object_handle: _ObjectInstanceRef, attribute_handles: _AttributeRefList
+    ) -> tuple[int, ...]:
+        """Return the attributes transferred by this exact operation."""
+        from rti.v1 import common_pb2, ownership_pb2
+
+        req = ownership_pb2.DivestIfWantedRequest(
+            wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
+            federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
+            object_handle=int(object_handle),
+            attribute_handles=[int(h) for h in attribute_handles],
+        )
+        try:
+            resp = await self._stub.AttributeOwnershipDivestitureIfWantedWithResult(req)
+        except Exception as exc:  # noqa: BLE001
+            translate_rpc_error(exc)
+        return tuple(int(h) for h in resp.divested_attribute_handles)
+
     # --- Queries (§7.8-7.9) -------------------------------------------------
 
     async def query_attribute_ownership(
@@ -238,6 +276,7 @@ class OwnershipClient:
         req = ownership_pb2.QueryOwnershipRequest(
             wire_version=common_pb2.WireVersion.WIRE_VERSION_V1,
             federation_name=self._federation_name,
+            federate_handle=self._federate_handle,
             object_handle=int(object_handle),
             attribute_handle=int(attribute_handle),
         )

@@ -119,6 +119,136 @@ of audit logs. Relative paths are resolved from the process working directory. M
 deployments should use absolute paths on storage writable by the service
 account and include those paths in backup and retention policies.
 
+### Object instance names
+
+To register an object with an application-supplied name, reserve the name and
+wait for the successful reservation callback before registering. An explicit
+name without a reservation held by the caller is rejected with
+`ObjectInstanceNameNotReserved`. Omitting the name requests an RTI-generated
+name and does not require a reservation. This rule also applies to registration
+with regions.
+
+Reservation calls reject the `HLA` prefix; multiple-name reservation also
+rejects an empty set. A name collision produces the reservation-failed callback.
+If the callback cannot be admitted to the outbound queue, the call returns an
+error without retaining new reservations or advancing its callback sequence.
+
+Registration and deletion do not release an explicit reservation. Release it
+with the name-release service when it is no longer needed; resign also removes
+the federate's reservations. A released name can be reserved by another
+federate while its original object is still live, but registering a second
+object with that name remains prohibited until the first object is deleted.
+Checkpoints preserve reservation rights separately from registered objects.
+
+### Region-scoped object registration
+
+Use matching server and Go/Python SDK versions for
+`RegisterObjectInstanceWithRegions`. The operation now registers one object
+with validated region associations before discovery. Older Go/Python clients
+perform a preliminary ordinary registration and must be upgraded with the server.
+Resolve dimension handles by name; standard-MIM dimensions are now included.
+This registration profile currently requires the region's dimension set to
+match the attribute's declared set; region-template expansion is not implemented.
+
+The HLA core profile supports this operation. The current audit/replay codec
+cannot preserve region-scoped registration. The optional production audit
+observer warns and records a recording failure without blocking the HLA
+operation; its journal is incomplete for DDM replay. A directly injected strict
+writer rejects the operation before creating an object. Operational application
+logging is separate. Checkpoints retain the object and its region associations.
+Cross-version DDM handle-table restoration is not established.
+
+### Save and restore boundary
+
+Label-only restore selects the current execution's committed checkpoint when
+available, or an unambiguous committed checkpoint from a previous execution.
+An ambiguous label across executions fails; `saved_federation_generation`
+explicitly selects the source execution. Keep the original storage directory,
+including the committed-save history and bundle, when restarting the server.
+Participants are matched by saved names. Same-generation restoration can recover
+saved handles; cross-generation restoration assigns fresh handles in the target
+execution and rewrites saved references. The server saves
+the composed FOM and its handle bindings, object instances, name reservations,
+object knowledge and transport settings, publication/subscription tables,
+logical-time state and queued TSO callbacks, synchronization, ownership, DDM,
+and MOM state. Simulation model memory and current attribute values belong to
+the federates; the object registry routes values and does not cache them.
+
+Pause application service calls, drain acknowledged sends,
+and close LocalLRC/confirmed mutation streams before starting a checkpoint.
+Keep callback-consumption streams open. During the protocol, ordinary
+federation-scoped RPCs are rejected with `SaveInProgress` or `RestoreInProgress`;
+SavepointService requests and callback consumption remain available. Wait for
+the final callback before resuming model execution. The SDK refreshes FOM
+bindings and changes the active handle only on successful restoration; do not
+cache the pre-restore handle in application requests. Supported SDK runtime
+images preserve recognized pending callbacks, known unreported outcomes and
+typed local query notifications. The server reconciles them with its invocation
+ledger; unread bytes and arbitrary application closures are not snapshots.
+Checkpoint export rejects executing callbacks or unknown results. Go initially
+disables LocalLRC after restore and uses confirmed calls. With application sends
+paused and callback consumption running, call `ReinitializeLocalLRC(ctx)` to
+rebuild the local validation state. An ordered callback marker controls when the
+snapshot is installed. Failure leaves the confirmed path active; it does not
+resubmit unresolved work from an old stream.
+
+Restore validates all required snapshots before notifying participants and
+applies them only after every participant reports successful restoration and
+space for every completion callback has been reserved.
+Abort or participant failure before that commit leaves RTI state unchanged.
+Completion-queue admission failure also leaves state unchanged. An unexpected
+adapter failure after commit is reported as an error with state already
+committed; it is not described as a rollback.
+
+Scheduled saves preserve advance requests that cross the checkpoint, deliver
+eligible timestamped callbacks before save initiation, and resume pending
+requests after completion. Tests cover positive and zero lookahead. Restoration
+also resumes time requests retained in the checkpoint. An ambiguous source
+execution, incompatible source model, or legacy bundle missing required state
+is rejected rather than reported as restored. Legacy framing remains
+readable, but this does not make every old bundle sufficient for a current
+runtime restore. In particular, restoration requires complete accepted
+message-retraction ID history; a missing history is not treated as empty.
+The extended MOM snapshot format is not readable by older
+server versions. The bundle manifest, including encoded snapshots, is limited
+to 16 MiB; larger snapshots fail saving instead of creating an unreadable
+bundle. This checkpoint profile is not a declaration of full IEEE
+1516-2010 Save/Restore conformance.
+
+### Authenticated automatic resignation
+
+Joining issues a private 32-byte session token. Current SDKs retain it across
+restore handle changes, replace it on a fresh join, and use it for automatic
+resign settings and callback accounting. Do not log or persist this token.
+Use TLS outside a trusted local environment. This capability protects the new
+session-scoped controls; it is not a replacement for the server's existing
+network access controls and OIDC configuration.
+
+`SetAutomaticResignDirective` and `GetAutomaticResignDirective` require the
+calling membership's token. The initial directive comes from the FOM's
+`automaticResignAction`; the product default for an absent switch is `NoAction`.
+An authenticated callback-stream disconnect starts `--auto-resign-grace`
+(default `5s`). A reconnect within that interval cancels the pending cleanup.
+Legacy streams without session metadata do not enable this mechanism.
+Cleanup uses the configured action and its ordinary ownership preconditions;
+it does not silently upgrade `NoAction` to a destructive policy. A failure is
+reported in the server log. Active checkpoint protocols defer cleanup.
+
+Explicit resign requests carrying session metadata are authenticated and bound
+to the live membership identity, not only its numeric handle. Restore may change
+that handle; an old token cannot resign a replacement membership. Requests
+without session metadata retain the legacy behavior and still require the
+deployment's access controls.
+
+### Callback measurements
+
+MOM queries expose MIM-encoded `attribute_values` and explicit
+`unavailable_attributes`. Callback counts use authenticated receipts reported
+after SDK callback invocation, not successful socket writes. Outstanding,
+expired, or unsupported reports make affected totals unavailable. Existing
+top-level RPC counters keep their older server-admission/fanout interpretation.
+Keep callback accounting conditions identical when comparing performance.
+
 `--log-level` accepts `debug`, `info`, `warn`, or `error`.
 `--log-format` accepts `json` (the default) or `text`. Use JSON for log
 collection and text for an interactive development run.
@@ -158,11 +288,6 @@ Clients must use the matching TLS transport: `ConnectWithOptions` with a
 `tls.Config` in Go, or a `grpcs://` URL in Python. Protect private keys with
 filesystem permissions appropriate to the service account.
 
-The current C++ profile does not implement TLS, mTLS, or bearer-token client
-transport. Do not use a `grpcs://` C++ URL as evidence that the channel is
-encrypted; run C++ federates only on a trusted network boundary until secure
-transport is implemented.
-
 For mTLS, add `--tls-client-ca` with a PEM CA bundle. Every federate must then
 present a certificate signed by that CA. The optional
 `--tls-client-cn-allow` comma-separated list further restricts accepted client
@@ -187,6 +312,94 @@ admin on loopback. Mutating admin operations can forcibly resign federates or
 destroy federations; they are disabled by default and should remain so unless
 there is a specific operational need. The metrics listener is also plaintext;
 bind it to loopback or place it behind an appropriate monitoring boundary.
+
+## Service options and checkpoint limits
+
+Subscriptions can be active or passive. Passive subscriptions still receive
+matching object updates and interactions; they do not contribute active demand
+for registration or interaction-relevance advisories. An omitted active option
+preserves the previous active behavior. A nonempty update-rate designator must
+exist in the loaded FOM. Active demand, regional overlap and current ownership
+determine publisher update-on/off advisories and the effective named rate.
+The producer decides when to send; the RTI does not drop timestamped updates or
+delay grants to enforce the rate. A default or absent numeric rate is reported
+as unavailable, not zero. Advisory switches affect their notifications, not
+data subscriptions.
+
+Object lookups made through a joined SDK use that federate's known-object state.
+Local deletion forgets only that federate's copy. A continuing subscription can
+immediately cause rediscovery; other federates and the shared object remain
+unchanged. Keep consuming callbacks after local deletion.
+
+At least one participant must be time managed for a scheduled checkpoint.
+Initiation waits for safe logical-time progress and delivery of eligible TSO
+events at or below the target. Resignation or a time-mode change during the
+attempt cancels it; abort and failure release the checkpoint boundary.
+
+Joining federates may add FOM modules. Go accepts `AdditionalFOMModules` in its
+federation specification; Python accepts `additional_fom_modules` as explicit
+file paths in `FederationSpec` or the standard-style join method. Python sends
+the selected file contents to the connected RTI, so use only intended files
+and a trusted server.
+Conflicting definitions reject the join without publishing the extension.
+Existing bindings remain stable. Existing participants can refresh their
+authoritative view (`RefreshFOM` in Go and `refresh_fom` in Python).
+Restoring an older checkpoint also restores
+its FOM, so classes added later no longer exist after that restoration.
+
+For timestamped sends with a nonzero retraction ID, the server rejects an ID
+already accepted or reserved by that producer. History survives delivery,
+retraction, resignation and checkpoint restoration, and is removed when the
+federation generation is destroyed. An unused lower ID remains valid. Go and
+Python expose the restored next-ID hint without allocating an ID or rewriting
+the caller's value. The hint is not a reservation. Restoration fails explicitly
+if the next-ID hint would overflow.
+
+## MOM measurement sources
+
+Set `GORTI_FEDERATE_HOST` in a Go or Python federate process to report its
+host name as `HLAfederateHost`. The SDK sends this explicit UTF-8 value when it
+joins; it does not inspect the operating system for a hostname. Unset or empty
+means no host is reported. Values must be at most 1,024 UTF-8 bytes and contain
+no whitespace or control characters. A new join replaces the previous report;
+restoring a federate handle does not replace the live process's host report.
+
+```powershell
+$env:GORTI_FEDERATE_HOST = 'simulation-node-1.example'
+```
+
+```sh
+export GORTI_FEDERATE_HOST=simulation-node-1.example
+```
+
+MOM queries and object updates can include `HLAcurrentFDD`, exported from one
+committed merged model rather than concatenated source files. This exposes the
+model definition to clients using the federation's MOM services. Use trusted
+participants and the deployment's normal network and authentication controls;
+the federation name alone is not an authorization boundary. Current export
+requires explicit retained FDD switches, transportation and ordering metadata.
+Incomplete models remain usable where previously supported, but their FDD is
+reported unavailable. Source fields not retained by the model are not recovered
+by export; see the FDD exporter documentation for its current scope.
+
+With checkpoint storage configured, `HLAlastSaveName` and `HLAlastSaveTime` come
+from a separate versioned history of successful save decisions. An immediate
+save has an undefined logical time, distinct from a timed save at zero. A new
+execution has a known empty history; a legacy execution without evidence has
+unknown history. Restore retains the target execution's history. Back up the
+whole save directory, including `history/`, while the server is stopped.
+A process crash before the completion decision can leave an unproven bundle;
+it is not silently adopted as the last successful save. Choose another label
+until that orphan has been inspected.
+
+`HLAtimeGrantedTime` and `HLAtimeAdvancingTime` measure server time-management
+states, not application callback execution. Queries do not consume intervals.
+Successful MOM attribute publication advances each reported attribute's own
+baseline and retains sub-millisecond remainders. Restored observations exclude
+server downtime; snapshots without timing history remain explicitly unavailable.
+Queue lengths are separate metrics: `HLAROlength` and `HLATSOlength` combine
+waiting messages and committed callbacks through authenticated callback entry.
+See [time management](time-management.md) for the counting boundary.
 
 ## Graceful shutdown
 

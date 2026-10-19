@@ -39,6 +39,30 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+class _EventQueue(asyncio.Queue[Any]):
+    """Keep cross-thread producers on the event reader's asyncio loop."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._reader_loop: asyncio.AbstractEventLoop | None = None
+
+    async def get(self) -> Any:
+        self._reader_loop = asyncio.get_running_loop()
+        return await super().get()
+
+    def put_nowait(self, item: Any) -> None:
+        loop = self._reader_loop
+        if loop is not None and loop.is_running():
+            try:
+                producer_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                producer_loop = None
+            if producer_loop is not loop:
+                loop.call_soon_threadsafe(super().put_nowait, item)
+                return
+        super().put_nowait(item)
+
+
 @dataclass
 class RecordedCall:
     """One captured call from the SDK to the in-process driver.
@@ -144,12 +168,11 @@ class InProcessTransport:
         queue. Pushing here makes the event visible to the next
         ``async for`` iteration in the federate.
         """
-        queue = self.event_queues.setdefault(federate_handle, asyncio.Queue())
-        queue.put_nowait(event)
+        self.events_for(federate_handle).put_nowait(event)
 
     def events_for(self, federate_handle: int) -> asyncio.Queue[Any]:
         """Return the per-federate event queue (allocates on first use)."""
-        return self.event_queues.setdefault(federate_handle, asyncio.Queue())
+        return self.event_queues.setdefault(federate_handle, _EventQueue())
 
     def allocate_handle(self) -> int:
         """Mint a fresh monotonic handle. Used for register_object_instance,

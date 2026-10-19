@@ -259,8 +259,10 @@ def test_tc015_plain_acquire_requests_release_from_owner(
             "§7.11: the acquirer's tag must be echoed to the owner"
         )
     finally:
-        leave(sub)
-        leave(pub)
+        try:
+            leave(sub, "CANCEL_THEN_DELETE_THEN_DIVEST")
+        finally:
+            leave(pub)
 
 
 @pytest.mark.conformance

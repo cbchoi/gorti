@@ -23,13 +23,13 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/declaration"
-	"github.com/cbchoi/gorti/rti/internal/federation"
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
-	"github.com/cbchoi/gorti/rti/internal/object"
-	timepkg "github.com/cbchoi/gorti/rti/internal/time"
-	grpcsvc "github.com/cbchoi/gorti/rti/internal/transport/grpc"
+	grpcsvc "github.com/cbchoi/gorti/rti/internal/adapters/grpc"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
+	"github.com/cbchoi/gorti/rti/internal/hla/core"
+	"github.com/cbchoi/gorti/rti/internal/hla/declaration"
+	"github.com/cbchoi/gorti/rti/internal/hla/federation"
+	"github.com/cbchoi/gorti/rti/internal/hla/object"
+	timepkg "github.com/cbchoi/gorti/rti/internal/hla/time"
 )
 
 // ----------------------------------------------------------------------------
@@ -58,7 +58,7 @@ func newTestRtidWithTime(t *testing.T) *testRtid {
 
 func newTestRtidShared(t *testing.T, withTime bool) *testRtid {
 	t.Helper()
-	clock := core.NewFakeClock(time.Unix(0, 0))
+	clock := core.NewManualClock(time.Unix(0, 0))
 	declMgr := declaration.New()
 	outbox := newTestOutbox()
 	objReg, err := object.New(object.Options{
@@ -361,7 +361,7 @@ func TestJoinFederation_CallbackOpenFailurePreservesAllErrors(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 
-			joined, err := conn.JoinFederation(ctx, FederationSpec{Name: "fed"}, "alpha")
+			joined, err := conn.JoinFederation(ctx, FederationSpec{Name: testFederationName}, "alpha")
 			if joined != nil {
 				t.Fatalf("JoinFederation returned federate %+v on callback open failure", joined)
 			}
@@ -377,7 +377,7 @@ func TestJoinFederation_CallbackOpenFailurePreservesAllErrors(t *testing.T) {
 			if fedClient.resignContextErr != nil {
 				t.Fatalf("compensation context error = %v, want active cleanup context", fedClient.resignContextErr)
 			}
-			if req := fedClient.resignRequest; req.GetFederationName() != "fed" || req.GetFederateHandle() != 23 ||
+			if req := fedClient.resignRequest; req.GetFederationName() != testFederationName || req.GetFederateHandle() != 23 ||
 				req.GetAction() != rtiv1.ResignAction_RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES {
 				t.Fatalf("compensating ResignFederation request = %+v", req)
 			}
@@ -578,7 +578,7 @@ func TestJoinFederation_LazyCallbackReadyFailureCompensatesResign(t *testing.T) 
 				stream: streamClient,
 			}
 
-			joined, err := conn.JoinFederation(context.Background(), FederationSpec{Name: "fed"}, "alpha")
+			joined, err := conn.JoinFederation(context.Background(), FederationSpec{Name: testFederationName}, "alpha")
 			if joined != nil {
 				t.Fatalf("JoinFederation returned federate %+v after lazy ready failure", joined)
 			}
@@ -646,7 +646,7 @@ func TestJoinFederation_LegacyFallbackRequiresUnimplementedBeforeReady(t *testin
 				fed:    fedClient,
 				stream: client,
 			}
-			fed, err := conn.JoinFederation(context.Background(), FederationSpec{Name: "fed"}, "alpha")
+			fed, err := conn.JoinFederation(context.Background(), FederationSpec{Name: testFederationName}, "alpha")
 			if err != nil {
 				t.Fatalf("JoinFederation: %v", err)
 			}

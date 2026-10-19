@@ -20,6 +20,7 @@ Design notes:
 from __future__ import annotations
 
 import hashlib
+import os
 import socket
 import subprocess
 import sys
@@ -38,7 +39,7 @@ for _p in (str(HERE), str(PYSDK), str(GENERATED)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-RTID_BINARY = REPO_ROOT / "bin" / "rtid"
+RTID_BINARY = Path(os.environ.get("GORTI_RTID", str(REPO_ROOT / "bin" / "rtid")))
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -79,6 +80,9 @@ def rtid_url() -> Iterator[str]:
             "go build -o bin/rtid ./rti/cmd/rtid "
             "(CI's `go` stage does this before the `ivct` stage runs)"
         )
+    expected_hash = os.environ.get("GORTI_RTID_SHA256")
+    if expected_hash and hashlib.sha256(RTID_BINARY.read_bytes()).hexdigest() != expected_hash.lower():
+        pytest.fail("GORTI_RTID_SHA256 does not match the selected server")
     listen_port = _free_port()
     metrics_port = _free_port()
     while metrics_port == listen_port:  # pragma: no cover — kernel rarely repeats

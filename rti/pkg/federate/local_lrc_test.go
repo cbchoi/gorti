@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -287,7 +287,7 @@ func newLocalLRCTestFederate(
 	connection.localLRCAckEvery = uint32(queueCapacity)
 	fed := &Federate{
 		conn:                 connection,
-		federationName:       "fed",
+		federationName:       testFederationName,
 		federateHandle:       7,
 		federationGeneration: 9,
 		handles:              testLocalStateTables(),
@@ -301,7 +301,7 @@ func newLocalLRCTestFederate(
 	return fed
 }
 
-func waitLocalLRCSignal(t *testing.T, ctx context.Context, name string, signal <-chan struct{}) {
+func waitLocalLRCSignal(ctx context.Context, t *testing.T, name string, signal <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-signal:
@@ -385,7 +385,7 @@ func TestFederateResignWaitsForLocalLRCFlushACKAndStopsStream(t *testing.T) {
 	if _, err := fed.QueueInteractionByHandle(ctx, 12, nil); err != nil {
 		t.Fatal(err)
 	}
-	waitLocalLRCSignal(t, ctx, "queued operation", server.operationSeen)
+	waitLocalLRCSignal(ctx, t, "queued operation", server.operationSeen)
 	lrc := fed.localLRC
 	if lrc == nil {
 		t.Fatal("queued operation did not open LocalLRC")
@@ -393,14 +393,14 @@ func TestFederateResignWaitsForLocalLRCFlushACKAndStopsStream(t *testing.T) {
 
 	resignDone := make(chan error, 1)
 	go func() { resignDone <- fed.Resign(ctx) }()
-	waitLocalLRCSignal(t, ctx, "resign flush", server.flushSeen)
+	waitLocalLRCSignal(ctx, t, "resign flush", server.flushSeen)
 	requireLocalLRCSignalOpen(t, "wire resign", server.resigned)
 	requireLocalLRCSignalOpen(t, "LocalLRC sender", lrc.sendDone)
 	requireLocalLRCSignalOpen(t, "LocalLRC receiver", lrc.recvDone)
 	requireLocalLRCSignalOpen(t, "LocalLRC server stream", server.exchangeDone)
 
 	close(server.releaseACK)
-	waitLocalLRCSignal(t, ctx, "flush ACK", server.ackSent)
+	waitLocalLRCSignal(ctx, t, "flush ACK", server.ackSent)
 	select {
 	case err := <-resignDone:
 		if err != nil {
@@ -409,10 +409,10 @@ func TestFederateResignWaitsForLocalLRCFlushACKAndStopsStream(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatalf("Resign did not finish after flush ACK: %v", ctx.Err())
 	}
-	waitLocalLRCSignal(t, ctx, "wire resign", server.resigned)
-	waitLocalLRCSignal(t, ctx, "LocalLRC sender shutdown", lrc.sendDone)
-	waitLocalLRCSignal(t, ctx, "LocalLRC receiver shutdown", lrc.recvDone)
-	waitLocalLRCSignal(t, ctx, "LocalLRC server stream shutdown", server.exchangeDone)
+	waitLocalLRCSignal(ctx, t, "wire resign", server.resigned)
+	waitLocalLRCSignal(ctx, t, "LocalLRC sender shutdown", lrc.sendDone)
+	waitLocalLRCSignal(ctx, t, "LocalLRC receiver shutdown", lrc.recvDone)
+	waitLocalLRCSignal(ctx, t, "LocalLRC server stream shutdown", server.exchangeDone)
 	if got := fed.LocalLRCStats().Acked; got != 1 {
 		t.Fatalf("acked sequence = %d, want 1", got)
 	}
@@ -429,7 +429,7 @@ func TestFederateResignCanceledLocalLRCReturnsContextErrorAndStopsStream(t *test
 			if _, err := fed.QueueInteractionByHandle(waitCtx, 12, nil); err != nil {
 				t.Fatal(err)
 			}
-			waitLocalLRCSignal(t, waitCtx, "queued operation", server.operationSeen)
+			waitLocalLRCSignal(waitCtx, t, "queued operation", server.operationSeen)
 			lrc := fed.localLRC
 			if lrc == nil {
 				t.Fatal("queued operation did not open LocalLRC")
@@ -438,7 +438,7 @@ func TestFederateResignCanceledLocalLRCReturnsContextErrorAndStopsStream(t *test
 			resignCtx, trigger := newManualDoneContext(cause)
 			resignDone := make(chan error, 1)
 			go func() { resignDone <- fed.Resign(resignCtx) }()
-			waitLocalLRCSignal(t, waitCtx, "resign flush", server.flushSeen)
+			waitLocalLRCSignal(waitCtx, t, "resign flush", server.flushSeen)
 			requireLocalLRCSignalOpen(t, "wire resign", server.resigned)
 			trigger()
 
@@ -450,10 +450,10 @@ func TestFederateResignCanceledLocalLRCReturnsContextErrorAndStopsStream(t *test
 			case <-waitCtx.Done():
 				t.Fatalf("canceled Resign did not finish: %v", waitCtx.Err())
 			}
-			waitLocalLRCSignal(t, waitCtx, "best-effort wire resign", server.resigned)
-			waitLocalLRCSignal(t, waitCtx, "LocalLRC sender shutdown", lrc.sendDone)
-			waitLocalLRCSignal(t, waitCtx, "LocalLRC receiver shutdown", lrc.recvDone)
-			waitLocalLRCSignal(t, waitCtx, "LocalLRC server stream shutdown", server.exchangeDone)
+			waitLocalLRCSignal(waitCtx, t, "best-effort wire resign", server.resigned)
+			waitLocalLRCSignal(waitCtx, t, "LocalLRC sender shutdown", lrc.sendDone)
+			waitLocalLRCSignal(waitCtx, t, "LocalLRC receiver shutdown", lrc.recvDone)
+			waitLocalLRCSignal(waitCtx, t, "LocalLRC server stream shutdown", server.exchangeDone)
 			if got := fed.LocalLRCStats().Acked; got != 0 {
 				t.Fatalf("acked sequence = %d after %v, want 0", got, cause)
 			}
@@ -523,8 +523,8 @@ func TestLocalLRCAwaitReturnsExactOperationFailure(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("server did not receive failed operation")
 	}
-	deadline := time.Now().Add(time.Second)
-	for fed.LocalLRCStats().Failures == 0 && time.Now().Before(deadline) {
+	deadline := time.Now().Add(time.Second)                                //nolint:forbidigo // This deadline bounds a real asynchronous transport test.
+	for fed.LocalLRCStats().Failures == 0 && time.Now().Before(deadline) { //nolint:forbidigo // This deadline bounds a real asynchronous transport test.
 		time.Sleep(time.Millisecond)
 	}
 	if err := fed.AwaitLocalLRC(ctx, sequence); !errors.Is(err, ErrInteractionClassNotPublished) {

@@ -9,8 +9,8 @@ import (
 // parent is only legitimate when it IS the root.
 const objectClassRootName = "HLAobjectRoot"
 
-// parentValidator emits FOM-011 for every object class whose ParentName
-// fails to resolve. Resolution succeeds when the parent name is found in
+// parentValidator emits FOM-011 for every object class whose ParentKey
+// fails to resolve. Resolution succeeds when the parent key is found in
 // the same module's class set OR is the universal root (HLAobjectRoot).
 //
 // TODO(#1): once TASK-008 lands, "found in same module" expands to "found
@@ -30,17 +30,18 @@ func (parentValidator) Run(in diagnosticInput) []Diagnostic {
 		objectClassRootName: {},
 	}
 	for _, oc := range classes {
-		known[oc.Name] = struct{}{}
+		known[oc.Key()] = struct{}{}
 	}
 
 	reported := map[string]struct{}{}
 	var diags []Diagnostic
 	for _, oc := range classes {
-		if oc.Name == objectClassRootName {
+		classKey, parentKey := oc.Key(), oc.ParentKey()
+		if classKey == objectClassRootName {
 			continue
 		}
-		if oc.ParentName == "" {
-			key := oc.Name + "\x00<root>"
+		if parentKey == "" {
+			key := classKey + "\x00<root>"
 			if _, dup := reported[key]; dup {
 				continue
 			}
@@ -49,14 +50,14 @@ func (parentValidator) Run(in diagnosticInput) []Diagnostic {
 				Code: "FOM-011",
 				Message: fmt.Sprintf(
 					"object class %q is not nested under %s; missing parent class",
-					oc.Name, objectClassRootName,
+					classKey, objectClassRootName,
 				),
 				ModulePath: in.modulePath,
 			})
 			continue
 		}
-		if _, ok := known[oc.ParentName]; !ok {
-			key := oc.Name + "\x00" + oc.ParentName
+		if _, ok := known[parentKey]; !ok {
+			key := classKey + "\x00" + parentKey
 			if _, dup := reported[key]; dup {
 				continue
 			}
@@ -65,7 +66,7 @@ func (parentValidator) Run(in diagnosticInput) []Diagnostic {
 				Code: "FOM-011",
 				Message: fmt.Sprintf(
 					"object class %q references non-existent parent %q",
-					oc.Name, oc.ParentName,
+					classKey, parentKey,
 				),
 				ModulePath: in.modulePath,
 			})

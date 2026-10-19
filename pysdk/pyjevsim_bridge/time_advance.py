@@ -42,7 +42,7 @@ from __future__ import annotations
 import asyncio
 import math
 from collections import deque
-from typing import Any
+from typing import Any, Protocol, cast
 
 from pyjevsim_bridge._protocol import CoupledModelProtocol
 from pyjevsim_bridge.port_mapping import PortMapping
@@ -54,6 +54,16 @@ from rti1516e.events import (
     ReflectAttributeValues,
     TimeAdvanceGrant,
 )
+
+
+class _DiscoverHandler(Protocol):
+    def __call__(
+        self, object_handle: int, class_name: str, instance_name: str
+    ) -> None: ...
+
+
+class _ReflectHandler(Protocol):
+    def __call__(self, object_handle: int, values: dict[str, Any]) -> None: ...
 
 
 class HLAFederate:
@@ -116,6 +126,8 @@ class HLAFederate:
         self._owned_connection: RtiConnection | None = None
         self._owned_federate_cm: Any | None = None
         self._federate: Federate | None = None
+        self._close_lock = asyncio.Lock()
+        self._close_operation: asyncio.Task[None] | None = None
         # Object-class state. Populated lazily on first
         # ``_ensure_federate`` call when the coupled model exposes
         # ``ObjectClassFederateProtocol`` methods.
@@ -137,38 +149,30 @@ class HLAFederate:
         federation, then drives ``step_once`` ``ticks`` times. Resigns
         and closes deterministically on exit, even if a step raises.
         """
-        if self._connection is not None:
-            # Caller-managed connection: just join + step + resign.
-            async with self._connection.join_federation(
-                self.federation, federate_name=self.federate_name
-            ) as fed:
-                self._federate = fed
-                try:
-                    for _ in range(ticks):
-                        await self.step_once()
-                finally:
-                    self._federate = None
-                    self._clear_session_state()
-            return
-
-        if self._url is None:
+        if self._advance_failed:
             raise RuntimeError(
-                "HLAFederate.run: neither connection nor url was supplied"
+                "HLAFederate: previous advance or cleanup failed; "
+                "aclose must complete before run"
             )
+        original: BaseException | None = None
+        try:
+            await self._ensure_federate()
+            for _ in range(ticks):
+                await self.step_once()
+        except BaseException as exc:
+            original = exc
 
-        async with (
-            RtiConnection.connect(self._url) as rti,
-            rti.join_federation(
-                self.federation, federate_name=self.federate_name
-            ) as fed,
-        ):
-            self._federate = fed
-            try:
-                for _ in range(ticks):
-                    await self.step_once()
-            finally:
-                self._federate = None
-                self._clear_session_state()
+        try:
+            await self.aclose()
+        except BaseException as cleanup_error:
+            if original is None:
+                raise
+            raise BaseExceptionGroup(
+                "HLAFederate run failed and cleanup reported errors",
+                [original, cleanup_error],
+            ) from original
+        if original is not None:
+            raise original
 
     async def step_once(self) -> None:
         """Run one bridge cycle. Returns when the cycle's TimeAdvanceGrant
@@ -329,7 +333,7 @@ class HLAFederate:
         else:
             if self._url is None:
                 raise RuntimeError(
-                    "HLAFederate: no connection and no url configured"
+                    "HLAFederate: neither connection nor url was supplied"
                 )
             self._owned_connection = await RtiConnection.connect(
                 self._url
@@ -451,7 +455,7 @@ class HLAFederate:
             class_name, instance_name=instance_local_name
         )
         self._instance_handles[instance_local_name] = handle
-        return handle
+        return int(handle)
 
     async def _await_grant(
         self, fed: Federate, t_request: float
@@ -562,12 +566,18 @@ class HLAFederate:
                 return
             handler = getattr(model, "discover_handler", None)
             if callable(handler):
-                handler(event.object_handle, event.class_name, event.instance_name)
+                cast("_DiscoverHandler", handler)(
+                    event.object_handle,
+                    event.class_name,
+                    event.instance_name,
+                )
             return
         if isinstance(event, ReflectAttributeValues):
             handler = getattr(model, "reflect_handler", None)
             if callable(handler):
-                handler(event.object_handle, dict(event.values))
+                cast("_ReflectHandler", handler)(
+                    event.object_handle, dict(event.values)
+                )
             return
 
     async def _run_internal_cycle(self, fed: Federate) -> None:
@@ -643,25 +653,66 @@ class HLAFederate:
         leaks no resources. The method is provided for symmetry with
         the ``run()`` lifecycle and caller-managed bridge runners.
         """
-        errors: list[BaseException] = []
+        async with self._close_lock:
+            if (
+                self._owned_federate_cm is None
+                and self._owned_connection is None
+                and self._close_operation is None
+            ):
+                self._federate = None
+                self._clear_session_state()
+                return
+            operation = self._close_operation
+            if operation is None:
+                operation = asyncio.create_task(self._aclose_once())
+                self._close_operation = operation
+        try:
+            # Cleanup is shared, but cancellation belongs to each caller.
+            # Shielding prevents one waiter from cancelling the operation and
+            # lets CancelledError retain its identity on that waiter.
+            await asyncio.shield(operation)
+        finally:
+            if operation.done():
+                async with self._close_lock:
+                    if self._close_operation is operation:
+                        self._close_operation = None
+
+    async def _aclose_once(self) -> None:
         cm = self._owned_federate_cm
         if cm is not None:
-            self._owned_federate_cm = None
             try:
                 await cm.__aexit__(None, None, None)
+            except asyncio.CancelledError:
+                self._advance_failed = True
+                raise
             except BaseException as exc:
-                errors.append(exc)
-        self._federate = None
+                # The connection is a dependency of resign. Do not close it
+                # after a failed federate exit: doing so would make a real
+                # retry indistinguishable from a false success.
+                self._advance_failed = True
+                raise BaseExceptionGroup(
+                    "HLAFederate federate cleanup failed", [exc]
+                ) from exc
+            else:
+                self._owned_federate_cm = None
+                self._federate = None
+        else:
+            self._federate = None
         owned = self._owned_connection
         if owned is not None:
-            self._owned_connection = None
             try:
                 await owned.__aexit__(None, None, None)
+            except asyncio.CancelledError:
+                self._advance_failed = True
+                raise
             except BaseException as exc:
-                errors.append(exc)
+                self._advance_failed = True
+                raise BaseExceptionGroup(
+                    "HLAFederate connection cleanup failed", [exc]
+                ) from exc
+            else:
+                self._owned_connection = None
         self._clear_session_state()
-        if errors:
-            raise BaseExceptionGroup("HLAFederate cleanup failed", errors)
 
     def _clear_session_state(self) -> None:
         """Discard state scoped to one joined federation session."""

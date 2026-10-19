@@ -1,41 +1,46 @@
 # Roadmap
 
-## Near-term project work
+## Implemented foundation
 
-- Stabilize the v0.9 public API and publish repeatable release artifacts.
-- Expand Linux, macOS, and Windows SDK integration coverage.
-- Keep conformance fixtures and canonical logs versioned with behavioral
-  changes.
-- Complete publication metadata and archive a reproducibility bundle.
+The current single-server implementation provides Go, Python, and Java
+interfaces, dynamic FOM joins, Float64 and Integer64 execution, timed
+save/restore, callback and SDK-state recovery, ownership, DDM, and MOM services.
+Go receive-order traffic uses LocalLRC admission by default; confirmed calls
+remain available. The optional `callback_async` build pipelines eligible
+callback reports. Audit/replay is a separate runtime plugin.
 
-## Future performance track
+[Verification](verification.md) records the completed service campaigns and
+requirements review. [Performance](performance.md) reports the October 2026
+Portico comparisons.
 
-LocalLRC already provides bounded local admission, a pipelined stream, and
-cumulative ACKs for Go receive-order traffic; Python also has a bounded
-pipelined extension. Further performance work is tracked separately from the
-v0.9 release. A five-warm-up, 30-pair receive-order campaign completed with
-exact semantic evidence. Its central estimates favored Portico, while the
-predeclared practical-superiority decision was inconclusive. The next
-investigation will evaluate:
+## Standards and release work
 
-- a consistent public asynchronous API across SDKs;
-- ordered completion handles and explicit server-failure reporting;
-- a dedicated lighter transport only if it preserves the strict API boundary;
-- equivalent asynchronous reference RTI and gorti choreography;
-- server-to-subscriber callback serialization and stream scheduling;
-- allocation-aware strict journal encoding that preserves the current
-  write-ahead error boundary;
-- real per-federation journal-sequence metrics and profile status;
-- a paired multi-process Time Management workload; and
-- repetition of the 5+30 AB/BA campaign from a clean release commit.
+- Resolve the 25 open source-interpretation records in the IEEE requirements
+  inventory and review the completeness of clause coverage.
+- Obtain independent service and language-mapping assessment.
+- Repeat the full Go/Python/Java and race selections on an archived release
+  candidate, with exact source and fixture identities.
+- Expand Java and cross-language execution coverage on Linux and macOS.
+- Publish release archives, documentation, and reproducible experiment manifests.
 
-The synchronous API will continue to return only after the server ACK.
-Any alternative must preserve TSO-before-grant ordering, atomic recipient
-reservation, federation-generation fencing, teardown, and delivery accounting.
+## Performance work
 
-## Out of scope for the current release
+- Evaluate a sliding callback-report window that can replace acknowledged
+  frames without waiting for the entire current window.
+- Measure long-lived participants across independent sessions, alongside the
+  existing fresh-process comparisons.
+- Extend matched workloads to multiple hosts, more federates, and time management.
+- Reduce callback serialization and scheduling costs while retaining admission,
+  callback ordering, error reporting, and checkpoint behavior.
+- Assess a consistent asynchronous completion interface across SDKs.
+- Measure audit/replay overhead separately from the default core profile.
 
-- Formal IVCT certification.
-- A Java federate SDK.
-- HLA 1.3 and IEEE 1516-2000 compatibility.
-- Production support for clustered or failover RTI deployment.
+Each optimization is compared with the previous build under the same workload
+and checked with the affected IEEE service tests.
+
+## Separate experimental work
+
+Cluster/failover deployment and non-default time/ownership algorithms live
+under `rti/experiments`. They are separate from the supported single-server
+configuration. HLA 1.3 and IEEE 1516-2000 API compatibility are not current
+development targets.

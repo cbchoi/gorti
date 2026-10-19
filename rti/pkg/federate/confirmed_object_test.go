@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -87,7 +87,7 @@ func TestConfirmedObjectStreamSharesOrderingAndSurvivesRejection(t *testing.T) {
 			confirmedObject:              rtiv1.NewConfirmedObjectServiceClient(cc),
 			confirmedObjectStreamEnabled: true,
 		},
-		federationName: "fed", federateHandle: 7,
+		federationName: testFederationName, federateHandle: 7,
 		interactionContext: lifecycle, interactionCancel: cancel,
 	}
 

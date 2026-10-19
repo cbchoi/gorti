@@ -1,0 +1,3153 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-03",
+  "increment": "applicable-requirements-r1",
+  "verdict": "INCOMPLETE_WITH_REPRODUCED_FAILURES",
+  "coverage_complete": false,
+  "full_conformance": false,
+  "requirement_records": 712,
+  "applicable": 639,
+  "unresolved": 25,
+  "applicable_without_oracle_before": 402,
+  "applicable_without_oracle_after": 229,
+  "newly_linked_applicable": 173,
+  "test_links_before": 347,
+  "test_links_after": 597,
+  "passing_link_records": 583,
+  "nonpassing_variant_links": 14,
+  "not_found_links": 0,
+  "all_applicable_semantic_verdicts_remain_open": true,
+  "linked_does_not_mean_fulfilled": true,
+  "production_changes": false,
+  "evidence_root": "D:/workspace/gorti/applicable-requirements-20261003-r1",
+  "server_sha256": "fc2bd04a5e64970e2dd0f6cb37f98741a257a578e273cae6458d4fd9602d75e8",
+  "progress": [
+    {
+      "file": "declaration-object.json",
+      "before_unlinked": 43,
+      "after_unlinked": 3,
+      "links_before": 61,
+      "links_after": 135,
+      "newly_linked_ids": [
+        "DM2010-FDD-HIERARCHY",
+        "DM2010-IMPLICIT-DELETE-PRIVILEGE",
+        "DM2010-OBJECT-CLASS-KNOWLEDGE",
+        "DM2010-OBJECT-OWNERSHIP-ROUTING",
+        "DM2010-INTERACTION-DECLARATION-STATE",
+        "DM2010-INTERACTION-PROMOTION",
+        "DM2010-PUBLISH-INTERACTION",
+        "DM2010-UNPUBLISH-INTERACTION",
+        "DM2010-SUBSCRIBE-OBJECT-ADDITIVE",
+        "DM2010-SUBSCRIBE-OBJECT-DISCOVERY",
+        "DM2010-SUBSCRIBE-INTERACTION",
+        "DM2010-UNSUBSCRIBE-INTERACTION",
+        "DM2010-STOP-REGISTRATION-CALLBACK",
+        "OM2010-DISCOVERY-KNOWLEDGE",
+        "OM2010-IN-OUT-SCOPE-REFLECTS",
+        "OM2010-ATTRIBUTE-RELEVANCE-CONTROL",
+        "OM2010-INTERACTION-RECEIVED-CLASS",
+        "OM2010-AUTO-PROVIDE-SWITCH",
+        "OM2010-RELIABLE-RATE-AND-ADVICE",
+        "OM2010-RESERVE-SINGLE-INPUT",
+        "OM2010-RESERVE-SINGLE-CALLBACK",
+        "OM2010-RELEASE-SINGLE-NAME",
+        "OM2010-RESERVE-MULTIPLE-INPUT",
+        "OM2010-RESERVE-MULTIPLE-CALLBACK",
+        "OM2010-REGISTER-NAME-ADMISSION",
+        "OM2010-DISCOVER-CALLBACK",
+        "OM2010-UPDATE-INPUT-ADMISSION",
+        "OM2010-UPDATE-SUBSCRIPTION-WINDOW",
+        "OM2010-REFLECT-OPTIONAL-METADATA",
+        "OM2010-REFLECT-RECIPIENT-ADMISSION",
+        "OM2010-SEND-INTERACTION-INPUTS",
+        "OM2010-SEND-INTERACTION-DELIVERY-WINDOW",
+        "OM2010-RECEIVE-INTERACTION-ADMISSION",
+        "OM2010-REMOVE-ADMISSION-KNOWLEDGE",
+        "OM2010-LOCAL-DELETE",
+        "OM2010-OUT-OF-SCOPE-CALLBACK",
+        "OM2010-REQUEST-UPDATE-TAG-TIME",
+        "OM2010-PROVIDE-UPDATE-CALLBACK",
+        "OM2010-UPDATES-ON-CALLBACK",
+        "OM2010-UPDATES-OFF-CALLBACK"
+      ]
+    },
+    {
+      "file": "fm.json",
+      "before_unlinked": 295,
+      "after_unlinked": 212,
+      "links_before": 74,
+      "links_after": 165,
+      "newly_linked_ids": [
+        "FM2010-CONNECT-FIRST",
+        "FM2010-CALLBACK-MODELS",
+        "FM2010-SYNC-INDEPENDENT-POINTS",
+        "FM2010-FDD-CASE-SENSITIVE",
+        "FM2010-FDD-COMPLIANT-MODULES",
+        "FM2010-FDD-RATE-CONFLICT",
+        "FM2010-FDD-SWITCH-CONFLICT",
+        "FM2010-FDD-ACCESS-CURRENT-FDD",
+        "FM2010-JOIN-IDENTITY",
+        "FM2010-RESIGN-LAST-MEMBER-OVERRIDE",
+        "FM2010-SYNC-REGISTRATION-CALLBACK",
+        "FM2010-SAVE-REQUEST-REPLACE",
+        "FM2010-S2-EXCEPTION-B",
+        "FM2010-S2-EXCEPTION-C",
+        "FM2010-S4-POST-A",
+        "FM2010-S5-PRE-B",
+        "FM2010-S5-POST-A",
+        "FM2010-S5-EXCEPTION-A",
+        "FM2010-S5-EXCEPTION-D",
+        "FM2010-S5-EXCEPTION-G",
+        "FM2010-S6-PRE-B",
+        "FM2010-S6-PRE-C",
+        "FM2010-S6-POST-A",
+        "FM2010-S6-EXCEPTION-A",
+        "FM2010-S6-EXCEPTION-B",
+        "FM2010-S9-PRE-A",
+        "FM2010-S9-PRE-B",
+        "FM2010-S9-POST-A",
+        "FM2010-S9-EXCEPTION-C",
+        "FM2010-S9-EXCEPTION-J",
+        "FM2010-S10-PRE-B",
+        "FM2010-S10-PRE-C",
+        "FM2010-S10-POST-A",
+        "FM2010-S10-EXCEPTION-D",
+        "FM2010-S10-EXCEPTION-E",
+        "FM2010-S11-PRE-E",
+        "FM2010-S12-POST-A",
+        "FM2010-S12-POST-B",
+        "FM2010-S13-POST-A",
+        "FM2010-S14-PRE-D",
+        "FM2010-S14-POST-A",
+        "FM2010-S14-EXCEPTION-A",
+        "FM2010-S15-PRE-E",
+        "FM2010-S15-POST-A",
+        "FM2010-S16-PRE-D",
+        "FM2010-S16-PRE-E",
+        "FM2010-S16-POST-A",
+        "FM2010-S16-POST-B",
+        "FM2010-S16-EXCEPTION-B",
+        "FM2010-S16-EXCEPTION-C",
+        "FM2010-S16-EXCEPTION-D",
+        "FM2010-S17-POST-A",
+        "FM2010-S18-PRE-C",
+        "FM2010-S18-EXCEPTION-C",
+        "FM2010-S19-PRE-C",
+        "FM2010-S19-POST-A",
+        "FM2010-S19-EXCEPTION-C",
+        "FM2010-S20-POST-A",
+        "FM2010-S20-POST-B",
+        "FM2010-S21-PRE-C",
+        "FM2010-S21-POST-A",
+        "FM2010-S21-EXCEPTION-B",
+        "FM2010-S22-PRE-C",
+        "FM2010-S22-POST-A",
+        "FM2010-S22-EXCEPTION-B",
+        "FM2010-S23-POST-A",
+        "FM2010-S24-PRE-D",
+        "FM2010-S24-PRE-H",
+        "FM2010-S24-EXCEPTION-B",
+        "FM2010-S25-POST-A",
+        "FM2010-S28-PRE-C",
+        "FM2010-S28-PRE-D",
+        "FM2010-S28-POST-A",
+        "FM2010-S28-EXCEPTION-A",
+        "FM2010-S28-EXCEPTION-C",
+        "FM2010-S29-POST-A",
+        "FM2010-S29-POST-B",
+        "FM2010-S30-PRE-C",
+        "FM2010-S30-EXCEPTION-B",
+        "FM2010-S31-PRE-C",
+        "FM2010-S31-POST-A",
+        "FM2010-S31-EXCEPTION-B",
+        "FM2010-S32-POST-A"
+      ]
+    },
+    {
+      "file": "framework.json",
+      "before_unlinked": 1,
+      "after_unlinked": 0,
+      "links_before": 6,
+      "links_after": 8,
+      "newly_linked_ids": [
+        "FRAME2010-COORDINATION"
+      ]
+    },
+    {
+      "file": "java-annex.json",
+      "before_unlinked": 37,
+      "after_unlinked": 5,
+      "links_before": 33,
+      "links_after": 91,
+      "newly_linked_ids": [
+        "JAVA2010-NULL-AMBASSADOR",
+        "JAVA2010-ENCODING-COMPLEX",
+        "JAVA2010-SERVICE-MAPPING-01",
+        "JAVA2010-SERVICE-MAPPING-02",
+        "JAVA2010-SERVICE-MAPPING-03",
+        "JAVA2010-SERVICE-MAPPING-04",
+        "JAVA2010-SERVICE-MAPPING-05",
+        "JAVA2010-SERVICE-MAPPING-06",
+        "JAVA2010-SERVICE-MAPPING-07",
+        "JAVA2010-SERVICE-MAPPING-08",
+        "JAVA2010-SERVICE-MAPPING-09",
+        "JAVA2010-SERVICE-MAPPING-10",
+        "JAVA2010-SERVICE-MAPPING-12",
+        "JAVA2010-SERVICE-MAPPING-13",
+        "JAVA2010-SERVICE-MAPPING-14",
+        "JAVA2010-SERVICE-MAPPING-15",
+        "JAVA2010-SERVICE-MAPPING-16",
+        "JAVA2010-SERVICE-MAPPING-17",
+        "JAVA2010-SERVICE-MAPPING-18",
+        "JAVA2010-SERVICE-MAPPING-19",
+        "JAVA2010-SERVICE-MAPPING-20",
+        "JAVA2010-SERVICE-MAPPING-21",
+        "JAVA2010-SERVICE-MAPPING-22",
+        "JAVA2010-SERVICE-MAPPING-23",
+        "JAVA2010-SERVICE-MAPPING-25",
+        "JAVA2010-SERVICE-MAPPING-27",
+        "JAVA2010-SERVICE-MAPPING-29",
+        "JAVA2010-SERVICE-MAPPING-30",
+        "JAVA2010-SERVICE-MAPPING-31",
+        "JAVA2010-SERVICE-MAPPING-32",
+        "JAVA2010-SERVICE-MAPPING-33",
+        "JAVA2010-SERVICE-MAPPING-34"
+      ]
+    },
+    {
+      "file": "omt.json",
+      "before_unlinked": 3,
+      "after_unlinked": 0,
+      "links_before": 34,
+      "links_after": 38,
+      "newly_linked_ids": [
+        "OMTSLICE2010-TEXT-CASE",
+        "OMTSLICE2010-DIMENSION-NONBLANK",
+        "OMTSLICE2010-MERGE-SINGLETON-TABLES"
+      ]
+    },
+    {
+      "file": "ownership-ddm.json",
+      "before_unlinked": 1,
+      "after_unlinked": 0,
+      "links_before": 52,
+      "links_after": 53,
+      "newly_linked_ids": [
+        "DDM2010-TIME-INDEPENDENCE"
+      ]
+    },
+    {
+      "file": "support-mom.json",
+      "before_unlinked": 15,
+      "after_unlinked": 8,
+      "links_before": 40,
+      "links_after": 53,
+      "newly_linked_ids": [
+        "SM-SUPPORT-EVOKE-SINGLE",
+        "SM-MOM-PREDEFINED-IMMUTABLE",
+        "SM-MOM-OBJECT-CARDINALITY",
+        "SM-MOM-UNTIMED-UNTAGGED",
+        "SM-MOM-TABLE7-SERVICE-DATATYPES",
+        "SM-CONFORMANCE-RTI-SERVICES",
+        "SM-CONFORMANCE-RTI-LANGUAGE-SCOPE"
+      ]
+    },
+    {
+      "file": "time-mapping.json",
+      "before_unlinked": 7,
+      "after_unlinked": 1,
+      "links_before": 47,
+      "links_after": 54,
+      "newly_linked_ids": [
+        "TM-PREFERRED-ORDER",
+        "TM-REGULATION-LIFECYCLE",
+        "TM-LEGAL-ORDER-TYPES",
+        "TM-TARA-QUEUED-EQUALITY",
+        "TM-TAG-CLOSURE",
+        "TM-QUERY-ACTUAL-LOOKAHEAD"
+      ]
+    }
+  ],
+  "focused_go_campaigns": [
+    {
+      "path": "omt-go.jsonl",
+      "top_pass": 110,
+      "top_fail": 0,
+      "sub_pass": 321,
+      "sub_fail": 0,
+      "skip": 0
+    },
+    {
+      "path": "declaration/new-oracles.jsonl",
+      "top_pass": 2,
+      "top_fail": 5,
+      "sub_pass": 2,
+      "sub_fail": 2,
+      "skip": 0
+    },
+    {
+      "path": "declaration/review-oracles.jsonl",
+      "top_pass": 44,
+      "top_fail": 4,
+      "sub_pass": 43,
+      "sub_fail": 2,
+      "skip": 0
+    },
+    {
+      "path": "declaration/live-name-boundaries-r2.jsonl",
+      "top_pass": 0,
+      "top_fail": 1,
+      "sub_pass": 0,
+      "sub_fail": 4,
+      "skip": 0
+    },
+    {
+      "path": "time-support/focused-go.jsonl",
+      "top_pass": 14,
+      "top_fail": 0,
+      "sub_pass": 300,
+      "sub_fail": 0,
+      "skip": 0
+    },
+    {
+      "path": "time-support/order-state-go.jsonl",
+      "top_pass": 1,
+      "top_fail": 0,
+      "sub_pass": 0,
+      "sub_fail": 0,
+      "skip": 0
+    },
+    {
+      "path": "declaration/passive-routing.jsonl",
+      "top_pass": 1,
+      "top_fail": 0,
+      "sub_pass": 0,
+      "sub_fail": 0,
+      "skip": 0
+    }
+  ],
+  "other_fresh_campaigns": {
+    "ivct_corrected": {
+      "pass": 35,
+      "fail": 0,
+      "skip": 0
+    },
+    "java_selected": {
+      "pass": 204,
+      "fail": 0,
+      "skip": 0,
+      "new_methods": 3
+    },
+    "evidence_tools": {
+      "pass": 129,
+      "fail": 0,
+      "subtest_pass": 112,
+      "warnings": 1
+    }
+  },
+  "campaign_counts_overlap": true,
+  "prior_failing_evidence_preserved": true,
+  "nonpassing_links": [
+    {
+      "id": "DM2010-IMPLICIT-DELETE-PRIVILEGE",
+      "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+      "name": "TestApplicableR1ImplicitDeletePublicationLifetime",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "OM2010-RESERVE-SINGLE-INPUT",
+      "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+      "name": "TestApplicableR1IllegalSingleReservationHasNoEffects",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "OM2010-RESERVE-SINGLE-INPUT",
+      "path": "rti/internal/hla/ddm/applicable_r1_time_independence_test.go",
+      "name": "TestApplicableR1LiveObjectNameAdmissionBoundaries",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "OM2010-RESERVE-MULTIPLE-INPUT",
+      "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+      "name": "TestApplicableR1IllegalMultipleReservationIsAtomic",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "OM2010-RESERVE-MULTIPLE-INPUT",
+      "path": "rti/internal/hla/ddm/applicable_r1_time_independence_test.go",
+      "name": "TestApplicableR1LiveObjectNameAdmissionBoundaries",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "OM2010-REGISTER-NAME-ADMISSION",
+      "path": "rti/internal/hla/object/applicable_r1_declaration_review_test.go",
+      "name": "TestApplicableR1ExplicitRegistrationRequiresReservation",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "OM2010-REGISTER-NAME-ADMISSION",
+      "path": "rti/internal/hla/ddm/applicable_r1_time_independence_test.go",
+      "name": "TestApplicableR1LiveObjectNameAdmissionBoundaries",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "FM2010-SYNC-REGISTRATION-CALLBACK",
+      "path": "tests/conformance/rti/ivct-subset/tc_sync_point.py",
+      "name": "test_tc002_duplicate_label_registration_fails",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "FM2010-S6-PRE-C",
+      "path": "tests/conformance/rti/ivct-subset/tc_create_join_resign.py",
+      "name": "test_tc001_destroy_with_joined_federates_raises",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "FM2010-S6-POST-A",
+      "path": "tests/conformance/rti/ivct-subset/tc_create_join_resign.py",
+      "name": "test_tc001_create_join_resign_happy_path",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "FM2010-S6-EXCEPTION-A",
+      "path": "tests/conformance/rti/ivct-subset/tc_create_join_resign.py",
+      "name": "test_tc001_destroy_with_joined_federates_raises",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "FM2010-S11-PRE-E",
+      "path": "tests/conformance/rti/ivct-subset/tc_sync_point.py",
+      "name": "test_tc002_duplicate_label_registration_fails",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "FM2010-S12-POST-B",
+      "path": "tests/conformance/rti/ivct-subset/tc_sync_point.py",
+      "name": "test_tc002_duplicate_label_registration_fails",
+      "status": "nonpassing-variant"
+    },
+    {
+      "id": "DDM2010-TIME-INDEPENDENCE",
+      "path": "rti/internal/hla/ddm/applicable_r1_time_independence_test.go",
+      "name": "TestApplicableR1DDMCommitIndependentOfConstrainedLogicalTime",
+      "status": "nonpassing-variant"
+    }
+  ],
+  "unlinked_applicable_backlog": [
+    {
+      "id": "DM2010-MOM-SERVICE-REPORT-SUBSCRIPTION",
+      "slice": "engineering/verification/requirements2010/declaration-object.json",
+      "source_id": "S1516.1",
+      "clause": "5.8; 5.8.3(e); 5.8.5(a)",
+      "pdf_pages": [
+        102
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "OM2010-ORPHAN-OBJECTS",
+      "slice": "engineering/verification/requirements2010/declaration-object.json",
+      "source_id": "S1516.1",
+      "clause": "6.1.6",
+      "pdf_pages": [
+        109
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "OM2010-BEST-EFFORT-RATE-REDUCTION",
+      "slice": "engineering/verification/requirements2010/declaration-object.json",
+      "source_id": "S1516.1",
+      "clause": "6.1.12",
+      "pdf_pages": [
+        113,
+        114
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-INITIAL-EMPTY-EXECUTION",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1",
+      "pdf_pages": [
+        38
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-LAST-RESIGN-UNOWNED-CLEANUP",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1",
+      "pdf_pages": [
+        38
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-MULTIPLE-MEMBERSHIPS",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1",
+      "pdf_pages": [
+        39
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-SAVE-QUEUED-MESSAGES",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.2",
+      "pdf_pages": [
+        44
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-SAVE-PERSISTENCE-RTI",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.2",
+      "pdf_pages": [
+        44
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESTORE-DISCARD-CURRENT-MESSAGES",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.2",
+      "pdf_pages": [
+        44
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESTORE-SAVED-MESSAGES",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.2",
+      "pdf_pages": [
+        44
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-MINIMUM",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4",
+      "pdf_pages": [
+        47,
+        48
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-DIMENSION-CONFLICT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.1",
+      "pdf_pages": [
+        48,
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-TRANSPORT-CONFLICT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.1",
+      "pdf_pages": [
+        48,
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-ACCESS-FEDERATION-MODULE-LIST",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.2",
+      "pdf_pages": [
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-ACCESS-MIM-DESIGNATOR",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.2",
+      "pdf_pages": [
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-ACCESS-MODULE-DATA",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.2",
+      "pdf_pages": [
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-ACCESS-MIM-DATA",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.2",
+      "pdf_pages": [
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-ACCESS-FEDERATE-MODULE-LIST",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.2",
+      "pdf_pages": [
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FDD-ACCESS-DESIGNATOR-EXACT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.2",
+      "pdf_pages": [
+        49
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FAULT-REPORT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.5",
+      "pdf_pages": [
+        49,
+        50
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FAULT-RESIGN-RESTART",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.5",
+      "pdf_pages": [
+        49,
+        50
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-FAULT-ONE-SEGMENT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.1.5",
+      "pdf_pages": [
+        50
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-CREATE-INDEPENDENT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.5",
+      "pdf_pages": [
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESIGN-DIVEST",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10; 4.10.1",
+      "pdf_pages": [
+        57
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESIGN-DELETE",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10; 4.10.1",
+      "pdf_pages": [
+        57
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESIGN-NO-ACTION",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10; 4.10.1",
+      "pdf_pages": [
+        57
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-SAVE-FAILURE-RESIGN",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.20",
+      "pdf_pages": [
+        68,
+        69
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-SAVE-FAILURE-FAULT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.20",
+      "pdf_pages": [
+        68,
+        69
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-SAVE-FAILURE-TIME",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.20",
+      "pdf_pages": [
+        68,
+        69
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESTORE-FAILURE-RTI",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.29",
+      "pdf_pages": [
+        78,
+        79
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESTORE-FAILURE-RESIGN",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.29",
+      "pdf_pages": [
+        78,
+        79
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-RESTORE-FAILURE-FAULT",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.29",
+      "pdf_pages": [
+        78,
+        79
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S2-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.2.3(a)",
+      "pdf_pages": [
+        50,
+        51
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S2-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.2.4(a)",
+      "pdf_pages": [
+        50,
+        51
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S2-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.2.5(a)",
+      "pdf_pages": [
+        50,
+        51
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S2-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.2.5(d)",
+      "pdf_pages": [
+        50,
+        51
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S2-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.2.5(e)",
+      "pdf_pages": [
+        50,
+        51
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S3-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.3.3(a)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S3-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.3.3(b)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S3-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.3.4(a)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S3-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.3.5(a)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S3-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.3.5(b)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S3-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.3.5(c)",
+      "pdf_pages": [
+        51,
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S4-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.4.3(a)",
+      "pdf_pages": [
+        52
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S5-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.5.5(b)",
+      "pdf_pages": [
+        52,
+        53
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S5-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.5.5(c)",
+      "pdf_pages": [
+        52,
+        53
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S5-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.5.5(e)",
+      "pdf_pages": [
+        52,
+        53
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S5-EXCEPTION-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.5.5(f)",
+      "pdf_pages": [
+        52,
+        53
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S5-EXCEPTION-I",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.5.5(i)",
+      "pdf_pages": [
+        52,
+        53
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S6-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.6.3(a)",
+      "pdf_pages": [
+        53,
+        54
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S6-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.6.5(c)",
+      "pdf_pages": [
+        53,
+        54
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S6-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.6.5(d)",
+      "pdf_pages": [
+        53,
+        54
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S7-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.7.3(a)",
+      "pdf_pages": [
+        54
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S7-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.7.5(a)",
+      "pdf_pages": [
+        54
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S7-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.7.5(b)",
+      "pdf_pages": [
+        54
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.3(c)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.3(f)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.5(a)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.5(d)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.5(e)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-EXCEPTION-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.5(f)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-EXCEPTION-H",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.5(h)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-EXCEPTION-I",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.5(i)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S9-EXCEPTION-K",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.9.5(k)",
+      "pdf_pages": [
+        55,
+        56
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.3(a)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.3(d)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.3(e)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.3(f)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-POST-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.4(b)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-POST-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.4(c)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-POST-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.4(d)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.5(a)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.5(b)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.5(c)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-EXCEPTION-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.5(f)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S10-EXCEPTION-G",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.10.5(g)",
+      "pdf_pages": [
+        57,
+        58
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.3(a)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.3(b)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.3(d)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-PRE-G",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.3(g)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.4(a)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.5(b)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.5(d)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S11-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.11.5(e)",
+      "pdf_pages": [
+        59,
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S12-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.12.3(a)",
+      "pdf_pages": [
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S12-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.12.3(b)",
+      "pdf_pages": [
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S12-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.12.3(c)",
+      "pdf_pages": [
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S12-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.12.3(d)",
+      "pdf_pages": [
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S12-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.12.3(e)",
+      "pdf_pages": [
+        60
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S13-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.13.3(a)",
+      "pdf_pages": [
+        61
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S13-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.13.3(b)",
+      "pdf_pages": [
+        61
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S13-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.13.3(c)",
+      "pdf_pages": [
+        61
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S13-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.13.3(d)",
+      "pdf_pages": [
+        61
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S13-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.13.3(e)",
+      "pdf_pages": [
+        61
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.3(a)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.3(b)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.3(c)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.3(e)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.3(f)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.5(b)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.5(c)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.5(d)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.5(e)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S14-EXCEPTION-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.14.5(f)",
+      "pdf_pages": [
+        62,
+        63
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S15-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.15.3(a)",
+      "pdf_pages": [
+        63,
+        64
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S15-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.15.3(b)",
+      "pdf_pages": [
+        63,
+        64
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S15-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.15.3(c)",
+      "pdf_pages": [
+        63,
+        64
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S15-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.15.3(d)",
+      "pdf_pages": [
+        63,
+        64
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S15-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.15.3(f)",
+      "pdf_pages": [
+        63,
+        64
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S15-PRE-G",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.15.3(g)",
+      "pdf_pages": [
+        63,
+        64
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S16-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.16.3(a)",
+      "pdf_pages": [
+        64,
+        65
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S16-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.16.3(b)",
+      "pdf_pages": [
+        64,
+        65
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S16-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.16.3(f)",
+      "pdf_pages": [
+        64,
+        65
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S16-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.16.5(a)",
+      "pdf_pages": [
+        64,
+        65
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S16-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.16.5(e)",
+      "pdf_pages": [
+        64,
+        65
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S16-EXCEPTION-G",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.16.5(g)",
+      "pdf_pages": [
+        64,
+        65
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S16-EXCEPTION-H",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.16.5(h)",
+      "pdf_pages": [
+        64,
+        65
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S17-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.17.3(a)",
+      "pdf_pages": [
+        65,
+        66
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S17-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.17.3(b)",
+      "pdf_pages": [
+        65,
+        66
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S17-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.17.3(c)",
+      "pdf_pages": [
+        65,
+        66
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S17-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.17.3(d)",
+      "pdf_pages": [
+        65,
+        66
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S17-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.17.3(e)",
+      "pdf_pages": [
+        65,
+        66
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.3(a)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.3(b)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.3(d)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.3(e)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.3(f)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.4(a)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.5(a)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.5(b)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.5(d)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S18-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.18.5(e)",
+      "pdf_pages": [
+        66,
+        67,
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.3(a)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.3(b)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.3(d)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.3(e)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.3(f)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.5(a)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.5(b)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.5(d)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S19-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.19.5(e)",
+      "pdf_pages": [
+        68
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S20-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.20.3(a)",
+      "pdf_pages": [
+        68,
+        69
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S20-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.20.3(b)",
+      "pdf_pages": [
+        68,
+        69
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S20-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.20.3(c)",
+      "pdf_pages": [
+        68,
+        69
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S21-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.21.3(a)",
+      "pdf_pages": [
+        69,
+        70
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S21-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.21.3(b)",
+      "pdf_pages": [
+        69,
+        70
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S21-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.21.3(d)",
+      "pdf_pages": [
+        69,
+        70
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S21-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.21.5(a)",
+      "pdf_pages": [
+        69,
+        70
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S21-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.21.5(c)",
+      "pdf_pages": [
+        69,
+        70
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S21-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.21.5(d)",
+      "pdf_pages": [
+        69,
+        70
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S22-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.22.3(a)",
+      "pdf_pages": [
+        70,
+        71,
+        72
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S22-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.22.3(b)",
+      "pdf_pages": [
+        70,
+        71,
+        72
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S22-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.22.3(d)",
+      "pdf_pages": [
+        70,
+        71,
+        72
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S22-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.22.5(a)",
+      "pdf_pages": [
+        70,
+        71,
+        72
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S22-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.22.5(c)",
+      "pdf_pages": [
+        70,
+        71,
+        72
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S22-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.22.5(d)",
+      "pdf_pages": [
+        70,
+        71,
+        72
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S23-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.23.3(a)",
+      "pdf_pages": [
+        72,
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S23-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.23.3(b)",
+      "pdf_pages": [
+        72,
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S23-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.23.3(c)",
+      "pdf_pages": [
+        72,
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S23-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.23.3(d)",
+      "pdf_pages": [
+        72,
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.3(a)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.3(b)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.3(e)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-PRE-F",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.3(f)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-PRE-G",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.3(g)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.4(a)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.5(a)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.5(d)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S24-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.24.5(e)",
+      "pdf_pages": [
+        73
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.3(a)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.3(b)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.3(c)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.3(d)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-PRE-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.3(e)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-POST-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.4(b)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-POST-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.4(c)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S25-POST-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.25.4(d)",
+      "pdf_pages": [
+        74,
+        75
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S26-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.26.3(a)",
+      "pdf_pages": [
+        75,
+        76
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S26-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.26.3(b)",
+      "pdf_pages": [
+        75,
+        76
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S26-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.26.3(c)",
+      "pdf_pages": [
+        75,
+        76
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S26-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.26.3(d)",
+      "pdf_pages": [
+        75,
+        76
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S26-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.26.4(a)",
+      "pdf_pages": [
+        75,
+        76
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S27-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.27.3(a)",
+      "pdf_pages": [
+        76,
+        77
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S27-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.27.3(b)",
+      "pdf_pages": [
+        76,
+        77
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S27-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.27.3(c)",
+      "pdf_pages": [
+        76,
+        77
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S27-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.27.3(d)",
+      "pdf_pages": [
+        76,
+        77
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S27-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.27.4(a)",
+      "pdf_pages": [
+        76,
+        77
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S27-POST-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.27.4(b)",
+      "pdf_pages": [
+        76,
+        77
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S28-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.28.3(a)",
+      "pdf_pages": [
+        77,
+        78
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S28-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.28.3(b)",
+      "pdf_pages": [
+        77,
+        78
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S28-PRE-G",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.28.3(g)",
+      "pdf_pages": [
+        77,
+        78
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S28-EXCEPTION-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.28.5(b)",
+      "pdf_pages": [
+        77,
+        78
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S28-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.28.5(d)",
+      "pdf_pages": [
+        77,
+        78
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S28-EXCEPTION-E",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.28.5(e)",
+      "pdf_pages": [
+        77,
+        78
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S29-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.29.3(a)",
+      "pdf_pages": [
+        78,
+        79,
+        80
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S29-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.29.3(b)",
+      "pdf_pages": [
+        78,
+        79,
+        80
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S29-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.29.3(c)",
+      "pdf_pages": [
+        78,
+        79,
+        80
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S29-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.29.3(d)",
+      "pdf_pages": [
+        78,
+        79,
+        80
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S30-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.30.3(a)",
+      "pdf_pages": [
+        80,
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S30-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.30.3(b)",
+      "pdf_pages": [
+        80,
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S30-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.30.3(d)",
+      "pdf_pages": [
+        80,
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S30-POST-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.30.4(a)",
+      "pdf_pages": [
+        80,
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S30-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.30.5(a)",
+      "pdf_pages": [
+        80,
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S30-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.30.5(c)",
+      "pdf_pages": [
+        80,
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S30-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.30.5(d)",
+      "pdf_pages": [
+        80,
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S31-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.31.3(a)",
+      "pdf_pages": [
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S31-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.31.3(b)",
+      "pdf_pages": [
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S31-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.31.3(d)",
+      "pdf_pages": [
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S31-EXCEPTION-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.31.5(a)",
+      "pdf_pages": [
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S31-EXCEPTION-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.31.5(c)",
+      "pdf_pages": [
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S31-EXCEPTION-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.31.5(d)",
+      "pdf_pages": [
+        81
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S32-PRE-A",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.32.3(a)",
+      "pdf_pages": [
+        81,
+        82
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S32-PRE-B",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.32.3(b)",
+      "pdf_pages": [
+        81,
+        82
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S32-PRE-C",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.32.3(c)",
+      "pdf_pages": [
+        81,
+        82
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "FM2010-S32-PRE-D",
+      "slice": "engineering/verification/requirements2010/fm.json",
+      "source_id": "S1516.1",
+      "clause": "4.32.3(d)",
+      "pdf_pages": [
+        81,
+        82
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "JAVA2010-API-EXACT-PACKAGE",
+      "slice": "engineering/verification/requirements2010/java-annex.json",
+      "source_id": "S1516.1",
+      "clause": "B",
+      "pdf_pages": [
+        439,
+        440,
+        441,
+        442,
+        443
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "JAVA2010-FDD-SCHEMA-VALIDITY",
+      "slice": "engineering/verification/requirements2010/java-annex.json",
+      "source_id": "S1516.1",
+      "clause": "F",
+      "pdf_pages": [
+        582
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "JAVA2010-VALID-FDD-ADMISSION",
+      "slice": "engineering/verification/requirements2010/java-annex.json",
+      "source_id": "S1516.1",
+      "clause": "F",
+      "pdf_pages": [
+        582
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "JAVA2010-MIM-TABLE-PRECEDENCE",
+      "slice": "engineering/verification/requirements2010/java-annex.json",
+      "source_id": "S1516.1",
+      "clause": "G",
+      "pdf_pages": [
+        583
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "JAVA2010-SELECTED-BINDING-SCOPE",
+      "slice": "engineering/verification/requirements2010/java-annex.json",
+      "source_id": "S1516.1",
+      "clause": "13.2",
+      "pdf_pages": [
+        390
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-SUPPORT-EVOKE-MULTIPLE",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "10.42",
+      "pdf_pages": [
+        283,
+        284
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-MOM-OBJECT-EXTENSION-ISOLATION",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "11.2.1",
+      "pdf_pages": [
+        287
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-MOM-OWNERSHIP-PROHIBITIONS",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "11.2.1",
+      "pdf_pages": [
+        287,
+        290
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-MOM-REQUEST-ATTRIBUTE-REFRESH",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "11.2.1",
+      "pdf_pages": [
+        287
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-MOM-REPORT-EXTENSIONS",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "11.3.1",
+      "pdf_pages": [
+        288
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-MOM-LEAF-ADMINISTRATION",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "11.4.1",
+      "pdf_pages": [
+        289,
+        290,
+        292,
+        293,
+        294
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-MOM-PROHIBITED-MUTATIONS",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "11.4.1",
+      "pdf_pages": [
+        290
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "SM-CONFORMANCE-CERTIFIED-LABEL",
+      "slice": "engineering/verification/requirements2010/support-mom.json",
+      "source_id": "S1516.1",
+      "clause": "13",
+      "pdf_pages": [
+        390
+      ],
+      "stage": "external-recognition-required",
+      "semantic_verdict": "open"
+    },
+    {
+      "id": "MAP-LANGUAGE-TRANSPARENCY",
+      "slice": "engineering/verification/requirements2010/time-mapping.json",
+      "source_id": "S1516.1",
+      "clause": "12.1",
+      "pdf_pages": [
+        323
+      ],
+      "stage": "assertion-level-oracle-required",
+      "semantic_verdict": "open"
+    }
+  ],
+  "limitations": [
+    "Oracle links specify partial assertions and leave uncovered facets explicit.",
+    "Prior failed IVCT records remain indexed alongside current corrected passing records; these are different helper/oracle revisions, not hidden original passes.",
+    "Original Java child-deadline and Go cross-generation failures remain unresolved; no new full-product campaign was run.",
+    "JUnit module aliases lack explicit collection-root provenance; no collision was found in current linked keys.",
+    "Scope of a low-level service or supplied module is not automatically full selected-binding or assembled-model conformance."
+  ],
+  "owned_campaign_servers_stopped": true,
+  "ddm_fixture_correction": "Original QueryBounds used another federate's region; corrected owner-authenticated bounds/time oracle passes in review-oracles.jsonl. First failed variant remains in reconciliation."
+}

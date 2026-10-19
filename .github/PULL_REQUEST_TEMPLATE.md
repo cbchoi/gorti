@@ -10,7 +10,7 @@ Describe the problem and the chosen change.
 ## Verification
 
 - [ ] Go tests pass.
-- [ ] Affected Python/C++ tests pass.
+- [ ] Affected Python and Java SDK tests pass.
 - [ ] Documentation builds with `mkdocs build --strict`.
 - [ ] Performance claims follow `docs/reproducibility.md`.
 

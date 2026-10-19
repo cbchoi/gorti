@@ -58,6 +58,9 @@ message SyncPointStateEntry {
   repeated uint64 required = 4;  // sorted ascending
   repeated uint64 achieved = 5;  // sorted ascending
   bool dynamic = 6;
+  repeated uint64 failed = 7;
+  // Missing on legacy snapshots whose failure history cannot be recovered.
+  optional bool failure_history_complete = 8;
 }
 
 // SyncManagerState is the per-federation snapshot persisted into the

@@ -26,6 +26,7 @@ runnable standalone via:
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -140,13 +141,13 @@ def run_publisher(
         pub.reserveObjectInstanceName("car-7")
         # Let the reservation callback fire — evokeCallback yields.
         fired = pub.evokeMultipleCallbacks(approx_min_time=0.1, approx_max_time=0.5)
+        deadline = time.monotonic() + 5
+        while "car-7" not in pub.reservations_ok:
+            if "car-7" in pub.reservations_fail or time.monotonic() >= deadline:
+                raise RuntimeError("car-7 reservation did not succeed")
+            fired = pub.evokeCallback(0.1) or fired
 
         # 4. Register the object using the reserved name.
-        # The SDK's registerObjectInstance only takes class_name; we
-        # don't have a IEEE 1516 service-style "register with handle + reserved
-        # name" wrapper on the ambassador (deferred). For the smoke
-        # we use the existing wrapper, which goes through the same
-        # reservation table on the server side.
         obj_h = pub.registerObjectInstance("Vehicle", "car-7")
 
         # 5. Update attributes — IEEE 1516 service-style update by handle.

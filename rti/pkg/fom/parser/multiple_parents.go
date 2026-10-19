@@ -6,11 +6,10 @@ import (
 	"strings"
 )
 
-// multipleParentsValidator emits FOM-003 when an object class name appears
-// in the FOM with two or more distinct parent names. Detected at the
-// post-walk stage by reading the flattened ObjectClass list, where each
-// re-declaration of a class under a different parent creates an additional
-// (Name, ParentName) entry.
+// multipleParentsValidator emits FOM-003 when an object class key appears
+// with two or more distinct parent keys. Equal XML leaf names under
+// different parents are separate identities, not multiple inheritance.
+// Legacy programmatic graphs can still declare multiple parents for one key.
 type multipleParentsValidator struct{}
 
 func init() {

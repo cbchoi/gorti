@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>GoRTI Java DDM Routing</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-09-22</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Public Java API regional object and interaction routing.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name><sharing>Neither</sharing>
+      <objectClass>
+        <name>RegionalItem</name><sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>first</name><dataType>HLAinteger32BE</dataType>
+          <updateType>Conditional</updateType><updateCondition>On change</updateCondition>
+          <ownership>DivestAcquire</ownership><sharing>PublishSubscribe</sharing>
+          <dimensions><dimension>X</dimension></dimensions>
+          <transportation>HLAreliable</transportation><order>TimeStamp</order>
+          <semantics>First independently region-associated value.</semantics>
+        </attribute>
+        <attribute>
+          <name>second</name><dataType>HLAinteger32BE</dataType>
+          <updateType>Conditional</updateType><updateCondition>On change</updateCondition>
+          <ownership>DivestAcquire</ownership><sharing>PublishSubscribe</sharing>
+          <dimensions><dimension>X</dimension></dimensions>
+          <transportation>HLAreliable</transportation><order>TimeStamp</order>
+          <semantics>Second independently region-associated value.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name><sharing>Neither</sharing>
+      <transportation>HLAreliable</transportation><order>TimeStamp</order>
+      <interactionClass>
+        <name>RegionalPulse</name><sharing>PublishSubscribe</sharing>
+        <dimensions><dimension>X</dimension></dimensions>
+        <transportation>HLAreliable</transportation><order>TimeStamp</order>
+        <semantics>A regional pulse with an integer payload.</semantics>
+        <parameter><name>payload</name><dataType>HLAinteger32BE</dataType><semantics>Payload.</semantics></parameter>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <dimensions>
+    <dimension><name>X</name><dataType>HLAinteger64BE</dataType><upperBound>18446744073709551615</upperBound><normalization>None</normalization><value>Excluded</value></dimension>
+    <dimension><name>Y</name><dataType>HLAinteger32BE</dataType><upperBound>1000</upperBound><normalization>None</normalization><value>Excluded</value></dimension>
+  </dimensions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="true"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>

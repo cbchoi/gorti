@@ -4,7 +4,7 @@
 Boot:
   1. Connect to rtid, join as "sensor".
   2. publish_object_class("SensorReading", ["value"]).
-  3. register_object_instance("SensorReading", instance_name="sensor-1").
+  3. Reserve "sensor-1", await the success callback, then register it.
   4. For each of ``ticks`` cycles, compute the next value via the
      :class:`Sensor` model, encode 4-byte BE signed, and call
      update_attributes.
@@ -28,6 +28,10 @@ from _federate_common import (  # type: ignore[import-not-found]
     write_result,
 )
 from rti1516e.connection import RtiConnection  # type: ignore[import-not-found]
+from rti1516e.events import (
+    ObjectInstanceNameReservationFailed,
+    ObjectInstanceNameReservationSucceeded,
+)
 from sensor import Sensor  # type: ignore[import-not-found]
 
 
@@ -54,6 +58,16 @@ async def run(
             await fed.publish_object_class("SensorReading", attributes=["value"])
             if startup_delay > 0:
                 await asyncio.sleep(startup_delay)
+            await fed.reservation.reserve(instance_name)
+            async with asyncio.timeout(5):
+                async for event in fed.events():
+                    if isinstance(event, ObjectInstanceNameReservationFailed):
+                        raise RuntimeError(f"name reservation failed: {event.object_name}")
+                    if (isinstance(event, ObjectInstanceNameReservationSucceeded)
+                            and event.object_name == instance_name):
+                        break
+                else:
+                    raise RuntimeError("callback stream ended before name reservation")
             obj_handle = await fed.register_object_instance(
                 "SensorReading", instance_name=instance_name,
             )

@@ -29,7 +29,10 @@ _BAD_FIXTURES: list[tuple[Path, str]] = sorted(
 
 
 @pytest.mark.spec
-@pytest.mark.parametrize(("fixture", "expected_code"), _BAD_FIXTURES, ids=lambda v: str(v))
+@pytest.mark.parametrize(
+    ("fixture", "expected_code"), _BAD_FIXTURES,
+    ids=[f"{fixture.name}-{code}" for fixture, code in _BAD_FIXTURES],
+)
 def test_spec_m4_bad_fom_emits_code(fixture: Path, expected_code: str) -> None:
     result = parse([fixture])
     assert result.has_code(expected_code), (

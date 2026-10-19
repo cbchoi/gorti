@@ -1,4 +1,4 @@
-.PHONY: verify fmt go-fmt-check lint go-lint typecheck test go-test go-test-coverage go-coverage-report determinism proto py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps examples-check benchmark-check benchmark-dry-run clean ci-all help build build-dds test-dds rti-top
+.PHONY: verify fmt go-fmt-check lint go-lint typecheck test go-test go-test-coverage go-coverage-report determinism proto java-codegen java-test sdk-test validation-test py-codegen py-test py-lint py-typecheck docs docs-serve docs-deps examples-check benchmark-check benchmark-dry-run clean ci-all help build build-dds test-dds rti-top
 
 GO_PKGS := \
 	./examples/... \
@@ -7,7 +7,10 @@ GO_PKGS := \
 	./verification/gorti-go/... \
 	./verification/gorti-go-fair/...
 GO_ROOTS := $(GO_PKGS:/...=)
+GO_TEST_TIMEOUT ?= 5m
 PY_DIR := pysdk
+PYTHON ?= python
+MAVEN ?= mvn
 
 help:
 	@echo "Targets:"
@@ -15,15 +18,19 @@ help:
 	@echo "  fmt          gofmt + goimports + black + ruff --fix"
 	@echo "  lint         golangci-lint + ruff + buf lint"
 	@echo "  typecheck    mypy --strict (Python)"
-	@echo "  test         go test + pytest"
+	@echo "  test         Go race tests + Python/Java live SDK tests"
 	@echo "  determinism  10x determinism harness on core packages"
 	@echo "  build        compile bin/rtid + bin/rti-top (CGo-free, DDS-free)"
 	@echo "  rti-top      compile bin/rti-top only (live-federation TUI)"
 	@echo "  build-dds    compile bin/rtid-dds (DDS-capable; requires libcyclonedds-dev)"
 	@echo "  test-dds     go test under -tags=dds"
-	@echo "  proto        regenerate gRPC bindings via buf"
+	@echo "  proto        regenerate Go/Python bindings via Buf and Java bindings via Maven"
+	@echo "  java-codegen regenerate Java Protobuf/gRPC bindings"
+	@echo "  java-test    Java unit, transport and live-server tests"
+	@echo "  sdk-test     Python/Java live SDK tests + internal IVCT-derived subset"
+	@echo "  validation-test check supported-language workflow configuration"
 	@echo "  py-codegen   regenerate Python gRPC bindings into pysdk/rti1516e/_generated/"
-	@echo "  py-test      pytest pysdk/"
+	@echo "  py-test      Python HLA inventory, including live services"
 	@echo "  py-lint      ruff check pysdk/"
 	@echo "  py-typecheck mypy --strict Python packages"
 	@echo "  docs-deps    install MkDocs + Material + plugins (pip)"
@@ -73,18 +80,13 @@ typecheck:
 		echo "mypy or $(PY_DIR) not present; skipping"; \
 	fi
 
-test: go-test
-	@if command -v pytest >/dev/null && [ -d "$(PY_DIR)" ]; then \
-		cd $(PY_DIR) && pytest --maxfail=1; \
-	else \
-		echo "pytest or $(PY_DIR) not present; skipping"; \
-	fi
+test: go-test sdk-test
 
 go-test:
-	go test -race -timeout 60s $(GO_PKGS)
+	go test -race -timeout $(GO_TEST_TIMEOUT) $(GO_PKGS)
 
 go-test-coverage:
-	go test -race -timeout 60s -coverprofile=coverage.out -covermode=atomic $(GO_PKGS)
+	go test -race -timeout $(GO_TEST_TIMEOUT) -coverprofile=coverage.out -covermode=atomic $(GO_PKGS)
 
 go-coverage-report:
 	go tool cover -func=coverage.out
@@ -108,7 +110,7 @@ build-dds:
 
 # test-dds exercises the DDS-tagged unit tests.
 test-dds:
-	go test -race -tags=dds ./rti/internal/transport/dds/...
+	go test -race -tags=dds ./rti/internal/adapters/dds/...
 
 determinism:
 	go test -tags=determinism -count=10 -race -run=Determinism $(GO_PKGS)
@@ -116,6 +118,20 @@ determinism:
 proto:
 	@if ! command -v buf >/dev/null; then echo "ERROR: buf not installed"; exit 1; fi
 	buf generate
+	$(MAKE) java-codegen
+
+java-codegen:
+	$(MAVEN) --batch-mode --no-transfer-progress -f javasdk/pom.xml generate-sources
+
+java-test:
+	$(PYTHON) scripts/validate_sdks.py java --maven "$(MAVEN)"
+
+sdk-test:
+	$(PYTHON) scripts/validate_sdks.py python java ivct --maven "$(MAVEN)"
+
+validation-test:
+	$(PYTHON) -m unittest discover -s scripts/tests -p 'test_validation_*.py' -v
+	$(PYTHON) scripts/check_release_metadata.py
 
 # Python gRPC codegen emits into pysdk/rti1516e/_generated/ (gitignored).
 py-codegen:
@@ -130,8 +146,7 @@ py-codegen:
 	@touch $(PY_DIR)/rti1516e/_generated/__init__.py
 
 py-test:
-	@if ! command -v pytest >/dev/null; then echo "ERROR: pytest not installed (pip install -e 'pysdk[dev]')"; exit 1; fi
-	cd $(PY_DIR) && pytest --maxfail=5 -q
+	$(PYTHON) scripts/validate_sdks.py python
 
 py-lint:
 	@if ! command -v ruff >/dev/null; then echo "ERROR: ruff not installed"; exit 1; fi
@@ -166,8 +181,9 @@ benchmark-dry-run:
 	python3 benchmark/portico-gorti/orchestrator.py --dry-run
 
 clean:
-	rm -rf bin/ coverage.* pysdk/rti1516e/_generated/ cppsdk/_generated/ site/
+	rm -rf bin/ coverage.* pysdk/rti1516e/_generated/ javasdk/*/target/ site/
 
 ci-all: lint
 	go test -race -coverprofile=coverage.out -covermode=atomic $(GO_PKGS)
 	go tool cover -func=coverage.out
+	$(MAKE) sdk-test validation-test

@@ -133,6 +133,7 @@ def test_tc001_destroy_with_joined_federates_raises(
                 "§4.6: destroy with a joined federate must fail "
                 "FederatesCurrentlyJoined"
             )
+            assert dict(exc_info.value.trailing_metadata()).get("rti-spec-exception") == "FederatesCurrentlyJoined"
     finally:
         leave(amb)
     # §4.6 — and once the federate resigned, the same destroy succeeds.

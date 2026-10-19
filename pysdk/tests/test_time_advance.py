@@ -16,6 +16,8 @@ under ``tests/spec/m4/test_spec_m4_time_advance.py``:
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pyjevsim_bridge import HLAFederate, PortMapping
@@ -318,6 +320,257 @@ async def test_aclose_is_idempotent() -> None:
     await fed.step_once()
     await fed.aclose()
     await fed.aclose()  # second call: no-op
+
+
+@pytest.mark.asyncio
+async def test_concurrent_aclose_shares_successful_cleanup() -> None:
+    class BlockingExit:
+        def __init__(self, *, block: bool) -> None:
+            self.block = block
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.attempts = 0
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> None:
+            del exc_type, exc, traceback
+            self.attempts += 1
+            self.started.set()
+            if self.block:
+                await self.release.wait()
+
+    fed = _make_federate(StubCoupledModel())
+    federate_exit = BlockingExit(block=True)
+    connection_exit = BlockingExit(block=False)
+    fed._owned_federate_cm = federate_exit  # type: ignore[assignment]  # noqa: SLF001
+    fed._owned_connection = connection_exit  # type: ignore[assignment]  # noqa: SLF001
+    fed._federate = object()  # type: ignore[assignment]  # noqa: SLF001
+
+    first = asyncio.create_task(fed.aclose())
+    await federate_exit.started.wait()
+    second = asyncio.create_task(fed.aclose())
+    await asyncio.sleep(0)
+    federate_exit.release.set()
+    await asyncio.gather(first, second)
+
+    assert federate_exit.attempts == 1
+    assert connection_exit.attempts == 1
+    assert fed._owned_federate_cm is None  # noqa: SLF001
+    assert fed._owned_connection is None  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_concurrent_aclose_failure_is_shared_then_explicitly_retried() -> None:
+    class FlakyBlockingExit:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.attempts = 0
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> None:
+            del exc_type, exc, traceback
+            self.attempts += 1
+            if self.attempts == 1:
+                self.started.set()
+                await self.release.wait()
+                raise RuntimeError("shared resign failure")
+
+    class CountingExit:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> None:
+            del exc_type, exc, traceback
+            self.attempts += 1
+
+    fed = _make_federate(StubCoupledModel())
+    federate_exit = FlakyBlockingExit()
+    connection_exit = CountingExit()
+    fed._owned_federate_cm = federate_exit  # type: ignore[assignment]  # noqa: SLF001
+    fed._owned_connection = connection_exit  # type: ignore[assignment]  # noqa: SLF001
+    fed._federate = object()  # type: ignore[assignment]  # noqa: SLF001
+
+    first = asyncio.create_task(fed.aclose())
+    await federate_exit.started.wait()
+    second = asyncio.create_task(fed.aclose())
+    await asyncio.sleep(0)
+    federate_exit.release.set()
+    results = await asyncio.gather(first, second, return_exceptions=True)
+
+    assert all(isinstance(result, BaseExceptionGroup) for result in results)
+    assert federate_exit.attempts == 1
+    assert connection_exit.attempts == 0
+
+    await fed.aclose()
+    assert federate_exit.attempts == 2
+    assert connection_exit.attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_direct_aclose_cancellation_preserves_cancelled_error_identity() -> None:
+    class BlockingExit:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.attempts = 0
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> None:
+            del exc_type, exc, traceback
+            self.attempts += 1
+            self.started.set()
+            await self.release.wait()
+
+    fed = _make_federate(StubCoupledModel())
+    federate_exit = BlockingExit()
+    fed._owned_federate_cm = federate_exit  # type: ignore[assignment]  # noqa: SLF001
+    fed._federate = object()  # type: ignore[assignment]  # noqa: SLF001
+
+    caller = asyncio.create_task(fed.aclose())
+    await federate_exit.started.wait()
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    assert caller.cancelled()
+
+    federate_exit.release.set()
+    await fed.aclose()
+    assert federate_exit.attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_aclose_retains_failed_exit_for_retry_and_fails_closed() -> None:
+    class FlakyExit:
+        def __init__(self, *, fail_first: bool) -> None:
+            self.fail_first = fail_first
+            self.attempts = 0
+
+        async def __aexit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> None:
+            del exc_type, exc, traceback
+            self.attempts += 1
+            if self.fail_first and self.attempts == 1:
+                raise RuntimeError("federate exit failed")
+
+    stub = StubCoupledModel()
+    fed = _make_federate(stub)
+    federate_exit = FlakyExit(fail_first=True)
+    connection_exit = FlakyExit(fail_first=False)
+    fed._owned_federate_cm = federate_exit  # type: ignore[assignment]  # noqa: SLF001
+    fed._owned_connection = connection_exit  # type: ignore[assignment]  # noqa: SLF001
+    fed._federate = object()  # type: ignore[assignment]  # noqa: SLF001
+
+    with pytest.raises(BaseExceptionGroup) as failure:
+        await fed.aclose()
+    assert [str(error) for error in failure.value.exceptions] == [
+        "federate exit failed"
+    ]
+    assert federate_exit.attempts == 1
+    assert connection_exit.attempts == 0
+    assert fed._owned_federate_cm is federate_exit  # noqa: SLF001
+    assert fed._owned_connection is connection_exit  # noqa: SLF001
+    with pytest.raises(RuntimeError, match="previous advance failed"):
+        await fed.step_once()
+
+    await fed.aclose()
+    assert federate_exit.attempts == 2
+    assert connection_exit.attempts == 1
+    assert fed._owned_federate_cm is None  # noqa: SLF001
+    assert fed._federate is None  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_aclose_real_context_keeps_connection_for_resign_retry() -> None:
+    fake = FakeRtiServer()
+    stub = StubCoupledModel()
+    fed = _make_federate(stub)
+    await fed._ensure_federate()  # noqa: SLF001
+    fake.canned_responses["resign_federation"] = RuntimeError("resign failed")
+
+    with pytest.raises(BaseExceptionGroup, match="federate cleanup failed"):
+        await fed.aclose()
+    assert fed._owned_federate_cm is not None  # noqa: SLF001
+    assert fed._owned_connection is not None  # noqa: SLF001
+    assert fed._owned_connection.transport is fake  # noqa: SLF001
+
+    del fake.canned_responses["resign_federation"]
+    await fed.aclose()
+    assert len(fake.calls_for("resign_federation")) == 2
+    assert fed._owned_federate_cm is None  # noqa: SLF001
+    assert fed._owned_connection is None  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_aclose_real_context_retries_only_failed_connection_close() -> None:
+    fake = FakeRtiServer()
+    close_attempts = 0
+
+    async def flaky_close() -> None:
+        nonlocal close_attempts
+        close_attempts += 1
+        if close_attempts == 1:
+            raise RuntimeError("transport close failed")
+
+    fake.close = flaky_close
+    fed = _make_federate(StubCoupledModel())
+    await fed._ensure_federate()  # noqa: SLF001
+
+    with pytest.raises(BaseExceptionGroup, match="connection cleanup failed"):
+        await fed.aclose()
+    assert len(fake.calls_for("resign_federation")) == 1
+    assert fed._owned_federate_cm is None  # noqa: SLF001
+    assert fed._federate is None  # noqa: SLF001
+    assert fed._owned_connection is not None  # noqa: SLF001
+    assert fed._owned_connection.transport is fake  # noqa: SLF001
+    with pytest.raises(RuntimeError, match="aclose must complete"):
+        await fed.run(ticks=0)
+
+    await fed.aclose()
+    assert close_attempts == 2
+    assert len(fake.calls_for("resign_federation")) == 1
+    assert fed._owned_connection is None  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_run_uses_retryable_owned_lifecycle() -> None:
+    fake = FakeRtiServer()
+    stub = StubCoupledModel()
+    fed = _make_federate(stub)
+    fake.canned_responses["resign_federation"] = RuntimeError("resign failed")
+
+    with pytest.raises(BaseExceptionGroup, match="federate cleanup failed"):
+        await fed.run(ticks=0)
+    assert fed._owned_federate_cm is not None  # noqa: SLF001
+    assert fed._owned_connection is not None  # noqa: SLF001
+    with pytest.raises(RuntimeError, match="aclose must complete"):
+        await fed.run(ticks=0)
+    assert len(fake.calls_for("resign_federation")) == 1
+
+    del fake.canned_responses["resign_federation"]
+    await fed.aclose()
+    assert len(fake.calls_for("resign_federation")) == 2
 
 
 @pytest.mark.asyncio

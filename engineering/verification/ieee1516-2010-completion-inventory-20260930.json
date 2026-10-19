@@ -1,0 +1,576 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-09-30",
+  "scope": "selected_whole_RTI_completion_gaps_not_exhaustive_normative_inventory",
+  "inventory_complete": false,
+  "report": "ieee1516-2010-completion-audit-20260930.md",
+  "observed_head": "518cb67f00858fcbec9ed86145d5b2360cfb2241",
+  "working_tree": "concurrent_parent_edits_not_pinned_release",
+  "sources": [
+    {
+      "id": "S0",
+      "path": "C:/Users/cbchoi/Downloads/1516_2010-2000_redline.pdf",
+      "pages": 41,
+      "sha256": "6ac0b36add984f2f2e772b8c070f75e8172fd1cd3ab55dd65defe3066e46b086"
+    },
+    {
+      "id": "S1",
+      "path": "C:/Users/cbchoi/Downloads/15161_2010-2004_redline.pdf",
+      "pages": 588,
+      "sha256": "789780a38898bd513fe1dbdb877433e6518dac8d0eb577056fc0bbe9e5b5a9d4"
+    },
+    {
+      "id": "S2",
+      "path": "C:/Users/cbchoi/Downloads/15162_2010-2000_redline.pdf",
+      "pages": 164,
+      "sha256": "e0ec65cb99b9a9e47cb21cd1d003b78df76e18cddd5ab2f0fd1e3a60e5223f09"
+    }
+  ],
+  "service_definition_census": {
+    "FM": 31,
+    "DM": 12,
+    "OM": 29,
+    "Ownership": 18,
+    "TM": 23,
+    "DDM": 12,
+    "Support": 43,
+    "total": 168,
+    "not_a_normative_requirement_count": true
+  },
+  "gaps": [
+    {
+      "id": "G01",
+      "title": "Per-Federation Integer64 Production Acceptance",
+      "status": "in_flight",
+      "clauses": "S1 4.1.6; 12.4/Table 18; S2 4.7.1",
+      "pages": [
+        "S1:50",
+        "S1:338-340",
+        "S2:55"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/application/server/run.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "run concurrent Float64 and Integer64 federations in the assessed\nserver configuration. Verify creation/list/join factory identity; idle MOM time;\nall five advances; queries; timestamped interactions, updates, deletion and\nretraction; timed save; process restart and recreated-execution restore.\nUse adjacent times above 2^53 and near 2^63-1, zero intervals, and overflow\nnegatives with no partial mutation. Test Go, Python, and the chosen Java binding.\nReject wrong representations before state changes. Proprietary Float64-only\noptimized transports need explicit capability handling, not silent conversion.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G02",
+      "title": "Unpublish Guard and Ownership Loss",
+      "status": "in_flight",
+      "clauses": "S1 5.3.3(f); 5.3.4(e); 7.1.1",
+      "pages": [
+        "S1:94-95",
+        "S1:155-156"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/declaration/manager.go",
+        "rti/internal/hla/ownership/unpublication_callbacks.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "include a red-before/fixed-after ownership-loss case, then integrated\nconcurrency and failure tests. Only selected published attributes lose ownership.\nThe pending-callback guard covers qualifying attributes owned by another joined\nfederate, not caller-owned, unowned, or RTI-owned attributes indiscriminately.\nActual callback invocation, not enqueue or transport receipt, resolves the\napplicable terminal obligation. Cover acquisition, cancellation, unavailable and\nnotification variants; ancestor-known mappings; explicit empty versus omitted\nattribute sets; persistence; retry/duplicate acknowledgments; atomic reservation\nfailure; and reentrant callback service calls without lock inversion.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G03",
+      "title": "Empty Targeted Unsubscribe",
+      "status": "confirmed_gap",
+      "clauses": "S1 5.7",
+      "pages": [
+        "S1:100-101"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java",
+        "rti/internal/hla/declaration/manager.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "standard Java whole-class unsubscribe removes all subscriptions;\ntargeted unsubscribe with a supplied empty set succeeds without removing any.\nPropagate presence through Go/Python and the wire boundary while preserving the\ndocumented legacy omission path. Invalid class/membership still fails normally.\nVerify no accidental advisory, discovery, subscription, or ownership change.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G04",
+      "title": "Global Delete and Resign Callback Ordering",
+      "status": "assessment_gap_in_flight",
+      "clauses": "S1 4.10; 6.14-6.15; 7.1-7.16; 12.6",
+      "pages": [
+        "S1:56-58",
+        "S1:131-135",
+        "S1:155-176",
+        "S1:340"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/application/lifecycle/resign.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "validate permitted partial orders rather than demanding one total\norder copied from another RTI. Keep mandatory terminal ownership callbacks valid\nwhile retiring object knowledge; suppress genuinely obsolete assumption work;\nensure callback-reentered services see the proper knowledge/ownership state.\nExercise all six resign directives, pending acquisitions/divestitures, authenticated\nreceipts, concurrent deletion/rediscovery, send failure, and save/restore.\nFailed admission must leave membership, objects, ownership and queues unchanged.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G05",
+      "title": "Last-Resigner Deletion Rule",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.10 narrative",
+      "pages": [
+        "S1:57"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/application/lifecycle/resign.go",
+        "rti/internal/hla/federation/manager.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "a last member with delete privilege resigns using unconditional\ndivestiture; its deletable object and associated name/ownership/DDM/time state\nmust disappear. The federation execution/FDD remains until explicitly destroyed,\nand a later join cannot rediscover that old object. Determine last membership\nunder the same lifecycle transaction, including simultaneous resign/join.\nThis is not a claim that every unrelated unowned object must be deleted.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G06",
+      "title": "Synchronization Membership and Label Retirement",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.13-4.15",
+      "pages": [
+        "S1:61-64"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/synchronization/manager.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "join before all achievements adds and announces a member to an\nall-member point; join after that boundary does not. Explicit nonempty subset\nregistration excludes unrelated later joins. Resign removes a member and can\nallow synchronization to finish. Retire the registered label once the required\nFederation Synchronized invocations have occurred, then permit reuse with a new\ntag/set. Preserve historical reporting separately from active label registration.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G07",
+      "title": "Synchronization Negative Confirmation and Set Presence",
+      "status": "confirmed_gap_with_interpretation_issue",
+      "clauses": "S1 4.11-4.12",
+      "pages": [
+        "S1:59-60"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/synchronization/manager.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "duplicate registration produces the prescribed failed-confirmation\nreason without a nonstandard synchronous duplicate-label exception or mutation.\nExplicit empty and omitted sets both announce to all current members. Check the\nprecise late-join treatment against 4.13 wording. Page 59 also combines permission\nfor valid departed designators with a retained membership sentence; resolve that\nspecific tension against the clean edition/correction before choosing an oracle.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G08",
+      "title": "Synchronization Achievement Admission",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.14.3(d); 4.14.5(a); 4.15",
+      "pages": [
+        "S1:62-64"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/synchronization/manager.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "a joined but unannounced member receives the standard label-not-\nannounced exception, with no set/state change. The failed-to-synchronize set\ncontains exactly unsuccessful members of the synchronization set. Cover retries,\nduplicate achievements, resign, and same-label reuse epochs.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G09",
+      "title": "Synchronization Callback Delivery",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.12-4.15",
+      "pages": [
+        "S1:60-64"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/synchronization/manager.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "inject failures at the first and last confirmation/announcement/\nsynchronized recipient. No successful state transition silently loses a required\ncallback. Use reserved fanout or a durable retry obligation, with no duplicate\neffect, no premature label retirement, and no grant of achievement eligibility\nbased solely on a callback that never reaches invocation.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G10",
+      "title": "DDM Region Templates versus Specifications",
+      "status": "confirmed_gap",
+      "clauses": "S1 9.1.1; 9.1.3.1(a,e,h,i); 9.2-9.3",
+      "pages": [
+        "S1:220-223",
+        "S1:229-230"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/ddm/manager.go",
+        "rti/internal/hla/ddm/state.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "a newly created template cannot be used where a specification is\nrequired. Partial initialization followed by commit raises InvalidRegion\natomically and retains pending values; all dimensions initialized without commit\nis still a template; the first valid commit creates a specification. Later\npartial modifications of that specification are allowed. Test the empty-dimension\ncase and every relevant DDM/support operation, and persist both states and pending\ninitialization coverage.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G11",
+      "title": "DDM Contextual Defaults and Excluded Dimensions",
+      "status": "confirmed_gap",
+      "clauses": "S1 9.1.2(d); 9.1.3.1(f,g); S2 4.6; 6.2.6(4)",
+      "pages": [
+        "S1:221-222",
+        "S2:84"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/ddm/state.go",
+        "rti/pkg/fom/model/dimension_metadata.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "realize a specification against each attribute/interaction's available\ndimensions, adding applicable default ranges and excluding dimensions designated\nexcluded. An all-excluded empty realization overlaps nothing, including the default\nregion. Test proper subsets, per-attribute contexts, bounds at the upper limit,\ninvalid FDD defaults, empty-region versus default-region distinctions, modification\npropagation, and save/restore.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G12",
+      "title": "Conveyed Immutable Region Copies",
+      "status": "confirmed_gap",
+      "clauses": "S1 9.1.7",
+      "pages": [
+        "S1:228-229"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/object/update.go",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java",
+        "javasdk/client/src/main/java/org/gorti/rti/DdmServices.java"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "a receiving callback can query its conveyed designators using only\nGet Range Bounds and Get Dimension Handle Set. Results equal the realization\nused for overlap, including defaults, and remain unchanged if the sender commits\nor deletes its specification while the callback is blocked. Mutating/reusing these\ncopies fails. Preserve copies until callback completion, not just stream receipt.\nRepresent present-empty default-region metadata distinctly from absent metadata.\nBound cleanup and checkpoint queued copies.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G13",
+      "title": "Delayed Subscription Evaluation",
+      "status": "behavior_implemented_bounded_acceptance_green_secondary_integration_open",
+      "clauses": "S1 8.1.8",
+      "pages": [
+        "S1:191"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/object/interaction.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "with the switch enabled, a joined recipient subscribing after send\nbut before TSO eligibility receives the applicable queued interaction/update.\nCheck subscription changes, inherited known classes, DDM realization changes,\nFQR, retract and restore. Disabled evaluation permits the implementation to\nevaluate earlier; do not invent a rule that disabled always must drop a message.\nKeep the switch immutable according to federation creation rules.",
+      "execution_status": "followup_20261001_focused_windows_and_four_linux_race_packages_GREEN_secondary_integration_open",
+      "closure_evidence": "engineering/verification/ieee1516-2010-g13-integration-status-20260930.md"
+    },
+    {
+      "id": "G14",
+      "title": "Replacement of an Outstanding Save Request",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.16; 4.16.4",
+      "pages": [
+        "S1:64-65"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/save_restore/manager.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "a valid new request replaces an outstanding, not-yet-initiated request\nand cancels its time barriers; an invalid replacement leaves the old request\nintact. A request after Initiate Federate Save correctly raises save-in-progress.\nCover timed-to-timed, timed-to-immediate, replacement near eligibility, and faults.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G15",
+      "title": "Timed-Save Requester Preconditions",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.16.3(d); 4.16.5",
+      "pages": [
+        "S1:64-65"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/adapters/grpc/savepoint.go",
+        "rti/internal/hla/time/scheduled_save.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "retain authenticated caller identity to admission. Distinguish\nrequester-not-permitted, invalid timestamp and timestamp-already-passed exceptions.\nReject a nonregulating requester with undefined GALT even if other participants\ncould advance. Verify all constrained participants' logical times, equal-time\nboundaries, zero lookahead, Integer64 overflow, and no state mutation on failure.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G16",
+      "title": "Per-Federate Scheduled-Save Initiation",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.16-4.17; 4.1.2",
+      "pages": [
+        "S1:64-66",
+        "S1:44"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/time/scheduled_save.go",
+        "rti/internal/application/server/scheduled_save.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "independently advance two constrained members so the first receives\nInitiate Federate Save at its own specified readiness boundary, without waiting\nfor the slower member. Distinguish TAR/NMR versus available/FQR strict boundaries.\nEnsure all required earlier/equal TSO invocations precede initiation. Preserve\nper-federate service admission and messages arriving from not-yet-saving members;\ninitiate nonconstrained members at the prescribed all-constrained boundary.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G17",
+      "title": "Standard-API Durable Recreated-Execution Restore",
+      "status": "confirmed_gap",
+      "clauses": "S1 4.1.2; 4.24-4.29",
+      "pages": [
+        "S1:44",
+        "S1:73-79"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/save_restore/cross_generation.go",
+        "javasdk/client/src/main/java/org/gorti/rti/RuntimeCheckpoint.java"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "save, stop the RTI/clients, recreate the execution, rejoin compatible\nfederate types, and restore by the standard label-only Java request. Resolve\nsaved provenance and rebind execution-scoped handles, callback identities,\nknown objects, retraction state and SDK queue state safely. Saved Integer64 values\nremain exact. Wrong FDD/time factory/participant census, corruption and unknown\nprivate formats fail atomically. Discard current messages and restore saved\nmessages at their required delivery states, without manual generation overrides.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G18",
+      "title": "MOM Receive/TSO Queue Lengths",
+      "status": "confirmed_gap",
+      "clauses": "S1 8.1.1; 8.1.7; 11.6/Table 6",
+      "pages": [
+        "S1:182",
+        "S1:189",
+        "S1:297"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/application/server/mom_metrics_sources.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "follow one message identity through time queue, outbox, retry,\ntransport and SDK pending invocation, until invocation starts. Count reflection,\nreceive and removal messages by received order, not arbitrary control callbacks.\nTest disabled callbacks, blocked callback bodies, duplicates, filtering, retract,\nreconnect and save/restore without undercounting or double counting.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G19",
+      "title": "MOM HLAservice Execution Catalog",
+      "status": "confirmed_gap",
+      "clauses": "S1 11.3(d); 11.4/Table 5; 11.4.2",
+      "pages": [
+        "S1:288-294"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/mom/dispatch.go",
+        "rti/pkg/fom/mim/standard-mim.xml"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "one positive and one negative actual-server scenario for each of the\n32 classes listed in the companion inventory. Compare target state, callbacks\nand exceptions with a direct invocation by that target. A management sender must\nnot need to impersonate the target's transport token. Preserve target membership,\ntime factory, checkpoint state and optional-argument presence. Allow precisely the\nMOM save/restore service interactions permitted by 11.4.2 while checkpoint service\nadmission otherwise remains enforced. Report errors rather than silent no-ops.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G20",
+      "title": "MOM Extension Dispatch",
+      "status": "confirmed_gap",
+      "clauses": "S1 11.3.1; 11.4.1(l)",
+      "pages": [
+        "S1:288-290"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/mom/dispatch.go",
+        "rti/internal/hla/mom/handlers_catalog.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "dispatch a valid subclass to its nearest predefined RTI-subscribed\nleaf, process required predefined parameters, and ignore valid extension\nparameters. Omitted optional HLAservice parameters preserve service omission\nsemantics. RTI-generated reports use predefined classes/parameters only.\nUnrelated user management classes route normally, not as successful RTI no-ops.\nMissing mandatory parameters still fail explicitly.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G21",
+      "title": "MOM Attribute Regional Routing",
+      "status": "confirmed_attribute_routing_gap_partial_report_implementation",
+      "clauses": "S1 11.4.1(h-j)",
+      "pages": [
+        "S1:290"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "rti/internal/hla/mom/instances.go",
+        "rti/internal/hla/mom/timing.go",
+        "rti/internal/application/server/mom_regional_reports.go"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "regional subscriptions to HLAfederate attributes receive only the\nsubject selected by the normalized-federate point range, including late subscription\nand periodic updates. Compare with normal global subscriptions. Separately verify\nreport subject filtering and the additional service-group dimension for service\ninvocation reports, including conveyed region-copy semantics and boundary points.\nAudit Table 4-7 publication/subscription completeness instead of assuming the\npartial catalog covers all MOM administration rules.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G22",
+      "title": "Java Standard Binding and Go/Python Callback Proof",
+      "status": "assessment_gap",
+      "clauses": "S1 12.6; 12.8-12.11; 13.2",
+      "pages": [
+        "S1:340-342",
+        "S1:390"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "compile an independently authored client against the unmodified\nstandard Java interfaces and the product provider; assess every applicable\noverload, factory, handle, encoding and exception. Verify callbacks execute\nserially on the evoking thread, enable/disable behavior, callback reentrancy\n(excluding Connect, Disconnect, Join, Resign, Evoke and Evoke Multiple), and\ndisconnect/rejoin epochs. Compare Go/Python observations with the same source-\nderived service oracle. Queue consumption and transport ACK are not substitutes\nfor ambassador invocation. EVOKED-only support is permitted; do not invent a\nmandatory IMMEDIATE mode or a requirement to certify every shipped language.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    },
+    {
+      "id": "G23",
+      "title": "Whole Normative Inventory and Qualification",
+      "status": "assessment_gap",
+      "clauses": "S0 5-6; S1 4-13, Annex F-G; S2 3-7 and applicable normative annexes",
+      "pages": [
+        "S0:33-35",
+        "S1:582-583",
+        "S2:82-84"
+      ],
+      "page_numbering": "physical_1_based",
+      "implementation_paths": [],
+      "source_review": "retained_or_added_active_text; see report for redline interpretation and visual checks",
+      "acceptance": "enumerate every applicable obligation and conditional trigger, not\nonly known failures. Classify RTI, federate, federation, model and tool subjects\nseparately. Map each applicable RTI obligation to reviewed implementation and\npositive/negative/boundary/fault/concurrency tests as relevant. Resolve explicit\nnot-applicable decisions with source rationale. A zero-test, skipped, or manually\nassumed row cannot close an implemented obligation.\n\nS1 13.2 requires all specified joined-federate services and RTI callbacks, and at\nleast one standard language mapping. Its conformance label is tied to publicly\navailable verification results certified by a recognized authority. Internal\nagent review is not externally independent assessment or that certification.\nAvailability of a recognized assessment program was not established in this\noffline audit; no organization or certificate is invented.",
+      "execution_status": "not_executed_by_this_audit",
+      "closure_evidence": null
+    }
+  ],
+  "mom_service_catalog": {
+    "gap": "G19",
+    "source": "S1 11.3(d); Table 5",
+    "model": "rti/pkg/fom/mim/standard-mim.xml",
+    "count": 32,
+    "leaf_classes": [
+      "HLAresignFederationExecution",
+      "HLAsynchronizationPointAchieved",
+      "HLAfederateSaveBegun",
+      "HLAfederateSaveComplete",
+      "HLAfederateRestoreComplete",
+      "HLApublishObjectClassAttributes",
+      "HLAunpublishObjectClassAttributes",
+      "HLApublishInteractionClass",
+      "HLAunpublishInteractionClass",
+      "HLAsubscribeObjectClassAttributes",
+      "HLAunsubscribeObjectClassAttributes",
+      "HLAsubscribeInteractionClass",
+      "HLAunsubscribeInteractionClass",
+      "HLAdeleteObjectInstance",
+      "HLAlocalDeleteObjectInstance",
+      "HLArequestAttributeTransportationTypeChange",
+      "HLArequestInteractionTransportationTypeChange",
+      "HLAunconditionalAttributeOwnershipDivestiture",
+      "HLAenableTimeRegulation",
+      "HLAdisableTimeRegulation",
+      "HLAenableTimeConstrained",
+      "HLAdisableTimeConstrained",
+      "HLAtimeAdvanceRequest",
+      "HLAtimeAdvanceRequestAvailable",
+      "HLAnextMessageRequest",
+      "HLAnextMessageRequestAvailable",
+      "HLAflushQueueRequest",
+      "HLAenableAsynchronousDelivery",
+      "HLAdisableAsynchronousDelivery",
+      "HLAmodifyLookahead",
+      "HLAchangeAttributeOrderType",
+      "HLAchangeInteractionOrderType"
+    ],
+    "table_precedence": "S1 Annex G; Clause 11 tables prevail over XML discrepancies"
+  },
+  "implementation_followups": [
+    {
+      "date": "2026-09-30",
+      "gaps": ["G06", "G07", "G08", "G09"],
+      "report": "engineering/verification/ieee1516-2010-synchronization-completion-20260930.md",
+      "contract": "engineering/verification/ieee1516-2010-sync-integration-contract-20260930.md",
+      "status": "sync_retry_generation_race_fixed_root_wired_focused_acceptance_green",
+      "new_domain_tests": 17,
+      "new_application_helper_tests": 3,
+      "new_strict_adapter_tests": 2,
+      "direct_production_tcp_cases": 4,
+      "direct_production_tcp_result": "PASS",
+      "live_go_sdk_cases": 2,
+      "live_go_sdk_result": "PASS",
+      "fresh_root_tcp_checkpoint_replay_cases": 2,
+      "fresh_root_tcp_checkpoint_replay_result": "PASS",
+      "cross_generation_all_manager_restart_result": "PASS",
+      "broad_six_server_packages_result": "PASS",
+      "extra_go_sdk_package_result": "PASS_after_owner_session_metadata_fix",
+      "retry_generation_regression": "RED_recreated_one_mandatory_receipt_after_clear_then_helper_GREEN",
+      "production_retry_admission_guard": "PASS_parent_common_admission_root_wired",
+      "post_retry_fix_focused_windows": "PASS_1.444s",
+      "post_retry_fix_linux_race_count_10": "PASS_28.261s",
+      "race_scope": "domain_persistence_transport_direct_tcp_live_go_sdk_checkpoint_replay_cross_generation_restart",
+      "race_result": "PASS",
+      "unresolved_source_decision": "S1 PDF page 59 departed-designator versus retained membership wording; clean-edition or correction needed",
+      "normative_closure_asserted": false,
+      "external_assessment": false
+    }
+  ],
+  "next_milestone_followups": [
+    {
+      "date": "2026-10-01",
+      "gap": "G13",
+      "status": "implemented_original_RED_to_GREEN_hotfiles_frozen_secondary_DDM_codec_and_MOM_counter_open",
+      "report": "engineering/verification/ieee1516-2010-g13-integration-status-20260930.md",
+      "test": "rti/tests/unit/object/delayed_subscription_review_test.go",
+      "late_interaction_interest": "GREEN",
+      "late_attribute_interest": "GREEN",
+      "typed_five_advance_restore_retract_inherited_frozen_DDM": "GREEN",
+      "whole_object_time_composition_packages": "GREEN",
+      "canonical_time_graph_codec": "GREEN",
+      "previously_unknown_object_ordinary_ancestor_restore": "GREEN_source_visual_pages_107_122_126_191",
+      "policy_cache_current_committed_revision_and_restore": "RED_to_GREEN_original_Get_count_oracle_unchanged",
+      "immutable_switch_live_join_extension": "RED_to_GREEN",
+      "MOM_point_early_handled_return": "integrated_Schro_helper_no_type_or_route_duplication",
+      "linux_race_four_focused_packages": "PASS_count1_1.706s_1.374s_1.485s_7.886s",
+      "DDM_conveyed_lease_checkpoint": "existing_test_RED_adapter_omits_conveyed_state_parent_DDM_owner_handoff",
+      "MOM_received_counter_boundary": "open_generation_candidate_admission_is_not_delivery",
+      "already_subscribed_control": "PASS",
+      "source": "S1 8.1.8, physical PDF page 191",
+      "normative_closure_asserted": false
+    }
+  ],
+  "proof_method": [
+    "Complete an obligation-level active-source inventory with subject and conditional applicability.",
+    "Write source-derived actual-endpoint positive/negative and relevant boundary, concurrency, failure, persistence oracles.",
+    "Pin release, server options and SDK identity; preserve per-case provenance.",
+    "Use RTI differential traces only as supplemental evidence and compare permitted partial orders.",
+    "Obtain recognized-authority-certified publicly available verification results before using the formal standard conformance label."
+  ],
+  "external_independent_assessment": {
+    "performed": false,
+    "agent_review_is_external": false,
+    "assessment_program_availability_verified": false
+  },
+  "audit_operations": {
+    "production_edits": false,
+    "existing_evidence_edits": false,
+    "claim_toggles": false,
+    "test_campaign": false,
+    "downloads": false,
+    "commit": false,
+    "docs_assets_edits": false
+  }
+}

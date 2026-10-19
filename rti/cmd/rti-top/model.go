@@ -25,7 +25,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cbchoi/gorti/rti/cmd/rti-top/internal/client"
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 // view enumerates the five PINNED views from docs/rtid-tui.md §3.x.

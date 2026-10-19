@@ -127,13 +127,13 @@ func TestParse_ObjectClassHierarchy_FlattensWithParentName(t *testing.T) {
 		t.Fatalf("ObjectClasses len = %d; want 2 (HLAobjectRoot + Vehicle); got %+v", len(classes), classes)
 	}
 	// Sorted by name: HLAobjectRoot < Vehicle.
-	if classes[0].Name != "HLAobjectRoot" || classes[1].Name != "Vehicle" {
+	if classes[0].Name != objectClassRootName || classes[1].Name != testVehicleName {
 		t.Fatalf("classes not sorted by name: %v", []string{classes[0].Name, classes[1].Name})
 	}
 	if classes[0].ParentName != "" {
 		t.Errorf("HLAobjectRoot.ParentName = %q; want empty", classes[0].ParentName)
 	}
-	if classes[1].ParentName != "HLAobjectRoot" {
+	if classes[1].ParentName != objectClassRootName {
 		t.Errorf("Vehicle.ParentName = %q; want HLAobjectRoot", classes[1].ParentName)
 	}
 	// Vehicle's attribute must be carried over.
@@ -161,13 +161,13 @@ func TestParse_InteractionClassHierarchy_FlattensWithParentName(t *testing.T) {
 		t.Fatalf("InteractionClasses len = %d; want 2; got %+v", len(ics), ics)
 	}
 	// Sorted by name: HLAinteractionRoot < Honk.
-	if ics[0].Name != "HLAinteractionRoot" || ics[1].Name != "Honk" {
+	if ics[0].Name != interactionClassRootName || ics[1].Name != "Honk" {
 		t.Fatalf("interactions not sorted by name: %v", []string{ics[0].Name, ics[1].Name})
 	}
 	if ics[0].ParentName != "" {
 		t.Errorf("HLAinteractionRoot.ParentName = %q; want empty", ics[0].ParentName)
 	}
-	if ics[1].ParentName != "HLAinteractionRoot" {
+	if ics[1].ParentName != interactionClassRootName {
 		t.Errorf("Honk.ParentName = %q; want HLAinteractionRoot", ics[1].ParentName)
 	}
 }
@@ -178,8 +178,8 @@ func TestParse_InteractionClassHierarchy_FlattensWithParentName(t *testing.T) {
 func TestParse_MultipleModules_AggregatesObjectClasses(t *testing.T) {
 	t.Parallel()
 
-	moduleA := strings.Replace(minimalFOM, "Vehicle", "Alpha", 1)
-	moduleB := strings.Replace(minimalFOM, "Vehicle", "Bravo", 1)
+	moduleA := strings.Replace(minimalFOM, testVehicleName, "Alpha", 1)
+	moduleB := strings.Replace(minimalFOM, testVehicleName, "Bravo", 1)
 
 	res, err := Parse([]Module{
 		{Path: "a.xml", XML: []byte(moduleA)},

@@ -1,15 +1,17 @@
 package parser
 
-import "testing"
+import (
+	"testing"
 
-// TestSpec_Cycle_RejectsSelfLoop asserts a class declaring itself as parent
-// (self-loop) produces FOM-002.
-func TestSpec_Cycle_RejectsSelfLoop(t *testing.T) {
+	"github.com/cbchoi/gorti/rti/pkg/fom/model"
+)
+
+// The old RejectsSelfLoop assertion conflated HLAobjectRoot.A with
+// HLAobjectRoot.A.B.A. These are distinct identities, not a graph cycle;
+// explicit legacy graph rejection is covered below instead.
+func TestSpec_Cycle_AcceptsRepeatedAncestorLeaf(t *testing.T) {
 	t.Parallel()
 
-	// Construct a parent table with a self-loop directly via the model:
-	// the structural XML walk does not emit self-loops, but cycle.go must
-	// be robust against any input where Name == ParentName.
 	xml := []byte(`<?xml version="1.0"?>
 <objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
   <modelIdentification><name>x</name><type>FOM</type></modelIdentification>
@@ -34,11 +36,42 @@ func TestSpec_Cycle_RejectsSelfLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if !res.HasCode("FOM-002") {
-		t.Fatalf("want FOM-002, got %v", res.CodeCounts())
+	if len(res.Diagnostics) != 0 || res.FOM == nil {
+		t.Fatalf("distinct qualified classes must be accepted: %+v", res)
 	}
-	if res.FOM != nil {
-		t.Errorf("want FOM nil on rejection")
+}
+
+func TestSpec_Cycle_RejectsLegacyGraphCycles(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		classes []model.ObjectClass
+	}{
+		{"self_loop", []model.ObjectClass{{Name: "A", ParentName: "A"}}},
+		{"two_nodes", []model.ObjectClass{{Name: "A", ParentName: "B"}, {Name: "B", ParentName: "A"}}},
+		{"long_cycle", []model.ObjectClass{{Name: "A", ParentName: "B"}, {Name: "B", ParentName: "C"}, {Name: "C", ParentName: "A"}}},
+		{"redeclaration_back_edge", []model.ObjectClass{
+			{Name: objectClassRootName},
+			{Name: "A", ParentName: objectClassRootName},
+			{Name: "B", ParentName: "A"},
+			{Name: "A", ParentName: "B"},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Result{Diagnostics: (cycleValidator{}).Run(diagnosticInput{
+				modulePath: "legacy-graph",
+				fom:        model.NewFOM(tc.classes, nil, nil),
+			})}
+			if !res.HasCode("FOM-002") {
+				t.Fatalf("want FOM-002 for explicit graph cycle, got %+v", res.Diagnostics)
+			}
+			for _, d := range res.Diagnostics {
+				if d.ModulePath != "legacy-graph" {
+					t.Errorf("lost module path: %+v", d)
+				}
+			}
+		})
 	}
 }
 

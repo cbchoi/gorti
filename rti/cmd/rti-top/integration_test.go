@@ -9,9 +9,7 @@
 // from the dial-edge through render, leaving only `tea.Program.Run`
 // (which is exhaustively covered by bubbletea's own tests) untested.
 //
-// Skips when `go build ./rti/cmd/rtid` is unavailable from the
-// working directory (i.e. running tests outside the repo) or when
-// the smoke port is already in use.
+// Requires a working Go toolchain; build and listener failures fail the test.
 
 package main
 
@@ -28,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cbchoi/gorti/rti/cmd/rti-top/internal/client"
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 // TestIntegration_SpawnRtidAndRenderEmptySnapshot is the after-final-
@@ -41,19 +39,20 @@ func TestIntegration_SpawnRtidAndRenderEmptySnapshot(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in -short mode")
 	}
-	if runtime.GOOS == "windows" {
-		t.Skip("rtid build path not yet validated on windows")
-	}
-
 	repoRoot := repoRoot(t)
 	binDir := t.TempDir()
 	rtidBin := filepath.Join(binDir, "rtid")
+	if runtime.GOOS == "windows" {
+		rtidBin += ".exe"
+	}
 
-	build := exec.Command("go", "build", "-o", rtidBin, "./rti/cmd/rtid")
+	buildCtx, buildCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer buildCancel()
+	build := exec.CommandContext(buildCtx, "go", "build", "-o", rtidBin, "./rti/cmd/rtid")
 	build.Dir = repoRoot
 	build.Env = os.Environ()
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Skipf("could not build rtid for integration test (%v): %s", err, out)
+		t.Fatalf("could not build rtid for integration test (%v): %s", err, out)
 	}
 
 	listenPort, adminPort := freePort(t), freePort(t)
@@ -66,21 +65,47 @@ func TestIntegration_SpawnRtidAndRenderEmptySnapshot(t *testing.T) {
 		"--listen", listenAddr,
 		"--admin-listen", adminAddr,
 		"--metrics-listen", "127.0.0.1:0",
+		"--save-dir", filepath.Join(binDir, "saves"),
 	)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	cmd.Env = append(os.Environ(), "GORTI_RESEARCH_CONFIG=")
+	outputPath := filepath.Join(binDir, "rtid-startup.log")
+	output, err := os.Create(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer output.Close()
+	cmd.Stdout = output
+	cmd.Stderr = output
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start rtid: %v", err)
 	}
+	done := make(chan struct{})
+	var processErr error
+	go func() {
+		processErr = cmd.Wait()
+		close(done)
+	}()
 	defer func() {
 		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		<-done
 	}()
 
 	// Poll the admin port until it accepts a connection.
-	if !waitForPort(adminAddr, 5*time.Second) {
-		t.Fatalf("rtid admin listener never bound %s", adminAddr)
+	if !waitForPort(adminAddr, 5*time.Second, done) {
+		state := "process still running"
+		select {
+		case <-done:
+			state = fmt.Sprintf("process exited: %v", processErr)
+		default:
+		}
+		startup, readErr := os.ReadFile(outputPath)
+		t.Fatalf("rtid admin listener never bound %s; %s; context: %v; startup log read: %v\n%s", adminAddr, state, ctx.Err(), readErr, startup)
 	}
+	startup, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("fresh rtid startup:\n%s", startup)
 
 	cli, err := client.Dial(adminAddr)
 	if err != nil {
@@ -153,7 +178,7 @@ func freePort(t *testing.T) int {
 }
 
 // waitForPort returns true once a TCP connection succeeds within d.
-func waitForPort(addr string, d time.Duration) bool {
+func waitForPort(addr string, d time.Duration, exited <-chan struct{}) bool {
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
@@ -161,7 +186,11 @@ func waitForPort(addr string, d time.Duration) bool {
 			_ = c.Close()
 			return true
 		}
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-exited:
+			return false
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 	return false
 }

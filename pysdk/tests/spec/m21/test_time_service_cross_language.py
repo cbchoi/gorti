@@ -1,10 +1,8 @@
 """TASK-215 (M21) — Python-side acceptance gate for AC §3.
 
-Most cross-language invariants are proven in the runner-driven
-example (examples/pyjevsim-time-advance/test_time_advance.py at
-TASK-213) which spawns rtid + 3 Python regulators and verifies
-end-to-end. This file binds the higher-level AC rows to surface
-checks; the heavy lifting is in the example test.
+The adapter acceptance case runs the existing example model through
+HLAFederate in a child process alongside two separate live regulators.
+The remaining cases retain their historical SDK surface checks.
 """
 
 from __future__ import annotations
@@ -43,17 +41,10 @@ def test_ac_3_6_python_sdk_time_works() -> None:
 @pytest.mark.spec
 @pytest.mark.integration
 def test_ac_3_8_pyjevsim_time_advance_runs() -> None:
-    """AC §3.8 — examples/pyjevsim-time-advance/ runs cross-process.
+    """The existing example model runs through HLAFederate with two live peers."""
+    from tests.spec.m21._processes import assert_pyjevsim_adapter_cycles
 
-    Driven end-to-end by examples/pyjevsim-time-advance/test_time_advance.py
-    (TASK-213) which spawns rtid + 3 Python regulators. Skipping here
-    avoids running the same heavy E2E twice in one CI invocation.
-    """
-    pytest.skip(
-        "End-to-end run covered by examples/pyjevsim-time-advance/test_time_advance.py "
-        "(TASK-213). Run that test directly: "
-        "pytest examples/pyjevsim-time-advance/test_time_advance.py"
-    )
+    assert_pyjevsim_adapter_cycles()
 
 
 @pytest.mark.spec

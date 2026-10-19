@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <objects><objectClass><name>HLAobjectRoot</name>
+    <objectClass><name>Parent</name><sharing>PublishSubscribe</sharing>
+      <attribute><name>Inherited</name><dataType>Record</dataType><updateType>Conditional</updateType><ownership>DivestAcquire</ownership><sharing>PublishSubscribe</sharing><dimensions><dimension>Area</dimension></dimensions><transportation>HLAbestEffort</transportation><order>Receive</order></attribute>
+      <objectClass><name>Leaf</name><attribute><name>Local</name><dataType>Variant</dataType><transportation>HLAreliable</transportation><order>TimeStamp</order></attribute></objectClass>
+    </objectClass>
+    <objectClass><name>Other</name><objectClass><name>Leaf</name></objectClass></objectClass>
+  </objectClass></objects>
+  <interactions><interactionClass><name>HLAinteractionRoot</name><transportation>HLAreliable</transportation><order>TimeStamp</order>
+    <interactionClass><name>Event</name><sharing>PublishSubscribe</sharing><dimensions><dimension>Area</dimension></dimensions><transportation>HLAbestEffort</transportation><order>Receive</order><parameter><name>Inherited</name><dataType>Record</dataType></parameter>
+      <interactionClass><name>Leaf</name><transportation>HLAreliable</transportation><order>TimeStamp</order><parameter><name>Local</name><dataType>Variant</dataType></parameter></interactionClass>
+    </interactionClass>
+  </interactionClass></interactions>
+  <dimensions><dimension><name>Area</name><upperBound>18446744073709551615</upperBound><normalization>x &amp; y &lt; z</normalization></dimension><dimension><name>Unbounded</name></dimension></dimensions>
+  <transportations><transportation><name>HLAreliable</name><reliable>Yes</reliable></transportation><transportation><name>HLAbestEffort</name><reliable>No</reliable></transportation></transportations>
+  <switches><autoProvide isEnabled="true"/><conveyRegionDesignatorSets isEnabled="false"/><conveyProducingFederate isEnabled="true"/><attributeScopeAdvisory isEnabled="true"/><attributeRelevanceAdvisory isEnabled="false"/><objectClassRelevanceAdvisory isEnabled="true"/><interactionRelevanceAdvisory isEnabled="false"/><serviceReporting isEnabled="true"/><exceptionReporting isEnabled="false"/><delaySubscriptionEvaluation isEnabled="true"/><automaticResignAction resignAction="DeleteObjectsThenDivest"/></switches>
+  <updateRates><updateRate><name>Precise</name><rate>1.0000000000000000000000000001</rate><semantics>exact &amp; explicit</semantics></updateRate><updateRate><name>Positive</name><rate>0.25</rate></updateRate></updateRates>
+  <dataTypes>
+    <basicDataRepresentations><basicData><name>Scalar</name><size>32</size><interpretation>integer</interpretation><endian>Big</endian><encoding>32 bits &amp; exact</encoding></basicData></basicDataRepresentations>
+    <simpleDataTypes><simpleData><name>Distance</name><representation>Scalar</representation><units>m</units><resolution>1</resolution><accuracy>exact</accuracy></simpleData></simpleDataTypes>
+    <enumeratedDataTypes><enumeratedData><name>Choice</name><representation>Scalar</representation><enumerator><name>First</name><value>1</value><value>2</value></enumerator><enumerator><name>Second</name><value>3</value></enumerator></enumeratedData></enumeratedDataTypes>
+    <arrayDataTypes><arrayData><name>List</name><dataType>Distance</dataType><cardinality>Dynamic</cardinality><encoding>HLAvariableArray</encoding></arrayData></arrayDataTypes>
+    <fixedRecordDataTypes><fixedRecordData><name>Record</name><encoding>HLAfixedRecord</encoding><field><name>ZFirst</name><dataType>List</dataType></field><field><name>ASecond</name><dataType>Scalar</dataType></field></fixedRecordData></fixedRecordDataTypes>
+    <variantRecordDataTypes><variantRecordData><name>Variant</name><discriminant>Kind</discriminant><dataType>Choice</dataType><alternative><enumerator>First</enumerator><name>One</name><dataType>Record</dataType></alternative><alternative><enumerator>Second</enumerator><name>Two</name><dataType>List</dataType></alternative><encoding>HLAvariantRecord</encoding></variantRecordData></variantRecordDataTypes>
+  </dataTypes>
+</objectModel>

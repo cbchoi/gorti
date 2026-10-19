@@ -12,6 +12,11 @@ import "errors"
 // Time-management typed errors. The SDK constructs these from gRPC status
 // detail strings returned by rtid's TimeServiceServer.
 var (
+	ErrTimeRegulationPending          = errors.New("federate: request for time-regulation pending")
+	ErrTimeConstrainedPending         = errors.New("federate: request for time-constrained pending")
+	ErrInvalidMessageRetractionHandle = errors.New("federate: invalid message retraction handle")
+	ErrMessageCanNoLongerBeRetracted  = errors.New("federate: message can no longer be retracted")
+
 	// ErrTimeRegulationAlreadyEnabled — detail string: time_regulation_already_enabled.
 	// Maps to core.ErrTimeAlreadyRegulating server-side.
 	ErrTimeRegulationAlreadyEnabled = errors.New("federate: time regulation already enabled")
@@ -57,6 +62,14 @@ var (
 
 // SDK-foundation errors (not from TimeService).
 var (
+	// ErrCouldNotCreateLogicalTimeFactory means the requested or selected
+	// implementation cannot be used by the SDK/server. No lossy fallback is made.
+	ErrCouldNotCreateLogicalTimeFactory = errors.New("federate: could not create logical time factory")
+
+	// ErrRTIInternal corresponds to RTIinternalError, including contradictory
+	// successful server responses whose committed effects must not be forgotten.
+	ErrRTIInternal = errors.New("federate: RTIinternalError")
+
 	// ErrNotJoined — federate has not joined a federation (or has resigned).
 	ErrNotJoined = errors.New("federate: not joined to any federation")
 
@@ -103,43 +116,10 @@ func wrapStatusErr(err error) error {
 		return nil
 	}
 	msg := errorString(err)
-	switch {
-	case contains(msg, "already time-regulating"):
-		return ErrTimeRegulationAlreadyEnabled
-	case contains(msg, "not time-regulating"):
-		return ErrTimeRegulationNotEnabled
-	case contains(msg, "already time-constrained"):
-		return ErrTimeConstrainedAlreadyEnabled
-	case contains(msg, "not time-constrained"):
-		return ErrTimeConstrainedNotEnabled
-	case contains(msg, "lookahead must be"):
-		return ErrInvalidLookahead
-	case contains(msg, "requested time"):
-		return ErrLogicalTimeAlreadyPassed
-	case contains(msg, "outstanding advance"):
-		return ErrTimeAdvancingState
-	case contains(msg, "federation halted"):
-		return ErrFederationHalted
-	case contains(msg, "already enabled asynchronous"):
-		return ErrTimeAlreadyAsynchronous
-	case contains(msg, "not enabled asynchronous"):
-		return ErrTimeNotAsynchronous
-	case contains(msg, "object not owned"):
-		return ErrObjectNotOwned
-	case contains(msg, "object instance already deleted"):
-		return ErrObjectAlreadyDeleted
-	case contains(msg, "object not found"):
-		return ErrObjectInstanceNotKnown
-	case contains(msg, "attribute not found"):
-		return ErrAttributeNotDefined
-	case contains(msg, "attribute not owned"):
-		return ErrAttributeNotOwned
-	case contains(msg, "interaction class not found"):
-		return ErrInteractionClassNotDefined
-	case contains(msg, "interaction parameter not found"):
-		return ErrInteractionParameterNotDefined
-	case contains(msg, "interaction class not published"):
-		return ErrInteractionClassNotPublished
+	for _, mapping := range statusErrorMappings {
+		if contains(msg, mapping.message) {
+			return mapping.err
+		}
 	}
 	return err
 }
@@ -164,4 +144,34 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// The first matching detail wins, preserving the original status precedence.
+var statusErrorMappings = []struct {
+	message string
+	err     error
+}{
+	{"could not create logical time factory", ErrCouldNotCreateLogicalTimeFactory},
+	{"request for time-regulation pending", ErrTimeRegulationPending},
+	{"request for time-constrained pending", ErrTimeConstrainedPending},
+	{"message retraction designator is invalid", ErrInvalidMessageRetractionHandle},
+	{"object deletion has already been delivered", ErrMessageCanNoLongerBeRetracted},
+	{"already time-regulating", ErrTimeRegulationAlreadyEnabled},
+	{"not time-regulating", ErrTimeRegulationNotEnabled},
+	{"already time-constrained", ErrTimeConstrainedAlreadyEnabled},
+	{"not time-constrained", ErrTimeConstrainedNotEnabled},
+	{"lookahead must be", ErrInvalidLookahead},
+	{"requested time", ErrLogicalTimeAlreadyPassed},
+	{"outstanding advance", ErrTimeAdvancingState},
+	{"federation halted", ErrFederationHalted},
+	{"already enabled asynchronous", ErrTimeAlreadyAsynchronous},
+	{"not enabled asynchronous", ErrTimeNotAsynchronous},
+	{"object not owned", ErrObjectNotOwned},
+	{"object instance already deleted", ErrObjectAlreadyDeleted},
+	{"object not found", ErrObjectInstanceNotKnown},
+	{"attribute not found", ErrAttributeNotDefined},
+	{"attribute not owned", ErrAttributeNotOwned},
+	{"interaction class not found", ErrInteractionClassNotDefined},
+	{"interaction parameter not found", ErrInteractionParameterNotDefined},
+	{"interaction class not published", ErrInteractionClassNotPublished},
 }

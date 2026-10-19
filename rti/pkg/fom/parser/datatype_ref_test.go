@@ -13,7 +13,7 @@ func TestSpec_DataTypeRef_AcceptsMIMReference(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 	for _, d := range res.Diagnostics {
-		if d.Code == "FOM-001" {
+		if d.Code == undefinedDataTypeCode {
 			t.Fatalf("unexpected FOM-001 on minimal good FOM: %+v", d)
 		}
 	}
@@ -47,7 +47,7 @@ func TestSpec_DataTypeRef_RejectsUndeclaredAttributeType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if !res.HasCode("FOM-001") {
+	if !res.HasCode(undefinedDataTypeCode) {
 		t.Fatalf("want FOM-001, got %v", res.CodeCounts())
 	}
 	if res.FOM != nil {
@@ -82,7 +82,7 @@ func TestSpec_DataTypeRef_RejectsUndeclaredParameterType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if !res.HasCode("FOM-001") {
+	if !res.HasCode(undefinedDataTypeCode) {
 		t.Fatalf("want FOM-001, got %v", res.CodeCounts())
 	}
 }
@@ -123,7 +123,7 @@ func TestSpec_DataTypeRef_AcceptsLocallyDeclaredType(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 	for _, d := range res.Diagnostics {
-		if d.Code == "FOM-001" {
+		if d.Code == undefinedDataTypeCode {
 			t.Fatalf("unexpected FOM-001 on FOM with declared SimpleData: %+v", d)
 		}
 	}

@@ -16,6 +16,8 @@ service OwnershipService {
   rpc CancelNegotiatedAttributeOwnershipDivestiture(CancelDivestRequest) returns (Empty);
   rpc CancelAttributeOwnershipAcquisition(CancelAcquireRequest) returns (Empty);
   rpc AttributeOwnershipDivestitureIfWanted(DivestIfWantedRequest) returns (Empty);
+  // Returns the exact set committed by this operation, without later queries.
+  rpc AttributeOwnershipDivestitureIfWantedWithResult(DivestIfWantedRequest) returns (DivestIfWantedResponse);
   // IEEE 1516.1-2010 §7.6 confirmDivestiture — completes a TWO-PHASE
   // negotiated divestiture (NegotiatedDivestRequest.two_phase=true)
   // after the divester received requestDivestitureConfirmation.
@@ -23,6 +25,15 @@ service OwnershipService {
   rpc ConfirmDivestiture(ConfirmDivestitureRequest) returns (Empty);
   rpc QueryAttributeOwnership(QueryOwnershipRequest) returns (QueryOwnershipResponse);
   rpc IsAttributeOwnedByFederate(IsOwnedRequest) returns (IsOwnedResponse);
+  rpc AttributeOwnershipReleaseDenied(ReleaseDeniedRequest) returns (Empty);
+}
+
+message ReleaseDeniedRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 object_handle = 4;
+  repeated uint64 attribute_handles = 5;
 }
 
 message UnconditionalDivestRequest {
@@ -58,6 +69,7 @@ message ConfirmDivestitureRequest {
   uint64 federate_handle = 3;  // divesting owner
   uint64 object_handle = 4;
   repeated uint64 attribute_handles = 5;
+  bytes tag = 6;
 }
 
 message AcquireRequest {
@@ -101,15 +113,24 @@ message DivestIfWantedRequest {
   repeated uint64 attribute_handles = 5;
 }
 
+message DivestIfWantedResponse {
+  repeated uint64 divested_attribute_handles = 1;
+}
+
 message QueryOwnershipRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
   uint64 object_handle = 3;
   uint64 attribute_handle = 4;
+  uint64 federate_handle = 5;
 }
 
 message QueryOwnershipResponse {
-  uint64 owner_federate_handle = 1;  // 0 if attribute is mid-transfer / unowned
+  // 0 means unowned; UINT64_MAX is the reserved RTI owner of predefined
+  // MOM attributes, not a joined federate. All other nonzero values identify
+  // joined federates. This matches the backend's internal MOM producer.
+  uint64 owner_federate_handle = 1;
+  // True for both federate-owned and RTI-owned attributes.
   bool owned = 2;
 }
 
@@ -141,6 +162,8 @@ message PendingDivestEntry {
   uint64 attribute_handle = 2;
   uint64 owner_federate = 3;
   bytes tag = 4;
+  // Absent in legacy bundles: retains the previous one-phase interpretation.
+  bool two_phase = 5;
 }
 
 // PendingAcquireEntry is one queued Acquire entry in

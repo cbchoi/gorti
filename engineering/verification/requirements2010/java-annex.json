@@ -1,0 +1,2472 @@
+{
+  "schema_version": 1,
+  "source_id": "S1516.1",
+  "reviewed_units": [
+    "12.11.1",
+    "12.11.2.1",
+    "12.11.2.1.1",
+    "12.11.2.1.2",
+    "12.11.3.1",
+    "12.11.4.3",
+    "12.11.4.4",
+    "12.11.4.5",
+    "12.11.4.6",
+    "12.11.4.7",
+    "12.11.4.8",
+    "12.11.4.9",
+    "12.11.4.10",
+    "12.11.4.11",
+    "12.11.4.12",
+    "12.11.4.14",
+    "12.11.4.15",
+    "12.11.4.16",
+    "12.11.4.17",
+    "12.11.4.18",
+    "12.11.4.19",
+    "12.11.4.20",
+    "12.11.4.21",
+    "12.11.4.22",
+    "12.11.4.23",
+    "12.11.4.25",
+    "12.11.4.27",
+    "12.11.4.29",
+    "12.11.4.30",
+    "12.11.4.31",
+    "12.11.4.32",
+    "12.11.4.33",
+    "12.11.4.34",
+    "12.11.5.3",
+    "12.11.5.4",
+    "12.11.5.7",
+    "12.11.5.9",
+    "12.11.5.16",
+    "12.11.5.17",
+    "12.11.5.24.1",
+    "12.11.5.24.2",
+    "12.11.5.24.3",
+    "12.11.5.24.4",
+    "12.11.6"
+  ],
+  "coverage_complete": false,
+  "requirements": [
+    {
+      "id": "JAVA2010-API-EXACT-PACKAGE",
+      "source_id": "S1516.1",
+      "clause": "B",
+      "pdf_pages": [
+        439,
+        440,
+        441,
+        442,
+        443
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Supply the incorporated Java API types and declarations in the prescribed package, without additions, deletions, or renaming.",
+      "conditions": "Selected Java binding; normative reference 12.11, PDF 342. Declaration identity is distinct from implementation and service behavior.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeHandleFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeHandleSet.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeHandleSetFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeHandleValueMap.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeHandleValueMapFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeRegionAssociation.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeSetRegionSetPairList.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/AttributeSetRegionSetPairListFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/CallbackModel.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/DimensionHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/DimensionHandleFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/DimensionHandleSet.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/DimensionHandleSetFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/ByteWrapper.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/DataElement.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/DataElementFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/DecoderException.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/EncoderException.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/EncoderFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAASCIIchar.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAASCIIstring.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAboolean.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAbyte.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAfixedArray.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAfixedRecord.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAfloat32BE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAfloat32LE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAfloat64BE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAfloat64LE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAinteger16BE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAinteger16LE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAinteger32BE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAinteger32LE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAinteger64BE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAinteger64LE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAoctet.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAoctetPairBE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAoctetPairLE.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAopaqueData.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAunicodeChar.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAunicodeString.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAvariableArray.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/HLAvariantRecord.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AlreadyConnected.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AsynchronousDeliveryAlreadyDisabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AsynchronousDeliveryAlreadyEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAcquisitionWasNotRequested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyBeingAcquired.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyBeingChanged.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyBeingDivested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyOwned.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeDivestitureWasNotRequested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotOwned.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotPublished.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotRecognized.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotSubscribed.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeRelevanceAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeRelevanceAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeScopeAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeScopeAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CallNotAllowedFromWithinCallback.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ConnectionFailed.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotCreateLogicalTimeFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotDecode.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotEncode.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotOpenFDD.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotOpenMIM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/DeletePrivilegeNotHeld.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/DesignatorIsHLAstandardMIM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ErrorReadingFDD.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ErrorReadingMIM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateAlreadyExecutionMember.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateHandleNotKnown.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateHasNotBegunSave.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateInternalError.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateIsExecutionMember.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateNameAlreadyInUse.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateNotExecutionMember.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateOwnsAttributes.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederatesCurrentlyJoined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateServiceInvocationsAreBeingReportedViaMOM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateUnableToUseTime.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederationExecutionAlreadyExists.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederationExecutionDoesNotExist.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/IllegalName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/IllegalTimeArithmetic.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InconsistentFDD.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionClassAlreadyBeingChanged.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionClassNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionClassNotPublished.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionParameterNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionRelevanceAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionRelevanceAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InTimeAdvancingState.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidAttributeHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidDimensionHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidFederateHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidInteractionClassHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLocalSettingsDesignator.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLogicalTime.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLogicalTimeInterval.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLookahead.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidMessageRetractionHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidObjectClassHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidOrderName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidOrderType.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidParameterHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidRangeBound.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidRegion.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidRegionContext.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidResignAction.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidServiceGroup.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidTransportationName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidTransportationType.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidUpdateRateDesignator.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/LogicalTimeAlreadyPassed.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/MessageCanNoLongerBeRetracted.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NameNotFound.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NameSetWasEmpty.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NoAcquisitionPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NoRequestToEnableTimeConstrainedWasPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NoRequestToEnableTimeRegulationWasPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NotConnected.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassNotPublished.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassRelevanceAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassRelevanceAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectInstanceNameInUse.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectInstanceNameNotReserved.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectInstanceNotKnown.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/OwnershipAcquisitionPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RegionDoesNotContainSpecifiedDimension.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RegionInUseForUpdateOrSubscription.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RegionNotCreatedByThisFederate.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RequestForTimeConstrainedPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RequestForTimeRegulationPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RestoreInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RestoreNotInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RestoreNotRequested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RTIexception.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RTIinternalError.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SaveInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SaveNotInitiated.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SaveNotInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SynchronizationPointLabelNotAnnounced.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeConstrainedAlreadyEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeConstrainedIsNotEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeRegulationAlreadyEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeRegulationIsNotEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/UnableToPerformSave.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/UnknownName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/UnsupportedCallbackModel.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateHandleFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateHandleSaveStatusPair.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateHandleSet.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateHandleSetFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateRestoreStatus.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederationExecutionInformation.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederationExecutionInformationSet.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/InteractionClassHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/InteractionClassHandleFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/LogicalTime.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/LogicalTimeFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/LogicalTimeFactoryFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/LogicalTimeInterval.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/MessageRetractionHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/MessageRetractionReturn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/NullFederateAmbassador.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ObjectClassHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ObjectClassHandleFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ObjectInstanceHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ObjectInstanceHandleFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/OrderType.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ParameterHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ParameterHandleFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ParameterHandleValueMap.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ParameterHandleValueMapFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RangeBounds.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RegionHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RegionHandleSet.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RegionHandleSetFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ResignAction.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RestoreFailureReason.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RestoreStatus.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RtiFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RtiFactoryFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/SaveFailureReason.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/SaveStatus.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/ServiceGroup.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/SynchronizationPointFailureReason.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/time/HLAfloat64Interval.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/time/HLAfloat64Time.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/time/HLAfloat64TimeFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/time/HLAinteger64Interval.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/time/HLAinteger64Time.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/time/HLAinteger64TimeFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/TimeQueryReturn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/TransportationTypeHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/TransportationTypeHandleFactory.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexExternalApi20261004Test.java",
+          "name": "loadedPublicProtectedApiMatchesAll204DeclarationsInPinnedIeeeArchive",
+          "oracle": "Pins the incorporated Java archive SHA-256, independently compiles its 204 sources with Java 11, compares the actual loaded hla.rti1516e top-level class set, and compares public/protected generic class, superclass, interface, constructor, method, field, exception and nested-type declarations using an isolated original-API loader. Fresh final run passed. This is declaration identity, not helper implementation identity or service semantics."
+        }
+      ],
+      "open_items": [
+        "Complete external census: 204 source files (58 core, 30 encoding, 110 exceptions, six time); 202 byte-identical and two adapted discovery helpers. Evidence: D:/workspace/gorti/internal-java-assessment-20261002/external-source-comparison.json.",
+        "Historical api-signature-comparison.json and original-signatures.log/imported-signatures.log remain separate from the fresh 20261004 pinned-archive comparison. Post-backend-fix JUnit and executed-source-hashes.json are under D:/workspace/gorti/applicable-fixes-20261004/java/backend-final-java/, with broader execution separately recorded under backend-broad-java/. Neither comparison proves service semantics; the two discovery-helper implementation adaptations remain explicit.",
+        "Exact RTIambassador surface has 172 signatures; FederateAmbassador has 60 callback declarations, including overloads. Their complete signatures remain in the external original-signatures.log and repository API files; javasdk/service-coverage.tsv labels delegation, not normative coverage.",
+        "Source PDF SHA-256: 789780a38898bd513fe1dbdb877433e6518dac8d0eb577056fc0bbe9e5b5a9d4. Incorporated Java ZIP SHA-256: 66485e053b6183df2df94e35de7c609677f2ccaef0830edde014aad066e41890.",
+        "Visual PDF 444 contains red struck-through legacy declarations; do not count PDF 444-502 legacy code as active API. Retained file list and Table 19 still contain helper names absent from the archive; see encoding-table reconciliation row. Annex B is not marked wholly reviewed.",
+        "Historical D:/workspace/gorti/defect-java-backend-final-20261002/results-summary.json reports 535 passing executions against server SHA-256 24b9c82590543159e6234c8dc7d473b6ee1699329c34677d1779035aad115b05. Those executions are not current tests or proof of all 172 method/exception conditions and 60 callback triggers. The new declaration test is independently reported in the 20261004 evidence manifest."
+      ]
+    },
+    {
+      "id": "JAVA2010-INTERFACE-IMPLEMENTATION",
+      "source_id": "S1516.1",
+      "clause": "12.11",
+      "pdf_pages": [
+        342
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Implement specified Java interfaces in a vendor package, retain the API classes, and leave FederateAmbassador implementation to federate code.",
+      "conditions": "RTI supplies concrete implementations except the user callback interface.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiFactory.java",
+        "javasdk/client/src/main/java/org/gorti/rti/types/Handles.java",
+        "javasdk/client/src/main/java/org/gorti/rti/types/HandleCollections.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "standardFactoryDiscovery",
+          "oracle": "Loads a concrete ambassador via the standard factory and checks one encoded integer32BE vector."
+        }
+      ],
+      "open_items": [
+        "Generated ambassador bodies inspected delegate to service objects and filter declared RTI exceptions; delegation is not proof that every underlying method is complete. No generic stub finding is inferred from declarations or a MAPPED label.",
+        "Federate callback no-ops in the standard NullFederateAmbassador are intentional; they are not evidence of missing RTI dispatch.",
+        "Complete review of every underlying service path and exception precedence remains open."
+      ]
+    },
+    {
+      "id": "JAVA2010-HANDLE-HASH",
+      "source_id": "S1516.1",
+      "clause": "12.11.1",
+      "pdf_pages": [
+        342
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Equal handle instances must have equal hash values; unequal values need not have distinct hashes.",
+      "conditions": "Java designator implementations, including distinct instances representing the same typed value.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/types/Handles.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandlesTest.java",
+          "name": "equalityHashingAndUnsignedBitsArePreserved",
+          "oracle": "For nine handle kinds and five boundary bit patterns, asserts equal instances have equal hashes, preserve bits, and differ from adjacent values."
+        }
+      ],
+      "open_items": [
+        "The loop excludes TransportationTypeHandle and uses legacy unscoped retraction handles; extend hashing oracles to those representations."
+      ]
+    },
+    {
+      "id": "JAVA2010-FACTORY-IMPLEMENTATION",
+      "source_id": "S1516.1",
+      "clause": "12.11.2.1",
+      "pdf_pages": [
+        343
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Provide a concrete implementation of the standard RtiFactory interface.",
+      "conditions": "Selected Java RTI binding.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiFactory.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "standardFactoryDiscovery",
+          "oracle": "Asserts discovered factory name, concrete ambassador type, and usable encoder factory."
+        }
+      ],
+      "open_items": [
+        "Factory construction is exercised; this does not prove services of its returned ambassador."
+      ]
+    },
+    {
+      "id": "JAVA2010-FACTORY-REGISTRATION",
+      "source_id": "S1516.1",
+      "clause": "12.11.2.1.1",
+      "pdf_pages": [
+        343
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Register the RTI factory using its implementation class in the prescribed META-INF/services entry.",
+      "conditions": "Entry belongs to the Java implementation JAR.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/resources/META-INF/services/hla.rti1516e.RtiFactory"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "standardFactoryDiscovery",
+          "oracle": "Named, default and enumerated factory discovery actually return gorti."
+        }
+      ],
+      "open_items": [
+        "Source resource contains org.gorti.rti.GortiRtiFactory; final packaged JAR registration identity is not independently rechecked here."
+      ]
+    },
+    {
+      "id": "JAVA2010-FACTORY-DISCOVERY",
+      "source_id": "S1516.1",
+      "clause": "12.11.2.1.2",
+      "pdf_pages": [
+        343
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Expose standard factory discovery for default, named and enumerated RTI implementations.",
+      "conditions": "Use the incorporated API declarations rather than apparent method-name errors in the prose examples.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RtiFactoryFactory.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "standardFactoryDiscovery",
+          "oracle": "Checks getRtiFactory(), getRtiFactory(\"gorti\"), and getAvailableRtiFactories()."
+        }
+      ],
+      "open_items": [
+        "Original-helper Java 11 ImageIO-SPI rejection and working two-helper ServiceLoader overlay are documented in the external API audit. Preserve this adaptation distinction; exact signatures do not establish original helper execution.",
+        "Discovery failure, multiple-provider selection and classloader cases remain unlinked."
+      ]
+    },
+    {
+      "id": "JAVA2010-ENCODER-FACTORY",
+      "source_id": "S1516.1",
+      "clause": "12.11.2.1.3",
+      "pdf_pages": [
+        343
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "The RTI factory must provide an encoder factory in addition to the referenced factory contract.",
+      "conditions": "The incorporated SISO factory description is not fully reviewed in this local bounded review.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiFactory.java",
+        "javasdk/client/src/main/java/org/gorti/rti/encoding/GortiEncoderFactory.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "encoderFactoryDoesNotRequireConnection",
+          "oracle": "Obtains an encoder before connection and asserts the Unicode string A byte vector."
+        }
+      ],
+      "open_items": [
+        "Referenced SISO 6.6.1 contract remains unassessed; this clause is omitted from reviewed_units."
+      ]
+    },
+    {
+      "id": "JAVA2010-NULL-AMBASSADOR",
+      "source_id": "S1516.1",
+      "clause": "12.11.3.1",
+      "pdf_pages": [
+        344
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Include the standard convenience class with empty implementations of every federate callback.",
+      "conditions": "No-op methods are intentional only for this user-extensible callback convenience class.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/NullFederateAmbassador.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexApplicable20261003Test.java",
+          "name": "nullAmbassadorInvokesEveryCallbackAsNoOp",
+          "oracle": "Invokes all 60 declared FederateAmbassador methods on NullFederateAmbassador with null references/default primitives; each method is declared by the convenience class, returns void, and invocation returns null without throwing. This tests local no-op invocation, not RTI callback production."
+        }
+      ],
+      "open_items": [
+        "Null/default arguments are deliberate no-op probes, not valid service-trigger fixtures; arbitrary callback arguments, classloader identity and external unadapted API runtime remain separate."
+      ]
+    },
+    {
+      "id": "JAVA2010-ENCODING-PRIMITIVES",
+      "source_id": "S1516.1",
+      "clause": "12.11.3.2",
+      "pdf_pages": [
+        344,
+        345
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Supply primitive encoding helpers with standard encode/decode and get/set operations, through EncoderFactory.",
+      "conditions": "All applicable Table 19 representations and incorporated encoding API interfaces.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/encoding/GortiEncoderFactory.java",
+        "javasdk/client/src/main/java/org/gorti/rti/encoding/ScalarElements.java",
+        "javasdk/client/src/main/java/org/gorti/rti/encoding/TextElements.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/EncoderFactoryTest.java",
+          "name": "everyPrimitiveDefaultIsAnIndependentZeroOrEmptyValue",
+          "oracle": "Constructs 20 primitive/text defaults, compares bytes against zero-filled encoded lengths, and confirms two integer32 defaults are independently mutable."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/PrimitiveEncodingTest.java",
+          "name": "independentWireVectors",
+          "oracle": "Twenty primitive/text/opaque encoder instances compare exact independent byte vectors, encoded lengths and octet boundaries, including both endian forms."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/PrimitiveEncodingTest.java",
+          "name": "scalarDecodeValuesAndSetters",
+          "oracle": "Decodes explicit scalar byte vectors, asserts getValue, updates each value with setValue and compares re-encoded bytes, including signed integers, floats, octets and characters."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/PrimitiveEncodingTest.java",
+          "name": "stringDecodeValuesAndOpaqueIsolation",
+          "oracle": "ASCII/Unicode decode/get/set values and explicit bytes are checked; opaque input/output array mutations do not change its encoded bytes, size/get or iterator contents."
+        }
+      ],
+      "open_items": [
+        "Complete IEEE 1516.2 datatype semantics belong to separate source review.",
+        "Concrete vectors and setters are linked, but arbitrary invalid values, all malformed buffers and the retained Table 19/archive inconsistency are not closed. Complete IEEE 1516.2 semantics require their separate source review."
+      ]
+    },
+    {
+      "id": "JAVA2010-ENCODING-COMPLEX",
+      "source_id": "S1516.1",
+      "clause": "12.11.3.2",
+      "pdf_pages": [
+        344,
+        346
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Complex helpers must accept primitive and complex elements, expose element access, and support record discriminants, variants and variable-array size.",
+      "conditions": "Table 20 fixed record, variant record, fixed array and variable array; exact incorporated API signatures control method availability.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/encoding/FixedRecord.java",
+        "javasdk/client/src/main/java/org/gorti/rti/encoding/VariantRecord.java",
+        "javasdk/client/src/main/java/org/gorti/rti/encoding/ArrayElements.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/CompoundEncodingTest.java",
+          "name": "nestedArraysAndRecordsRespectSegmentOrigin",
+          "oracle": "Nests a variable array of ASCII strings within a fixed record, compares explicit encoded bytes, encodes/decodes at a nonzero segment origin, and checks the recovered second string and matching wrapper positions."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/CompoundEncodingTest.java",
+          "name": "variableArrayIncludesAlignedBigEndianCount",
+          "oracle": "Checks explicit count/padding bytes, decodes two float64 values, asserts size/get, then resize/addElement/default creation and zero-size encoding."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/CompoundEncodingTest.java",
+          "name": "variantAlignsToWidestAlternativeAndMatchesEncodedDiscriminants",
+          "oracle": "Registers primitive and record variants, asserts selected value identity, switches discriminants and compares bytes, then decodes and checks discriminant and nested record values."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/encoding/CompoundEncodingTest.java",
+          "name": "fixedArrayHasInterElementPaddingButNoTrailingPadding",
+          "oracle": "Constructs a fixed array of complex records, compares exact bytes/length/boundary, decodes through a DataElementFactory, and checks nested get values and iterator mutation rejection."
+        }
+      ],
+      "open_items": [
+        "These are concrete composition/access/selection vectors, not all arbitrary element classes or all malformed encodings. Retained Table 19/archive discrepancies and complete IEEE 1516.2 datatype semantics remain unresolved separately."
+      ]
+    },
+    {
+      "id": "JAVA2010-ENCODING-TABLE-RECONCILIATION",
+      "source_id": "S1516.1",
+      "clause": "12.11.3.2",
+      "pdf_pages": [
+        345,
+        440,
+        441
+      ],
+      "subject": "rti",
+      "applicability": "unresolved",
+      "statement": "Resolve the retained helper tables and Annex B file list against the incorporated encoding archive before declaring helper coverage complete.",
+      "conditions": "Visually reviewed PDF 345 and 440 show HLAhandle/HLAlogicalTime/HLAlogicalTimeInterval names in added blue text, but the 30-file encoding archive census does not contain those types.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/encoding/EncoderFactory.java"
+      ],
+      "tests": [],
+      "open_items": [
+        "Table 19 also maps HLAlogicalTimeInterval to HLAbyte and has case inconsistencies. Do not silently discard retained text or invent extra API signatures.",
+        "Resolve edition/correction precedence between the normative tables/file list and the normative incorporated archive. This is an unresolved source inconsistency, not a reproduced runtime defect."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-01",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.1",
+      "pdf_pages": [
+        346
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Create uses URL-array FOM modules, a logical-time implementation selector, and a specific factory-creation failure.",
+      "conditions": "All incorporated createFederationExecution overloads, including MIM selection; mapping does not replace Clause 4 creation semantics.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FederationTimeSelectionTest.java",
+          "name": "creationSendsExplicitFloat64IncludingDefaultSelection",
+          "oracle": "Public RTIambassador create calls with explicit, empty and omitted selectors produce four loopback requests whose logicalTimeImplementationName is HLAfloat64Time; no FOM payload or MIM identity assertion is credited."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FederationTimeSelectionTest.java",
+          "name": "unsupportedCreationRemainsLocalWithoutLossyIntegerConversion",
+          "oracle": "Four unsupported/null selector inputs throw CouldNotCreateLogicalTimeFactory and leave the recorded create-request list empty."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FederationTimeSelectionTest.java",
+          "name": "createPropagatesAuthoritativeFactoryExceptionMetadata",
+          "oracle": "A loopback create rejection carrying CouldNotCreateLogicalTimeFactory metadata reaches the public checked exception after exactly one recorded create RPC."
+        }
+      ],
+      "open_items": [
+        "URL support currently accepts local file URLs only and imposes a 4 MiB limit in readModule; general URL obligations and valid-FDD admission need disposition.",
+        "File-only URL intake and 4 MiB limit still need source/profile disposition. Full URL-array/MIM payload fidelity, every create overload, valid-schema admission and server factory construction remain unverified.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-02",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.2",
+      "pdf_pages": [
+        346
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Join represents optional additional FOM modules as URL arrays and may fail if its selected logical-time factory cannot be created.",
+      "conditions": "Named/unnamed join overloads; selection originates in federation creation.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FederationTimeSelectionTest.java",
+          "name": "advertisedUnsupportedFactoryIsRejectedBeforeJoining",
+          "oracle": "Unsupported advertised federation time causes CouldNotCreateLogicalTimeFactory with zero joins/subscriptions/resigns and no accessible member time factory."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FederationTimeSelectionTest.java",
+          "name": "authoritativeUnsupportedJoinResponseIsCompensatedBeforeCallbacks",
+          "oracle": "Three unsupported authoritative join selections produce CouldNotCreateLogicalTimeFactory, authenticated compensating resign with returned handle, no callback subscription, and a successful later supported join."
+        }
+      ],
+      "open_items": [
+        "These loopback factory-selection oracles do not assess URL-array additional-module forwarding/merge/failure atomicity or all named/unnamed join forms; empty additional join modules are not empty creation modules.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-03",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.3",
+      "pdf_pages": [
+        346
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Synchronization registration has separate all-members and explicit-set method forms.",
+      "conditions": "registerFederationSynchronizationPoint with or without FederateHandleSet.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SynchronizationServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SynchronizationServicesTest.java",
+          "name": "preservesExplicitParticipantsTagAndFailedAchievement",
+          "oracle": "Explicit participant registration records a required-federate count of two, current federation/caller identity and a tag snapshot after caller mutation; it does not assert the two participant values individually."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SynchronizationServicesTest.java",
+          "name": "explicitEmptySetUsesAllMemberRegistration",
+          "oracle": "Implicit registration and explicit empty-set registration produce identical recorded requests after label normalization, with zero required-federate entries and copied tags; null tag is encoded empty. This is a local wire oracle, not a late-join or live callback oracle."
+        }
+      ],
+      "open_items": [
+        "Service preconditions, server participant selection, registration outcome callbacks and late-join conditions remain Clause 4 obligations; local request equality does not establish them.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-04",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.4",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Synchronization registration success and failure are distinct callbacks; failure carries its reason.",
+      "conditions": "synchronizationPointRegistrationSucceeded and synchronizationPointRegistrationFailed.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexApplicable20261003Test.java",
+          "name": "synchronizationRegistrationCallbacksPreserveLabelAndBothFailureReasons",
+          "oracle": "Synthesized success and two failure events invoke distinct callbacks with exact labels and both standard failure enum values; reason 99 throws RTIinternalError without another user callback."
+        }
+      ],
+      "open_items": [
+        "Adapter invocation only: production label uniqueness, participant-membership rejection, routing to the requester and EVOKED admission/order remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-05",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.5",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Synchronization achievement has default-success and explicit boolean method forms.",
+      "conditions": "synchronizationPointAchieved overloads.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SynchronizationServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SynchronizationServicesTest.java",
+          "name": "preservesExplicitParticipantsTagAndFailedAchievement",
+          "oracle": "Default achievement before announcement throws SynchronizationPointLabelNotAnnounced and sends no RPC; after local announcement, the explicit false overload sets optional successfully presence and false value. A subsequent default call is rejected after local achievement consumption."
+        }
+      ],
+      "open_items": [
+        "A positive default-success achievement and explicit true wire-value assertion are not supplied by this case. Production synchronization completion and failure propagation remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-06",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.6",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Save requests have untimed and timestamped method forms.",
+      "conditions": "requestFederationSave overloads with optional LogicalTime.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SaveRestoreServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "immediateAndTimedSavesKeepOptionalTimeAndCurrentIdentity",
+          "oracle": "Untimed save has no save_time; timed zero has explicit presence and current changed caller handle; future 12.5 is retained. Successful requests leave the callback queue empty."
+        }
+      ],
+      "open_items": [
+        "Loopback forwarding only: save scheduling/grant boundary, selected Integer64 representation, all preconditions and authoritative initiate callbacks remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-07",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.7",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Save initiation has untimed and timestamped callback forms.",
+      "conditions": "initiateFederateSave overloads with optional LogicalTime.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SaveRestoreCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "decoderSelectsStandardSaveAndRestoreCallbacksWithoutChangingState",
+          "oracle": "Synthesized save-initiate events invoke distinct untimed and timestamped callbacks, asserted as save:now and timed:pin:0.0 in the exact ordered callback list."
+        }
+      ],
+      "open_items": [
+        "Synthesized Float64 adapter cases do not demonstrate authoritative scheduling, Integer64 callback type, EVOKED timing or production save transition state.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-08",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.8",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Save completion success and failure use distinct methods.",
+      "conditions": "federateSaveComplete and federateSaveNotComplete.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SaveRestoreServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "allParticipantTransitionsAreIndependentAuthoritativeCalls",
+          "oracle": "Calls participant save success/failure and restore success/failure methods and asserts the exact distinct RPC sequence: begun, saveComplete, saveNotComplete, abortSave, restore, restoreComplete, restoreNotComplete, abortRestore; no callbacks are fabricated."
+        }
+      ],
+      "open_items": [
+        "Loopback operation distinction does not prove participant save state admission, collective outcomes or negative exception precedence.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-09",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.9",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Federation save success and failure use distinct callbacks; failure carries SaveFailureReason.",
+      "conditions": "federationSaved and federationNotSaved.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SaveRestoreCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "decoderSelectsStandardSaveAndRestoreCallbacksWithoutChangingState",
+          "oracle": "A synthesized save-completed event contributes exactly saved to the asserted callback sequence."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "mapsEverySaveFailureReason",
+          "oracle": "Six explicit wire reason values invoke federationNotSaved with the exact corresponding SaveFailureReason, checked by equality of the delivered singleton list."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "reasonlessFailureTerminalsCannotInventStandardFailureReasons",
+          "oracle": "Absent save failure reason throws RTIinternalError and the user failure callback must not run."
+        }
+      ],
+      "open_items": [
+        "These adapter oracles do not demonstrate production failure detection/cause attribution, recipient coverage, save-state exit or callback ordering.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-10",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.10",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Restore request acceptance and rejection use distinct callbacks.",
+      "conditions": "requestFederationRestoreSucceeded and requestFederationRestoreFailed.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SaveRestoreCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "decoderSelectsStandardSaveAndRestoreCallbacksWithoutChangingState",
+          "oracle": "Synthesized accepted and failed restore requests select distinct requestFederationRestoreSucceeded/Failed callbacks, asserted with labels old and missing in the exact callback sequence; no nonstandard reason argument is delivered."
+        }
+      ],
+      "open_items": [
+        "Production restore-request admission/rejection, requester-only routing and label-to-snapshot lookup remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-11",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.11",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Restore completion success and failure use distinct methods.",
+      "conditions": "federateRestoreComplete and federateRestoreNotComplete; archive resolves a prose spelling omission.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SaveRestoreServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveCallbackGateContractTest.java",
+          "name": "idleRestoreResponsesUseTheStandardException",
+          "oracle": "Both idle completion methods must throw RestoreNotRequested through the standard Java facade."
+        }
+      ],
+      "open_items": [
+        "Exact API declaration is present, but no test body assessing every listed mapping form was linked in this bounded review.",
+        "Relevant service preconditions, effects, exception identities and callback triggers in Clauses 4-10 remain separate obligations; a 535-pass suite or MAPPED signature is not closure."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-12",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.12",
+      "pdf_pages": [
+        347
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Federation restoration success and failure use distinct callbacks; failure carries RestoreFailureReason.",
+      "conditions": "federationRestored and federationNotRestored.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/SaveRestoreCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "decoderSelectsStandardSaveAndRestoreCallbacksWithoutChangingState",
+          "oracle": "A synthesized restoration-completed event selects federationRestored and contributes restored to the exact callback sequence."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "mapsEveryRestoreFailureReason",
+          "oracle": "Five explicit wire reason values invoke federationNotRestored with the exact corresponding RestoreFailureReason, asserted by singleton-list equality."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/SaveRestoreServicesTest.java",
+          "name": "reasonlessFailureTerminalsCannotInventStandardFailureReasons",
+          "oracle": "Absent restore failure reason throws RTIinternalError instead of invoking a guessed user failure callback."
+        }
+      ],
+      "open_items": [
+        "Synthetic adapters do not establish actual restore poststate, failure cause attribution, handle/state reinstatement, recipient coverage or ordering.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-13",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.13",
+      "pdf_pages": [
+        347,
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Connect supplies a FederateAmbassador; an empty local settings string selects defaults.",
+      "conditions": "Exact API offers connect overloads; explicit localSettingsDesignator may contain implementation-specific configuration.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/FederationTimeSelectionTest.java",
+          "name": "listReportsServerNamesWithoutInventingFactorySupport",
+          "oracle": "The fixture connects a supplied FederateAmbassador using EVOKED and an explicit loopback URL; list reports remain absent until evokeMultipleCallbacks, then exactly one report contains the expected federation/time-name mapping."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "connectRejectsUnsupportedModeAndAmbiguousSettings",
+          "oracle": "IMMEDIATE is rejected with UnsupportedCallbackModel and malformed/credential-bearing designators with InvalidLocalSettingsDesignator, using public connect."
+        }
+      ],
+      "open_items": [
+        "Unsupported IMMEDIATE is a valid supported-model restriction, not automatic nonconformance. Empty/default settings and each connection exception need separate runtime oracles.",
+        "An empty local-settings string selecting defaults is NOT asserted. Connected callback delivery is a supplied-ambassador control; every connection exception and supported-model behavior remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-14",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.14",
+      "pdf_pages": [
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Whole-class and selected-attribute unpublication are separate methods.",
+      "conditions": "unpublishObjectClass versus unpublishObjectClassAttributes(AttributeHandleSet).",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "everyDeclarationOverloadUsesItsWireOperationAndOptions",
+          "oracle": "Calls declaration service overloads on ExchangeServices and checks exact wire request types, attribute-set presence, active/passive booleans, update-rate strings, handles and joined envelopes; 14 recorded requests. This is a recording-channel service adapter, not public facade/live state."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "explicitEmptyUnpublicationIsNotWholeClassRemoval",
+          "oracle": "Explicit empty selected unpublication retains attribute_set_present=true, while whole-class unpublication omits presence; both have zero attribute entries."
+        }
+      ],
+      "open_items": [
+        "Full public-facade routing and production ownership/publication checks, empty-set effects and exception precedence remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-15",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.15",
+      "pdf_pages": [
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Object subscription distinguishes active/passive forms and optional update-rate names.",
+      "conditions": "Four subscribeObjectClassAttributes / subscribeObjectClassAttributesPassively forms.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "everyDeclarationOverloadUsesItsWireOperationAndOptions",
+          "oracle": "Calls declaration service overloads on ExchangeServices and checks exact wire request types, attribute-set presence, active/passive booleans, update-rate strings, handles and joined envelopes; 14 recorded requests. This is a recording-channel service adapter, not public facade/live state."
+        }
+      ],
+      "open_items": [
+        "Wire active=true/false and empty/fast/slow rates cover four service-adapter forms only; actual subscriber/update-rate semantics and invalid-rate precedence remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-16",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.16",
+      "pdf_pages": [
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Whole-class and selected-attribute unsubscription are separate methods.",
+      "conditions": "unsubscribeObjectClass versus unsubscribeObjectClassAttributes(AttributeHandleSet).",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "everyDeclarationOverloadUsesItsWireOperationAndOptions",
+          "oracle": "Calls declaration service overloads on ExchangeServices and checks exact wire request types, attribute-set presence, active/passive booleans, update-rate strings, handles and joined envelopes; 14 recorded requests. This is a recording-channel service adapter, not public facade/live state."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "explicitEmptyUnsubscriptionIsNotWholeClassRemoval",
+          "oracle": "Explicit empty selected unsubscription has attribute_set_present=true; whole-class unsubscription omits it; null selected set throws AttributeNotDefined with exactly two prior requests."
+        }
+      ],
+      "open_items": [
+        "Recording-channel presence is not proof of whole-class/selected production subscription mutation, queued message effects or all checked errors.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-17",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.17",
+      "pdf_pages": [
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Interaction subscription distinguishes active and passive forms.",
+      "conditions": "subscribeInteractionClass and subscribeInteractionClassPassively.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "everyDeclarationOverloadUsesItsWireOperationAndOptions",
+          "oracle": "Calls declaration service overloads on ExchangeServices and checks exact wire request types, attribute-set presence, active/passive booleans, update-rate strings, handles and joined envelopes; 14 recorded requests. This is a recording-channel service adapter, not public facade/live state."
+        }
+      ],
+      "open_items": [
+        "Active and passive wire booleans are asserted locally; production relevance/delivery and public-facade exception semantics remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-18",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.18",
+      "pdf_pages": [
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Single-name and multiple-name reservation use distinct methods.",
+      "conditions": "reserveObjectInstanceName and reserveMultipleObjectInstanceName, using exact archive spelling.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "reservationsAndBothRegistrationsUseTheActualAssignedName",
+          "oracle": "Single reserve/release carries car; multiple reserve/release preserves the set one,two in recorded requests. Generated-name registration has an empty request name and stores the assigned response name; explicit registration carries reserved and stores its returned handle/name."
+        }
+      ],
+      "open_items": [
+        "Recording-channel name forwarding does not prove authoritative single/multiple reservation atomicity, uniqueness, callback production or invalid-name conditions.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-19",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.19",
+      "pdf_pages": [
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Single-name reservation success and failure use distinct callbacks.",
+      "conditions": "objectInstanceNameReservationSucceeded and objectInstanceNameReservationFailed.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexApplicable20261003Test.java",
+          "name": "singleAndMultipleReservationCallbacksPreserveRequestedNames",
+          "oracle": "Synthesized single-name success and failure invoke distinct callbacks with exact names accepted and taken; the full four-outcome callback sequence is asserted."
+        }
+      ],
+      "open_items": [
+        "Adapter distinction only: authoritative acceptance/collision, requester routing and actual reservation poststate are not established.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-20",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.20",
+      "pdf_pages": [
+        348
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Multiple-name reservation success and failure use distinct callbacks.",
+      "conditions": "multipleObjectInstanceNameReservationSucceeded and multipleObjectInstanceNameReservationFailed.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexApplicable20261003Test.java",
+          "name": "singleAndMultipleReservationCallbacksPreserveRequestedNames",
+          "oracle": "Synthesized multiple success and failure both deliver the full requested set a,b, not just colliding a; clearing delivered sets does not mutate the original event lists. Exact callback sequence and original collision payload are asserted."
+        }
+      ],
+      "open_items": [
+        "Production all-or-nothing reservation, name ownership and EVOKED scheduling remain open; copied event payloads do not establish these semantics.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-21",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.21",
+      "pdf_pages": [
+        348,
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Object registration offers generated-name and explicit-name forms.",
+      "conditions": "registerObjectInstance overloads, one adding String.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "reservationsAndBothRegistrationsUseTheActualAssignedName",
+          "oracle": "Single reserve/release carries car; multiple reserve/release preserves the set one,two in recorded requests. Generated-name registration has an empty request name and stores the assigned response name; explicit registration carries reserved and stores its returned handle/name."
+        }
+      ],
+      "open_items": [
+        "Local response-derived object knowledge and both request-name forms are checked, but production reservation/publication preconditions, uniqueness and discovery recipients remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-22",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.22",
+      "pdf_pages": [
+        348,
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Discovery has forms with and without a producing federate handle.",
+      "conditions": "discoverObjectInstance overloads; optional producer metadata determines form.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "discoveryChoosesProducingFederateOverloadOnlyWhenPresent",
+          "oracle": "Synthesized discovery without producer and with producer 7 chooses the plain and producer overloads in that exact order. The callback body records which overload ran, not object/name/producer argument equality."
+        }
+      ],
+      "open_items": [
+        "Exact discovery payload values, convey-switch behavior and actual object discovery delivery remain unasserted by this case.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-23",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.23",
+      "pdf_pages": [
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Attribute updates have untimed and timestamped forms; the timed form returns retraction-validity information.",
+      "conditions": "updateAttributeValues overloads and MessageRetractionReturn.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "receiveOrderPayloadsAndRequestTagsAreCopied",
+          "oracle": "Untimed update/send requests have no logical_time and zero retraction ID; caller mutation does not change recorded value bytes or tags. Object-instance and object-class update requests retain exact tag and attribute list."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "timestampedMethodsShareUniqueProducerScopedRetractionSequence",
+          "oracle": "Timed update/send/delete at 10/11/12 return valid handles 1/2/3; requests carry matching IDs/times and the delete handle retains federation, generation and producer scope. Retraction dispatch and local restoration of deleted knowledge are checked."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "timestampedNonregulatingSendsNeverClaimValidRetractionHandles",
+          "oracle": "Timed update/send/delete while nonregulating return retractionHandleIsValid=false with null handle; all three requests have zero retraction IDs, and update wire time presence is explicitly asserted. The send/delete wire time presence is not asserted by this case."
+        }
+      ],
+      "open_items": [
+        "Recording-channel time/value/retraction mapping does not establish production delivery/order or grant-boundary retraction, all declared failures, or Integer64 variants.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-24",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.24",
+      "pdf_pages": [
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Reflection provides three overloads selected by timestamp presence and received order.",
+      "conditions": "reflectAttributeValues; complete selection rules referenced in 12.8.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "selectsAllNineObjectCallbackOverloads",
+          "oracle": "Synthesized wire events cover reflect/receive/remove crossed with three forms; asserts exactly the expected callback, tag, sent order, time 3, producer 7 and retraction only for TSO. This is local dispatch, not production service-trigger evidence."
+        }
+      ],
+      "open_items": [
+        "Exact API declaration is present, but no test body assessing every listed mapping form was linked in this bounded review.",
+        "Relevant service preconditions, effects, exception identities and callback triggers in Clauses 4-10 remain separate obligations; a 535-pass suite or MAPPED signature is not closure."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-25",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.25",
+      "pdf_pages": [
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Interaction sends have untimed and timestamped forms; the timed form returns retraction-validity information.",
+      "conditions": "sendInteraction overloads and MessageRetractionReturn.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "receiveOrderPayloadsAndRequestTagsAreCopied",
+          "oracle": "Untimed update/send requests have no logical_time and zero retraction ID; caller mutation does not change recorded value bytes or tags. Object-instance and object-class update requests retain exact tag and attribute list."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "timestampedMethodsShareUniqueProducerScopedRetractionSequence",
+          "oracle": "Timed update/send/delete at 10/11/12 return valid handles 1/2/3; requests carry matching IDs/times and the delete handle retains federation, generation and producer scope. Retraction dispatch and local restoration of deleted knowledge are checked."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "timestampedNonregulatingSendsNeverClaimValidRetractionHandles",
+          "oracle": "Timed update/send/delete while nonregulating return retractionHandleIsValid=false with null handle; all three requests have zero retraction IDs, and update wire time presence is explicitly asserted. The send/delete wire time presence is not asserted by this case."
+        }
+      ],
+      "open_items": [
+        "Service-adapter send overloads are covered locally; actual recipients, transport/order, production retraction and Integer64 variants remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-26",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.26",
+      "pdf_pages": [
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Interaction receipt provides three overloads selected by timestamp presence and received order.",
+      "conditions": "receiveInteraction; complete selection rules referenced in 12.9.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "selectsAllNineObjectCallbackOverloads",
+          "oracle": "Synthesized wire events cover reflect/receive/remove crossed with three forms; asserts exactly the expected callback, tag, sent order, time 3, producer 7 and retraction only for TSO. This is local dispatch, not production service-trigger evidence."
+        }
+      ],
+      "open_items": [
+        "Exact API declaration is present, but no test body assessing every listed mapping form was linked in this bounded review.",
+        "Relevant service preconditions, effects, exception identities and callback triggers in Clauses 4-10 remain separate obligations; a 535-pass suite or MAPPED signature is not closure."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-27",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.27",
+      "pdf_pages": [
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Object deletion has untimed and timestamped forms; the timed form returns retraction-validity information.",
+      "conditions": "deleteObjectInstance overloads and MessageRetractionReturn.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "failedDeletesPreserveKnowledgeAndSuccessfulDeletesForgetIt",
+          "oracle": "Untimed delete canonical rejection preserves local object knowledge; successful delete snapshots a mutated caller tag, omits logical_time, and removes local knowledge."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "timestampedMethodsShareUniqueProducerScopedRetractionSequence",
+          "oracle": "Timed update/send/delete at 10/11/12 return valid handles 1/2/3; requests carry matching IDs/times and the delete handle retains federation, generation and producer scope. Retraction dispatch and local restoration of deleted knowledge are checked."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "timestampedNonregulatingSendsNeverClaimValidRetractionHandles",
+          "oracle": "Timed update/send/delete while nonregulating return retractionHandleIsValid=false with null handle; all three requests have zero retraction IDs, and update wire time presence is explicitly asserted. The send/delete wire time presence is not asserted by this case."
+        }
+      ],
+      "open_items": [
+        "Local deletion bookkeeping and timed return mapping do not prove authoritative privilege checks, receiver removal callbacks, grant-boundary effects or all time representations.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-28",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.28",
+      "pdf_pages": [
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Object removal provides three overloads selected by timestamp presence and received order.",
+      "conditions": "removeObjectInstance; complete selection rules referenced in 12.10.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "selectsAllNineObjectCallbackOverloads",
+          "oracle": "Synthesized wire events cover reflect/receive/remove crossed with three forms; asserts exactly the expected callback, tag, sent order, time 3, producer 7 and retraction only for TSO. This is local dispatch, not production service-trigger evidence."
+        }
+      ],
+      "open_items": [
+        "Exact API declaration is present, but no test body assessing every listed mapping form was linked in this bounded review.",
+        "Relevant service preconditions, effects, exception identities and callback triggers in Clauses 4-10 remain separate obligations; a 535-pass suite or MAPPED signature is not closure."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-29",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.29",
+      "pdf_pages": [
+        349
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Attribute update requests distinguish object-instance and object-class handles.",
+      "conditions": "requestAttributeValueUpdate overloads typed by first argument.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "receiveOrderPayloadsAndRequestTagsAreCopied",
+          "oracle": "Untimed update/send requests have no logical_time and zero retraction ID; caller mutation does not change recorded value bytes or tags. Object-instance and object-class update requests retain exact tag and attribute list."
+        }
+      ],
+      "open_items": [
+        "Object-instance versus object-class request types and copied tags/attributes are checked; backend class/instance selection and provide-update recipient effects remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-30",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.30",
+      "pdf_pages": [
+        350
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Ownership reports distinguish unowned, RTI-owned and federate-owned attributes.",
+      "conditions": "attributeIsNotOwned, attributeIsOwnedByRTI and informAttributeOwnership; only the last adds FederateHandle.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/OwnershipCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/OwnershipServicesTest.java",
+          "name": "queryCallbacksDescribeTheRpcSnapshotNotLaterOwnership",
+          "oracle": "Queued synthesized RPC snapshots invoke informAttributeOwnership with object/attribute/owner 8, then attributeIsNotOwned with exact object/attribute; delivered remains empty until invocation and exact owned/unowned sequence and two requests are asserted."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/OwnershipServicesTest.java",
+          "name": "reservedRtiOwnerQueuesRtiCallbackWithoutFederateHandle",
+          "oracle": "A reserved RTI-owner response queues exactly one attributeIsOwnedByRTI callback with exact object/attribute; any informAttributeOwnership invocation fails the test."
+        }
+      ],
+      "open_items": [
+        "Injected query responses are not authoritative ownership-transfer/query state; production owner changes, identity isolation and full exception/callback admission remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-31",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.31",
+      "pdf_pages": [
+        350
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Region-based registration offers generated-name and explicit-name forms.",
+      "conditions": "registerObjectInstanceWithRegions overloads, one adding String.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/DdmServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/DdmServicesTest.java",
+          "name": "registrationAndUnassociationUnionRegionsOnlyWithinEachAttribute",
+          "oracle": "Unnamed regional registration stores assigned response name/class and exact per-attribute region unions; the named form carries reserved in the request. A recording channel supplies results."
+        }
+      ],
+      "open_items": [
+        "Generated-name request omission is not explicitly asserted. Production region validity, ownership, publication/reservation and discovery side effects remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-32",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.32",
+      "pdf_pages": [
+        350
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Region-based object subscription distinguishes active/passive forms and optional update-rate names.",
+      "conditions": "Four subscribeObjectClassAttributesWithRegions / subscribeObjectClassAttributesPassivelyWithRegions forms.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/DdmServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/DdmServicesTest.java",
+          "name": "allSubscriptionOverloadsPreservePerAttributeRegionsAndOptions",
+          "oracle": "Four regional subscription forms assert active/passive options, empty/fast/slow update rates and exact per-attribute region groups through assertSubscriptions; regional unsubscribe/update request groups and tags are also checked."
+        }
+      ],
+      "open_items": [
+        "All four adapter option forms are tested, not backend overlap matching, rate semantics, atomic state mutation, callback recipients or all errors.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-33",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.33",
+      "pdf_pages": [
+        350
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Region-based interaction subscription distinguishes active and passive forms.",
+      "conditions": "subscribeInteractionClassWithRegions and subscribeInteractionClassPassivelyWithRegions.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/DdmServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/DdmServicesTest.java",
+          "name": "interactionSubscriptionsAndBothSendsUseSharedRetractionIdentity",
+          "oracle": "Regional interaction subscribe/passive forms assert true/false active values. Untimed send lacks logical_time; timed regional send shares a sequence with ordinary send, preserves producer/generation/federation identity, time 11, wire handle and parameter bytes; nonregulating timed return is invalid and null timestamp is rejected."
+        }
+      ],
+      "open_items": [
+        "Local active/passive forwarding is not proof of production regional interaction subscription, overlap matching or live delivery.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-SERVICE-MAPPING-34",
+      "source_id": "S1516.1",
+      "clause": "12.11.4.34",
+      "pdf_pages": [
+        350
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Region-based interaction sends have untimed and timestamped forms; timed sends return retraction-validity information.",
+      "conditions": "sendInteractionWithRegions overloads and MessageRetractionReturn.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java",
+        "javasdk/client/src/main/java/org/gorti/rti/DdmServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/DdmServicesTest.java",
+          "name": "interactionSubscriptionsAndBothSendsUseSharedRetractionIdentity",
+          "oracle": "Regional interaction subscribe/passive forms assert true/false active values. Untimed send lacks logical_time; timed regional send shares a sequence with ordinary send, preserves producer/generation/federation identity, time 11, wire handle and parameter bytes; nonregulating timed return is invalid and null timestamp is rejected."
+        }
+      ],
+      "open_items": [
+        "Regional timed/untimed adapter and selected retraction values are covered; actual backend regional recipients, retraction validity boundaries, Integer64 forms and every exception remain open.",
+        "Only the named assertions above are linked; complete Clause 4-10 service semantics, exception precedence and live callback triggers remain open. No completion flag or reviewed-unit census is advanced."
+      ]
+    },
+    {
+      "id": "JAVA2010-EXCEPTION-HIERARCHY",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.3",
+      "pdf_pages": [
+        351
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Java API service exceptions inherit from RTIexception, itself a checked Exception.",
+      "conditions": "All declared service exception types, not arbitrary encoder exceptions.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AlreadyConnected.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AsynchronousDeliveryAlreadyDisabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AsynchronousDeliveryAlreadyEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAcquisitionWasNotRequested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyBeingAcquired.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyBeingChanged.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyBeingDivested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeAlreadyOwned.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeDivestitureWasNotRequested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotOwned.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotPublished.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotRecognized.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeNotSubscribed.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeRelevanceAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeRelevanceAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeScopeAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/AttributeScopeAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CallNotAllowedFromWithinCallback.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ConnectionFailed.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotCreateLogicalTimeFactory.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotDecode.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotEncode.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotOpenFDD.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/CouldNotOpenMIM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/DeletePrivilegeNotHeld.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/DesignatorIsHLAstandardMIM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ErrorReadingFDD.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ErrorReadingMIM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateAlreadyExecutionMember.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateHandleNotKnown.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateHasNotBegunSave.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateInternalError.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateIsExecutionMember.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateNameAlreadyInUse.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateNotExecutionMember.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateOwnsAttributes.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederatesCurrentlyJoined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateServiceInvocationsAreBeingReportedViaMOM.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederateUnableToUseTime.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederationExecutionAlreadyExists.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/FederationExecutionDoesNotExist.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/IllegalName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/IllegalTimeArithmetic.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InconsistentFDD.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionClassAlreadyBeingChanged.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionClassNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionClassNotPublished.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionParameterNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionRelevanceAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InteractionRelevanceAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InTimeAdvancingState.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidAttributeHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidDimensionHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidFederateHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidInteractionClassHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLocalSettingsDesignator.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLogicalTime.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLogicalTimeInterval.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidLookahead.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidMessageRetractionHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidObjectClassHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidOrderName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidOrderType.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidParameterHandle.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidRangeBound.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidRegion.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidRegionContext.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidResignAction.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidServiceGroup.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidTransportationName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidTransportationType.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/InvalidUpdateRateDesignator.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/LogicalTimeAlreadyPassed.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/MessageCanNoLongerBeRetracted.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NameNotFound.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NameSetWasEmpty.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NoAcquisitionPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NoRequestToEnableTimeConstrainedWasPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NoRequestToEnableTimeRegulationWasPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/NotConnected.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassNotDefined.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassNotPublished.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassRelevanceAdvisorySwitchIsOff.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectClassRelevanceAdvisorySwitchIsOn.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectInstanceNameInUse.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectInstanceNameNotReserved.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/ObjectInstanceNotKnown.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/OwnershipAcquisitionPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RegionDoesNotContainSpecifiedDimension.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RegionInUseForUpdateOrSubscription.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RegionNotCreatedByThisFederate.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RequestForTimeConstrainedPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RequestForTimeRegulationPending.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RestoreInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RestoreNotInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RestoreNotRequested.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RTIexception.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/RTIinternalError.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SaveInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SaveNotInitiated.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SaveNotInProgress.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/SynchronizationPointLabelNotAnnounced.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeConstrainedAlreadyEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeConstrainedIsNotEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeRegulationAlreadyEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/TimeRegulationIsNotEnabled.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/UnableToPerformSave.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/UnknownName.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/exceptions/UnsupportedCallbackModel.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "canonicalWireErrorsMapToStandardExceptionTypes",
+          "oracle": "A valid trailer maps to InTimeAdvancingState; a disallowed arbitrary class name maps to RTIinternalError."
+        }
+      ],
+      "open_items": [
+        "All 110 exception files are included as declaration references; no per-service negative oracle is claimed for all 110.",
+        "Generated facade preserves declared RTIexception subtypes and wraps undeclared failures; examine exception precedence and undeclared runtime failures separately."
+      ]
+    },
+    {
+      "id": "JAVA2010-HANDLE-TYPING",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.4",
+      "pdf_pages": [
+        351
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Use distinct handle interfaces with typed equality, hashing and printable representations.",
+      "conditions": "Different designator types are incommensurable; implementation classes are hidden behind interfaces.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/types/Handles.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandlesTest.java",
+          "name": "eachHandleImplementsOnlyItsOfficialHandleType",
+          "oracle": "Checks ten kinds against all ten official interfaces and checks all ten values remain distinct in a set."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandlesTest.java",
+          "name": "equalityHashingAndUnsignedBitsArePreserved",
+          "oracle": "Checks equality, hashing and printable unsigned bit patterns for nine handle kinds."
+        }
+      ],
+      "open_items": [
+        "Factory/support-service exposure and every handle representation remain separate facets."
+      ]
+    },
+    {
+      "id": "JAVA2010-HANDLE-CODECS",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.4",
+      "pdf_pages": [
+        351
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Encode handles into byte arrays at offsets and reconstruct them through corresponding factories.",
+      "conditions": "Encoding is opaque; independently equal reconstructed handles are required, not a universally prescribed vendor byte layout.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/types/Handles.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandlesTest.java",
+          "name": "everyEncodableHandleHasBigEndianRoundTrip",
+          "oracle": "Seven encoded handle kinds round-trip at offset two with surrounding sentinel bytes and all-one bits."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandlesTest.java",
+          "name": "everyHandleFactoryTranslatesMalformedBoundsToCouldNotDecode",
+          "oracle": "Seven factories reject null, short buffers and invalid offsets with CouldNotDecode."
+        }
+      ],
+      "open_items": [
+        "Transportation has a separately inspected factory test but is not in the seven-kind loop; cross-API reconstitution required by 12.2 is not established.",
+        "Do not impose encoding methods on region/retraction types absent from the incorporated interfaces."
+      ]
+    },
+    {
+      "id": "JAVA2010-HANDLE-SETS",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.7",
+      "pdf_pages": [
+        352
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Provide factory-created typed handle sets with all Set operations, rejecting wrong elements and incommensurable set arguments.",
+      "conditions": "Federate, attribute, dimension and region sets; implementation hidden behind interfaces.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/types/HandleCollections.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandleCollectionsTest.java",
+          "name": "setsSupportAllBulkAndIteratorMutations",
+          "oracle": "Across four set kinds, checks addAll, retainAll, removeAll, iterator removal, removeIf and clear."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandleCollectionsTest.java",
+          "name": "setsRejectNullWrongHandlesAndNonOfficialBulkArguments",
+          "oracle": "Across four kinds, asserts IllegalArgumentException for wrong handles and incommensurable bulk collections, preserving contents."
+        }
+      ],
+      "open_items": [
+        "Complete Java Set contract and factory facade states remain open despite these broad local cases."
+      ]
+    },
+    {
+      "id": "JAVA2010-ATTRIBUTE-VALUE-MAP",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.16",
+      "pdf_pages": [
+        354,
+        355
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Provide the typed value-map factory and full Map behavior, rejecting wrong keys, non-byte-array values and null mappings.",
+      "conditions": "ATTRIBUTE handle keys and byte[] values; type errors use IllegalArgumentException.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/types/HandleCollections.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandleCollectionsTest.java",
+          "name": "mapClonesCopyStructureButShareValuesAndViewsStayIndependent",
+          "oracle": "Runs both map kinds; clone mutations do not change original structure, shared value arrays remain shared, serialized copies preserve values, and null values are rejected."
+        }
+      ],
+      "open_items": [
+        "Raw-put/bulk rejection body was only partially inspected and is not credited as an oracle. Full entry-view, compute/merge/replace, atomic invalid-bulk and all optional Map operations need reconciliation."
+      ]
+    },
+    {
+      "id": "JAVA2010-PARAMETER-VALUE-MAP",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.17",
+      "pdf_pages": [
+        356
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Provide the typed value-map factory and full Map behavior, rejecting wrong keys, non-byte-array values and null mappings.",
+      "conditions": "PARAMETER handle keys and byte[] values; type errors use IllegalArgumentException.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/types/HandleCollections.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/HandleCollectionsTest.java",
+          "name": "mapClonesCopyStructureButShareValuesAndViewsStayIndependent",
+          "oracle": "Runs both map kinds; clone mutations do not change original structure, shared value arrays remain shared, serialized copies preserve values, and null values are rejected."
+        }
+      ],
+      "open_items": [
+        "Raw-put/bulk rejection body was only partially inspected and is not credited as an oracle. Full entry-view, compute/merge/replace, atomic invalid-bulk and all optional Map operations need reconciliation."
+      ]
+    },
+    {
+      "id": "JAVA2010-CALLBACK-MODEL",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.9",
+      "pdf_pages": [
+        353
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Represent the requested callback model using the standard EVOKED or IMMEDIATE enumeration.",
+      "conditions": "RTI need not implement both models; this product selects EVOKED.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/CallbackModel.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java",
+          "name": "connectRejectsUnsupportedModeAndAmbiguousSettings",
+          "oracle": "IMMEDIATE request throws UnsupportedCallbackModel; invalid settings strings throw InvalidLocalSettingsDesignator."
+        }
+      ],
+      "open_items": [
+        "This proves a bounded unsupported-model branch, not complete connect behavior."
+      ]
+    },
+    {
+      "id": "JAVA2010-TIME-REGISTRATION",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.24.1",
+      "pdf_pages": [
+        359
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Register logical-time factories in the prescribed META-INF/services entry.",
+      "conditions": "Any supplied time implementation.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/resources/META-INF/services/hla.rti1516e.LogicalTimeFactory"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java",
+          "name": "enumerationContainsBothStandardFactories",
+          "oracle": "Enumerates actual discovered factories and requires both exact standard names."
+        }
+      ],
+      "open_items": [
+        "Source entry lists Float64TimeFactory and Integer64TimeFactory; packaged JAR identity is not rechecked here."
+      ]
+    },
+    {
+      "id": "JAVA2010-STANDARD-TIME-TYPES",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.24.2",
+      "pdf_pages": [
+        359
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Supply all six standard Java time interfaces' implementations with exact Float64 and Integer64 factory names and service registrations.",
+      "conditions": "Mandatory standardized implementations, not optional custom types.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/types/Float64Time.java",
+        "javasdk/client/src/main/java/org/gorti/rti/types/Float64Interval.java",
+        "javasdk/client/src/main/java/org/gorti/rti/types/Float64TimeFactory.java",
+        "javasdk/client/src/main/java/org/gorti/rti/types/Integer64Time.java",
+        "javasdk/client/src/main/java/org/gorti/rti/types/Integer64Interval.java",
+        "javasdk/client/src/main/java/org/gorti/rti/types/Integer64TimeFactory.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java",
+          "name": "standardFactoryIsDiscoverableByNameAndInterface",
+          "oracle": "Name and interface discovery select the same concrete Integer64 factory and exact name."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java",
+          "name": "enumerationContainsBothStandardFactories",
+          "oracle": "Requires both registered standard names."
+        }
+      ],
+      "open_items": [
+        "Factory discovery does not establish all time arithmetic, network encodings, callbacks, save/restore or runtime time-management conditions."
+      ]
+    },
+    {
+      "id": "JAVA2010-TIME-DISCOVERY",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.24.3",
+      "pdf_pages": [
+        360
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Offer logical-time factory lookup by name or interface, enumeration, and usable direct implementation classes.",
+      "conditions": "Incorporated API uses getAvailableLogicalTimeFactories; use exact archive signatures.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/LogicalTimeFactoryFactory.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java",
+          "name": "standardFactoryIsDiscoverableByNameAndInterface",
+          "oracle": "Checks named and interface-based Integer64 discovery."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java",
+          "name": "enumerationContainsBothStandardFactories",
+          "oracle": "Checks discovery enumeration, not runtime joining."
+        }
+      ],
+      "open_items": [
+        "Two-helper Java 11 adaptation is retained; direct construction and all Float64 discovery forms are not covered by these two tests."
+      ]
+    },
+    {
+      "id": "JAVA2010-CUSTOM-TIME-REGISTRATION",
+      "source_id": "S1516.1",
+      "clause": "12.11.5.24.4",
+      "pdf_pages": [
+        360
+      ],
+      "subject": "rti",
+      "applicability": "unresolved",
+      "statement": "Register any supplied custom time implementation by the same service-registration mechanism.",
+      "conditions": "Conditional: custom time implementations supplied by an RTI or federation implementer; no obligation to invent an unclaimed custom type.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No supplied custom time implementation identified; applicability remains conditional and unresolved. Built-in standard types are not exempt."
+      ]
+    },
+    {
+      "id": "JAVA2010-CALL-MEMORY-COPY",
+      "source_id": "S1516.1",
+      "clause": "12.11.6",
+      "pdf_pages": [
+        360,
+        361
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "A callee must copy reference-argument data it retains beyond the call.",
+      "conditions": "Default Java RTI/federate method convention unless explicitly overridden; applies in both directions.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeServices.java",
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "copiesWirePayloadAndSentRegions",
+          "oracle": "Delivered attribute bytes match input; mutating received bytes cannot mutate wire payload, and clearing returned region set cannot alter subsequent region results."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeServicesTest.java",
+          "name": "receiveOrderPayloadsAndRequestTagsAreCopied",
+          "oracle": "Untimed update/send requests have no logical_time and zero retraction ID; caller mutation does not change recorded value bytes or tags. Object-instance and object-class update requests retain exact tag and attribute list."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexApplicable20261003Test.java",
+          "name": "singleAndMultipleReservationCallbacksPreserveRequestedNames",
+          "oracle": "Clearing delivered reservation sets leaves original success/requested/colliding event lists unchanged, demonstrating local adapter payload detachment only."
+        }
+      ],
+      "open_items": [
+        "Copy oracles cover specific update/send/request tags and values plus reservation callback sets, not all retained references. Async queues, DDM pairs, save/restore arrays and mutable time references remain open."
+      ]
+    },
+    {
+      "id": "JAVA2010-RETURNED-REFERENCE-FRESHNESS",
+      "source_id": "S1516.1",
+      "clause": "12.11.6",
+      "pdf_pages": [
+        360,
+        361
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Returned references ordinarily designate new callee-created objects that the caller may modify.",
+      "conditions": "Default convention; do not substitute collection shallow-clone rules for service reference ownership.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "copiesWirePayloadAndSentRegions",
+          "oracle": "Repeated getSentRegions returns a set unaffected by clearing a previously returned set."
+        }
+      ],
+      "open_items": [
+        "queryLogicalTime can return the stored logicalTime when an operation is pending; inspect concrete time immutability and returned-factory exceptions before declaring aliasing defects.",
+        "All returned reference types and applicable explicit exceptions are not decomposed here."
+      ]
+    },
+    {
+      "id": "JAVA2010-CALLBACK-REFLECT-FORMS",
+      "source_id": "S1516.1",
+      "clause": "12.8",
+      "pdf_pages": [
+        341
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Select the untimed RO, timestamped RO, or timestamped TSO callback form according to timestamp presence and received order.",
+      "conditions": "reflect delivery; timestamped TSO carries retraction information; supplemental producer/region information depends on convey switches.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "selectsAllNineObjectCallbackOverloads",
+          "oracle": "Synthesized wire events cover reflect/receive/remove crossed with three forms; asserts exactly the expected callback, tag, sent order, time 3, producer 7 and retraction only for TSO. This is local dispatch, not production service-trigger evidence."
+        }
+      ],
+      "open_items": [
+        "The test uses synthesized metadata and does not demonstrate production convey-switch behavior or every service-trigger/delivery ordering.",
+        "Separate each overload, producer/region presence and absence, exact type, payload, retraction validity and both time representations for full runtime coverage.",
+        "Remove-source prose refers to SupplementalReceiveInfo although the archive uses SupplementalRemoveInfo; retain this editorial inconsistency for source reconciliation."
+      ]
+    },
+    {
+      "id": "JAVA2010-CALLBACK-RECEIVE-FORMS",
+      "source_id": "S1516.1",
+      "clause": "12.9",
+      "pdf_pages": [
+        341
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Select the untimed RO, timestamped RO, or timestamped TSO callback form according to timestamp presence and received order.",
+      "conditions": "receive delivery; timestamped TSO carries retraction information; supplemental producer/region information depends on convey switches.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "selectsAllNineObjectCallbackOverloads",
+          "oracle": "Synthesized wire events cover reflect/receive/remove crossed with three forms; asserts exactly the expected callback, tag, sent order, time 3, producer 7 and retraction only for TSO. This is local dispatch, not production service-trigger evidence."
+        }
+      ],
+      "open_items": [
+        "The test uses synthesized metadata and does not demonstrate production convey-switch behavior or every service-trigger/delivery ordering.",
+        "Separate each overload, producer/region presence and absence, exact type, payload, retraction validity and both time representations for full runtime coverage.",
+        "Remove-source prose refers to SupplementalReceiveInfo although the archive uses SupplementalRemoveInfo; retain this editorial inconsistency for source reconciliation."
+      ]
+    },
+    {
+      "id": "JAVA2010-CALLBACK-REMOVE-FORMS",
+      "source_id": "S1516.1",
+      "clause": "12.10",
+      "pdf_pages": [
+        341,
+        342
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Select the untimed RO, timestamped RO, or timestamped TSO callback form according to timestamp presence and received order.",
+      "conditions": "remove delivery; timestamped TSO carries retraction information; supplemental producer/region information depends on convey switches.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/ExchangeCallbacks.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ExchangeCallbacksTest.java",
+          "name": "selectsAllNineObjectCallbackOverloads",
+          "oracle": "Synthesized wire events cover reflect/receive/remove crossed with three forms; asserts exactly the expected callback, tag, sent order, time 3, producer 7 and retraction only for TSO. This is local dispatch, not production service-trigger evidence."
+        }
+      ],
+      "open_items": [
+        "The test uses synthesized metadata and does not demonstrate production convey-switch behavior or every service-trigger/delivery ordering.",
+        "Separate each overload, producer/region presence and absence, exact type, payload, retraction validity and both time representations for full runtime coverage.",
+        "Remove-source prose refers to SupplementalReceiveInfo although the archive uses SupplementalRemoveInfo; retain this editorial inconsistency for source reconciliation."
+      ]
+    },
+    {
+      "id": "JAVA2010-URL-DESIGNATOR",
+      "source_id": "S1516.1",
+      "clause": "12.11.2",
+      "pdf_pages": [
+        343
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Interpret Java FDD designators as URLs.",
+      "conditions": "FOM/MIM admission using standard Java entry points.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveFomCreationTest.java",
+          "name": "validCreationAndEmptyAdditionalJoinModulesRetainDefaultMim",
+          "oracle": "Creates with a file URL, joins with an empty additional-module array and resolves two standard-MIM declaration handles."
+        }
+      ],
+      "open_items": [
+        "readModule explicitly rejects all non-file protocols and modules larger than 4 MiB. Determine source-permitted URL/profile restrictions and accepted valid-FDD boundaries; a successful local file case cannot justify a blanket restriction."
+      ]
+    },
+    {
+      "id": "JAVA2010-FDD-SCHEMA-VALIDITY",
+      "source_id": "S1516.1",
+      "clause": "F",
+      "pdf_pages": [
+        582
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "FDD validity is determined by the incorporated IEEE1516-FDD-2010 XML Schema.",
+      "conditions": "RTI FDD intake, not an unclaimed complete OMT authoring tool; schema allows additional FOM and non-FOM elements/attributes.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/strict.go",
+        "rti/pkg/fom/parser/parser.go",
+        "rti/pkg/fom/parser/fdd_extensions.go",
+        "rti/internal/application/composition/fom_repository.go",
+        "rti/internal/hla/core/fom_admission_error.go"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexFdd20261004Test.java",
+          "name": "independentlySchemaValidFddCreatesJoinsAndExposesDeclaredInteraction",
+          "oracle": "JDK SchemaFactory validates the complete fixture against the incorporated FDD XSD before public Java create/join; subsequent interaction and parameter handle/name round trips prove declared content admission. Fresh final run passed; this is one schema-valid FDD, not the whole schema."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexFdd20261004Test.java",
+          "name": "schemaInvalidSharingEnumerationIsRejectedWithoutCreatingExecution",
+          "oracle": "The independent XSD validator rejects supplied sharing value NotASharing; public Java then receives ErrorReadingFDD and joining the same federation name yields FederationExecutionDoesNotExist. Fresh backend-final-java run PASSED both assertions after parser/repository fixes and parent-owned error mapping. Prior acceptance and pre-mapping exception failures remain preserved separately. Unlike an omitted module section, the invalid supplied enumeration cannot be completed by the MIM."
+        },
+        {
+          "path": "rti/pkg/fom/parser/fdd_namespace_admission_test.go",
+          "name": "TestFDDSharingEnumerationUsesSchemaLexicalValues",
+          "oracle": "All four exact sharing enumerations and a split CDATA spelling are admitted; invalid spelling, case, leading/trailing whitespace and embedded-space variants yield a located FOM-009 and no semantic model. Fresh configured Go package run passed."
+        },
+        {
+          "path": "rti/pkg/fom/parser/fdd_namespace_admission_test.go",
+          "name": "TestFDDNamespaceRejectsUnauthorizedSlots",
+          "oracle": "Rejects foreign children in simple leaves, service-utilization and empty-switch contexts, before required class/root content, after a used wildcard, in duplicate wildcard slots, in an unqualified namespace, and beneath a misplaced parent. Every case requires FOM-009 and no model; no global foreign-element whitelist exemption is used. Fresh configured Go package run passed."
+        }
+      ],
+      "open_items": [
+        "Official schema available at D:/workspace/gorti/ieee2010-source-intake-20260921/supplementary/IEEE1516-FDD-2010.xsd. Full schema declaration has not been assessed here.",
+        "Backend fixes now reject invalid supplied sharing content, constrain foreign elements to projected schema wildcard contexts/order/cardinality, and attach a typed invalid-FOM boundary. Fresh evidence is D:/workspace/gorti/applicable-fixes-20261004/java/backend-final-java/ and backend-packages-configured-final.jsonl. Remaining lexical, structural, namespace, foreign-schema validation, identity-constraint and merged-FDD cases remain open; this bounded projection is not a complete schema validator.",
+        "Initial/corrected runs used a missing-dimensions negative fixture. That inference is withdrawn: 4.5 PDF 52 assesses supplied modules together with the MIM, so an omitted module section is not itself a proven invalid combined FDD. Those raw failures are retained as superseded test-design evidence, not product defects."
+      ]
+    },
+    {
+      "id": "JAVA2010-VALID-FDD-ADMISSION",
+      "source_id": "S1516.1",
+      "clause": "F",
+      "pdf_pages": [
+        582
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "RTI implementations must be able to read valid FDDs.",
+      "conditions": "All schema-valid inputs including permitted additional information; bounded product limits need explicit assessment.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/parser.go",
+        "rti/pkg/fom/parser/fdd_extensions.go",
+        "rti/pkg/fom/parser/local_names.go",
+        "rti/pkg/fom/parser/mim_merge.go",
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexFdd20261004Test.java",
+          "name": "independentlySchemaValidFddCreatesJoinsAndExposesDeclaredInteraction",
+          "oracle": "Independently validates a complete FDD, creates and joins through public Java APIs, and asserts interaction/parameter handle-name identity. Fresh final run passed for this base fixture only."
+        },
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexFdd20261004Test.java",
+          "name": "schemaValidForeignNamespaceInformationDoesNotPreventAdmission",
+          "oracle": "The official FDD XSD plus an explicit foreign-namespace declaration independently validate additional non-FOM information at the permitted root extension point. Fresh backend-final-java run PASSED public Java create, join and declared parameter lookup after the namespace admission fix. Earlier FOM-009 rejection evidence remains preserved."
+        },
+        {
+          "path": "rti/pkg/fom/parser/fdd_namespace_admission_test.go",
+          "name": "TestFDDNamespaceAuthorizedSlotsDoNotAlterSemanticModel",
+          "oracle": "Admits foreign payloads at exercised schema wildcard slots while asserting the exact original object/interaction declarations and parameter identity. Foreign local names objectClass, objects, interactionClass, name, sharing and modelIdentification cannot inject or replace HLA declarations, trigger HLA name/enumeration checks, or bypass MIM conflict checks. Fresh configured Go package run passed."
+        }
+      ],
+      "open_items": [
+        "The reproduced foreign-namespace rejection is fixed for schema-authorized wildcard placements, with foreign subtrees opaque to semantic, name and MIM-marker decoding. Full foreign-schema validation, complete extension corpus, combined-module semantics, file-only URLs and the 4 MiB input limit remain open. These positive and injection-control cases do not establish all valid-FDD admission."
+      ]
+    },
+    {
+      "id": "JAVA2010-STANDARD-MIM-IDENTITY",
+      "source_id": "S1516.1",
+      "clause": "G",
+      "pdf_pages": [
+        582,
+        583
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Use the incorporated HLAstandardMIM.xml definition for the standard MIM.",
+      "conditions": "Default standard MIM is an RTI admission responsibility, not arbitrary federation-author correctness.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/mim/embed.go",
+        "rti/pkg/fom/mim/standard-mim.xml",
+        "rti/internal/application/composition/fom_repository.go"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveFomCreationTest.java",
+          "name": "validCreationAndEmptyAdditionalJoinModulesRetainDefaultMim",
+          "oracle": "Public Java client resolves standard MOM object class and interaction handles after ordinary creation."
+        }
+      ],
+      "open_items": [
+        "Two handle lookups prove availability of two declarations, not exact full MIM identity or every MOM behavior. Compare the selected module structurally with the incorporated official MIM; the embedding file records third-party provenance."
+      ]
+    },
+    {
+      "id": "JAVA2010-MIM-TABLE-PRECEDENCE",
+      "source_id": "S1516.1",
+      "clause": "G",
+      "pdf_pages": [
+        292,
+        298,
+        583
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Where incorporated MIM XML and Clause 11 MOM tables differ, Clause 11 governs.",
+      "conditions": "Conditional on a discrepancy; do not infer equality from names or a MIM parse success.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/mim/table_precedence.go",
+        "rti/pkg/fom/mim/selected.go",
+        "rti/internal/hla/mom/metrics.go",
+        "rti/internal/application/composition/fom_state.go",
+        "pysdk/rti1516e/fom/parser.py"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaAnnexMimSourceDiagnostic20261004Test.java",
+          "name": "suppliedClause11TableSaveNameIsAvailableDespiteAnnexMimDiscrepancy",
+          "oracle": "Regular endpoint-enabled Java acceptance: Table 6 HLAAnnexSaveName resolves and round-trips to that name; the legacy XML spelling resolves to the same handle. No sourceDiagnostics opt-in is required. Passed against the rebuilt server in mim-table-precedence."
+        },
+        {
+          "path": "rti/pkg/fom/mim/table_precedence_test.go",
+          "name": "TestMIMTablePrecedencePreservesSourceAndAttributePosition",
+          "oracle": "Pins the unmodified IEEE XML SHA-256; default and explicitly selected original/table spellings produce the same 12 attributes, next-save label type and original ordinal in runtime and public Go parser."
+        },
+        {
+          "path": "rti/internal/application/composition/mim_table_precedence_test.go",
+          "name": "TestMIMTablePrecedenceLegacySnapshotAndAlias",
+          "oracle": "Both default and selected MIM snapshots containing the pre-fix member name restore to canonical Table 6 FDD while preserving every handle, source byte, digest and revision."
+        },
+        {
+          "path": "rti/internal/application/server/mim_table_precedence_test.go",
+          "name": "TestMIMTablePrecedencePendingSaveMetrics",
+          "oracle": "Real RPC save/abort/completion changes the production metric provider's Table 6 next-save label and last-save history. During saving the provider is read directly, not through the intentionally blocked MOM query RPC."
+        },
+        {
+          "path": "pysdk/tests/test_mim_table_precedence_live.py",
+          "name": "test_live_mim_table_precedence_save_restore_and_callbacks",
+          "oracle": "Hash-pinned real server: default/original/table MIMs preserve lookup handles, canonical current FDD, initial/completed-save callback encoding, save/restore identity and selected source bytes. SaveInProgress still rejects ordinary MOM queries."
+        }
+      ],
+      "open_items": [
+        "Full Clause 11 versus official-MIM discrepancy register and behavioral leaf oracles remain open; Annex G not marked wholly reviewed."
+      ]
+    },
+    {
+      "id": "JAVA2010-SELECTED-BINDING-SCOPE",
+      "source_id": "S1516.1",
+      "clause": "13.2",
+      "pdf_pages": [
+        390
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Assess every required service and RTI callback in the selected standard Java mapping.",
+      "conditions": "At least one standard API is required. Go/Python product-interface tests do not substitute for Java binding evidence.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/GortiRtiAmbassador.java",
+        "javasdk/ieee1516-api/src/main/java/hla/rti1516e/FederateAmbassador.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/JavaLanguageTransparency20261004Test.java",
+          "name": "simultaneousJavaAndPythonParticipantsExchangeOpaqueInteractionBytesThroughPublicApis",
+          "oracle": "Selected standard Java API is actually invoked for create/join, support lookups, unpublished-send InteractionClassNotPublished rejection, publication/subscription, untimed send and an actual receiveInteraction callback during evokeMultipleCallbacks. Asserts callback caller boundary, class/parameter identities, exact byte payload/tag, receive order, reliable transport and producing federate while both participants remain joined. Fresh final run passed; Python supplies the peer, not a substitute Java binding oracle."
+        }
+      ],
+      "open_items": [
+        "Full service and callback semantics are incomplete; no conformance percentage follows from 172 signatures, 60 callbacks, 204 files or 535 passes.",
+        "C++/WSDL exclusion applies only to this Java-selected assessment; independently advertised conformance claims require their own review. Public certification/label conditions in Clause 13 remain separate."
+      ]
+    },
+    {
+      "id": "JAVA2010-NONSELECTED-CPP-API",
+      "source_id": "S1516.1",
+      "clause": "13.2",
+      "pdf_pages": [
+        390
+      ],
+      "subject": "rti",
+      "applicability": "not-applicable",
+      "statement": "C++-specific API mapping verification is outside this Java-selected assessment.",
+      "conditions": "Conditional scope exclusion only; shared abstract services, FDD/MIM, time representations and interoperability obligations remain applicable.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Do not describe Annex C or 12.12 as universally optional for an independently claimed C++ API."
+      ]
+    },
+    {
+      "id": "JAVA2010-NONSELECTED-WSDL-API",
+      "source_id": "S1516.1",
+      "clause": "13.2",
+      "pdf_pages": [
+        390
+      ],
+      "subject": "rti",
+      "applicability": "not-applicable",
+      "statement": "WSDL-specific API mapping verification is outside this Java-selected assessment.",
+      "conditions": "Conditional scope exclusion only; not a waiver of RTI abstract service obligations.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Do not describe Annex D or 12.13 as universally optional for an independently claimed WSDL API."
+      ]
+    }
+  ]
+}

@@ -76,6 +76,9 @@ message QueryFederationAttributesResponse {
   string federation_name = 1;
   repeated uint64 federate_handles = 2;
   repeated string fom_module_names = 3;
+  // MIM-encoded observed attributes; missing values have an explicit reason.
+  map<string, bytes> attribute_values = 10;
+  map<string, string> unavailable_attributes = 11;
   // Reserved for cut-4 expansion:
   //   string last_save_name = 4;
   //   double last_save_time = 5;
@@ -125,6 +128,9 @@ message QueryFederateAttributesResponse {
   uint32 interactions_received = 21;
   uint32 updates_sent = 22;
   uint32 reflections_received = 23;
+  // Separate from legacy fanout counters: these report actual invocations.
+  map<string, bytes> attribute_values = 30;
+  map<string, string> unavailable_attributes = 31;
 }
 
 // =============================================================================
@@ -172,7 +178,9 @@ message MOMFederateRecord {
   bool time_regulating = 4;
   bool time_constrained = 5;
   double lookahead = 6;
+  LogicalTimeValue lookahead_value = 14;
   double logical_time = 7;
+  LogicalTimeValue logical_time_value = 15;
   uint32 interactions_sent = 10;
   uint32 interactions_received = 11;
   uint32 updates_sent = 12;

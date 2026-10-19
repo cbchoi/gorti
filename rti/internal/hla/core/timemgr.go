@@ -1,0 +1,115 @@
+package core
+
+import "context"
+
+// TimeManager governs HLA time management per IEEE 1516.1-2010 §8.
+//
+// Cut 1 (MVP) — NER only.
+// Cut 2 (M7+) — adds the other three time-advance primitives:
+//   - TimeAdvanceRequest(t)             (TAR)   — §8.10
+//   - TimeAdvanceRequestAvailable(t)    (TARA)  — §8.11 (allows grants AT t even with regulating peers exactly at t)
+//   - FlushQueueRequest(t)              (FQR)   — §8.13 (cancels any TSO traffic ≤ t)
+//   - NextMessageRequestAvailable(t)    (NMRA)  — §8.12 (NER variant that allows grants AT t)
+//
+// All four primitives share the LBTS computation and grant-emission
+// machinery from cut 1. The semantic differences are:
+//   - NER:   grant fires at t' = min(t, LBTS); fed advances to t'.
+//   - NMRA:  same as NER but grant time may equal LBTS (allows other federates' messages at exactly LBTS).
+//   - TAR:   grant fires at t' = min(t, LBTS); but federate must advance ALL the way to t' (no early grants).
+//   - TARA:  same as TAR but grant time may equal LBTS.
+//   - FQR:   request the RTI to flush the federate's TSO queue ≤ t; grant fires when queue is drained.
+//
+// Grants are emitted via Outbox.
+type TimeManagerOf[T LogicalTimeScalar] interface {
+	EnableRegulation(ctx context.Context, fed FederationName, h FederateHandle, lookahead T) error
+	DisableRegulation(ctx context.Context, fed FederationName, h FederateHandle) error
+
+	EnableConstrained(ctx context.Context, fed FederationName, h FederateHandle) error
+	DisableConstrained(ctx context.Context, fed FederationName, h FederateHandle) error
+
+	// NextMessageRequest — IEEE 1516.1-2010 §8.10. Cut 1.
+	NextMessageRequest(ctx context.Context, fed FederationName, h FederateHandle, t T) error
+
+	// NextMessageRequestAvailable — IEEE 1516.1-2010 §8.12. Cut 2 (M7).
+	NextMessageRequestAvailable(ctx context.Context, fed FederationName, h FederateHandle, t T) error
+
+	// TimeAdvanceRequest — IEEE 1516.1-2010 §8.10. Cut 2 (M7).
+	TimeAdvanceRequest(ctx context.Context, fed FederationName, h FederateHandle, t T) error
+
+	// TimeAdvanceRequestAvailable — IEEE 1516.1-2010 §8.11. Cut 2 (M7).
+	TimeAdvanceRequestAvailable(ctx context.Context, fed FederationName, h FederateHandle, t T) error
+
+	// FlushQueueRequest — IEEE 1516.1-2010 §8.13. Cut 2 (M7).
+	// Drains the federate's TSO queue up to t and emits a grant when complete.
+	FlushQueueRequest(ctx context.Context, fed FederationName, h FederateHandle, t T) error
+
+	// ModifyLookahead — IEEE 1516.1-2010 §8.16. M21 (TASK-202b).
+	// Mutates the regulating federate's lookahead in place. Returns
+	// ErrTimeNotRegulating if the federate is not currently regulating;
+	// ErrTimeInvalidLookahead on negative / NaN / +Inf input.
+	ModifyLookahead(ctx context.Context, fed FederationName, h FederateHandle, lookahead T) error
+
+	// EnableAsynchronousDelivery enables asynchronous RO delivery. It does not
+	// bypass time-constrained TSO delivery. Repeats return ErrTimeAlreadyAsynchronous.
+	EnableAsynchronousDelivery(ctx context.Context, fed FederationName, h FederateHandle) error
+
+	// DisableAsynchronousDelivery clears the asynchronous RO delivery flag.
+	// Returns ErrTimeNotAsynchronous if already off.
+	DisableAsynchronousDelivery(ctx context.Context, fed FederationName, h FederateHandle) error
+
+	// --- Read-only introspection (rtid-TUI Phase 1) ----------------------
+
+	// Snapshot returns the per-federation time-management view for
+	// the AdminService handler. Read-only; cheap.
+	Snapshot(fed FederationName) TimeSnapshotOf[T]
+
+	// QueryGALT returns the bound established by other regulating federates.
+	// Returns (0, false) when no other regulator exists (1516.1-2010 8.16).
+	QueryGALT(fed FederationName, h FederateHandle) (T, bool)
+
+	// QueryLITS returns the minimum of GALT and pending incoming timestamps.
+	// Returns (0, false) only when both are undefined.
+	QueryLITS(fed FederationName, h FederateHandle) (T, bool)
+}
+
+// TimeFederateState bundles one federate's time-management snapshot.
+// Phase 1 of the rtid-TUI plan: consumed by the AdminService handler
+// to populate FederateSnapshot.{current_time, pending_request_time,
+// lookahead, regulating, constrained}.
+type TimeFederateStateOf[T LogicalTimeScalar] struct {
+	Handle             FederateHandle
+	CurrentTime        T
+	HasPendingRequest  bool
+	PendingRequestTime T
+	Lookahead          T
+	Regulating         bool
+	Constrained        bool
+}
+
+// TimeSnapshot is the federation-wide time view for the AdminService
+// Snapshot RPC. The TUI's "Time advance" view (docs/rtid-tui.md §3.3)
+// consumes the LBTS + per-federate detail.
+type TimeSnapshotOf[T LogicalTimeScalar] struct {
+	// LBTS is the current Lower Bound on Time Stamp over the
+	// regulating set. PositiveInfinity when no federate is regulating.
+	LBTS          T
+	LBTSUnbounded bool
+
+	// Federates carries every federate that has any time-management
+	// state recorded for the federation, in handle-sorted order.
+	Federates []TimeFederateStateOf[T]
+}
+
+type TimeManager = TimeManagerOf[LogicalTime]
+
+// BoundTimeManagerOf exposes horizons without mapping unbounded Integer64 to
+// finite final time. Legacy scalar-only implementations remain compatible.
+type BoundTimeManagerOf[T LogicalTimeScalar] interface {
+	TimeManagerOf[T]
+	QueryGALTBound(FederationName, FederateHandle) (TimeBoundOf[T], bool)
+	QueryLITSBound(FederationName, FederateHandle) (TimeBoundOf[T], bool)
+}
+
+type TimeFederateState = TimeFederateStateOf[LogicalTime]
+
+type TimeSnapshot = TimeSnapshotOf[LogicalTime]

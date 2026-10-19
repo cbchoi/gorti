@@ -20,6 +20,10 @@ service SavepointService {
   // M24 W3 — IEEE 1516.1-2010 §4.28 + §4.30.
   rpc AbortFederationSave(AbortFederationSaveRequest) returns (Empty);
   rpc AbortFederationRestore(AbortFederationRestoreRequest) returns (Empty);
+
+  // IEEE 1516.1-2010 4.18 and 4.28; independent participant transitions.
+  rpc FederateSaveBegun(FederateSaveResponseRequest) returns (Empty);
+  rpc FederateRestoreNotComplete(FederateRestoreResponseRequest) returns (Empty);
 }
 
 // AbortFederationSave — §4.28 (M24).
@@ -43,12 +47,16 @@ message RequestFederationSaveRequest {
   string label = 4;
   // Optional save-time pin; absent means "save now at current sync point".
   optional double save_time = 5;
+  LogicalTimeValue save_time_value = 6;
 }
 
 message FederateSaveResponseRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
   uint64 federate_handle = 3;
+  // Private SDK runtime checkpoint, accepted only by FederateSaveComplete.
+  // Not application-model state; bounded to 1 MiB and returned only to its participant.
+  bytes client_state = 4;
 }
 
 enum SaveState {
@@ -67,6 +75,9 @@ message QuerySaveStateRequest {
 
 message QuerySaveStateResponse {
   SaveState state = 1;
+  // Current federation-wide vector, independent of the requested legacy label.
+  repeated FederateSaveStatus federate_statuses = 2;
+  string active_label = 3;
 }
 
 message RequestFederationRestoreRequest {
@@ -74,6 +85,8 @@ message RequestFederationRestoreRequest {
   string federation_name = 2;
   uint64 federate_handle = 3;  // requester
   string label = 4;
+  // Select an exact saved execution. Omission restores within this execution.
+  optional uint64 saved_federation_generation = 5;
 }
 
 message FederateRestoreResponseRequest {
@@ -99,4 +112,36 @@ message QueryRestoreStateRequest {
 
 message QueryRestoreStateResponse {
   RestoreState state = 1;
+  repeated FederateRestoreStatus federate_statuses = 2;
+  string active_label = 3;
+}
+
+enum FederateSaveProgress {
+  FEDERATE_SAVE_PROGRESS_UNSPECIFIED = 0;
+  FEDERATE_SAVE_PROGRESS_NO_SAVE_IN_PROGRESS = 1;
+  FEDERATE_SAVE_PROGRESS_INSTRUCTED_TO_SAVE = 2;
+  FEDERATE_SAVE_PROGRESS_SAVING = 3;
+  FEDERATE_SAVE_PROGRESS_WAITING_FOR_FEDERATION_TO_SAVE = 4;
+}
+
+message FederateSaveStatus {
+  uint64 federate_handle = 1;
+  FederateSaveProgress status = 2;
+}
+
+enum FederateRestoreProgress {
+  FEDERATE_RESTORE_PROGRESS_UNSPECIFIED = 0;
+  FEDERATE_RESTORE_PROGRESS_NO_RESTORE_IN_PROGRESS = 1;
+  FEDERATE_RESTORE_PROGRESS_RESTORE_REQUEST_PENDING = 2;
+  FEDERATE_RESTORE_PROGRESS_WAITING_FOR_RESTORE_TO_BEGIN = 3;
+  FEDERATE_RESTORE_PROGRESS_PREPARED_TO_RESTORE = 4;
+  FEDERATE_RESTORE_PROGRESS_RESTORING = 5;
+  FEDERATE_RESTORE_PROGRESS_WAITING_FOR_FEDERATION_TO_RESTORE = 6;
+}
+
+message FederateRestoreStatus {
+  uint64 pre_restore_handle = 1;
+  // Zero means no post-restore identity has been assigned yet.
+  uint64 post_restore_handle = 2;
+  FederateRestoreProgress status = 3;
 }

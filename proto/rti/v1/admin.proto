@@ -116,12 +116,15 @@ message FederateSnapshot {
   // current_time is the federate's last granted (or initial) logical
   // time.
   double current_time = 3;
+  LogicalTimeValue current_time_value = 20;
   // pending_request_time, when present, is the t parameter of the
   // outstanding time-advance request. Absent → no pending request.
   optional double pending_request_time = 4;
+  LogicalTimeValue pending_request_time_value = 21;
   // lookahead is the federate's regulating-set lookahead. Zero when
   // not regulating.
   double lookahead = 5;
+  LogicalTimeValue lookahead_value = 22;
   // regulating reports whether the federate is in the regulating set.
   bool regulating = 6;
   // constrained reports whether the federate is in the constrained set.
@@ -178,6 +181,7 @@ message TimeSnapshot {
   // regulating set. When no federate is regulating, the field is
   // serialised as +Inf (IEEE 754).
   double lbts = 1;
+  LogicalTimeValue lbts_value = 5;
   // regulating_handles is the set of federate handles currently in
   // the regulating set (sorted handle order).
   repeated uint64 regulating_handles = 2;
@@ -191,6 +195,7 @@ message TimeSnapshot {
 message PendingGrant {
   uint64 federate_handle = 1;
   double requested_time = 2;
+  LogicalTimeValue requested_time_value = 3;
 }
 
 // SyncPointSnapshot is one sync point's per-federation state. The

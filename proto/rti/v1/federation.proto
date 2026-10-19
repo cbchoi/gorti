@@ -17,6 +17,9 @@ service FederationService {
 
   // M24 W3 — IEEE 1516.1-2010 §4.8.
   rpc ListFederationMembers(ListFederationMembersRequest) returns (ListFederationMembersResponse);
+  rpc GetFOMView(GetFOMViewRequest) returns (FOMView);
+  rpc SetAutomaticResignDirective(SetAutomaticResignDirectiveRequest) returns (Empty);
+  rpc GetAutomaticResignDirective(GetAutomaticResignDirectiveRequest) returns (GetAutomaticResignDirectiveResponse);
 }
 
 message CreateFederationRequest {
@@ -38,6 +41,12 @@ message CreateFederationRequest {
   // "this rtid was not built with DDS support" message. Append-only:
   // old federates that omit this field are treated as GRPC.
   TransportMode transport_mode = 7;
+  // Explicit selected MIM; absent retains the embedded-MIM compatibility path.
+  // Present with empty XML is invalid. Kept separate from user FOM modules.
+  FOMModule mim_module = 8;
+  // Empty selects the server default. An unsupported implementation is rejected
+  // before federation creation; it must never be silently converted to Float64.
+  string logical_time_implementation_name = 9;
 }
 
 // TransportMode selects the data-plane wire path for a federation.
@@ -55,6 +64,7 @@ message CreateFederationResponse {
   uint64 effective_seed = 1;
   // Generation assigned to this concrete federation execution.
   uint64 federation_generation = 2;
+  string logical_time_implementation_name = 3;
 }
 
 message DestroyFederationRequest {
@@ -78,6 +88,9 @@ message JoinFederationRequest {
   string federate_type = 4;
   // Fences a delayed join from entering a same-name replacement execution.
   optional uint64 expected_federation_generation = 5;
+  repeated FOMModule additional_fom_modules = 6;
+  // Checked before membership or additional FOM changes; requires wire V2.
+  FOMModule expected_mim_module = 7;
 }
 
 message JoinFederationResponse {
@@ -95,6 +108,67 @@ message JoinFederationResponse {
   // Federates joining a DDS-mode federation use this to construct
   // their DomainParticipant. Zero is the DDS default domain.
   int32 dds_domain_id = 3;
+  FOMView fom_view = 4;
+  // Private capability for session-scoped administration; never persist or log.
+  bytes session_token = 5;
+  // Immutable federation time representation. Legacy absent metadata means
+  // HLAfloat64Time; it does not advertise Integer64 service support.
+  string logical_time_implementation_name = 6;
+  // Absent/false servers support completion only; never probe entry with a ticket.
+  bool callback_invocation_entry_supported = 7;
+}
+
+message GetFOMViewRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+// Authoritative immutable handle assignments; clients must not infer handles
+// from XML ordering after a federation has accepted additional modules.
+message FOMView {
+  uint64 revision = 1;
+  string digest = 2;
+  repeated FOMModule modules = 3;
+  repeated FOMClassBinding object_classes = 4;
+  repeated FOMClassBinding interaction_classes = 5;
+  repeated FOMDimensionBinding dimensions = 6;
+  // Exact explicitly selected MIM bytes and supplied designator, if any.
+  FOMModule mim_module = 7;
+}
+
+message FOMClassBinding {
+  string name = 1;
+  uint64 handle = 2;
+  repeated FOMMemberBinding members = 3;
+}
+
+message FOMMemberBinding {
+  string name = 1;
+  uint64 handle = 2;
+}
+
+message FOMDimensionBinding {
+  string name = 1;
+  uint64 handle = 2;
+  uint64 upper_bound = 3;
+}
+
+message SetAutomaticResignDirectiveRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  ResignAction action = 4;
+}
+
+message GetAutomaticResignDirectiveRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+}
+
+message GetAutomaticResignDirectiveResponse {
+  ResignAction action = 1;
 }
 
 message ResignFederationRequest {
@@ -117,6 +191,7 @@ message FederationSummary {
   Mode mode = 2;
   uint32 federates_joined = 3;
   uint64 federation_generation = 4;
+  string logical_time_implementation_name = 5;
 }
 
 // ListFederationMembers — IEEE 1516.1-2010 §4.8 listFederationExecutionMembers.

@@ -17,6 +17,7 @@ ambassador methods, both wired against the same gorti rtid.
 
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import subprocess
@@ -34,13 +35,12 @@ if str(_PYSDK) not in sys.path:
 
 # ruff: noqa: E402
 from rti1516e.standard import Rti1516eAmbassador
+from tests._legacy_server import build_rtid, spawn_rtid
 
-BIN_DIR = REPO_ROOT / "bin"
-RTID_BINARY = BIN_DIR / "rtid"
-CPP_PUBLISHER = (
+CPP_PUBLISHER = Path(os.environ.get("GORTI_CPP_PUBLISHER", str(
     REPO_ROOT / "cppsdk" / "build" / "examples" / "cpp-ieee1516e-smoke"
-    / "cpp_ieee1516e_publisher"
-)
+    / ("cpp_ieee1516e_publisher.exe" if os.name == "nt" else "cpp_ieee1516e_publisher")
+)))
 CPP_FOM = REPO_ROOT / "examples" / "cpp-ieee1516e-smoke" / "federation.fom.xml"
 FEDERATION = "cpp-ieee1516e-smoke"
 
@@ -52,23 +52,11 @@ def _free_port() -> int:
 
 
 def _build_rtid() -> Path:
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    subprocess.run(  # noqa: S603
-        ["go", "build", "-o", str(RTID_BINARY), "./rti/cmd/rtid"],  # noqa: S607
-        cwd=REPO_ROOT, check=True,
-    )
-    return RTID_BINARY
+    return build_rtid()
 
 
 def _spawn_rtid(binary: Path, port: int, mport: int) -> subprocess.Popen[bytes]:
-    return subprocess.Popen(  # noqa: S603
-        [str(binary),
-         "--listen", f":{port}",
-         "--metrics-listen", f":{mport}",
-         "--log-level", "warn"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    return spawn_rtid(binary, port, mport)
 
 
 def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:

@@ -33,6 +33,10 @@ from _federate_common import (  # type: ignore[import-not-found]
     write_result,
 )
 from rti1516e.connection import RtiConnection  # type: ignore[import-not-found]
+from rti1516e.events import (
+    ObjectInstanceNameReservationFailed,
+    ObjectInstanceNameReservationSucceeded,
+)
 
 
 class VehicleProducer:
@@ -122,9 +126,20 @@ async def run(
         # in cut-3). 1.5s covers spawn + subscribe with margin.
         await asyncio.sleep(1.5)
 
+        instance_name = f"vehicle-{name}"
+        await fed.reservation.reserve(instance_name)
+        async with asyncio.timeout(5):
+            async for event in fed.events():
+                if isinstance(event, ObjectInstanceNameReservationFailed):
+                    raise RuntimeError(f"name reservation failed: {event.object_name}")
+                if (isinstance(event, ObjectInstanceNameReservationSucceeded)
+                        and event.object_name == instance_name):
+                    break
+            else:
+                raise RuntimeError("callback stream ended before name reservation")
         obj_handle = await fed.register_object_instance(
             "Vehicle",
-            instance_name=f"vehicle-{name}",
+            instance_name=instance_name,
         )
         print(
             f"producer[{name}]: registered Vehicle (handle={obj_handle}) — "

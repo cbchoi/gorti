@@ -30,6 +30,48 @@ class RtiError(Exception):
             self.error_code = error_code
 
 
+class UnsupportedCallbackModel(RtiError):
+    """The requested local callback model is not supported."""
+
+
+class CallNotAllowedFromWithinCallback(RtiError):
+    """A callback attempted a prohibited recursive lifecycle/evocation call."""
+
+
+class AlreadyConnected(RtiError):
+    """The ambassador already has an open connection."""
+
+
+class CouldNotCreateLogicalTimeFactory(RtiError, ValueError):
+    """The requested or selected time implementation cannot be used.
+
+    ValueError compatibility retains the former local selector-validation API.
+    """
+
+
+class RTIinternalError(RtiError):
+    """Internal RTI/protocol failure, not a promise that no effects occurred."""
+
+
+class FederationCreationResponseError(RTIinternalError):
+    """A successful create returned unsupported metadata; execution remains."""
+
+    def __init__(
+        self, federation_name: str, federation_generation: int,
+        effective_seed: int, logical_time_implementation_name: str,
+    ) -> None:
+        super().__init__(
+            f"server already created federation execution {federation_name!r} "
+            f"(generation {federation_generation}), but its successful response reported "
+            f"unsupported logical time implementation {logical_time_implementation_name!r}; "
+            "no automatic destruction was attempted"
+        )
+        self.federation_name = federation_name
+        self.federation_generation = federation_generation
+        self.effective_seed = effective_seed
+        self.logical_time_implementation_name = logical_time_implementation_name
+
+
 # --- Federation lifecycle (errors.proto 1..7) -------------------------------
 
 
@@ -92,6 +134,10 @@ class FomMimRedefinition(RtiError):
     """ERR_FOM_MIM_REDEFINITION (101)."""
 
     error_code = 101
+
+
+class ErrorReadingFDD(FomValidationFailed):
+    """Invalid supplied FOM; retains the product validation-error base type."""
 
 
 # --- Object management (errors.proto 200..206) ------------------------------
@@ -254,6 +300,18 @@ class FederateNameAlreadyInUse(RtiError):
     """Annex C — §4.9 the requested federate name is taken."""
 
 
+class NameNotFound(RtiError):
+    """A support-service name lookup could not resolve the supplied name."""
+
+
+class InvalidObjectClassHandle(RtiError):
+    """A support query supplied an invalid object class handle."""
+
+
+class InvalidInteractionClassHandle(RtiError):
+    """A support query supplied an invalid interaction class handle."""
+
+
 class ObjectClassNotDefined(ObjectClassNotFound):
     """Annex C — object class handle/name is not in the FOM."""
 
@@ -302,6 +360,10 @@ class ObjectInstanceNameNotReserved(RtiError):
     """Annex C — §6.8 explicit-name register without a reservation."""
 
 
+class NameSetWasEmpty(RtiError):
+    """An object-name reservation service received an empty name set."""
+
+
 class SynchronizationPointLabelNotAnnounced(RtiError):
     """Annex C — §4.14 achieve on a label never announced here."""
 
@@ -331,6 +393,10 @@ class FederateOwnsAttributes(RtiError):
     """Annex C — §4.10 resign forbidden while owning attributes."""
 
 
+class OwnershipAcquisitionPending(RtiError):
+    """Resignation is forbidden while ownership acquisitions remain pending."""
+
+
 class AttributeAlreadyBeingAcquired(RtiError):
     """Annex C — §7.8 acquisition already pending for the attribute."""
 
@@ -340,7 +406,11 @@ class AttributeAlreadyBeingDivested(RtiError):
 
 
 class AttributeDivestitureWasNotRequested(RtiError):
-    """Annex C — §7.6 confirmDivestiture without a pending divest."""
+    """Confirm divestiture without a prior request to confirm (7.6.5(b))."""
+
+
+class NoAcquisitionPending(RtiError):
+    """No pending or willing acquirer remains for confirmation (7.6.5(a))."""
 
 
 class AttributeAcquisitionWasNotRequested(RtiError):
@@ -357,6 +427,10 @@ class RegionNotCreatedByThisFederate(RtiError):
 
 class InvalidRegionContext(RtiError):
     """Annex C — §9 region used with a mismatched class/attribute."""
+
+
+class InvalidRangeBound(RtiError):
+    """Annex C - range bounds are invalid for the dimension."""
 
 
 class MessageCanNoLongerBeRetracted(RtiError):

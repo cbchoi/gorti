@@ -4,19 +4,17 @@
 
 | Goal | Required tools |
 |---|---|
-| Run a published `rtid` archive | No Go, Python, or C++ runtime |
+| Run a published `rtid` archive | No separate language runtime |
 | Build `rtid`, `rti-top`, or the Go examples | Git and Go 1.22 or later |
 | Use the Python SDK from this checkout | Python 3.11+ and `pip` |
-| Build the C++ SDK | C++17, CMake 3.18+, Buf, gRPC++, and protobuf |
+| Build the Java SDK | JDK 11+ and Maven |
 
 The portable `rtid` and `rti-top` builds do not require CGo or a DDS runtime.
 Go dependencies require network access the first time they are downloaded.
 Buf and its remote plugins are needed only for the all-language generation
-path and the C++ SDK.
+path.
 
 The server, Go SDK, and Python SDK are supported on Linux, macOS, and Windows.
-The C++ DLC SDK currently targets Linux and macOS; Windows C++ support remains
-on the roadmap.
 
 ## Build from source
 
@@ -153,15 +151,19 @@ SDK dependencies isolated.
 The runtime package is `rti1516e`. Add the `pyjevsim` extra only for the DEVS
 bridge: `python -m pip install -e './pysdk[dev,pyjevsim]'`.
 
-## C++ SDK from source
+## Java SDK from source
 
-Run `buf generate` from the repository root before configuring CMake; it
-creates the untracked protobuf and gRPC sources under `cppsdk/_generated`.
-The SDK requires a C++17 compiler, CMake 3.18 or later, gRPC++, and protobuf.
-Conan, vcpkg, or compatible system packages can provide those dependencies.
-See the
-[C++ SDK build guide](https://github.com/cbchoi/gorti/blob/main/cppsdk/README.md)
-for the current commands and supported profile.
+With JDK 11 or later and Maven installed, run from the repository root:
+
+```bash
+mvn -f javasdk/pom.xml verify
+```
+
+Maven generates the Java protocol bindings and builds the `hla.rti1516e` API
+and gorti service provider. Live-server tests require an explicit endpoint;
+see the
+[Java SDK guide](https://github.com/cbchoi/gorti/blob/main/javasdk/README.md)
+for setup, test commands, and service coverage.
 
 ## Installation troubleshooting
 
@@ -170,7 +172,6 @@ for the current commands and supported profile.
 | `go: go.mod file not found` | Run the command from the cloned repository root. |
 | Go reports an older language version | Install Go 1.22 or later and confirm with `go version`. |
 | Dependency or plugin download fails | Confirm network and proxy access for the Go module proxy, GitHub, and `buf.build`. |
-| CMake reports missing generated protobuf sources | Run `buf generate` from the repository root before configuring CMake. |
 | PowerShell blocks virtual-environment activation | Invoke `.\.venv\Scripts\python.exe -m pip ...` directly or use an execution policy approved for the machine. |
 | The installer cannot write its destination | Set `INSTALL_DIR` to a user-writable directory and add that directory to `PATH`. |
 

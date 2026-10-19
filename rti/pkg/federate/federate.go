@@ -12,7 +12,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/cbchoi/gorti/rti/pkg/logicaltime"
 	"io"
+	"math"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,17 +25,22 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 // Connection wraps a gRPC channel to rtid + the cut-1 service stubs.
 // One Connection MAY host multiple federates; the cut-3 / M21 happy
 // path is one Federate per Connection.
 type Connection struct {
-	generationMu sync.RWMutex
-	generations  map[string]uint64
+	callbackOrderMu sync.Mutex
+	callbackOrder   map[*callbackReportTransport]struct{}
+	generationMu    sync.RWMutex
+	generations     map[string]uint64
+	selectedMIMs    map[string]*FOMModule // immutable copies, protected by generationMu
 
 	cc                           *grpc.ClientConn
 	fed                          rtiv1.FederationServiceClient
@@ -42,6 +50,7 @@ type Connection struct {
 	localLRC                     rtiv1.LocalLRCServiceClient
 	stream                       rtiv1.StreamServiceClient
 	sync                         rtiv1.SyncServiceClient
+	savepoint                    rtiv1.SavepointServiceClient
 	interactionStreamEnabled     bool
 	confirmedObjectStreamEnabled bool
 	localLRCEnabled              bool
@@ -57,11 +66,16 @@ type Connection struct {
 
 // FederationSpec describes a federation to create-or-join.
 type FederationSpec struct {
-	Name       string
-	FOMModules []FOMModule
-	Seed       uint64
+	Name                 string
+	FOMModules           []FOMModule
+	MIMModule            *FOMModule // nil keeps the embedded MIM; XML is uploaded, Path is a designator
+	AdditionalFOMModules []FOMModule
+	Seed                 uint64
 	// StallTimeoutSeconds is optional. Zero → server default (60s).
 	StallTimeoutSeconds float64
+	// LogicalTimeImplementationName selects the time factory on creation.
+	// Empty selects HLAfloat64Time. Other implementations are rejected locally.
+	LogicalTimeImplementationName string
 }
 
 // FOMModule is one FOM XML module submitted at federation create time.
@@ -74,11 +88,27 @@ type FOMModule struct {
 // Resign() MUST be called to cleanly leave; cancelling the context
 // is not sufficient.
 type Federate struct {
-	conn                 *Connection
-	federationName       string
-	federateName         string
-	federateHandle       uint64
-	federationGeneration uint64
+	conn                          *Connection
+	federationName                string
+	federateName                  string
+	federateHandle                uint64
+	federationGeneration          uint64
+	logicalTimeImplementationName string
+	callbackEntrySupported        bool
+	checkpointMu                  sync.Mutex
+	runtimeEpoch                  uint64
+	runtimeNext                   uint64
+	runtimeActive                 int
+	runtimeRestoring              bool
+	runtimeAdmission              map[uint64]bool
+	runtimePending                []sdkQueuedCallback
+	runtimeStaged                 *sdkPreparedRuntime
+	runtimeRestoreReady           bool
+	runtimeRestoreError           error
+	runtimeRecovered              []Event
+	restoredIdentity              atomic.Pointer[federateIdentity]
+	restoreTransport              atomic.Pointer[federateTransport]
+	restoreLocalDisabled          atomic.Bool
 
 	// FOM-derived handle tables built once at JoinFederation time. The
 	// SDK resolves string class/parameter names to wire handles via
@@ -96,8 +126,31 @@ type Federate struct {
 	// resignOnce gates Resign so a second call is a no-op.
 	resignOnce sync.Once
 
-	mu            sync.Mutex
-	objectClasses map[uint64]uint64 // object handle -> object class handle
+	mu                         sync.Mutex
+	objectClasses              map[uint64]uint64 // object handle -> object class handle
+	deleteRequestMu            sync.Mutex
+	deletedObjects             map[deletionDesignator]deletedObjectKnowledge
+	pendingObjectRemovals      map[uint64]logicaltime.Time
+	pendingFinalObjectRemovals map[uint64]struct{}
+	objectKnowledgeEpoch       uint64
+	timeRequestMu              sync.Mutex
+	timeAdvances               []*sdkAdvanceRequest
+	ownershipCallbackMu        sync.Mutex
+	genericCallbackMu          sync.Mutex
+	genericCallbacks           map[string]*genericCallbackInvocation
+	genericCallbackCompleted   []string
+	callbackReportMu           sync.Mutex
+	callbackReports            *callbackReportTransport
+	callbackReportBatches      atomic.Uint64
+	callbackReportCount        atomic.Uint64
+	callbackReportAsync        atomic.Uint64
+	callbackLocalEntries       atomic.Uint64
+	ownershipReceiptsEnabled   bool
+	ownershipInvoked           map[ownershipReceiptKey]bool
+	ownershipPending           map[ownershipReceiptKey]*rtiv1.OwnershipCallbackReceipt
+	callbackKnowledge          map[uint64]uint64
+	retiredKnowledge           map[uint64]uint64
+	callbackDeletion           map[uint64]chan struct{}
 	// The LocalLRC admission path mirrors declaration and ownership state
 	// established by confirmed RTI calls. These maps are guarded by mu.
 	publishedObjectAttributes map[uint64]map[uint64]struct{}
@@ -119,6 +172,12 @@ type Federate struct {
 	localLRC            *localLRC
 	localLRCClosing     atomic.Bool
 	localLRCUnsupported atomic.Bool
+	sessionToken        []byte
+	localTicketBase     uint64
+	retiredLocalLRC     []retiredLocalLRC
+	localHydrationMu    sync.Mutex
+	localHydrationID    uint64
+	localHydration      *localHydration
 }
 
 type interactionTransportCounters struct {
@@ -350,7 +409,7 @@ func Connect(ctx context.Context, addr string) (*Connection, error) {
 // Caller owns the channel's lifecycle: Close() on the returned
 // Connection releases the underlying *grpc.ClientConn.
 func WrapGRPCClientConn(cc *grpc.ClientConn) *Connection {
-	return &Connection{
+	connection := &Connection{
 		generations:                  make(map[string]uint64),
 		cc:                           cc,
 		fed:                          rtiv1.NewFederationServiceClient(cc),
@@ -366,10 +425,13 @@ func WrapGRPCClientConn(cc *grpc.ClientConn) *Connection {
 		receiveOrderTransport:        ReceiveOrderTransportLocalLRC,
 		stream:                       rtiv1.NewStreamServiceClient(cc),
 		sync:                         rtiv1.NewSyncServiceClient(cc),
+		savepoint:                    rtiv1.NewSavepointServiceClient(cc),
 		tm:                           rtiv1.NewTimeServiceClient(cc),
 		ddm:                          rtiv1.NewDDMServiceClient(cc),
 		cluster:                      rtiv1.NewClusterServiceClient(cc),
 	}
+	connection.installCallbackOrdering()
+	return connection
 }
 
 // ConnectWithOptions dials rtid at addr with the given auth options.
@@ -379,26 +441,9 @@ func WrapGRPCClientConn(cc *grpc.ClientConn) *Connection {
 // → grpc.WithTransportCredentials(credentials.NewTLS(opts.TLS)). Bearer
 // token (literal or via Provider) attaches via PerRPCCredentials.
 func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (*Connection, error) {
-	if opts.ReceiveOrderTransport > ReceiveOrderTransportConfirmed {
-		return nil, errors.New("federate: invalid receive-order transport")
-	}
-	receiveOrderTransport := opts.ReceiveOrderTransport
-	confirmedAdmission := false
-	switch opts.AdmissionMode {
-	case "", AdmissionModePipelined:
-		// Pipelined LocalLRC admission is the default. An explicit
-		// ReceiveOrderTransportConfirmed remains honored for
-		// compatibility, but contradicting an explicit
-		// AdmissionModePipelined is an error.
-		if opts.AdmissionMode == AdmissionModePipelined &&
-			opts.ReceiveOrderTransport == ReceiveOrderTransportConfirmed {
-			return nil, errors.New("federate: AdmissionMode \"pipelined\" conflicts with ReceiveOrderTransportConfirmed")
-		}
-	case AdmissionModeConfirmed:
-		receiveOrderTransport = ReceiveOrderTransportConfirmed
-		confirmedAdmission = true
-	default:
-		return nil, fmt.Errorf("federate: invalid admission mode %q", opts.AdmissionMode)
+	receiveOrderTransport, confirmedAdmission, err := connectionAdmission(opts)
+	if err != nil {
+		return nil, err
 	}
 	if opts.LocalLRCQueueCapacity < 0 {
 		return nil, errors.New("federate: LocalLRC queue capacity must not be negative")
@@ -420,35 +465,18 @@ func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (
 	if ackEvery == 0 {
 		ackEvery = defaultLocalLRCAckEvery
 	}
-	if ackEvery > uint32(queueCapacity) {
-		ackEvery = uint32(queueCapacity)
+	// A queue larger than the wire counter needs no additional ACK clamp.
+	if queueCapacity >= 0 {
+		capacity := uint64(queueCapacity)
+		if capacity <= math.MaxUint32 {
+			ackEvery = min(ackEvery, uint32(capacity))
+		}
 	}
 	batchSize := opts.LocalLRCBatchSize
 	if batchSize == 0 {
 		batchSize = defaultLocalLRCBatchSize
 	}
-	dialOpts := []grpc.DialOption{}
-	// W8 — first-class channel tuning. Zero-value Transport appends
-	// nothing; these options never influence streamEligible below.
-	dialOpts = append(dialOpts, opts.Transport.dialOptions()...)
-	if opts.TLS != nil {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(opts.TLS)))
-	} else {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
-	if opts.BearerToken != "" || opts.BearerTokenProvider != nil {
-		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(bearerCreds{
-			token:    opts.BearerToken,
-			provider: opts.BearerTokenProvider,
-			// requireTLS: only require TLS when TLS is actually
-			// configured. Insecure + bearer is allowed for tests
-			// (real deployments should pair them).
-			requireTLS: opts.TLS != nil,
-		}))
-	}
-	if len(opts.ExtraDialOptions) > 0 {
-		dialOpts = append(dialOpts, opts.ExtraDialOptions...)
-	}
+	dialOpts := connectionDialOptions(opts)
 	cc, err := grpc.NewClient(addr, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("federate: dial %s: %w", addr, err)
@@ -464,7 +492,7 @@ func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (
 	// path by disabling the LocalLRC fast path and the shared streams.
 	streamEnabled := streamEligible && !confirmedAdmission
 	_ = ctx
-	return &Connection{
+	connection := &Connection{
 		generations:                  make(map[string]uint64),
 		cc:                           cc,
 		fed:                          rtiv1.NewFederationServiceClient(cc),
@@ -482,10 +510,13 @@ func ConnectWithOptions(ctx context.Context, addr string, opts ConnectOptions) (
 		receiveOrderTransport:        receiveOrderTransport,
 		stream:                       rtiv1.NewStreamServiceClient(cc),
 		sync:                         rtiv1.NewSyncServiceClient(cc),
+		savepoint:                    rtiv1.NewSavepointServiceClient(cc),
 		tm:                           rtiv1.NewTimeServiceClient(cc),
 		ddm:                          rtiv1.NewDDMServiceClient(cc),
 		cluster:                      rtiv1.NewClusterServiceClient(cc),
-	}, nil
+	}
+	connection.installCallbackOrdering()
+	return connection, nil
 }
 
 func validLocalLRCBatchSize(size uint32) bool {
@@ -529,6 +560,9 @@ func (c *Connection) Close() error {
 	if c == nil || c.cc == nil {
 		return nil
 	}
+	for _, q := range c.reportTransports() {
+		q.cancel()
+	}
 	return c.cc.Close()
 }
 
@@ -550,6 +584,7 @@ func (c *Connection) DestroyFederation(ctx context.Context, federationName strin
 	if err == nil {
 		c.generationMu.Lock()
 		delete(c.generations, federationName)
+		delete(c.selectedMIMs, federationName)
 		c.generationMu.Unlock()
 	}
 	return wrapStatusErr(err)
@@ -599,6 +634,9 @@ func (c *Connection) JoinFederation(
 	if c == nil || c.cc == nil {
 		return nil, errors.New("federate: Connection is closed")
 	}
+	if err := requireSupportedLogicalTime(spec.LogicalTimeImplementationName); err != nil {
+		return nil, err
+	}
 
 	// Build the proto FOM modules + parse locally for handle resolution.
 	protoMods := make([]*rtiv1.FOMModule, len(spec.FOMModules))
@@ -613,36 +651,24 @@ func (c *Connection) JoinFederation(
 	}
 
 	// 1. Create federation (idempotent).
-	createReq := &rtiv1.CreateFederationRequest{
-		WireVersion:         rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:      spec.Name,
-		FomModules:          protoMods,
-		Seed:                spec.Seed,
-		StallTimeoutSeconds: spec.StallTimeoutSeconds,
-	}
-	createResp, cErr := c.fed.CreateFederation(ctx, createReq)
-	var generation uint64
-	if cErr != nil {
-		if status.Code(cErr) != codes.AlreadyExists {
-			return nil, fmt.Errorf("federate: CreateFederation: %w", cErr)
-		}
-		generation, err = c.resolveFederationGeneration(ctx, spec.Name)
-		if err != nil {
-			return nil, fmt.Errorf("federate: resolve federation generation: %w", err)
-		}
-	} else {
-		generation = createResp.GetFederationGeneration()
-		c.generationMu.Lock()
-		if c.generations == nil {
-			c.generations = make(map[string]uint64)
-		}
-		c.generations[spec.Name] = generation
-		c.generationMu.Unlock()
+	selectedMIM, generation, err := c.createFederationForJoin(ctx, spec, protoMods)
+	if err != nil {
+		return nil, err
 	}
 
 	// 2. Join.
-	joinResp, err := c.fed.JoinFederation(ctx, &rtiv1.JoinFederationRequest{
-		WireVersion:                  rtiv1.WireVersion_WIRE_VERSION_V1,
+	additionalModules := make([]*rtiv1.FOMModule, len(spec.AdditionalFOMModules))
+	for i, module := range spec.AdditionalFOMModules {
+		additionalModules[i] = &rtiv1.FOMModule{Path: module.Path, Xml: append([]byte(nil), module.XML...)}
+	}
+	joinCtx := ctx
+	if host := os.Getenv("GORTI_FEDERATE_HOST"); host != "" {
+		joinCtx = metadata.AppendToOutgoingContext(ctx, "gorti-federate-host-bin", host)
+	}
+	joinResp, err := c.fed.JoinFederation(joinCtx, &rtiv1.JoinFederationRequest{
+		ExpectedMimModule:            selectedMIM,
+		AdditionalFomModules:         additionalModules,
+		WireVersion:                  createWireVersion(selectedMIM),
 		FederationName:               spec.Name,
 		FederateName:                 federateName,
 		ExpectedFederationGeneration: &generation,
@@ -650,77 +676,53 @@ func (c *Connection) JoinFederation(
 	if err != nil {
 		return nil, fmt.Errorf("federate: JoinFederation: %w", err)
 	}
+	tables, err = confirmedJoinTables(joinResp, selectedMIM, tables, len(additionalModules) != 0)
+	if err != nil {
+		return nil, c.compensateFailedJoin(ctx, spec.Name, joinResp, err)
+	}
+	if view := joinResp.GetFomView(); view != nil {
+		c.rememberMIM(spec.Name, view.GetMimModule())
+	}
 
 	// 3. Open the batched callback stream + spawn drainer.
 	streamCtx, streamCancel := context.WithCancel(context.Background())
+	if token := joinResp.GetSessionToken(); len(token) != 0 {
+		streamCtx = metadata.AppendToOutgoingContext(streamCtx, "gorti-session-token-bin", string(token))
+	}
 	eventsRequest := &rtiv1.EventsRequest{
 		WireVersion:                  rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:               spec.Name,
 		FederateHandle:               joinResp.GetFederateHandle(),
 		ExpectedFederationGeneration: &generation,
 	}
-	batchStream, batchErr := c.stream.EventBatches(streamCtx, eventsRequest)
-	var legacyStream grpc.ServerStreamingClient[rtiv1.FederateEvent]
-	failCallbackInitialization := func(callbackErr error) (*Federate, error) {
+	batchStream, legacyStream, err := c.openCallbackStreams(ctx, streamCtx, streamCancel, eventsRequest)
+	if err != nil {
 		streamCancel()
-		return nil, c.compensateFailedJoin(ctx, spec.Name, joinResp.GetFederateHandle(), callbackErr)
-	}
-	openLegacy := func(unimplementedErr error) error {
-		var legacyErr error
-		legacyStream, legacyErr = c.stream.Events(streamCtx, eventsRequest)
-		if legacyErr == nil {
-			return nil
-		}
-		return fmt.Errorf("federate: callback stream open: %w", errors.Join(
-			fmt.Errorf("EventBatches unsupported: %w", unimplementedErr),
-			fmt.Errorf("Events fallback: %w", legacyErr),
-		))
-	}
-
-	if batchErr != nil {
-		if status.Code(batchErr) != codes.Unimplemented {
-			return failCallbackInitialization(fmt.Errorf("federate: EventBatches callback stream open: %w", batchErr))
-		}
-		if err := openLegacy(batchErr); err != nil {
-			return failCallbackInitialization(err)
-		}
-		batchStream = nil
-	} else {
-		ready, readyErr := receiveCallbackReady(ctx, streamCancel, batchStream)
-		if readyErr != nil {
-			if status.Code(readyErr) == codes.Unimplemented {
-				if err := openLegacy(readyErr); err != nil {
-					return failCallbackInitialization(err)
-				}
-				batchStream = nil
-			} else {
-				return failCallbackInitialization(fmt.Errorf("federate: EventBatches ready: %w", readyErr))
-			}
-		} else if ready == nil || !ready.GetReady() || len(ready.GetEvents()) != 0 {
-			return failCallbackInitialization(errors.New(
-				"federate: EventBatches ready: server did not send an empty ready batch",
-			))
-		}
+		return nil, c.compensateFailedJoin(ctx, spec.Name, joinResp, err)
 	}
 
 	interactionContext, interactionCancel := context.WithCancel(context.Background())
 	f := &Federate{
-		conn:                      c,
-		federationName:            spec.Name,
-		federateName:              federateName,
-		federateHandle:            joinResp.GetFederateHandle(),
-		federationGeneration:      generation,
-		handles:                   tables,
-		eventCh:                   make(chan Event, 256),
-		streamCancel:              streamCancel,
-		drainDone:                 make(chan struct{}),
-		objectClasses:             make(map[uint64]uint64),
-		publishedObjectAttributes: make(map[uint64]map[uint64]struct{}),
-		publishedInteractions:     make(map[uint64]struct{}),
-		ownedObjectAttributes:     make(map[uint64]map[uint64]struct{}),
-		interactionContext:        interactionContext,
-		interactionCancel:         interactionCancel,
+		conn:                          c,
+		federationName:                spec.Name,
+		federateName:                  federateName,
+		federateHandle:                joinResp.GetFederateHandle(),
+		sessionToken:                  append([]byte(nil), joinResp.GetSessionToken()...),
+		federationGeneration:          generation,
+		logicalTimeImplementationName: logicalTimeImplementationName(joinResp.GetLogicalTimeImplementationName()),
+		callbackEntrySupported:        joinResp.GetCallbackInvocationEntrySupported(),
+		handles:                       tables,
+		eventCh:                       make(chan Event, 256),
+		streamCancel:                  streamCancel,
+		drainDone:                     make(chan struct{}),
+		objectClasses:                 make(map[uint64]uint64),
+		publishedObjectAttributes:     make(map[uint64]map[uint64]struct{}),
+		publishedInteractions:         make(map[uint64]struct{}),
+		ownedObjectAttributes:         make(map[uint64]map[uint64]struct{}),
+		interactionContext:            interactionContext,
+		interactionCancel:             interactionCancel,
 	}
+	f.bindFOMRefresh()
 	if batchStream != nil {
 		go f.drainEventBatches(batchStream)
 	} else {
@@ -756,28 +758,8 @@ func receiveCallbackReady(
 	}
 }
 
-func (c *Connection) compensateFailedJoin(
-	ctx context.Context,
-	federationName string,
-	federateHandle uint64,
-	originalErr error,
-) error {
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-	defer cancel()
-	_, resignErr := c.fed.ResignFederation(cleanupCtx, &rtiv1.ResignFederationRequest{
-		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName: federationName,
-		FederateHandle: federateHandle,
-		Action:         rtiv1.ResignAction_RESIGN_ACTION_UNCONDITIONALLY_DIVEST_ATTRIBUTES,
-	})
-	if resignErr == nil {
-		return originalErr
-	}
-	return errors.Join(originalErr, fmt.Errorf("federate: compensating ResignFederation: %w", resignErr))
-}
-
-// Handle returns the federate handle assigned by rtid at join time.
-func (f *Federate) Handle() uint64 { return f.federateHandle }
+// Handle returns the current federate handle, which can change on restore.
+func (f *Federate) Handle() uint64 { return f.CurrentHandle() }
 
 // Name returns the federate name passed to JoinFederation.
 func (f *Federate) Name() string { return f.federateName }
@@ -860,7 +842,15 @@ func (f *Federate) ListFederationMembers(ctx context.Context) ([]FederationMembe
 func (f *Federate) ResignWithAction(ctx context.Context, action ResignAction) error {
 	var resignErr error
 	f.resignOnce.Do(func() {
+		if f.hasCallbackReports() {
+			resignErr = f.FlushCallbackInvocationReports(ctx)
+			f.closeCallbackReports()
+		}
+		f.resetRuntimeRestoreReadiness(false)
 		f.localLRCClosing.Store(true)
+		f.mu.Lock()
+		f.resetDeletionKnowledgeLocked()
+		f.mu.Unlock()
 		if err := f.closeLocalLRC(ctx); err != nil {
 			resignErr = err
 		}
@@ -882,10 +872,10 @@ func (f *Federate) ResignWithAction(ctx context.Context, action ResignAction) er
 		if ctx.Err() != nil {
 			rpcCtx, cancelRPC = context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		}
-		_, err := f.conn.fed.ResignFederation(rpcCtx, &rtiv1.ResignFederationRequest{
+		_, err := f.conn.fed.ResignFederation(f.sessionContext(rpcCtx), &rtiv1.ResignFederationRequest{
 			WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 			FederationName: f.federationName,
-			FederateHandle: f.federateHandle,
+			FederateHandle: f.CurrentHandle(),
 			Action:         action.wire(),
 		})
 		cancelRPC()
@@ -906,6 +896,7 @@ func (f *Federate) ResignWithAction(ctx context.Context, action ResignAction) er
 func (f *Federate) drainEvents(stream grpc.ServerStreamingClient[rtiv1.FederateEvent]) {
 	defer close(f.eventCh)
 	defer close(f.drainDone)
+	defer f.resetRuntimeRestoreReadiness(false)
 	for {
 		evt, err := stream.Recv()
 		if err != nil {
@@ -918,17 +909,22 @@ func (f *Federate) drainEvents(stream grpc.ServerStreamingClient[rtiv1.FederateE
 			// channel if callers care.
 			return
 		}
+		if f.consumeLocalValidationBarrier(evt) {
+			continue
+		}
 		typed := f.translate(evt)
 		if typed == nil {
 			continue
 		}
+		typed, healthy := f.prepareRestoredCallback(stream.Context(), typed)
 		// Non-blocking send on the event channel? Not yet — backpressure
 		// surfaces as a slow drainer (the server-side outbox already
 		// has its own queue limit). Block here so the federate's
 		// internal queue can serialize consumption.
-		select {
-		case f.eventCh <- typed:
-		case <-stream.Context().Done():
+		if !f.publishRuntimeEvent(stream.Context(), typed) {
+			return
+		}
+		if !healthy {
 			return
 		}
 	}
@@ -942,19 +938,25 @@ func (f *Federate) drainEventBatches(
 ) {
 	defer close(f.eventCh)
 	defer close(f.drainDone)
+	defer f.resetRuntimeRestoreReadiness(false)
 	for {
 		batch, err := stream.Recv()
 		if err != nil {
 			return
 		}
 		for _, evt := range batch.GetEvents() {
+			if f.consumeLocalValidationBarrier(evt) {
+				continue
+			}
 			typed := f.translate(evt)
 			if typed == nil {
 				continue
 			}
-			select {
-			case f.eventCh <- typed:
-			case <-stream.Context().Done():
+			typed, healthy := f.prepareRestoredCallback(stream.Context(), typed)
+			if !f.publishRuntimeEvent(stream.Context(), typed) {
+				return
+			}
+			if !healthy {
 				return
 			}
 		}
@@ -971,183 +973,41 @@ func isCanceledOrUnavailable(err error) bool {
 //
 // Known object and interaction handles are resolved through fomTables. Other
 // oneof variants are silently dropped until their SDK types are added.
-func (f *Federate) translate(evt *rtiv1.FederateEvent) Event {
+func (f *Federate) translate(evt *rtiv1.FederateEvent) (event Event) {
 	if evt == nil {
 		return nil
 	}
-	switch v := evt.GetEvent().(type) {
-	case *rtiv1.FederateEvent_Discover:
-		discover := v.Discover
-		if discover == nil {
-			return nil
-		}
-		classHandle := discover.GetObjectClassHandle()
-		className, ok := f.handles.objectClassName(classHandle)
-		if !ok {
-			return nil
-		}
-		f.rememberObjectClass(discover.GetObjectHandle(), classHandle)
-		return DiscoverObjectInstance{
-			ObjectHandle: discover.GetObjectHandle(),
-			ClassName:    className,
-			ObjectName:   discover.GetObjectName(),
-		}
-	case *rtiv1.FederateEvent_Reflect:
-		reflect := v.Reflect
-		if reflect == nil {
-			return nil
-		}
-		classHandle := reflect.GetObjectClassHandle()
-		if f.conn != nil && f.conn.callbackRepresentation == CallbackRepresentationHandles {
-			var timestamp *float64
-			if reflect.LogicalTime != nil {
-				value := reflect.GetLogicalTime()
-				timestamp = &value
-			}
-			f.rememberObjectClass(reflect.GetObjectHandle(), classHandle)
-			return ReflectAttributeValuesByHandle{
-				ObjectHandle:      reflect.GetObjectHandle(),
-				ObjectClassHandle: classHandle,
-				Attributes:        reflect.GetAttributes(),
-				Timestamp:         timestamp,
-			}
-		}
-		className, ok := f.handles.objectClassName(classHandle)
-		if !ok {
-			return nil
-		}
-		attributes := make(map[string][]byte, len(reflect.GetAttributes()))
-		for attributeHandle, payload := range reflect.GetAttributes() {
-			name, found := f.handles.attributeName(classHandle, attributeHandle)
-			if !found {
-				continue
-			}
-			attributes[name] = append([]byte(nil), payload...)
-		}
-		var timestamp *float64
-		if reflect.LogicalTime != nil {
-			value := reflect.GetLogicalTime()
-			timestamp = &value
-		}
-		f.rememberObjectClass(reflect.GetObjectHandle(), classHandle)
-		return ReflectAttributeValues{
-			ObjectHandle: reflect.GetObjectHandle(),
-			ClassName:    className,
-			Attributes:   attributes,
-			Timestamp:    timestamp,
-		}
-	case *rtiv1.FederateEvent_Receive:
-		ri := v.Receive
-		if ri == nil {
-			return nil
-		}
-		if f.conn != nil && f.conn.callbackRepresentation == CallbackRepresentationHandles {
-			var timestamp *float64
-			if hasLogicalTime(ri) {
-				value := ri.GetLogicalTime()
-				timestamp = &value
-			}
-			return ReceiveInteractionByHandle{
-				InteractionClassHandle: ri.GetInteractionClassHandle(),
-				Parameters:             ri.GetParameters(),
-				Timestamp:              timestamp,
-			}
-		}
-		className, ok := f.handles.interactionName(ri.GetInteractionClassHandle())
-		if !ok {
-			return nil
-		}
-		params := map[string][]byte{}
-		for ph, payload := range ri.GetParameters() {
-			pname, pok := f.handles.parameterName(ri.GetInteractionClassHandle(), ph)
-			if !pok {
-				continue
-			}
-			// Defensive copy so the caller can't see proto-internal buffer reuse.
-			b := make([]byte, len(payload))
-			copy(b, payload)
-			params[pname] = b
-		}
-		var ts *float64
-		if hasLogicalTime(ri) {
-			lt := ri.GetLogicalTime()
-			ts = &lt
-		}
-		return ReceiveInteraction{
-			ClassName:  className,
-			Parameters: params,
-			Timestamp:  ts,
-		}
-	case *rtiv1.FederateEvent_Grant:
-		return TimeAdvanceGrant{Time: v.Grant.GetLogicalTime()}
-	case *rtiv1.FederateEvent_SyncAnnounced:
-		if v.SyncAnnounced == nil {
-			return nil
-		}
-		return SynchronizationPointAnnounced{
-			Label:             v.SyncAnnounced.GetLabel(),
-			Tag:               append([]byte(nil), v.SyncAnnounced.GetTag()...),
-			RequiredFederates: append([]uint64(nil), v.SyncAnnounced.GetRequiredFederates()...),
-		}
-	case *rtiv1.FederateEvent_SyncSynchronized:
-		if v.SyncSynchronized == nil {
-			return nil
-		}
-		return FederationSynchronized{
-			Label:        v.SyncSynchronized.GetLabel(),
-			FailedToSync: append([]uint64(nil), v.SyncSynchronized.GetFailedToSync()...),
-		}
-	case *rtiv1.FederateEvent_ReservationSucceeded:
-		if v.ReservationSucceeded == nil {
-			return nil
-		}
-		return ObjectInstanceNameReservationSucceeded{
-			ObjectName: v.ReservationSucceeded.GetObjectName(),
-		}
-	case *rtiv1.FederateEvent_ReservationFailed:
-		if v.ReservationFailed == nil {
-			return nil
-		}
-		return ObjectInstanceNameReservationFailed{
-			ObjectName: v.ReservationFailed.GetObjectName(),
-		}
-	case *rtiv1.FederateEvent_Halted:
-		return FederationHalted{Reason: v.Halted.GetCause()}
-	case *rtiv1.FederateEvent_Remove:
-		// M23 W1 — IEEE 1516.1-2010 §6.16 RemoveObjectInstance callback.
-		rm := v.Remove
-		if rm == nil {
-			return nil
-		}
-		var ts *float64
-		if rm.LogicalTime != nil {
-			lt := rm.GetLogicalTime()
-			ts = &lt
-		}
-		// Defensive copy on the tag bytes.
-		tag := append([]byte(nil), rm.GetUserSuppliedTag()...)
-		f.forgetObjectClass(rm.GetObjectHandle())
-		return RemoveObjectInstance{
-			ObjectHandle: rm.GetObjectHandle(),
-			Tag:          tag,
-			Timestamp:    ts,
-		}
-	case *rtiv1.FederateEvent_ProvideUpdate:
-		// M23 W2 — IEEE 1516.1-2010 §6.26 ProvideAttributeValueUpdate callback.
-		pv := v.ProvideUpdate
-		if pv == nil {
-			return nil
-		}
-		attrs := append([]uint64(nil), pv.GetAttributeHandles()...)
-		tag := append([]byte(nil), pv.GetUserSuppliedTag()...)
-		return ProvideAttributeValueUpdate{
-			ObjectHandle:     pv.GetObjectHandle(),
-			AttributeHandles: attrs,
-			Tag:              tag,
-		}
-	default:
+	f.checkpointMu.Lock()
+	defer f.checkpointMu.Unlock()
+	recovery, recoveryErr := callbackRecoveryInfo(evt)
+	if recoveryErr != nil {
+		return CallbackProtocolError{Err: recoveryErr}
+	}
+	if recovery.completed {
+		f.reconcileCompletedCallback(recovery.identity)
 		return nil
 	}
+	if recovery.outcomeOnly {
+		recovery.receipt, recovery.federate = append([]byte(nil), evt.CallbackReceipt...), f.CurrentHandle()
+		recovery = f.trackRuntimeCallback(evt, recovery)
+		return callbackOutcomeRecovery{CallbackInfo: recovery}
+	}
+	if recovery.recovered {
+		return f.translateRecoveredCallback(evt)
+	}
+
+	exactTime, timeErr := f.wireEventTime(evt)
+	if timeErr != nil {
+		return CallbackProtocolError{Err: timeErr}
+	}
+	defer func() {
+		info := f.callbackInfo(evt)
+		if event != nil {
+			info = f.trackRuntimeCallback(evt, info)
+		}
+		event = attachCallbackInfo(attachEventTime(event, exactTime), info)
+	}()
+	return f.translateCallbackBody(evt, exactTime)
 }
 
 // ReceiveInteraction.logical_time is optional, so presence distinguishes an
@@ -1233,4 +1093,471 @@ func (c *Connection) ResolveFederationHost(
 		}
 	}
 	return current, ErrTooManyRedirects
+}
+
+func (f *Federate) translateCallbackBody(evt *rtiv1.FederateEvent, exactTime *logicaltime.Time) Event {
+	switch v := evt.GetEvent().(type) {
+	case *rtiv1.FederateEvent_Discover:
+		return f.translateDiscover(v)
+	case *rtiv1.FederateEvent_Reflect:
+		return f.translateReflect(v)
+	case *rtiv1.FederateEvent_Receive:
+		return f.translateReceive(v)
+	case *rtiv1.FederateEvent_Remove:
+		return f.translateRemove(v)
+	case *rtiv1.FederateEvent_Grant, *rtiv1.FederateEvent_TimeRegulationEnabled, *rtiv1.FederateEvent_TimeConstrainedEnabled:
+		return f.translateTimeCallback(evt, exactTime)
+	case *rtiv1.FederateEvent_SyncAnnounced, *rtiv1.FederateEvent_SyncSynchronized, *rtiv1.FederateEvent_Halted, *rtiv1.FederateEvent_RestoreCompleted:
+		return f.translateSynchronizationCallback(evt)
+	case *rtiv1.FederateEvent_OwnershipAcquisitionCancelled, *rtiv1.FederateEvent_ReservationSucceeded, *rtiv1.FederateEvent_ReservationFailed, *rtiv1.FederateEvent_RetractionRequested:
+		return f.translateObjectControlCallback(evt)
+	case *rtiv1.FederateEvent_TurnUpdatesOn, *rtiv1.FederateEvent_TurnUpdatesOff, *rtiv1.FederateEvent_ProvideUpdate:
+		return f.translateUpdatesCallback(evt)
+	default:
+		return f.translateRemainingEvent(evt)
+	}
+}
+
+func (f *Federate) translateRecoveredCallback(evt *rtiv1.FederateEvent) Event {
+	// The checkpoint already contains post-receive knowledge. Reconstruct
+	// the notification on a detached translator, without reapplying effects.
+	probe := &Federate{federateHandle: f.CurrentHandle(), logicalTimeImplementationName: f.logicalTimeImplementationName, handles: f.handles}
+	f.mu.Lock()
+	probe.objectClasses = make(map[uint64]uint64, len(f.objectClasses))
+	for object, class := range f.objectClasses {
+		probe.objectClasses[object] = class
+	}
+	f.mu.Unlock()
+	wire := proto.Clone(evt).(*rtiv1.FederateEvent)
+	wire.CallbackRecovery, wire.CallbackReceipt = nil, nil
+	translated := probe.translate(wire)
+	if translated == nil {
+		return nil
+	}
+	if _, invalid := translated.(CallbackProtocolError); invalid {
+		return translated
+	}
+	info := f.trackRuntimeCallback(evt, f.callbackInfo(evt))
+	return attachCallbackInfo(translated, info)
+}
+
+func (f *Federate) translateDiscover(v *rtiv1.FederateEvent_Discover) Event {
+	discover := v.Discover
+	if discover == nil {
+		return nil
+	}
+	classHandle := discover.GetObjectClassHandle()
+	className, ok := f.handles.objectClassName(classHandle)
+	if !ok {
+		return nil
+	}
+	f.rememberDiscoveredObject(discover.GetObjectHandle(), classHandle)
+	return DiscoverObjectInstance{
+		ProducingFederate: copyUint64(discover.ProducingFederate),
+		ObjectHandle:      discover.GetObjectHandle(),
+		ClassName:         className,
+		ObjectName:        discover.GetObjectName(),
+	}
+}
+
+func (f *Federate) translateReflect(v *rtiv1.FederateEvent_Reflect) Event {
+	reflect := v.Reflect
+	if reflect == nil {
+		return nil
+	}
+	classHandle := reflect.GetObjectClassHandle()
+	if f.conn != nil && f.conn.callbackRepresentation == CallbackRepresentationHandles {
+		var timestamp *float64
+		if reflect.LogicalTime != nil {
+			value := reflect.GetLogicalTime()
+			timestamp = &value
+		}
+		f.rememberObjectClass(reflect.GetObjectHandle(), classHandle)
+		return ReflectAttributeValuesByHandle{
+			Tag: append([]byte(nil), reflect.UserSuppliedTag...), Metadata: metadataFromWire(reflect.Metadata),
+			ObjectHandle:      reflect.GetObjectHandle(),
+			ObjectClassHandle: classHandle,
+			Attributes:        reflect.GetAttributes(),
+			Timestamp:         timestamp,
+		}
+	}
+	className, ok := f.handles.objectClassName(classHandle)
+	if !ok {
+		return nil
+	}
+	attributes := make(map[string][]byte, len(reflect.GetAttributes()))
+	for attributeHandle, payload := range reflect.GetAttributes() {
+		name, found := f.handles.attributeName(classHandle, attributeHandle)
+		if !found {
+			continue
+		}
+		attributes[name] = append([]byte(nil), payload...)
+	}
+	var timestamp *float64
+	if reflect.LogicalTime != nil {
+		value := reflect.GetLogicalTime()
+		timestamp = &value
+	}
+	f.rememberObjectClass(reflect.GetObjectHandle(), classHandle)
+	return ReflectAttributeValues{
+		Tag: append([]byte(nil), reflect.UserSuppliedTag...), Metadata: metadataFromWire(reflect.Metadata),
+		ObjectHandle: reflect.GetObjectHandle(),
+		ClassName:    className,
+		Attributes:   attributes,
+		Timestamp:    timestamp,
+	}
+}
+
+func (f *Federate) translateReceive(v *rtiv1.FederateEvent_Receive) Event {
+	ri := v.Receive
+	if ri == nil {
+		return nil
+	}
+	if f.conn != nil && f.conn.callbackRepresentation == CallbackRepresentationHandles {
+		var timestamp *float64
+		if hasLogicalTime(ri) {
+			value := ri.GetLogicalTime()
+			timestamp = &value
+		}
+		return ReceiveInteractionByHandle{
+			Tag: append([]byte(nil), ri.UserSuppliedTag...), Metadata: metadataFromWire(ri.Metadata),
+			InteractionClassHandle: ri.GetInteractionClassHandle(),
+			Parameters:             ri.GetParameters(),
+			Timestamp:              timestamp,
+		}
+	}
+	className, ok := f.handles.interactionName(ri.GetInteractionClassHandle())
+	if !ok {
+		return nil
+	}
+	params := map[string][]byte{}
+	for ph, payload := range ri.GetParameters() {
+		pname, pok := f.handles.parameterName(ri.GetInteractionClassHandle(), ph)
+		if !pok {
+			continue
+		}
+		// Defensive copy so the caller can't see proto-internal buffer reuse.
+		b := make([]byte, len(payload))
+		copy(b, payload)
+		params[pname] = b
+	}
+	var ts *float64
+	if hasLogicalTime(ri) {
+		lt := ri.GetLogicalTime()
+		ts = &lt
+	}
+	return ReceiveInteraction{
+		Tag: append([]byte(nil), ri.UserSuppliedTag...), Metadata: metadataFromWire(ri.Metadata),
+		ClassName:  className,
+		Parameters: params,
+		Timestamp:  ts,
+	}
+}
+
+func (f *Federate) translateRemove(v *rtiv1.FederateEvent_Remove) Event {
+	// M23 W1 — IEEE 1516.1-2010 §6.16 RemoveObjectInstance callback.
+	rm := v.Remove
+	if rm == nil {
+		return nil
+	}
+	var ts *float64
+	if rm.LogicalTime != nil {
+		lt := rm.GetLogicalTime()
+		ts = &lt
+	}
+	// Defensive copy on the tag bytes.
+	tag := append([]byte(nil), rm.GetUserSuppliedTag()...)
+	f.applyObjectRemoval(rm)
+	return RemoveObjectInstance{
+		Metadata:     metadataFromWire(rm.Metadata),
+		ObjectHandle: rm.GetObjectHandle(),
+		Tag:          tag,
+		Timestamp:    ts,
+	}
+}
+
+func (f *Federate) translateTimeCallback(evt *rtiv1.FederateEvent, exactTime *logicaltime.Time) Event {
+	switch v := evt.GetEvent().(type) {
+	case *rtiv1.FederateEvent_Grant:
+		if exactTime != nil {
+			f.completeSDKGrantValue(*exactTime)
+		} else if v.Grant != nil && f.legacyFinalTime(v.Grant.LogicalTime, v.Grant.LogicalTimeValue) {
+			f.completeSDKGrant(v.Grant.LogicalTime)
+		}
+		return TimeAdvanceGrant{Time: v.Grant.GetLogicalTime()}
+	case *rtiv1.FederateEvent_TimeRegulationEnabled:
+		if exactTime != nil {
+			f.observeSDKEnabledTimeValue(*exactTime)
+		} else if v.TimeRegulationEnabled != nil && f.legacyFinalTime(v.TimeRegulationEnabled.LogicalTime, v.TimeRegulationEnabled.LogicalTimeValue) {
+			f.observeSDKEnabledTime(v.TimeRegulationEnabled.LogicalTime)
+		}
+		return TimeRegulationEnabled{Time: v.TimeRegulationEnabled.GetLogicalTime()}
+	case *rtiv1.FederateEvent_TimeConstrainedEnabled:
+		if exactTime != nil {
+			f.observeSDKEnabledTimeValue(*exactTime)
+		} else if v.TimeConstrainedEnabled != nil && f.legacyFinalTime(v.TimeConstrainedEnabled.LogicalTime, v.TimeConstrainedEnabled.LogicalTimeValue) {
+			f.observeSDKEnabledTime(v.TimeConstrainedEnabled.LogicalTime)
+		}
+		return TimeConstrainedEnabled{Time: v.TimeConstrainedEnabled.GetLogicalTime()}
+	default:
+		return nil
+	}
+}
+
+func (f *Federate) translateSynchronizationCallback(evt *rtiv1.FederateEvent) Event {
+	switch v := evt.GetEvent().(type) {
+	case *rtiv1.FederateEvent_SyncAnnounced:
+		if v.SyncAnnounced == nil {
+			return nil
+		}
+		return SynchronizationPointAnnounced{
+			Label:             v.SyncAnnounced.GetLabel(),
+			Tag:               append([]byte(nil), v.SyncAnnounced.GetTag()...),
+			RequiredFederates: append([]uint64(nil), v.SyncAnnounced.GetRequiredFederates()...),
+		}
+	case *rtiv1.FederateEvent_SyncSynchronized:
+		if v.SyncSynchronized == nil {
+			return nil
+		}
+		return FederationSynchronized{
+			Label:        v.SyncSynchronized.GetLabel(),
+			FailedToSync: append([]uint64(nil), v.SyncSynchronized.GetFailedToSync()...),
+		}
+	case *rtiv1.FederateEvent_Halted:
+		return FederationHalted{Reason: v.Halted.GetCause()}
+	case *rtiv1.FederateEvent_RestoreCompleted:
+		if v.RestoreCompleted == nil {
+			return nil
+		}
+		return FederationRestored{
+			Label:                v.RestoreCompleted.Label,
+			FederateHandle:       copyUint64(v.RestoreCompleted.FederateHandle),
+			CallbackEpoch:        copyUint64(v.RestoreCompleted.CallbackEpoch),
+			NextRetractionHandle: copyUint64(v.RestoreCompleted.NextRetractionHandle),
+		}
+	default:
+		return nil
+	}
+}
+
+func (f *Federate) translateObjectControlCallback(evt *rtiv1.FederateEvent) Event {
+	switch v := evt.GetEvent().(type) {
+	case *rtiv1.FederateEvent_OwnershipAcquisitionCancelled:
+		if v.OwnershipAcquisitionCancelled == nil {
+			return nil
+		}
+		return ConfirmAttributeOwnershipAcquisitionCancellation{ObjectHandle: v.OwnershipAcquisitionCancelled.ObjectHandle, AttributeHandles: append([]uint64(nil), v.OwnershipAcquisitionCancelled.AttributeHandles...)}
+	case *rtiv1.FederateEvent_ReservationSucceeded:
+		if v.ReservationSucceeded == nil {
+			return nil
+		}
+		return ObjectInstanceNameReservationSucceeded{
+			ObjectName: v.ReservationSucceeded.GetObjectName(),
+		}
+	case *rtiv1.FederateEvent_ReservationFailed:
+		if v.ReservationFailed == nil {
+			return nil
+		}
+		return ObjectInstanceNameReservationFailed{
+			ObjectName: v.ReservationFailed.GetObjectName(),
+		}
+	case *rtiv1.FederateEvent_RetractionRequested:
+		if v.RetractionRequested == nil {
+			return nil
+		}
+		f.restoreDeletedObject(deletionDesignator{sender: v.RetractionRequested.SenderFederate, id: v.RetractionRequested.MessageRetractionHandle}, false)
+		return RequestRetraction{SenderFederate: v.RetractionRequested.SenderFederate, RetractionHandle: v.RetractionRequested.MessageRetractionHandle}
+	default:
+		return nil
+	}
+}
+
+func (f *Federate) translateUpdatesCallback(evt *rtiv1.FederateEvent) Event {
+	switch v := evt.GetEvent().(type) {
+	case *rtiv1.FederateEvent_TurnUpdatesOn:
+		if v.TurnUpdatesOn == nil {
+			return nil
+		}
+		var rate *string
+		if v.TurnUpdatesOn.UpdateRateDesignator != nil {
+			value := *v.TurnUpdatesOn.UpdateRateDesignator
+			rate = &value
+		}
+		return TurnUpdatesOnForObjectInstance{ObjectHandle: v.TurnUpdatesOn.ObjectHandle, AttributeHandles: append([]uint64(nil), v.TurnUpdatesOn.AttributeHandles...), UpdateRateDesignator: rate}
+	case *rtiv1.FederateEvent_TurnUpdatesOff:
+		if v.TurnUpdatesOff == nil {
+			return nil
+		}
+		return TurnUpdatesOffForObjectInstance{ObjectHandle: v.TurnUpdatesOff.ObjectHandle, AttributeHandles: append([]uint64(nil), v.TurnUpdatesOff.AttributeHandles...)}
+	case *rtiv1.FederateEvent_ProvideUpdate:
+		// M23 W2 — IEEE 1516.1-2010 §6.26 ProvideAttributeValueUpdate callback.
+		pv := v.ProvideUpdate
+		if pv == nil {
+			return nil
+		}
+		attrs := append([]uint64(nil), pv.GetAttributeHandles()...)
+		tag := append([]byte(nil), pv.GetUserSuppliedTag()...)
+		return ProvideAttributeValueUpdate{
+			ObjectHandle:     pv.GetObjectHandle(),
+			AttributeHandles: attrs,
+			Tag:              tag,
+		}
+	default:
+		return nil
+	}
+}
+
+func connectionAdmission(opts ConnectOptions) (ReceiveOrderTransport, bool, error) {
+	if opts.ReceiveOrderTransport > ReceiveOrderTransportConfirmed {
+		return 0, false, errors.New("federate: invalid receive-order transport")
+	}
+	receiveOrderTransport := opts.ReceiveOrderTransport
+	confirmedAdmission := false
+	switch opts.AdmissionMode {
+	case "", AdmissionModePipelined:
+		// Pipelined LocalLRC admission is the default. An explicit
+		// ReceiveOrderTransportConfirmed remains honored for
+		// compatibility, but contradicting an explicit
+		// AdmissionModePipelined is an error.
+		if opts.AdmissionMode == AdmissionModePipelined &&
+			opts.ReceiveOrderTransport == ReceiveOrderTransportConfirmed {
+			return 0, false, errors.New("federate: AdmissionMode \"pipelined\" conflicts with ReceiveOrderTransportConfirmed")
+		}
+	case AdmissionModeConfirmed:
+		receiveOrderTransport = ReceiveOrderTransportConfirmed
+		confirmedAdmission = true
+	default:
+		return 0, false, fmt.Errorf("federate: invalid admission mode %q", opts.AdmissionMode)
+	}
+	return receiveOrderTransport, confirmedAdmission, nil
+}
+
+func (c *Connection) createFederationForJoin(ctx context.Context, spec FederationSpec, protoMods []*rtiv1.FOMModule) (*rtiv1.FOMModule, uint64, error) {
+	requestedMIM := spec.MIMModule
+	if requestedMIM == nil {
+		requestedMIM = c.cachedMIM(spec.Name)
+	}
+	selectedMIM, err := prepareMIMModule(requestedMIM)
+	if err != nil {
+		return nil, 0, err
+	}
+	createReq := &rtiv1.CreateFederationRequest{
+		WireVersion:                   createWireVersion(selectedMIM),
+		FederationName:                spec.Name,
+		FomModules:                    protoMods,
+		MimModule:                     selectedMIM,
+		Seed:                          spec.Seed,
+		StallTimeoutSeconds:           spec.StallTimeoutSeconds,
+		LogicalTimeImplementationName: spec.LogicalTimeImplementationName,
+	}
+	createResp, cErr := c.fed.CreateFederation(ctx, createReq)
+	var generation uint64
+	if cErr != nil {
+		if status.Code(cErr) != codes.AlreadyExists {
+			return nil, 0, fmt.Errorf("federate: CreateFederation: %w", wrapStatusErr(cErr))
+		}
+		generation, err = c.resolveFederationGeneration(ctx, spec.Name)
+		if err != nil {
+			return nil, 0, fmt.Errorf("federate: resolve federation generation: %w", err)
+		}
+	} else {
+		created, err := c.recordFederationCreation(spec.Name, createResp)
+		if err != nil {
+			return nil, 0, err
+		}
+		generation = created.FederationGeneration
+	}
+
+	return selectedMIM, generation, nil
+}
+
+func (c *Connection) openCallbackStreams(ctx, streamCtx context.Context, streamCancel context.CancelFunc, eventsRequest *rtiv1.EventsRequest) (grpc.ServerStreamingClient[rtiv1.FederateEventBatch], grpc.ServerStreamingClient[rtiv1.FederateEvent], error) {
+	batchStream, batchErr := c.stream.EventBatches(streamCtx, eventsRequest)
+	var legacyStream grpc.ServerStreamingClient[rtiv1.FederateEvent]
+	openLegacy := func(unimplementedErr error) error {
+		var legacyErr error
+		legacyStream, legacyErr = c.stream.Events(streamCtx, eventsRequest)
+		if legacyErr == nil {
+			return nil
+		}
+		return fmt.Errorf("federate: callback stream open: %w", errors.Join(
+			fmt.Errorf("EventBatches unsupported: %w", unimplementedErr),
+			fmt.Errorf("Events fallback: %w", legacyErr),
+		))
+	}
+
+	if batchErr != nil {
+		if status.Code(batchErr) != codes.Unimplemented {
+			return nil, nil, (fmt.Errorf("federate: EventBatches callback stream open: %w", batchErr))
+		}
+		if err := openLegacy(batchErr); err != nil {
+			return nil, nil, (err)
+		}
+		batchStream = nil
+	} else {
+		ready, readyErr := receiveCallbackReady(ctx, streamCancel, batchStream)
+		if readyErr != nil {
+			if status.Code(readyErr) == codes.Unimplemented {
+				if err := openLegacy(readyErr); err != nil {
+					return nil, nil, (err)
+				}
+				batchStream = nil
+			} else {
+				return nil, nil, (fmt.Errorf("federate: EventBatches ready: %w", readyErr))
+			}
+		} else if ready == nil || !ready.GetReady() || len(ready.GetEvents()) != 0 {
+			return nil, nil, (errors.New(
+				"federate: EventBatches ready: server did not send an empty ready batch",
+			))
+		}
+	}
+
+	return batchStream, legacyStream, nil
+}
+
+func connectionDialOptions(opts ConnectOptions) []grpc.DialOption {
+	dialOpts := []grpc.DialOption{}
+	// W8 — first-class channel tuning. Zero-value Transport appends
+	// nothing; these options never influence streamEligible below.
+	dialOpts = append(dialOpts, opts.Transport.dialOptions()...)
+	if opts.TLS != nil {
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(opts.TLS)))
+	} else {
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+	if opts.BearerToken != "" || opts.BearerTokenProvider != nil {
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(bearerCreds{
+			token:    opts.BearerToken,
+			provider: opts.BearerTokenProvider,
+			// requireTLS: only require TLS when TLS is actually
+			// configured. Insecure + bearer is allowed for tests
+			// (real deployments should pair them).
+			requireTLS: opts.TLS != nil,
+		}))
+	}
+	if len(opts.ExtraDialOptions) > 0 {
+		dialOpts = append(dialOpts, opts.ExtraDialOptions...)
+	}
+	return dialOpts
+}
+
+func confirmedJoinTables(joinResp *rtiv1.JoinFederationResponse, selectedMIM *rtiv1.FOMModule, tables *fomTables, hasAdditional bool) (*fomTables, error) {
+	var err error
+	if err := requireSupportedLogicalTime(joinResp.GetLogicalTimeImplementationName()); err != nil {
+		return nil, err
+	}
+	if selectedMIM != nil {
+		if err := confirmSelectedMIM(selectedMIM, joinResp.GetFomView()); err != nil {
+			return nil, err
+		}
+	}
+	if view := joinResp.GetFomView(); view != nil {
+		tables, err = tablesFromFOMView(view)
+		if err != nil {
+			return nil, err
+		}
+	} else if hasAdditional {
+		return nil, fmt.Errorf("server did not confirm additional FOM bindings")
+	}
+	return tables, nil
 }

@@ -1,0 +1,14 @@
+# Dedicated environment only; no production SDK install or code generation.
+pytest==9.1.1
+pytest-asyncio==1.4.0
+grpcio==1.84.0
+protobuf==7.36.2
+cryptography==46.0.3
+cffi==2.0.0
+pycparser==2.23
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+typing_extensions==4.16.0
+colorama==0.4.6; sys_platform == 'win32'

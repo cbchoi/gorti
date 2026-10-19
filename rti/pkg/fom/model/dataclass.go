@@ -32,6 +32,7 @@ type SimpleData struct {
 	Units          string
 	Resolution     string
 	Accuracy       string
+	Semantics      OptionalString
 }
 
 // Name returns the data type's declared name.
@@ -43,12 +44,16 @@ type EnumeratedData struct {
 	NameField      string
 	Representation string
 	Enumerators    []Enumerator
+	Semantics      OptionalString
 }
 
 // Enumerator is one named value within an EnumeratedData.
 type Enumerator struct {
 	Name   string
 	Values string
+	// ValueList preserves repeated FDD <value> elements. Values remains the
+	// first value (or the legacy <values> text) for existing consumers.
+	ValueList []string
 }
 
 // Name returns the data type's declared name.
@@ -63,6 +68,7 @@ type ArrayData struct {
 	DataType    string
 	Cardinality string
 	Encoding    string
+	Semantics   OptionalString
 }
 
 // Name returns the data type's declared name.
@@ -74,12 +80,14 @@ type FixedRecordData struct {
 	NameField string
 	Fields    []RecordField
 	Encoding  string
+	Semantics OptionalString
 }
 
 // RecordField is one named field of a FixedRecordData or VariantRecordData.
 type RecordField struct {
-	Name     string
-	DataType string
+	Name      string
+	DataType  string
+	Semantics OptionalString
 }
 
 // Name returns the data type's declared name.
@@ -93,6 +101,7 @@ type VariantRecordData struct {
 	DiscriminantType string
 	Alternatives     []VariantAlternative
 	Encoding         string
+	Semantics        OptionalString
 }
 
 // VariantAlternative is one alternative within a VariantRecordData.
@@ -100,6 +109,7 @@ type VariantAlternative struct {
 	Enumerator string
 	Name       string
 	DataType   string
+	Semantics  OptionalString
 }
 
 // Name returns the data type's declared name.

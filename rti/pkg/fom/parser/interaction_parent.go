@@ -9,8 +9,8 @@ import (
 const interactionClassRootName = "HLAinteractionRoot"
 
 // interactionParentValidator emits FOM-012 for every interaction class
-// whose ParentName fails to resolve. Resolution succeeds when the parent
-// name is found in the same module's interaction set OR is the universal
+// whose ParentKey fails to resolve. Resolution succeeds when the parent
+// key is found in the same module's interaction set OR is the universal
 // root (HLAinteractionRoot).
 //
 // TODO(#1): once TASK-008 lands, "found in same module" expands to "found
@@ -30,17 +30,18 @@ func (interactionParentValidator) Run(in diagnosticInput) []Diagnostic {
 		interactionClassRootName: {},
 	}
 	for _, ic := range classes {
-		known[ic.Name] = struct{}{}
+		known[ic.Key()] = struct{}{}
 	}
 
 	reported := map[string]struct{}{}
 	var diags []Diagnostic
 	for _, ic := range classes {
-		if ic.Name == interactionClassRootName {
+		classKey, parentKey := ic.Key(), ic.ParentKey()
+		if classKey == interactionClassRootName {
 			continue
 		}
-		if ic.ParentName == "" {
-			key := ic.Name + "\x00<root>"
+		if parentKey == "" {
+			key := classKey + "\x00<root>"
 			if _, dup := reported[key]; dup {
 				continue
 			}
@@ -49,14 +50,14 @@ func (interactionParentValidator) Run(in diagnosticInput) []Diagnostic {
 				Code: "FOM-012",
 				Message: fmt.Sprintf(
 					"interaction class %q is not nested under %s; missing parent class",
-					ic.Name, interactionClassRootName,
+					classKey, interactionClassRootName,
 				),
 				ModulePath: in.modulePath,
 			})
 			continue
 		}
-		if _, ok := known[ic.ParentName]; !ok {
-			key := ic.Name + "\x00" + ic.ParentName
+		if _, ok := known[parentKey]; !ok {
+			key := classKey + "\x00" + parentKey
 			if _, dup := reported[key]; dup {
 				continue
 			}
@@ -65,7 +66,7 @@ func (interactionParentValidator) Run(in diagnosticInput) []Diagnostic {
 				Code: "FOM-012",
 				Message: fmt.Sprintf(
 					"interaction class %q references non-existent parent %q",
-					ic.Name, ic.ParentName,
+					classKey, parentKey,
 				),
 				ModulePath: in.modulePath,
 			})

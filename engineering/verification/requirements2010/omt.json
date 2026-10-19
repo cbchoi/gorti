@@ -1,0 +1,1151 @@
+{
+  "schema_version": 1,
+  "latest_defect_increment": {
+    "date": "2026-10-03",
+    "report": "engineering/verification/ieee1516-2010-defect-fixes-20261003.md",
+    "scope": "Five invalid class-name creates reject with exact ErrorReadingFDD and execution-name reuse; two mixed valid/invalid join-module orders leave the complete FDD and roster unchanged and allow a later valid extension. Parser tests separately cover Unicode, predefined MIM and additional identifier controls. Older dated admission failures are retained checkpoint observations. Other categories and whole requirement verdicts remain open.",
+    "coverage_complete": false,
+    "full_conformance": false
+  },
+  "source_id": "S1516.2",
+  "reviewed_units": [
+    "6.1",
+    "6.1.1",
+    "6.1.2",
+    "6.1.3",
+    "6.2.1",
+    "6.2.9",
+    "C.9",
+    "B.1",
+    "B.2",
+    "B.4",
+    "B.5"
+  ],
+  "coverage_complete": false,
+  "requirements": [
+    {
+      "id": "OMTSLICE2010-XML-NAMES",
+      "source_id": "S1516.2",
+      "clause": "3.3.1",
+      "pdf_pages": [
+        31,
+        32
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Respect XML-compatible naming syntax for FDD identifiers.",
+      "conditions": "Applies to class/member, dimension and transportation identifiers consumed by the RTI; full datatype/enumerator/field/note/synchronization naming additionally belongs to model validation.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/parser.go",
+        "rti/pkg/fom/parser/strict.go"
+      ],
+      "tests": [
+        {
+          "path": "pysdk/tests/test_ieee2010_fom_name_completion_live.py",
+          "name": "test_valid_name_control_can_create_and_destroy",
+          "oracle": "A separately generated FOM with an ordinary local class name creates and destroys a federation through the public Python ambassador against the pinned production server; this controls name admission, not complete FOM validity."
+        },
+        {
+          "path": "pysdk/tests/test_ieee2010_fom_name_completion_live.py",
+          "name": "test_noncompliant_local_class_name_rejected_at_create",
+          "oracle": "Literal leading-digit and space class-name cases must reject FOM admission; other parameter cases separately exercise colon and reserved names. The complete method currently fails, rather than establishing rejection."
+        }
+      ],
+      "open_items": [
+        "2026-10-02 production-server run admits 1Sensor and Sensor Bad; rejection defect remains open. Vocabulary whitelisting is not an XML-name validator.",
+        "Other punctuation, breaking characters, Unicode names, identifier categories, join-time rejection and rejection nonmutation remain unverified."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-QUALIFICATION-SEPARATORS",
+      "source_id": "S1516.2",
+      "clause": "3.3.1",
+      "pdf_pages": [
+        32
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Reserve periods for qualified class ancestry and prohibit colon in user-defined model names.",
+      "conditions": "Local names cannot contain qualification periods; a qualified class path begins at its root.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/walk.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/exporter/exporter_test.go",
+          "name": "TestIndependentMergedMIMXMLAndInheritance",
+          "oracle": "Independent encoding/xml decoder checks the 2010 namespace, one root per hierarchy, exact local-only inherited declarations, preserved repeated leaf identities, merged MOM class and HLAboolean enumerator value."
+        },
+        {
+          "path": "pysdk/tests/test_ieee2010_fom_name_completion_live.py",
+          "name": "test_noncompliant_local_class_name_rejected_at_create",
+          "oracle": "The literal colon case supplies Sensor:Bad as a local user class and requires create rejection. The pinned production-server invocation currently accepts it and the test fails."
+        }
+      ],
+      "open_items": [
+        "2026-10-02 production-server run admits Sensor:Bad; colon rejection defect remains open. Nested hierarchy export is positive evidence only; explicit local-period rejection remains unverified."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-RESERVED-HLA-PREFIX",
+      "source_id": "S1516.2",
+      "clause": "3.3.1",
+      "pdf_pages": [
+        32
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Reject user-defined identifiers beginning with any case variant of the reserved HLA prefix.",
+      "conditions": "Standard predefined MIM names legitimately use the reserved prefix; they must not be rejected as user declarations.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/parser.go",
+        "rti/pkg/fom/mim/merge.go"
+      ],
+      "tests": [
+        {
+          "path": "pysdk/tests/test_ieee2010_fom_name_completion_live.py",
+          "name": "test_noncompliant_local_class_name_rejected_at_create",
+          "oracle": "HLAcustom is introduced as a new user-defined class, not standard MIM scaffolding; create must reject it. The pinned production-server invocation currently accepts it and fails the test."
+        }
+      ],
+      "open_items": [
+        "2026-10-02 production-server run admits HLAcustom; reserved-prefix rejection defect remains open.",
+        "Map user-versus-standard origin and all prefix-case variants; standard MIM presence does not prove this rejection."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-RESERVED-NA",
+      "source_id": "S1516.2",
+      "clause": "3.3.1",
+      "pdf_pages": [
+        32
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Do not accept any case variant of NA as a user-defined name.",
+      "conditions": "NA is a context-dependent not-applicable marker, not a new named entity.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/parser.go"
+      ],
+      "tests": [
+        {
+          "path": "pysdk/tests/test_ieee2010_fom_name_completion_live.py",
+          "name": "test_noncompliant_local_class_name_rejected_at_create",
+          "oracle": "NA is declared as a new local object-class name rather than used as a field marker; create must reject it. The pinned production-server invocation currently accepts it and fails the test."
+        }
+      ],
+      "open_items": [
+        "2026-10-02 production-server run admits NA as a user class; rejection defect remains open. Other case variants and identifier categories are not closed."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-TEXT-CASE",
+      "source_id": "S1516.2",
+      "clause": "3.3.1",
+      "pdf_pages": [
+        32
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Preserve case-sensitive interpretation of model textual data and identifiers.",
+      "conditions": "Do not collapse differently cased FDD identifiers; descriptive strings outside FDD do not become RTI combination rejection keys.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/class_merge.go",
+        "rti/pkg/fom/parser/dimension_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "tests/conformance/rti/requirementsomt/omt_test.go",
+          "name": "TestIEEE2010CaseDistinctFDDNames",
+          "oracle": "Public Parse and ParseAdditive retain case-distinct object/interaction classes, attributes, parameters and dimensions with distinct bounds; no normalization into one identifier. Parser-only fixture, not live handle lookup or every textual field."
+        },
+        {
+          "path": "tests/conformance/rti/requirementsomt/omt_test.go",
+          "name": "TestIEEE2010DimensionReferencesAreCaseSensitive",
+          "oracle": "Both parser paths accept an exact X dimension reference and reject x when only X is defined, for attribute and interaction scopes, with nil FOM and FOM-015 diagnostics."
+        }
+      ],
+      "open_items": [
+        "Case-distinct declarations and dimension references are now isolated; remaining textual fields and live class/member handle resolution require separate oracles."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-CONFORMANCE-LABEL",
+      "source_id": "S1516.2",
+      "clause": "6.1",
+      "pdf_pages": [
+        82
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Use the HLA Conforming label only when certified results are publicly available.",
+      "conditions": "Applies to certification claims for models/tools, not an inference from local passing tests.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No certification or whole-conformance claim is made by these slices or trusted local execution records."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-FULL-MODEL-CONTENT",
+      "source_id": "S1516.2",
+      "clause": "6.1.1",
+      "pdf_pages": [
+        82
+      ],
+      "subject": "federation",
+      "applicability": "not-applicable",
+      "statement": "Provide all required OMT components, permitted empty tables and MOM data within a MIM for a conforming complete model.",
+      "conditions": "Full FOM/SOM authoring is outside the RTI-only claim; applicable FDD structural admission is retained below.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Do not mistake a schema-valid FDD export for a complete OMT FOM/SOM with all descriptive tables."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-TOOL-INPUT-CHOICE",
+      "source_id": "S1516.2",
+      "clause": "6.1.2",
+      "pdf_pages": [
+        82
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "A claimed conforming OMT tool accepts conforming XML models, identifies invalid user inputs and permits the user to choose nonconforming output.",
+      "conditions": "Only parsing and valid XML output, when offered, are mandatory tool operations; arbitrary additional authoring capabilities are optional.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No full OMT-authoring-tool/UI claim. An RTI rejection service need not offer a user override to create invalid FDD."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-XML-PRODUCT",
+      "source_id": "S1516.2",
+      "clause": "6.1.3",
+      "pdf_pages": [
+        82
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Validate a claimed conforming complete OMT XML product with the normative OMT conformance schema.",
+      "conditions": "All fully conforming XML processors should accept it without validation exception.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/exporter/exporter.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/exporter/exporter_test.go",
+          "name": "TestOfficialFDDSchemaIndependentOracle",
+          "oracle": "Conditional external oracle validates retained and merged exports against caller-supplied GORTI_FDD_XSD and runs independent semantic checks plus plural-value, missing-switch, broken-dimension and section-order invalidation mutations; skipped if schema/Python variables are absent. It is an FDD-schema oracle, not full OMT schema certification."
+        }
+      ],
+      "open_items": [
+        "The inspected oracle uses an FDD schema supplied via environment, not the Annex E OMT schema. No full OMT XML-product claim is closed."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-VERIFICATION-DIAGNOSTICS",
+      "source_id": "S1516.2",
+      "clause": "6.2",
+      "pdf_pages": [
+        82
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Identify invalid model entries explicitly when applying normative structural conformance checks.",
+      "conditions": "Clause 6's enumerated checks are minimum verification criteria, not permission to ignore other applicable normative FDD constraints.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/diagnostics.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/ieee2010_class_admission_test.go",
+          "name": "TestIEEE2010CompleteClassMemberAdmission",
+          "oracle": "Object/interaction regular definitions with disjoint, superset, subset, removed-all or grown-empty member sets yield FOM-014 and nil FOM in Parse and ParseAdditive; diagnostics identify next.xml/Shared and reparsing baseline gives exact equality."
+        },
+        {
+          "path": "rti/pkg/fom/parser/dimension_merge_test.go",
+          "name": "TestDimensionDeclarationsMerge",
+          "oracle": "Both orders deduplicate equivalent numeric bounds (+00100 and 100) but reject different bounds or normalization text/whitespace with FOM-015, nil FOM and correct module/dimension context."
+        }
+      ],
+      "open_items": [
+        "Diagnostics identify module/class/dimension in linked cases; systematic invalid-entry locations and all normative checks remain incomplete."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-IDENTIFICATION-TABLE",
+      "source_id": "S1516.2",
+      "clause": "6.2.1",
+      "pdf_pages": [
+        83
+      ],
+      "subject": "federation",
+      "applicability": "not-applicable",
+      "statement": "Check identification name syntax, prescribed modification-date format and nonblank remaining fields, allowing NA where permitted.",
+      "conditions": "These full-model descriptive metadata are not RTI FDD combination fields.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No complete-model authoring validation oracle. Do not reject RTI joins merely because two model-identification descriptions differ."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-OBJECT-IDENTITY",
+      "source_id": "S1516.2",
+      "clause": "6.2.2",
+      "pdf_pages": [
+        83
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Preserve unique ancestry-qualified object-class identities and valid publish/subscribe declarations.",
+      "conditions": "Names follow 3.3; tabular P/S tokens are P, S, PS or N, with corresponding XML vocabulary.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/walk.go",
+        "rti/pkg/fom/parser/class_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/hierarchy_validation_test.go",
+          "name": "TestSpec_Hierarchy_BranchLocalInheritedDuplicates",
+          "oracle": "Repeated Shared/Leaf names on distinct branches are accepted; only actual same-ancestry attribute/parameter collisions produce FOM-004/FOM-005 at the expected branch, with exact diagnostic counts and nil model on rejection."
+        },
+        {
+          "path": "rti/pkg/fom/exporter/exporter_test.go",
+          "name": "TestIndependentMergedMIMXMLAndInheritance",
+          "oracle": "Independent encoding/xml decoder checks the 2010 namespace, one root per hierarchy, exact local-only inherited declarations, preserved repeated leaf identities, merged MOM class and HLAboolean enumerator value."
+        }
+      ],
+      "open_items": [
+        "Map all sharing token values and invalid sharing independently; repeated local names are legal on distinct ancestry."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-INTERACTION-IDENTITY",
+      "source_id": "S1516.2",
+      "clause": "6.2.3",
+      "pdf_pages": [
+        83
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Preserve unique ancestry-qualified interaction-class identities and valid publish/subscribe declarations.",
+      "conditions": "Use class ancestry, not local name alone; tabular versus XML sharing spelling differs.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/walk.go",
+        "rti/pkg/fom/parser/class_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/hierarchy_validation_test.go",
+          "name": "TestSpec_Hierarchy_BranchLocalInheritedDuplicates",
+          "oracle": "Repeated Shared/Leaf names on distinct branches are accepted; only actual same-ancestry attribute/parameter collisions produce FOM-004/FOM-005 at the expected branch, with exact diagnostic counts and nil model on rejection."
+        }
+      ],
+      "open_items": [
+        "No exhaustive sharing-vocabulary oracle is linked."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-ATTRIBUTE-REFERENCES",
+      "source_id": "S1516.2",
+      "clause": "6.2.4",
+      "pdf_pages": [
+        83
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Resolve each attribute's class, datatype, dimensions and transportation, reject inherited name overloads and honor Receive/TimeStamp order.",
+      "conditions": "Structural admission is not excluded merely because the RTI transports values opaquely; the root includes HLAprivilegeToDeleteObject.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/datatype_ref.go",
+        "rti/pkg/fom/parser/dimension_ref.go",
+        "rti/pkg/fom/parser/duplicate.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/hierarchy_validation_test.go",
+          "name": "TestSpec_Hierarchy_BranchLocalInheritedDuplicates",
+          "oracle": "Repeated Shared/Leaf names on distinct branches are accepted; only actual same-ancestry attribute/parameter collisions produce FOM-004/FOM-005 at the expected branch, with exact diagnostic counts and nil model on rejection."
+        },
+        {
+          "path": "rti/pkg/fom/parser/datatype_ref_test.go",
+          "name": "TestSpec_DataTypeRef_RejectsUndeclaredAttributeType",
+          "oracle": "An attribute using NotAType produces FOM-001 and nil FOM."
+        }
+      ],
+      "open_items": [
+        "Map unresolved dimension/transport/order and missing root privilege negatives independently; no whole 6.2.4 completion."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-ATTRIBUTE-DESCRIPTIVE-CHECKS",
+      "source_id": "S1516.2",
+      "clause": "6.2.4",
+      "pdf_pages": [
+        83
+      ],
+      "subject": "federation",
+      "applicability": "not-applicable",
+      "statement": "Verify full-model attribute update-kind, ownership capability, sharing and nonblank descriptive fields.",
+      "conditions": "For complete OMT model verification, tabular update values are Static/Periodic/Conditional/NA and D/A values D/A/DA/N. These descriptions must not all become RTI FDD combination comparison keys.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Runtime ownership capabilities are separate from an author's table entries. Reconcile exact FDD column scope with 1516.1 4.1.4 rather than blanket-excluding attribute structure."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-PARAMETER-REFERENCES",
+      "source_id": "S1516.2",
+      "clause": "6.2.5",
+      "pdf_pages": [
+        83
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Resolve parameter names/types in their interaction hierarchy and reject local or inherited overloads.",
+      "conditions": "The projection additionally lists dimensions, transportation and order in this verification subclause; applicability must follow actual table/FDD context, not blindly attach attributes to each parameter.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/datatype_ref.go",
+        "rti/pkg/fom/parser/duplicate_parameter.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/hierarchy_validation_test.go",
+          "name": "TestSpec_Hierarchy_BranchLocalInheritedDuplicates",
+          "oracle": "Repeated Shared/Leaf names on distinct branches are accepted; only actual same-ancestry attribute/parameter collisions produce FOM-004/FOM-005 at the expected branch, with exact diagnostic counts and nil model on rejection."
+        },
+        {
+          "path": "rti/pkg/fom/parser/datatype_ref_test.go",
+          "name": "TestSpec_DataTypeRef_RejectsUndeclaredParameterType",
+          "oracle": "A parameter with NoSuchType yields FOM-001; this body does not assert nil FOM separately."
+        }
+      ],
+      "open_items": [
+        "Retain the parameter table-context ambiguity: inspect the relevant table/schema before inventing per-parameter runtime transport/dimension properties."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-DIMENSION-STRUCTURE",
+      "source_id": "S1516.2",
+      "clause": "6.2.6",
+      "pdf_pages": [
+        84
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Validate dimension name/type and a positive integer upper bound; check declared unspecified-value ranges against that bound.",
+      "conditions": "Dimensions are a complete FDD table, not blanket-excluded OMT metadata. Full-model remaining-field nonblank checks are separately inventoried.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/dimension_ref.go",
+        "rti/pkg/fom/parser/dimension_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/dimension_default_bounds_test.go",
+          "name": "TestDimensionDefaultBoundsAdmission",
+          "oracle": "Rejects equal/reversed/out-of-bound default ranges and out-of-domain scalar defaults; accepts bounded valid values and explicit Excluded."
+        }
+      ],
+      "open_items": [
+        "Page 84 was visually inspected: its verification wording states a numeric subrange but 9.1 DDM and other OMT text permit Excluded. Retain cross-clause reconciliation rather than wrongly reject Excluded.",
+        "No linked positive-upper-bound/type/name negative matrix; missing value fallback is product compatibility, not proof of a complete compliant dimension declaration."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-DIMENSION-NONBLANK",
+      "source_id": "S1516.2",
+      "clause": "6.2.6",
+      "pdf_pages": [
+        84
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Assess nonblank remaining dimension-table fields where required for a complete model.",
+      "conditions": "Dimension table is optional as a table, but supplied complete declarations have required content; complete FDD scope includes the dimension table.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/parser.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/descriptive_test.go",
+          "name": "TestDescriptiveMetadataInvalidDimension",
+          "oracle": "Supplied empty datatype, normalization and value declarations reject with nil FOM and exact diagnostics, alongside unknown datatype and malformed-value controls. Omitted fields/assembled-complete-model responsibilities are not inferred from these module negatives."
+        }
+      ],
+      "open_items": [
+        "Determine supplied-module versus assembled-complete-model obligations before treating omitted metadata as a defect. Explicit-empty datatype/normalization/value rejection is tested; omitted required complete-model fields and full assembly remain open."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-TIME-AND-TAG-TABLES",
+      "source_id": "S1516.2",
+      "clause": "6.2.7",
+      "pdf_pages": [
+        84
+      ],
+      "subject": "federation",
+      "applicability": "not-applicable",
+      "statement": "Document nonnegative lookahead representations and permitted datatype categories or NA for time and tag tables.",
+      "conditions": "Full OMT time representation and user-supplied-tag model tables are not listed FDD combination columns; 6.2.8 uses simple/enumerated/array/fixed/variant categories or NA.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "RTI factory encoding/lookahead admission remains applicable in the time slice; it is not proved by authoring table declarations."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-SYNCHRONIZATION-TABLE",
+      "source_id": "S1516.2",
+      "clause": "6.2.9",
+      "pdf_pages": [
+        84
+      ],
+      "subject": "federation",
+      "applicability": "not-applicable",
+      "statement": "Verify synchronization-label names, permitted tag datatype and FOM/SOM-specific capability values.",
+      "conditions": "Capability is NA for FOMs/modules and Register/Achieve/RegisterAchieve/NoSynch for SOMs/modules.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "A full-model synchronization-table check is not an RTI static-model merge requirement; runtime synchronization remains applicable separately."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-TRANSPORT-RELIABILITY",
+      "source_id": "S1516.2",
+      "clause": "6.2.10",
+      "pdf_pages": [
+        84
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Validate transportation names and allowed reliability declarations.",
+      "conditions": "Tabular Reliable/Best Effort correspond to XML reliable Yes/No; do not confuse vocabulary forms.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/transportations.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/transport_rates_test.go",
+          "name": "TestTransportDeclarationsInvalidAndLegacyReferences",
+          "oracle": "Missing/empty/true reliability or missing name gives FOM-016 and nil model at invalid.xml; valid XML reliable No declaration is accepted."
+        }
+      ],
+      "open_items": [
+        "No isolated naming-convention matrix; parser compatibility inputs are not full OMT table completion."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-POSITIVE-UPDATE-RATE",
+      "source_id": "S1516.2",
+      "clause": "6.2.11",
+      "pdf_pages": [
+        84
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Validate named maximum update rates as exact positive decimal hertz values.",
+      "conditions": "Zero, negative and rounded-underflow interpretations must not satisfy strict positivity.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/update_rates.go",
+        "rti/pkg/fom/model/update_rates.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/update_rates_positive_test.go",
+          "name": "TestIEEE2010UpdateRateParserAndCreateAdmission",
+          "oracle": "Both parsers reject zero/negative rates with FOM-016; accept tiny positive and high-precision decimals unchanged. Invalid create publishes no FOM and does not reserve the name, allowing corrected create."
+        }
+      ],
+      "open_items": [
+        "No full rate-name grammar oracle; exact small-decimal admission is already tested, not missing."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-SWITCH-VALUES",
+      "source_id": "S1516.2",
+      "clause": "6.2.12",
+      "pdf_pages": [
+        84,
+        85
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Validate FDD switch settings and automatic-resign action against the permitted vocabulary.",
+      "conditions": "FOM switch settings are Enabled/Disabled; SOM settings are NA. Automatic-resign choices include all six enumerated actions.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/automatic_resign.go",
+        "rti/pkg/fom/parser/advisory_switches.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/automatic_resign_test.go",
+          "name": "TestAutomaticResignFOMSwitch",
+          "oracle": "Valid CancelThenDeleteThenDivest is retained, omitted attribute defaults to NoAction, and invalid/duplicate declarations produce diagnostics."
+        }
+      ],
+      "open_items": [
+        "Map every action and every switch, duplicate/invalid boolean settings and SOM-specific NA authoring; a single valid action plus product default is not exhaustive."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-DATATYPE-TABLE-STRUCTURE",
+      "source_id": "S1516.2",
+      "clause": "6.2.13",
+      "pdf_pages": [
+        85
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Preserve valid basic/simple/enumerated/array/fixed-record datatype structure needed for model admission.",
+      "conditions": "6.2.13-6.2.17 specify names, endian, representation/reference categories, enumerator names, cardinality formats and predefined encoding vocabulary.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/datatype_ref.go",
+        "rti/pkg/fom/exporter/datatypes.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/exporter/exporter_test.go",
+          "name": "TestRetainedModelSemanticRoundTrip",
+          "oracle": "Parsed/exported/reparsed model preserves datatypes, dimensions, classes, switches and exact rates; output is stable and uses singular enumerator value."
+        }
+      ],
+      "open_items": [
+        "This aggregate is a bounded partial inventory, not a reviewed-unit claim for 6.2.13-6.2.17. Add individual wrong-category, endian, cardinality and encoding negatives; self-roundtrip can share defects."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-VARIANT-RECORD",
+      "source_id": "S1516.2",
+      "clause": "6.2.18",
+      "pdf_pages": [
+        85,
+        86
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Validate variant names, enumerated discriminator type, alternatives, enumerator ranges/HLAother uniqueness and predefined encoding.",
+      "conditions": "Alternative types reference permitted datatype categories; ranges use the specified notation and HLAother occurs at most once per record.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/variant_discriminator.go",
+        "rti/pkg/fom/exporter/datatypes.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/variant_discriminator_test.go",
+          "name": "TestSpec_VariantDiscriminator_RejectsMissingDiscriminant",
+          "oracle": "A record with no discriminant produces FOM-013; the body does not assert all variant-category conditions."
+        }
+      ],
+      "open_items": [
+        "The positive counterpart uses a basic integer discriminator and only asserts absence of FOM-013, so it cannot prove the normative enumerated discriminator-type requirement. Highest-risk missing oracle: wrong discriminator category and duplicate HLAother."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-FULL-MERGER-METADATA",
+      "source_id": "S1516.2",
+      "clause": "7",
+      "pdf_pages": [
+        91,
+        92,
+        97
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Merge model descriptions and record Composed_From contributors while leaving other identification fields for completion after merging.",
+      "conditions": "Clause 7/Table 50/C.1 concern full FOM/SOM assembly. Under 1516.1 4.1.4.1 the RTI compares only FDD, so excluded metadata differences are not RTI rejection keys.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Current parser/exporter is an RTI FDD pipeline, not a claimed full OMT merger; retaining some descriptions does not establish C.1 contributor metadata or complete lexicon merging."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-MERGE-CLASS-UNION",
+      "source_id": "S1516.2",
+      "clause": "7/Table 50",
+      "pdf_pages": [
+        92,
+        97,
+        98
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Combine compatible class hierarchies by ancestry, preserving new classes and ignoring scaffolding definitions in regular-definition equivalence.",
+      "conditions": "Apply Table 50 structure to FDD; regular local member sets must match, not silently union/grow an existing regular declaration.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/class_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/ieee2010_class_admission_test.go",
+          "name": "TestIEEE2010CompleteClassMemberAdmission",
+          "oracle": "Object/interaction regular definitions with disjoint, superset, subset, removed-all or grown-empty member sets yield FOM-014 and nil FOM in Parse and ParseAdditive; diagnostics identify next.xml/Shared and reparsing baseline gives exact equality."
+        },
+        {
+          "path": "rti/pkg/fom/parser/ieee2010_class_admission_test.go",
+          "name": "TestIEEE2010ScaffoldingCompletionAndNewClasses",
+          "oracle": "Both module orders preserve exact Shared/Child/Sibling memberships when name-only scaffolding is completed; later growth of the completed regular class rejects with FOM-014."
+        }
+      ],
+      "open_items": [
+        "Annex C's broad 'shall not be merged' phrasing must be read with Table 50's union/deduplication and scaffolding results, not as a ban on all same-class modules. Full descriptive warning/tool behavior is separate."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-MERGE-FDD-CLASS-COLUMNS",
+      "source_id": "S1516.2",
+      "clause": "7/Table 50",
+      "pdf_pages": [
+        92
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Compare repeated regular definitions on applicable FDD member sets, dimensions, transport and order while not rejecting excluded semantics or update-condition descriptions.",
+      "conditions": "1516.1 4.1.4.1 selects operational FDD from the broader Table 50 full-model comparison set.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/class_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/ieee2010_class_admission_test.go",
+          "name": "TestIEEE2010ClassDescriptionsDoNotRejectMerge",
+          "oracle": "Parse and additive parsing accept differing class/member semantics and object updateCondition without diagnostics, retaining operational members."
+        },
+        {
+          "path": "rti/pkg/fom/parser/ieee2010_class_admission_test.go",
+          "name": "TestIEEE2010ClassOperationalConflictsStillReject",
+          "oracle": "Changed datatype/transport/order/dimension set/sharing gives FOM-014 and nil FOM; reordered equivalent dimensions preserve the baseline."
+        }
+      ],
+      "open_items": [
+        "Sharing/datatype are checked by current implementation but exact FDD projection differs by table: reconcile those extra rejection keys against 1516.1 before declaring them normative.",
+        "Local parser success/rejection is not public create/join atomicity."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-MERGE-DIMENSIONS",
+      "source_id": "S1516.2",
+      "clause": "7/Table 50",
+      "pdf_pages": [
+        92,
+        99
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Require compatible duplicate dimension definitions and retain unique dimensions without dropping their complete FDD context.",
+      "conditions": "Table 50 compares dimension datatype, upper bound, normalization, unspecified value and semantics. Unlike transportation/rate descriptions, the dimension table is complete FDD.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/dimension_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/dimension_merge_test.go",
+          "name": "TestDimensionDeclarationsMerge",
+          "oracle": "Both orders deduplicate equivalent numeric bounds (+00100 and 100) but reject different bounds or normalization text/whitespace with FOM-015, nil FOM and correct module/dimension context."
+        }
+      ],
+      "open_items": [
+        "Do not blanket-exclude normalization or value as descriptive. Need independent datatype/value/semantics/presence conflict and public admission tests; inspected dim test covers bound/normalization only.",
+        "Current xmlDimension and model.Dimension retain name, datatype, upper bound, normalization and value but have no semantics member. Assess whether a supplied dimension-semantics difference is lost or ignored despite complete-dimension FDD scope; no new execution or production defect reproduction is claimed."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-MERGE-TRANSPORT",
+      "source_id": "S1516.2",
+      "clause": "7/Table 50",
+      "pdf_pages": [
+        93,
+        100
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Combine transportation names/reliability but do not reject description-only differences in RTI FDD combination.",
+      "conditions": "Full OMT mergers compare semantics; RTI 1516.1 FDD scope explicitly excludes it.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/transportations.go",
+        "rti/pkg/fom/parser/mim_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/fdd_merge_normative_test.go",
+          "name": "TestFDDTransportationDescriptionsDoNotRejectMerge",
+          "oracle": "Different, empty and whitespace-varied descriptions with equal name/reliability produce a model without diagnostics in normal/additive parsing; operational declaration remains unchanged."
+        },
+        {
+          "path": "rti/pkg/fom/parser/transport_rates_test.go",
+          "name": "TestTransportRateConflictingDeclarations",
+          "oracle": "Both orders and both parsers reject differing transportation reliability or maximum rate with FOM-016 and nil FOM."
+        }
+      ],
+      "open_items": [
+        "First-description retention is implementation policy, not a conformance obligation; don't apply full OMT semantics-equivalence rejection to the RTI."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-MERGE-RATES",
+      "source_id": "S1516.2",
+      "clause": "7/Table 50",
+      "pdf_pages": [
+        93,
+        100,
+        101
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Combine equal exact named rates and reject unequal maximum rates without comparing excluded rate descriptions.",
+      "conditions": "Exact decimal equality, not rounded float equality, governs the operational comparison.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/update_rates.go",
+        "rti/pkg/fom/parser/mim_merge.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/fdd_merge_normative_test.go",
+          "name": "TestFDDUpdateRateDescriptionsDoNotRejectMerge",
+          "oracle": "Same high-precision rate with differing descriptions is accepted unchanged."
+        },
+        {
+          "path": "rti/pkg/fom/parser/fdd_merge_normative_test.go",
+          "name": "TestFDDTransportRateMIMMergeUsesOnlyOperationalFields",
+          "oracle": "MIM merge accepts descriptive differences without changing source declarations; reliability or rate changes from ...001 to ...002 return nil merged model and diagnostics."
+        }
+      ],
+      "open_items": [
+        "Full OMT rate semantics/notes comparison belongs to an OMT merger claim, not this RTI row."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-MERGE-SINGLETON-TABLES",
+      "source_id": "S1516.2",
+      "clause": "7/Table 50",
+      "pdf_pages": [
+        91,
+        93
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Reconcile repeated switches tables consistently, while treating time-representation and user-tag tables as full-model assembly requirements outside FDD combination.",
+      "conditions": "Full-model time/tag/switch singleton tables must be identical where repeated; only switches are listed complete FDD here.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/advisory_switches.go",
+        "rti/pkg/fom/parser/automatic_resign.go"
+      ],
+      "tests": [
+        {
+          "path": "tests/conformance/rti/requirementsomt/omt_test.go",
+          "name": "TestIEEE2010RepeatedSwitchDefinitions",
+          "oracle": "For ten Boolean switches, both parser paths and module orders merge identical true definitions into one retained value and reject true/false conflicts with nil FOM and FOM-017. Per-switch consistency facet; not full-table completeness, automatic-resign enum or time/tag model equivalence."
+        }
+      ],
+      "open_items": [
+        "Per-switch Boolean repetition/conflict is now tested; full supplied-table completeness/identity and automatic-resign enum equivalence require further source analysis and tests. Time/tag descriptor equivalence is not claimed as an RTI FDD merger gate."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-MERGE-NONFDD-TABLES",
+      "source_id": "S1516.2",
+      "clause": "7/Table 50",
+      "pdf_pages": [
+        91,
+        93,
+        99,
+        100,
+        101
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Merge full-model synchronization descriptions, datatype definitions, notes and service-usage tables with their prescribed equivalence/union rules.",
+      "conditions": "Repeated notes require matching identification/references; service usage uses logical OR when any module provides a table. This full-model assembly is not all part of RTI FDD combination.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Structural datatype references needed for compliant input remain applicable above. This exclusion is not permission to accept malformed FDD names/hierarchies/dimensions."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-C-DATATYPE-CONFLICT-WARNING",
+      "source_id": "S1516.2",
+      "clause": "C.3",
+      "pdf_pages": [
+        98,
+        99
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Compare same-name datatype definitions, ignore equivalents and warn when an inserted item would use an inconsistent datatype.",
+      "conditions": "Unique dependent datatypes are inserted when their referencing item is inserted, under the full-model merger principles.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No full OMT-merger warning or transactional dependency-insertion oracle; don't equate this warning UI with RTI service exceptions."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-C-NOTE-RELABEL",
+      "source_id": "S1516.2",
+      "clause": "C.8",
+      "pdf_pages": [
+        101
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Merge referenced notes using unique labels and update affected references when labels change.",
+      "conditions": "Table 50 also constrains repeated-note equivalence and same-identification references.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "The relationship between label reassignment and Table 50 repeated-note identity needs explicit implementation/oracle reconciliation before a complete C.8 disposition; no RTI FDD notes-merger claim."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-C-SERVICE-USAGE-OR",
+      "source_id": "S1516.2",
+      "clause": "C.9",
+      "pdf_pages": [
+        101
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Insert service usage when absent and merge each named row by logical OR when both models supply it.",
+      "conditions": "No table is required merely because an RTI implements the corresponding runtime service.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No inspected OR truth-table oracle; service-usage descriptions are outside RTI FDD combination."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-NORMALIZE-LINEAR",
+      "source_id": "S1516.2",
+      "clause": "B.1",
+      "pdf_pages": [
+        95
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "If the named linear normalization is selected, scale its domain relative to the declared lower/upper limits into the dimension's normalized range.",
+      "conditions": "Applies to a nonenumerated simulation domain, scaled against DUB minus one; selecting application coordinate normalization is not automatic RTI routing.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No application normalization implementation claim. Avoid implying the RTI must compute all named Annex B functions."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-NORMALIZE-ENUMERATED",
+      "source_id": "S1516.2",
+      "clause": "B.2",
+      "pdf_pages": [
+        95
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "If linearEnumerated is selected, normalize the zero-based mapped-set position using the mapped-set length and dimension bound.",
+      "conditions": "The enumerated mapped set is compact on integers; function semantics depend on its size.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Degenerate mapped-set inputs and application-selected implementation are not covered by RTI DDM tests."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-NORMALIZE-RTISET",
+      "source_id": "S1516.2",
+      "clause": "B.3",
+      "pdf_pages": [
+        95
+      ],
+      "subject": "rti",
+      "applicability": "unresolved",
+      "statement": "Determine the implementation contract for the RTIset mapping referenced by enumeratedSet normalization.",
+      "conditions": "The normative annex describes an enumerated mapped set, potentially noncompact, mapped into [0,DUB), but this bounded review does not establish a public RTI service/API obligation for RTIset.",
+      "review_status": "candidate",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Retain unresolved instead of excluding merely by function name or inventing a mandatory public service; reconcile dimension normalization documentation with interface services."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-NORMALIZE-LOGARITHMIC",
+      "source_id": "S1516.2",
+      "clause": "B.4",
+      "pdf_pages": [
+        96
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "If logarithmic normalization is selected, use positive domain/lower-bound values and an upper bound greater than the lower bound.",
+      "conditions": "The log-ratio maps into the dimension scale; these conditional function parameters belong to application normalization.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No universal requirement that an RTI execute this function for model data."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-NORMALIZE-TANH",
+      "source_id": "S1516.2",
+      "clause": "B.5",
+      "pdf_pages": [
+        96
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "If tanh normalization is selected, normalize using the declared domain center and size to distribute precision around the center.",
+      "conditions": "A nonenumerated domain is mapped against DUB minus one using the specified tanh form.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No application numerical boundary/parameter oracle; not an automatic DDM transform."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-DIF-VALID-XML",
+      "source_id": "S1516.2",
+      "clause": "D.2",
+      "pdf_pages": [
+        102,
+        103
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Consume and emit structurally valid XML for the declared DIF/FDD scope; well-formedness alone is insufficient.",
+      "conditions": "Incomplete DIF models may be exchanged because many fields are optional; complete OMT models additionally need body-level completeness/consistency.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/strict.go",
+        "rti/pkg/fom/exporter/exporter.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/exporter/exporter_test.go",
+          "name": "TestOfficialFDDSchemaIndependentOracle",
+          "oracle": "Conditional external oracle validates retained and merged exports against caller-supplied GORTI_FDD_XSD and runs independent semantic checks plus plural-value, missing-switch, broken-dimension and section-order invalidation mutations; skipped if schema/Python variables are absent. It is an FDD-schema oracle, not full OMT schema certification."
+        }
+      ],
+      "open_items": [
+        "Conditional FDD-schema test is not proof against the Annex D DIF schema or Annex E OMT schema. Parser explicitly says it is not a full schema validator. No new oracle execution is claimed."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-DIF-INHERITANCE",
+      "source_id": "S1516.2",
+      "clause": "D.2",
+      "pdf_pages": [
+        102
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Represent class inheritance by nested class membership in XML, preserving local declarations and ancestry.",
+      "conditions": "Do not flatten inherited attributes into child local declarations or collapse same local names on distinct branches.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/walk.go",
+        "rti/pkg/fom/exporter/classes.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/exporter/exporter_test.go",
+          "name": "TestIndependentMergedMIMXMLAndInheritance",
+          "oracle": "Independent encoding/xml decoder checks the 2010 namespace, one root per hierarchy, exact local-only inherited declarations, preserved repeated leaf identities, merged MOM class and HLAboolean enumerator value."
+        }
+      ],
+      "open_items": [
+        "Positive independent export coverage is present; structural malformed nesting negatives remain unlinked."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-DIF-NOTE-REFERENCES",
+      "source_id": "S1516.2",
+      "clause": "D.2",
+      "pdf_pages": [
+        102,
+        103
+      ],
+      "subject": "omt-tool",
+      "applicability": "not-applicable",
+      "statement": "Represent note identifiers/references with the underscore prefix required by NCName and use the XML note-reference representation.",
+      "conditions": "XML lists/notes differ from tabular comma-separated lists and bracketed note pointers.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No complete DIF notes/table converter claim; retained FDD exporter does not reconstruct discarded full-model notes."
+      ]
+    },
+    {
+      "id": "OMTSLICE2010-OMT-SCHEMA-INHERITED-OVERLOADS",
+      "source_id": "S1516.2",
+      "clause": "E",
+      "pdf_pages": [
+        113
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Check inherited attribute and parameter name overloads independently of XML schema validation.",
+      "conditions": "Annex E explicitly lists both overload checks as conformance tests not expressed by the OMT conformance schema.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/pkg/fom/parser/duplicate.go",
+        "rti/pkg/fom/parser/duplicate_parameter.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/pkg/fom/parser/hierarchy_validation_test.go",
+          "name": "TestSpec_Hierarchy_BranchLocalInheritedDuplicates",
+          "oracle": "Repeated Shared/Leaf names on distinct branches are accepted; only actual same-ancestry attribute/parameter collisions produce FOM-004/FOM-005 at the expected branch, with exact diagnostic counts and nil model on rejection."
+        }
+      ],
+      "open_items": [
+        "A schema pass cannot replace these semantic checks; branch-local tests are current evidence, not proof of all module/restore admission paths."
+      ]
+    }
+  ]
+}

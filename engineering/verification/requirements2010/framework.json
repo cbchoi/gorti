@@ -1,0 +1,370 @@
+{
+  "schema_version": 1,
+  "source_id": "S1516",
+  "reviewed_units": [
+    "5.1",
+    "5.2",
+    "5.4",
+    "5.5",
+    "6.1",
+    "6.2",
+    "6.3",
+    "6.4",
+    "6.5"
+  ],
+  "coverage_complete": false,
+  "requirements": [
+    {
+      "id": "FRAME2010-FOM-DOCUMENT",
+      "source_id": "S1516",
+      "clause": "5.1",
+      "pdf_pages": [
+        33
+      ],
+      "subject": "federation",
+      "applicability": "not-applicable",
+      "statement": "Document the federation's HLA exchanged data, agreement and minimum exchange conditions in an OMT FOM using one or more FOM modules and one MIM.",
+      "conditions": "The standard does not prescribe the simulation data selection. The arbitrary federation's exchange agreement and model documentation belong to its users/developers, not to the RTI-only claim.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "RTI admission and MIM composition remain applicable in the separate FDD/OMT inventory; this exclusion is not an exemption for malformed structural input."
+      ]
+    },
+    {
+      "id": "FRAME2010-SIMULATION-STATE",
+      "source_id": "S1516",
+      "clause": "5.2",
+      "pdf_pages": [
+        33
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Maintain simulation-associated object representation and attribute values in the joined federates.",
+      "conditions": "RTI routing/checkpoint retention is not simulation-model maintenance.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Application memory and simulation semantics require identified federates, outside this RTI-only assessment."
+      ]
+    },
+    {
+      "id": "FRAME2010-RTI-DATA-USE",
+      "source_id": "S1516",
+      "clause": "5.2",
+      "pdf_pages": [
+        33
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Use simulation attribute/interaction data to provide infrastructure services without changing their simulation content.",
+      "conditions": "The RTI may retain/use data for services such as declaration management; federate-associated simulation attributes are not RTI-owned.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/ownership_acquisition.go"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java",
+          "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks",
+          "oracle": "The registering owner and discovering peer report true/false ownership; negotiated confirmation transfers it, the former owner's update throws AttributeNotOwned, and the peer's bytes and producing-federate identity are reflected."
+        }
+      ],
+      "open_items": [
+        "The linked byte-preservation transfer example is not an exhaustive payload-immutability oracle over all transports, timestamped queues, restore and MOM adjustments."
+      ]
+    },
+    {
+      "id": "FRAME2010-MOM-OWNERSHIP-EXCEPTION",
+      "source_id": "S1516",
+      "clause": "5.2",
+      "pdf_pages": [
+        33
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Keep simulation ownership distinct from the permitted RTI ownership of federation MOM instance attributes.",
+      "conditions": "MOM ownership is an explicit exception, not permission for RTI ownership of arbitrary simulation attributes.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/ownership/mom_state.go",
+        "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java",
+          "name": "predefinedMomAttributeIsReportedAsRtiOwnedAndCannotBeAcquired",
+          "oracle": "A predefined MOM attribute reports RTI-owned rather than federate-owned; both acquisition modes report unavailable, no acquisition callback occurs, and RTI ownership persists."
+        }
+      ],
+      "open_items": [
+        "Identify all RTI-owned predefined versus user-extension MOM attributes; one attribute is not a whole-MIM disposition oracle."
+      ]
+    },
+    {
+      "id": "FRAME2010-EXCHANGE-VIA-RTI",
+      "source_id": "S1516",
+      "clause": "5.3",
+      "pdf_pages": [
+        33
+      ],
+      "subject": "federation",
+      "applicability": "not-applicable",
+      "statement": "Exchange FOM data between joined federates only through RTI services.",
+      "conditions": "Applies during a federation execution, not to unrelated application communication.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "A functioning RTI cannot prove that arbitrary federates never exchange FOM data over a side channel."
+      ]
+    },
+    {
+      "id": "FRAME2010-DECLARE-PROVIDE-REQUIRE",
+      "source_id": "S1516",
+      "clause": "5.3",
+      "pdf_pages": [
+        33
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Declare the data a joined federate provides and requires and supply its changing attribute/interaction data to the RTI.",
+      "conditions": "Declarations follow the federation FOM.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Application declaration completeness is separate from RTI interpretation of admitted publications/subscriptions."
+      ]
+    },
+    {
+      "id": "FRAME2010-DECLARED-DELIVERY",
+      "source_id": "S1516",
+      "clause": "5.3",
+      "pdf_pages": [
+        33,
+        34
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Deliver shared data consistently with recipients' declared data, transport-reliability and ordering requirements.",
+      "conditions": "FOM and active declarations govern delivery; requirements apply across the execution, not merely initial join.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/object/regions.go",
+        "rti/internal/hla/ddm/operations.go"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveDdmTest.java",
+          "name": "regionsRouteByAttributePairsAndCommittedBoundsAcrossThreeSessions",
+          "oracle": "Three Java sessions assert exact delivered attribute sets and positive/negative interaction recipients for near/far regions, then changed recipients after commit; invalid later association does not partially change routing."
+        }
+      ],
+      "open_items": [
+        "The regional recipient assertions do not independently prove reliability, timestamp ordering, all subscription changes or every transport. Detailed obligations belong to the interface slices."
+      ]
+    },
+    {
+      "id": "FRAME2010-COORDINATION",
+      "source_id": "S1516",
+      "clause": "5.3",
+      "pdf_pages": [
+        33,
+        34
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Provide coordination, synchronization and data exchange so participants' coordination needs are handled consistently over the execution.",
+      "conditions": "Infrastructure consistency is separate from the scientific correctness of participants' use of received data.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/federation/manager.go",
+        "rti/internal/hla/object/regions.go"
+      ],
+      "tests": [
+        {
+          "path": "tests/conformance/rti/ivct-subset/tc_sync_point.py",
+          "name": "test_tc002_federation_synchronized_fires_once",
+          "oracle": "Two real Python federates receive announcements; one achievement does not synchronize, both achievements produce exactly one synchronized callback at each. Bounded synchronization facet, not arbitrary-model correctness or all Clause 5.3 coordination."
+        },
+        {
+          "path": "tests/conformance/rti/ivct-subset/tc_object_pub_sub.py",
+          "name": "test_tc005_update_reflect_round_trip_bytes",
+          "oracle": "Real publisher/subscriber exchange attribute bytes and assert the reflected payload at the discovered instance. Receive-order data-exchange facet only; not all temporal coordination or scientific correctness."
+        }
+      ],
+      "open_items": [
+        "Synchronization and attribute exchange are linked to live bounded cases; temporal coordination, every execution state and arbitrary federation use remain open. Clause 5.3 is not fully decomposed or verified."
+      ]
+    },
+    {
+      "id": "FRAME2010-SUBSTANTIVE-DATA-CORRECTNESS",
+      "source_id": "S1516",
+      "clause": "5.3",
+      "pdf_pages": [
+        33
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Provide substantively correct data at appropriate times and use received data correctly.",
+      "conditions": "These are joined-federate responsibilities under the federation agreement, not an RTI assertion about arbitrary simulation models.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Do not infer application correctness from successful routing or a passing RTI scenario."
+      ]
+    },
+    {
+      "id": "FRAME2010-STANDARD-INTERFACE-USE",
+      "source_id": "S1516",
+      "clause": "5.4",
+      "pdf_pages": [
+        34
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Use the HLA interface specification to interact with the RTI during execution.",
+      "conditions": "The interface specifies interaction with infrastructure, not particular application data. Standard Java is the selected binding; Go/Python are product interfaces.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/OwnershipServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java",
+          "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks",
+          "oracle": "The registering owner and discovering peer report true/false ownership; negotiated confirmation transfers it, the former owner's update throws AttributeNotOwned, and the peer's bytes and producing-federate identity are reflected."
+        }
+      ],
+      "open_items": [
+        "The Java case demonstrates a supported interface path, not compliance by every arbitrary federate or full interface coverage."
+      ]
+    },
+    {
+      "id": "FRAME2010-SINGLE-OWNER",
+      "source_id": "S1516",
+      "clause": "5.5",
+      "pdf_pages": [
+        34
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Enforce at most one joined-federate owner per instance attribute while allowing dynamic acquisition and divestiture.",
+      "conditions": "Different attributes of one object can have different owners; zero joined-federate owners is allowed.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/ownership/manager.go",
+        "rti/internal/hla/ownership/known_command.go"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/LiveOwnershipTest.java",
+          "name": "twoSessionsNegotiateCancelAndConfirmTransferWithEvokedCallbacks",
+          "oracle": "The registering owner and discovering peer report true/false ownership; negotiated confirmation transfers it, the former owner's update throws AttributeNotOwned, and the peer's bytes and producing-federate identity are reflected."
+        },
+        {
+          "path": "rti/internal/hla/ownership/ieee2010_unconditional_test.go",
+          "name": "TestIEEE2010UnconditionalProgressesSeparatePendingRequests",
+          "oracle": "Queued single-attribute requests transfer first to federate 2, preserve federate 3's waiters, leave the unwaited attribute unowned and then transfer wanted attributes to federate 3."
+        }
+      ],
+      "open_items": [
+        "Sequential owner checks are not a universal concurrent invariant over transfer, deletion, resignation and restore. The underlying federation rule has an applicable RTI enforcement surface."
+      ]
+    },
+    {
+      "id": "FRAME2010-SOM-CONTENT",
+      "source_id": "S1516",
+      "clause": "6.1",
+      "pdf_pages": [
+        34
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Document publicly available object classes, attributes and interactions in an OMT SOM.",
+      "conditions": "Use one or more SOM modules and an optional MIM; the developer chooses the particular data.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "No arbitrary SOM authoring or completeness claim; RTI model consumption is not SOM documentation."
+      ]
+    },
+    {
+      "id": "FRAME2010-SOM-EXCHANGE-CAPABILITIES",
+      "source_id": "S1516",
+      "clause": "6.2",
+      "pdf_pages": [
+        34
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Support the updates/reflections and interaction sending/receiving capabilities documented in the SOM.",
+      "conditions": "Export internally computed updated values and exercise externally represented interactions when those capabilities are declared.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "RTI routing tests do not prove each identified federate implements its declared capabilities."
+      ]
+    },
+    {
+      "id": "FRAME2010-SOM-OWNERSHIP-CAPABILITIES",
+      "source_id": "S1516",
+      "clause": "6.3",
+      "pdf_pages": [
+        35
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Support and document dynamic transfer/acceptance for SOM-declared ownable or reflectable instance attributes.",
+      "conditions": "The capability claim is conditional on the particular SOM, not a requirement that every federate acquire every attribute.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "RTI transfer support is assessed separately in ownership-ddm.json; no arbitrary federate capability verdict."
+      ]
+    },
+    {
+      "id": "FRAME2010-SOM-UPDATE-CONDITIONS",
+      "source_id": "S1516",
+      "clause": "6.4",
+      "pdf_pages": [
+        35
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Vary and document the conditions under which owned attributes are updated as specified in the SOM.",
+      "conditions": "Rates and change thresholds are examples; federation-specific application update policy belongs to the federate.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Retaining updateCondition text or RTI update-rate metadata does not execute a federate's simulation threshold policy."
+      ]
+    },
+    {
+      "id": "FRAME2010-LOCAL-TIME-POLICY",
+      "source_id": "S1516",
+      "clause": "6.5",
+      "pdf_pages": [
+        35
+      ],
+      "subject": "federate",
+      "applicability": "not-applicable",
+      "statement": "Manage local time to coordinate exchange and adhere to the federation's chosen time-management approach.",
+      "conditions": "The approach is selected by federation designers.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "RTI logical-time factories and service tests are different obligations; arbitrary application policy compliance is outside scope."
+      ]
+    }
+  ]
+}

@@ -165,13 +165,13 @@ class FederationHaltedError(RtiError):
 
 
 class TimeAlreadyAsynchronous(RtiError):
-    """Federate has already enabled asynchronous TSO delivery (M22)."""
+    """Federate has already enabled asynchronous delivery."""
 
     error_code = 708
 
 
 class TimeNotAsynchronous(RtiError):
-    """Federate has not enabled asynchronous TSO delivery (M22)."""
+    """Federate has not enabled asynchronous delivery."""
 
     error_code = 709
 
@@ -312,7 +312,7 @@ def _spec_exception_name(exc: BaseException) -> str:
 # --- Translation entry point --------------------------------------------------
 
 
-def translate_rpc_error(exc: BaseException) -> NoReturn:
+def translate_rpc_error(exc: BaseException, *, operation: str = "") -> NoReturn:
     """Re-raise ``exc`` as the matching RtiError subclass (or pass through).
 
     The cut-3 service handlers surface failures as ``grpc.aio.AioRpcError``
@@ -341,6 +341,13 @@ def translate_rpc_error(exc: BaseException) -> NoReturn:
         if spec_cls is not None:
             raise spec_cls(detail or spec_name) from exc
 
+    # Older servers do not distinguish by-name support lookups in trailers.
+    if (operation == "GetObjectClassHandle" and code_name == "NOT_FOUND"
+            and detail.startswith("object class ") and detail.endswith("not found")):
+        from .errors import NameNotFound
+
+        raise NameNotFound(detail) from exc
+
     # Time-management errors share gRPC codes
     # (FailedPrecondition for most state errors, InvalidArgument for
     # bad inputs). The detail string is the manager's sentinel.Error()
@@ -352,7 +359,17 @@ def translate_rpc_error(exc: BaseException) -> NoReturn:
     # metadata servers). Same policy as _time_class_for: substring on
     # the distinguishing fragment of core/errors.go.
     if detail_cls := _detail_class_for(detail):
-        raise detail_cls(detail) from exc
+        # Join recovery trusts these as definite admission rejections. Text
+        # alone must not turn an uncertain transport/internal failure into one.
+        admission_codes = {
+            "FederateNameAlreadyInUse": "ALREADY_EXISTS",
+            "FederateAlreadyExecutionMember": "ALREADY_EXISTS",
+            "SaveInProgress": "FAILED_PRECONDITION",
+            "RestoreInProgress": "FAILED_PRECONDITION",
+        }
+        expected = admission_codes.get(detail_cls.__name__)
+        if expected is None or code_name == expected:
+            raise detail_cls(detail) from exc
 
     cls = _CODE_TO_EXCEPTION.get(code_name)
     if cls is not None:
@@ -371,6 +388,10 @@ def _time_class_for(detail: str) -> type[RtiError] | None:
     distinguishing fragment.
     """
     # Order matters — pick the most-specific match first.
+    if "request for time-regulation pending" in detail:
+        return RequestForTimeRegulationPending
+    if "request for time-constrained pending" in detail:
+        return RequestForTimeConstrainedPending
     if "already time-regulating" in detail:
         return TimeRegulationAlreadyEnabled
     if "not time-regulating" in detail:
@@ -413,6 +434,10 @@ def _detail_class_for(detail: str) -> type[RtiError] | None:
     """
     from rti1516e import errors as e
 
+    if "message retraction designator is invalid" in detail:
+        return e.InvalidMessageRetractionHandle
+    if "object deletion has already been delivered" in detail:
+        return e.MessageCanNoLongerBeRetracted
     if "federation already exists" in detail:
         return e.FederationExecutionAlreadyExists
     if "federation has federates joined" in detail:
@@ -429,6 +454,10 @@ def _detail_class_for(detail: str) -> type[RtiError] | None:
         return e.InteractionClassNotPublished
     if "attribute not owned" in detail:
         return e.AttributeNotOwned
+    if "attribute divestiture confirmation was not requested" in detail:
+        return e.AttributeDivestitureWasNotRequested
+    if "no acquisition pending or willing acquirer for this attribute" in detail:
+        return e.NoAcquisitionPending
     if "object class not found" in detail:
         return e.ObjectClassNotDefined
     if "attribute not found" in detail:

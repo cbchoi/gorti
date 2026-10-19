@@ -16,7 +16,7 @@ func TestSpec_StrictMode_AcceptsAnnexAElements(t *testing.T) {
 		t.Fatalf("Parse error: %v", err)
 	}
 	for _, d := range res.Diagnostics {
-		if d.Code == "FOM-009" {
+		if d.Code == invalidStructureCode {
 			t.Fatalf("unexpected FOM-009 on minimal good FOM: %+v", d)
 		}
 	}
@@ -43,7 +43,7 @@ func TestSpec_StrictMode_RejectsUnknownElement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
-	if !res.HasCode("FOM-009") {
+	if !res.HasCode(invalidStructureCode) {
 		t.Fatalf("want FOM-009, got %v", res.CodeCounts())
 	}
 	if res.FOM != nil {
@@ -51,7 +51,7 @@ func TestSpec_StrictMode_RejectsUnknownElement(t *testing.T) {
 	}
 	var got Diagnostic
 	for _, d := range res.Diagnostics {
-		if d.Code == "FOM-009" {
+		if d.Code == invalidStructureCode {
 			got = d
 			break
 		}

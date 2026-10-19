@@ -41,8 +41,6 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-BIN_DIR = REPO_ROOT / "bin"
-RTID_BINARY = BIN_DIR / "rtid"
 
 # Make the pysdk package importable when this helper is consumed from
 # pytest. The pytest invocation runs from inside pysdk/ so rti1516e is on
@@ -55,6 +53,7 @@ if str(_PYSDK) not in sys.path:
 # ruff: noqa: E402  (sys.path tweak above must precede project imports)
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.events import ReceiveInteraction
+from tests._legacy_server import build_rtid, spawn_rtid
 
 
 def _free_port() -> int:
@@ -73,10 +72,7 @@ def _build_rtid() -> Path:
     suppressed at the argv site because it is the literal that triggers
     the rule.
     """
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    argv = ["go", "build", "-o", str(RTID_BINARY), "./rti/cmd/rtid"]  # noqa: S607 — PATH-resolved by design
-    subprocess.run(argv, cwd=REPO_ROOT, check=True)  # noqa: S603 — argv built from literals
-    return RTID_BINARY
+    return build_rtid()
 
 
 def _spawn_rtid(
@@ -88,17 +84,7 @@ def _spawn_rtid(
     not reap rtid before the async caller's ``finally`` block can
     terminate it cleanly.
     """
-    return subprocess.Popen(  # noqa: S603 — controlled args
-        [
-            str(binary),
-            "--listen", f":{listen_port}",
-            "--metrics-listen", f":{metrics_port}",
-            "--log-level", "warn",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    return spawn_rtid(binary, listen_port, metrics_port)
 
 
 # noqa: ASYNC109 — the ``timeout`` parameter is the deadline for the

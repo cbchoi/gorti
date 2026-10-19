@@ -1,9 +1,8 @@
 """M27 Phase C — §6.30 / §6.31 runtime instance handle services.
 
-Federate A registers "car-7". Federate B (a late joiner) calls
-getObjectInstanceHandle("car-7") to recover the handle without
-having received the Discover callback. Federate A also round-trips
-its own handle through getObjectInstanceName.
+Federate A registers "car-7". Federate B (a late joiner) resolves it
+only after subscription and discovery establish local knowledge.
+Federate A also round-trips its own handle through getObjectInstanceName.
 """
 
 from __future__ import annotations
@@ -27,9 +26,12 @@ if str(_PYSDK) not in sys.path:
 # ruff: noqa: E402
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.errors import RtiError
-
-BIN_DIR = REPO_ROOT / "bin"
-RTID_BINARY = BIN_DIR / "rtid"
+from rti1516e.events import (
+    DiscoverObjectInstance,
+    ObjectInstanceNameReservationFailed,
+    ObjectInstanceNameReservationSucceeded,
+)
+from tests._legacy_server import build_rtid, spawn_rtid
 
 _FOM = """<?xml version="1.0" encoding="utf-8"?>
 <objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
@@ -64,24 +66,11 @@ def _free_port() -> int:
 
 
 def _build_rtid() -> Path:
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    argv = ["go", "build", "-o", str(RTID_BINARY), "./rti/cmd/rtid"]  # noqa: S607
-    subprocess.run(argv, cwd=REPO_ROOT, check=True)  # noqa: S603
-    return RTID_BINARY
+    return build_rtid()
 
 
 def _spawn_rtid(binary: Path, port: int, mport: int) -> subprocess.Popen[bytes]:
-    return subprocess.Popen(  # noqa: S603
-        [
-            str(binary),
-            "--listen", f":{port}",
-            "--metrics-listen", f":{mport}",
-            "--log-level", "warn",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    return spawn_rtid(binary, port, mport)
 
 
 async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109
@@ -133,6 +122,18 @@ def _make_fom() -> Path:
     return Path(tmp.name)
 
 
+async def _reserve(fed, name: str) -> None:
+    await fed.reservation.reserve(name)
+    async with asyncio.timeout(5):
+        async for event in fed.events():
+            if isinstance(event, (ObjectInstanceNameReservationSucceeded,
+                                  ObjectInstanceNameReservationFailed)):
+                assert event.object_name == name
+                assert isinstance(event, ObjectInstanceNameReservationSucceeded)
+                return
+    raise AssertionError("callback stream ended before reservation result")
+
+
 @pytest.mark.spec
 @pytest.mark.integration
 async def test_spec_m27c_get_object_instance_handle_round_trip() -> None:
@@ -144,6 +145,7 @@ async def test_spec_m27c_get_object_instance_handle_round_trip() -> None:
             async with rti.join_federation(spec, federate_name="fed1") as fed:
                 vehicle = await fed.support.get_object_class_handle("Vehicle")
                 await fed.publish_object_class(vehicle, attributes=["P"])
+                await _reserve(fed, "car-7")
                 obj_h = await fed.register_object_instance(
                     vehicle, instance_name="car-7"
                 )
@@ -161,8 +163,7 @@ async def test_spec_m27c_get_object_instance_handle_round_trip() -> None:
 @pytest.mark.spec
 @pytest.mark.integration
 async def test_spec_m27c_late_joiner_can_resolve_handle() -> None:
-    """Federate B can resolve "car-7" even without having received the
-    Discover callback. Closes the §6.30 use case for late joiners."""
+    """A late joiner resolves an existing instance after actual discovery."""
     async with _rtid_subprocess() as url:
         fom = _make_fom()
         spec = FederationSpec(name="m27c-late", fom_modules=[str(fom)])
@@ -170,16 +171,30 @@ async def test_spec_m27c_late_joiner_can_resolve_handle() -> None:
             async with rti_a.join_federation(spec, federate_name="A") as fed_a:
                 vehicle = await fed_a.support.get_object_class_handle("Vehicle")
                 await fed_a.publish_object_class(vehicle, attributes=["P"])
+                await _reserve(fed_a, "car-7")
                 obj_h = await fed_a.register_object_instance(
                     vehicle, instance_name="car-7"
                 )
 
                 # Fed B joins AFTER the instance was registered.
                 async with rti_b.join_federation(spec, federate_name="B") as fed_b:
-                    # B never subscribed and never saw Discover; still
-                    # can resolve the handle.
+                    with pytest.raises(RtiError):
+                        await fed_b.support.get_object_instance_handle("car-7")
+                    await fed_b.subscribe_object_class(vehicle, attributes=["P"])
+
+                    async def discovery():
+                        async for event in fed_b.events():
+                            if isinstance(event, DiscoverObjectInstance):
+                                return event
+                        raise AssertionError("callback stream ended before discovery")
+
+                    discovered = await asyncio.wait_for(discovery(), timeout=2)
+                    assert discovered.object_handle == obj_h
+                    assert discovered.instance_name == "car-7"
+                    assert int(discovered.object_class) == vehicle
                     h = await fed_b.support.get_object_instance_handle("car-7")
                     assert h == obj_h
+                    assert await fed_b.support.get_object_instance_name(h) == "car-7"
 
 
 @pytest.mark.spec

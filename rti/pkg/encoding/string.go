@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"unicode/utf16"
 )
 
@@ -45,8 +46,12 @@ func (HLAASCIIstring) Encode(v any) ([]byte, error) {
 			return nil, fmt.Errorf("encoding: HLAASCIIstring byte 0x%02X at offset %d out of ASCII range", s[i], i)
 		}
 	}
+	length := uint64(len(s))
+	if length > math.MaxUint32 {
+		return nil, fmt.Errorf("encoding: length %d exceeds the uint32 wire limit", len(s))
+	}
 	out := make([]byte, 4+len(s))
-	binary.BigEndian.PutUint32(out[:4], uint32(len(s)))
+	binary.BigEndian.PutUint32(out[:4], uint32(length))
 	copy(out[4:], s)
 	return out, nil
 }
@@ -95,8 +100,12 @@ func (HLAunicodeString) Encode(v any) ([]byte, error) {
 			return nil, fmt.Errorf("encoding: HLAunicodeString rune U+%04X at index %d is a UTF-16 surrogate", r, i)
 		}
 	}
+	length := uint64(len(runes))
+	if length > math.MaxUint32 {
+		return nil, fmt.Errorf("encoding: length %d exceeds the uint32 wire limit", len(runes))
+	}
 	out := make([]byte, 4+2*len(runes))
-	binary.BigEndian.PutUint32(out[:4], uint32(len(runes)))
+	binary.BigEndian.PutUint32(out[:4], uint32(length))
 	for i, r := range runes {
 		u := uint16(r)
 		out[4+2*i] = byte(u >> 8)

@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package rti.v1;
+
+import "rti/v1/support.proto";
+
+option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
+
+// An optional transport for the existing authenticated callback reports.
+// Sequences are stream-local; opaque receipts remain the retry identity.
+service CallbackReportService {
+  rpc Exchange(stream CallbackReportBatch) returns (stream CallbackReportAck);
+}
+
+message CallbackReportBatch {
+  uint64 first_sequence = 1;
+  repeated ReportCallbackInvocationRequest reports = 2;
+}
+
+message CallbackReportAck {
+  // All reports up to this sequence have completed successfully on this stream.
+  uint64 acknowledged_sequence = 1;
+  // A failed report ends the stream; subsequent reports are not applied.
+  uint64 failed_sequence = 2;
+  uint32 error_code = 3;
+  string error_message = 4;
+  // Serialized google.rpc.Status, retaining the unary error details.
+  bytes error_status = 5;
+}

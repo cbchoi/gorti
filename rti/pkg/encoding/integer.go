@@ -48,7 +48,7 @@ func (HLAinteger16BE) Encode(v any) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 2)
-	binary.BigEndian.PutUint16(b, uint16(x))
+	binary.BigEndian.PutUint16(b, integer16Bits(x))
 	return b, nil
 }
 
@@ -58,7 +58,7 @@ func (HLAinteger16BE) Decode(b []byte) (any, int, error) {
 	if len(b) < 2 {
 		return nil, 0, ErrEncShortBuffer
 	}
-	return int32(int16(binary.BigEndian.Uint16(b[:2]))), 2, nil
+	return int32(integer16FromBits(binary.BigEndian.Uint16(b[:2]))), 2, nil
 }
 
 // OctetBoundary implements Codec.
@@ -71,7 +71,7 @@ func (HLAinteger16LE) Encode(v any) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 2)
-	binary.LittleEndian.PutUint16(b, uint16(x))
+	binary.LittleEndian.PutUint16(b, integer16Bits(x))
 	return b, nil
 }
 
@@ -80,7 +80,7 @@ func (HLAinteger16LE) Decode(b []byte) (any, int, error) {
 	if len(b) < 2 {
 		return nil, 0, ErrEncShortBuffer
 	}
-	return int32(int16(binary.LittleEndian.Uint16(b[:2]))), 2, nil
+	return int32(integer16FromBits(binary.LittleEndian.Uint16(b[:2]))), 2, nil
 }
 
 // OctetBoundary implements Codec.
@@ -93,7 +93,7 @@ func (HLAinteger32BE) Encode(v any) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, uint32(x))
+	binary.BigEndian.PutUint32(b, integer32Bits(x))
 	return b, nil
 }
 
@@ -102,7 +102,7 @@ func (HLAinteger32BE) Decode(b []byte) (any, int, error) {
 	if len(b) < 4 {
 		return nil, 0, ErrEncShortBuffer
 	}
-	return int32(binary.BigEndian.Uint32(b[:4])), 4, nil
+	return integer32FromBits(binary.BigEndian.Uint32(b[:4])), 4, nil
 }
 
 // OctetBoundary implements Codec.
@@ -115,7 +115,7 @@ func (HLAinteger32LE) Encode(v any) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b, uint32(x))
+	binary.LittleEndian.PutUint32(b, integer32Bits(x))
 	return b, nil
 }
 
@@ -124,7 +124,7 @@ func (HLAinteger32LE) Decode(b []byte) (any, int, error) {
 	if len(b) < 4 {
 		return nil, 0, ErrEncShortBuffer
 	}
-	return int32(binary.LittleEndian.Uint32(b[:4])), 4, nil
+	return integer32FromBits(binary.LittleEndian.Uint32(b[:4])), 4, nil
 }
 
 // OctetBoundary implements Codec.
@@ -137,7 +137,7 @@ func (HLAinteger64BE) Encode(v any) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(x))
+	binary.BigEndian.PutUint64(b, integer64Bits(x))
 	return b, nil
 }
 
@@ -146,7 +146,7 @@ func (HLAinteger64BE) Decode(b []byte) (any, int, error) {
 	if len(b) < 8 {
 		return nil, 0, ErrEncShortBuffer
 	}
-	return int64(binary.BigEndian.Uint64(b[:8])), 8, nil
+	return integer64FromBits(binary.BigEndian.Uint64(b[:8])), 8, nil
 }
 
 // OctetBoundary implements Codec.
@@ -159,7 +159,7 @@ func (HLAinteger64LE) Encode(v any) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, uint64(x))
+	binary.LittleEndian.PutUint64(b, integer64Bits(x))
 	return b, nil
 }
 
@@ -168,7 +168,7 @@ func (HLAinteger64LE) Decode(b []byte) (any, int, error) {
 	if len(b) < 8 {
 		return nil, 0, ErrEncShortBuffer
 	}
-	return int64(binary.LittleEndian.Uint64(b[:8])), 8, nil
+	return integer64FromBits(binary.LittleEndian.Uint64(b[:8])), 8, nil
 }
 
 // OctetBoundary implements Codec.
@@ -235,4 +235,31 @@ func toInt64Any(v any) (int64, error) {
 	default:
 		return 0, fmt.Errorf("%w: %T", ErrEncTypeMismatch, v)
 	}
+}
+
+// integer16Bits preserves the signed HLA two's-complement wire representation.
+func integer16Bits(value int16) uint16 {
+	return uint16(value) //nolint:gosec // G115: deliberate bit reinterpretation, including negative values.
+}
+
+func integer16FromBits(bits uint16) int16 {
+	return int16(bits) //nolint:gosec // G115: restore the signed two's-complement value without rejecting the sign bit.
+}
+
+// integer32Bits preserves the signed HLA two's-complement wire representation.
+func integer32Bits(value int32) uint32 {
+	return uint32(value) //nolint:gosec // G115: deliberate bit reinterpretation, including negative values.
+}
+
+func integer32FromBits(bits uint32) int32 {
+	return int32(bits) //nolint:gosec // G115: restore the signed two's-complement value without rejecting the sign bit.
+}
+
+// integer64Bits preserves the signed HLA two's-complement wire representation.
+func integer64Bits(value int64) uint64 {
+	return uint64(value) //nolint:gosec // G115: deliberate bit reinterpretation, including negative values.
+}
+
+func integer64FromBits(bits uint64) int64 {
+	return int64(bits) //nolint:gosec // G115: restore the signed two's-complement value without rejecting the sign bit.
 }

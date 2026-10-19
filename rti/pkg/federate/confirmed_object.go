@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -32,16 +32,8 @@ func (f *Federate) sendConfirmedObjectStreamLocked(
 	ctx context.Context,
 	request *rtiv1.ConfirmedObjectRequest,
 ) confirmedObjectOutcome {
-	if f.conn == nil || f.conn.confirmedObject == nil || !f.conn.confirmedObjectStreamEnabled {
-		return confirmedObjectOutcome{fallbackDisabled: true}
-	}
-	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok && len(outgoing) > 0 {
-		// Per-call metadata cannot safely be changed after a persistent stream is
-		// opened. Connection-level credentials are still applied by gRPC.
-		return confirmedObjectOutcome{fallbackMetadata: true}
-	}
-	if f.confirmedObjectStreamUnsupported {
-		return confirmedObjectOutcome{unsupported: true}
+	if fallback, required := f.confirmedObjectFallback(ctx); required {
+		return fallback
 	}
 	if err := ctx.Err(); err != nil {
 		return confirmedObjectOutcome{handled: true, err: status.FromContextError(err).Err()}
@@ -172,11 +164,8 @@ func decodeConfirmedObjectError(encoded []byte) (error, error) {
 }
 
 func (f *Federate) openConfirmedObjectStream(ctx context.Context) (*confirmedObjectRPCStream, error) {
-	parent := f.interactionContext
-	if parent == nil {
-		parent = context.Background()
-	}
-	streamCtx, cancel := context.WithCancel(parent)
+	parent := f.transportLifetime().ctx
+	streamCtx, cancel := context.WithCancel(f.sessionContext(parent))
 	stream, err := f.conn.confirmedObject.Exchange(streamCtx)
 	if err != nil {
 		cancel()
@@ -196,7 +185,7 @@ func (f *Federate) openConfirmedObjectStream(ctx context.Context) (*confirmedObj
 		Operation: &rtiv1.ConfirmedObjectRequest_Open{Open: &rtiv1.ConfirmedObjectOpen{
 			WireVersion:                  rtiv1.WireVersion_WIRE_VERSION_V1,
 			FederationName:               f.federationName,
-			FederateHandle:               f.federateHandle,
+			FederateHandle:               f.CurrentHandle(),
 			ExpectedFederationGeneration: f.federationGeneration,
 		}},
 	}); err != nil {
@@ -239,11 +228,9 @@ func (f *Federate) resetConfirmedObjectStreamLocked() {
 }
 
 func (f *Federate) confirmedUnaryContext(ctx context.Context) (context.Context, func()) {
-	unaryCtx, cancel := context.WithCancel(ctx)
+	unaryCtx, cancel := context.WithCancel(f.sessionContext(ctx))
 	var stopLifecycleCancel func() bool
-	if f.interactionContext != nil {
-		stopLifecycleCancel = context.AfterFunc(f.interactionContext, cancel)
-	}
+	stopLifecycleCancel = context.AfterFunc(f.transportLifetime().ctx, cancel)
 	return unaryCtx, func() {
 		if stopLifecycleCancel != nil {
 			stopLifecycleCancel()
@@ -272,4 +259,19 @@ func (f *Federate) recordConfirmedInteractionOutcome(outcome confirmedObjectOutc
 	if outcome.indeterminate {
 		stats.indeterminate.Add(1)
 	}
+}
+
+func (f *Federate) confirmedObjectFallback(ctx context.Context) (confirmedObjectOutcome, bool) {
+	if f.conn == nil || f.conn.confirmedObject == nil || !f.conn.confirmedObjectStreamEnabled {
+		return confirmedObjectOutcome{fallbackDisabled: true}, true
+	}
+	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok && len(outgoing) > 0 {
+		// Per-call metadata cannot safely be changed after a persistent stream is
+		// opened. Connection-level credentials are still applied by gRPC.
+		return confirmedObjectOutcome{fallbackMetadata: true}, true
+	}
+	if f.confirmedObjectStreamUnsupported {
+		return confirmedObjectOutcome{unsupported: true}, true
+	}
+	return confirmedObjectOutcome{}, false
 }

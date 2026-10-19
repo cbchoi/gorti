@@ -9,7 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cbchoi/gorti/rti/internal/transport/grpc"
+	"github.com/cbchoi/gorti/rti/internal/adapters/grpc"
+	"github.com/cbchoi/gorti/rti/internal/hla/core"
+	"github.com/cbchoi/gorti/rti/internal/hla/declaration"
+	"github.com/cbchoi/gorti/rti/internal/hla/federation"
+	"github.com/cbchoi/gorti/rti/internal/hla/object"
+	timepkg "github.com/cbchoi/gorti/rti/internal/hla/time"
+	grpcwire "google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 // timeFixture wires the bufconn rtid + a *grpc.Server with the
@@ -57,15 +64,24 @@ func TestEnableTimeRegulationTwiceTypedError(t *testing.T) {
 	}
 }
 
-// 207.3 — NER without enabling regulation → ErrTimeRegulationNotEnabled.
-// (Pinning to manager behavior per plan §2.3.1 — the manager surfaces
-// "not regulating" rather than the HLA-spec NotJoined.)
-func TestNERWithoutRegulationFails(t *testing.T) {
+// A joined federate may advance without enabling either time mode.
+func TestNERWithoutTimeEngagementGrants(t *testing.T) {
 	_, _, fed := timeFixture(t)
 	ctx := context.Background()
-	err := fed.NextMessageRequest(ctx, 5.0)
-	if !errors.Is(err, ErrTimeRegulationNotEnabled) {
-		t.Errorf("err = %v, want ErrTimeRegulationNotEnabled", err)
+	if err := fed.NextMessageRequest(ctx, 5.0); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-fed.Events():
+		grant, ok := event.(TimeAdvanceGrant)
+		if !ok || grant.Time != 5 {
+			t.Fatalf("callback = %#v, want grant 5", event)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("unengaged federate received no grant")
+	}
+	if current, err := fed.QueryLogicalTime(ctx); err != nil || current != 5 {
+		t.Fatalf("logical time = %v, %v, want 5", current, err)
 	}
 }
 
@@ -99,6 +115,8 @@ func TestTwoFederatesNERGrantArrival(t *testing.T) {
 	if err := b.EnableTimeRegulation(ctx, 0.5); err != nil {
 		t.Fatalf("b.EnableTimeRegulation: %v", err)
 	}
+	expectTimeEnable(t, a, true, 0)
+	expectTimeEnable(t, b, true, 0)
 	// Issue NERs concurrently. Both pending → LBTS-promotion → full grants.
 	if err := a.NextMessageRequest(ctx, 10); err != nil {
 		t.Fatalf("a.NER: %v", err)
@@ -161,6 +179,8 @@ func TestPerPrimitiveBoundaries(t *testing.T) {
 			if err := b.EnableTimeRegulation(ctx, 1); err != nil {
 				t.Fatalf("b.EnableTimeRegulation: %v", err)
 			}
+			expectTimeEnable(t, a, true, 0)
+			expectTimeEnable(t, b, true, 0)
 			if err := fn(a, ctx); err != nil {
 				t.Fatalf("a primitive %s: %v", name, err)
 			}
@@ -170,11 +190,12 @@ func TestPerPrimitiveBoundaries(t *testing.T) {
 			// Both should receive a grant within deadline; the boundary
 			// (strict vs inclusive) is exercised at the manager level
 			// in TASK-203 and at the example level in TASK-211.
-			select {
-			case <-a.Events():
-				// any event qualifies as activity for this smoke
-			case <-time.After(5 * time.Second):
-				t.Errorf("a (%s): no event within 5s", name)
+			for _, fed := range []*Federate{a, b} {
+				event := nextEnableTestEvent(t, fed)
+				grant, ok := event.(TimeAdvanceGrant)
+				if !ok || grant.Time != 10 {
+					t.Fatalf("%s callback=%#v, want grant 10", name, event)
+				}
 			}
 		})
 	}
@@ -184,13 +205,32 @@ func TestPerPrimitiveBoundaries(t *testing.T) {
 // (The Resign-during-pending is exercised at the manager level in
 // TASK-205; here we just confirm the SDK side completes cleanly.)
 func TestResignMidNERLeakFree(t *testing.T) {
-	_, _, fed := timeFixture(t)
-	ctx := context.Background()
+	_, conn, fed := timeFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	peer, err := conn.JoinFederation(ctx, FederationSpec{Name: "test-fed"}, "beta")
+	if err != nil {
+		t.Fatalf("peer join: %v", err)
+	}
+	t.Cleanup(func() { _ = peer.Resign(context.Background()) })
+	// Keep the peer idle so the request cannot receive a grant before resign.
+	if err := peer.EnableTimeRegulation(ctx, 0); err != nil {
+		t.Fatalf("peer.EnableTimeRegulation: %v", err)
+	}
 	if err := fed.EnableTimeRegulation(ctx, 0); err != nil {
 		t.Fatalf("EnableTimeRegulation: %v", err)
 	}
+	if err := fed.EnableTimeConstrained(ctx); err != nil {
+		t.Fatal(err)
+	}
+	expectTimeEnable(t, peer, true, 0)
+	expectTimeEnable(t, fed, true, 0)
+	expectTimeEnable(t, fed, false, 0)
 	if err := fed.NextMessageRequest(ctx, 10); err != nil {
 		t.Fatalf("NER: %v", err)
+	}
+	if err := fed.NextMessageRequest(ctx, 11); !errors.Is(err, ErrTimeAdvancingState) {
+		t.Fatalf("request before resign = %v, want ErrTimeAdvancingState proving NER is pending", err)
 	}
 	// Resign mid-pending. The cleanup is wired via cmd/rtid's resign
 	// hook — unit-tested at TASK-205; here we just want the SDK call
@@ -208,14 +248,137 @@ func TestResignMidNERLeakFree(t *testing.T) {
 	}
 }
 
-// 207.7 — Resign mid-pending for each of TAR/TARA/NMRA/FQR.
-// Since the SDK code path is identical for all 5 primitives (each
-// just dispatches the right RPC), the SDK-side leak-freeness is
-// established by 207.6. Per-primitive cleanup behavior is tested at
-// the manager level in TASK-205.6-205.8. We mark this case skip with
-// a pointer rather than duplicating coverage.
+// A zero-lookahead peer holds the four ordinary advances pending. FQR instead
+// completes at current time; resignation must clean up either state.
 func TestResignMidPendingAllPrimitives(t *testing.T) {
-	t.Skip("SDK path identical across primitives; coverage at TASK-205.6-205.8 (cmd/rtid level)")
+	for _, tc := range []struct {
+		name    string
+		advance func(*Federate, context.Context, float64) error
+	}{
+		{"NER", (*Federate).NextMessageRequest},
+		{"NMRA", (*Federate).NextMessageRequestAvailable},
+		{"TAR", (*Federate).TimeAdvanceRequest},
+		{"TARA", (*Federate).TimeAdvanceRequestAvailable},
+		{"FQR", (*Federate).FlushQueueRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, tm := newPendingResignTestRtid(t)
+			conn := r.connect(t)
+			t.Cleanup(func() { _ = conn.Close() })
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			a, err := conn.JoinFederation(ctx, FederationSpec{Name: "pending"}, "alpha")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = a.Resign(context.Background()) })
+			b, err := conn.JoinFederation(ctx, FederationSpec{Name: "pending"}, "beta")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = b.Resign(context.Background()) })
+			for _, fed := range []*Federate{a, b} {
+				if err := fed.EnableTimeRegulation(ctx, 0); err != nil {
+					t.Fatal(err)
+				}
+				expectTimeEnable(t, fed, true, 0)
+			}
+			if err := a.EnableTimeConstrained(ctx); err != nil {
+				t.Fatal(err)
+			}
+			expectTimeEnable(t, a, false, 0)
+			if err := tc.advance(a, ctx, 10); err != nil {
+				t.Fatal(err)
+			}
+			pending := false
+			for _, state := range tm.Snapshot("pending").Federates {
+				if uint64(state.Handle) == a.Handle() {
+					pending = state.HasPendingRequest && state.PendingRequestTime == 10 && state.CurrentTime == 0
+				}
+			}
+			if tc.name == "FQR" {
+				if pending {
+					t.Fatal("FQR remained pending instead of granting current time")
+				}
+				event := nextEnableTestEvent(t, a)
+				grant, ok := event.(TimeAdvanceGrant)
+				if !ok || grant.Time != 0 {
+					t.Fatalf("FQR callback=%#v, want grant 0", event)
+				}
+			} else {
+				if !pending {
+					t.Fatal("resign fixture did not establish a pending request at time 10")
+				}
+				if err := tc.advance(a, ctx, 11); !errors.Is(err, ErrTimeAdvancingState) {
+					t.Fatalf("second request: %v, want ErrTimeAdvancingState", err)
+				}
+			}
+			if err := a.Resign(ctx); err != nil {
+				t.Fatal(err)
+			}
+			for _, state := range tm.Snapshot("pending").Federates {
+				if uint64(state.Handle) == a.Handle() {
+					t.Fatalf("resigned federate retained time state: %+v", state)
+				}
+			}
+			select {
+			case event, open := <-a.Events():
+				if open {
+					t.Fatalf("callback after pending resignation: %#v", event)
+				}
+			case <-ctx.Done():
+				t.Fatal("callback channel did not close after resignation")
+			}
+			if err := b.ModifyLookahead(ctx, 1); err != nil {
+				t.Fatal(err)
+			}
+			if err := b.TimeAdvanceRequest(ctx, 7); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case event := <-b.Events():
+				grant, ok := event.(TimeAdvanceGrant)
+				if !ok || grant.Time != 7 {
+					t.Fatalf("survivor callback=%#v, want grant 7", event)
+				}
+			case <-ctx.Done():
+				t.Fatal("resigned regulator still blocked the survivor")
+			}
+		})
+	}
+}
+
+// The older SDK fixture omits lifecycle hooks. This fixture composes the real
+// resignation hook so a closed SDK channel cannot hide retained server state.
+func newPendingResignTestRtid(t *testing.T) (*testRtid, *timepkg.Manager) {
+	t.Helper()
+	clock := core.NewManualClock(time.Unix(0, 0))
+	outbox := newTestOutbox()
+	tm, err := timepkg.New(timepkg.Options{Clock: clock, Outbox: outbox})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decl := declaration.New()
+	objects, err := object.New(object.Options{Clock: clock, Outbox: outbox, Declarations: decl, FOMs: &nopFOMRepo{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fed, err := federation.New(federation.Options{Clock: clock, FOMs: &nopFOMRepo{}, OnFederateResigned: tm.OnFederateResign})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := grpc.NewServer(grpc.Options{Federations: fed, Declarations: decl, Objects: objects, Outbox: outbox, Time: tm})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := grpcwire.NewServer()
+	if err := svc.Register(server); err != nil {
+		t.Fatal(err)
+	}
+	r := &testRtid{listener: bufconn.Listen(1 << 20), server: server}
+	go func() { _ = server.Serve(r.listener) }()
+	t.Cleanup(r.stop)
+	return r, tm
 }
 
 // 207.8 — QueryLBTS with no regulators returns (_, false, nil).

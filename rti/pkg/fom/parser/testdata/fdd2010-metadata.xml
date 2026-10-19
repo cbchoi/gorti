@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Service entries derived from IEEE1516-FDD-2010.xsd (2010-08-16).
+     Reprinted with permission from IEEE 1516.2(TM)-2010.
+     This is FDD schema evidence, not full OMT conformance evidence. -->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <serviceUtilization>
+    <connect section="4.2" isCallback="false" isUsed="true"/>
+    <disconnect section="4.3" isCallback="false" isUsed="false"/>
+    <connectionLost section="4.4" isCallback="true" isUsed="1"/>
+    <createFederationExecution section="4.5" isCallback="false" isUsed="0"/>
+    <destroyFederationExecution section="4.6" isCallback="false"/>
+    <listFederationExecutions section="4.7" isCallback="false" isUsed="true"/>
+    <reportFederationExecutions section="4.8" isCallback="true" isUsed="false"/>
+    <joinFederationExecution section="4.9" isCallback="false" isUsed="1"/>
+    <resignFederationExecution section="4.10" isCallback="false" isUsed="0"/>
+    <registerFederationSynchronizationPoint section="4.11" isCallback="false"/>
+    <confirmSynchronizationPointRegistration section="4.12" isCallback="true" isUsed="true"/>
+    <announceSynchronizationPoint section="4.13" isCallback="true" isUsed="false"/>
+    <synchronizationPointAchieved section="4.14" isCallback="false" isUsed="1"/>
+    <federationSynchronized section="4.15" isCallback="true" isUsed="0"/>
+    <requestFederationSave section="4.16" isCallback="false"/>
+    <initiateFederateSave section="4.17" isCallback="true" isUsed="true"/>
+    <federateSaveBegun section="4.18" isCallback="false" isUsed="false"/>
+    <federateSaveComplete section="4.19" isCallback="false" isUsed="1"/>
+    <federationSaved section="4.20" isCallback="true" isUsed="0"/>
+    <abortFederationSave section="4.21" isCallback="false"/>
+    <queryFederationSaveStatus section="4.22" isCallback="false" isUsed="true"/>
+    <federationSaveStatusResponse section="4.23" isCallback="true" isUsed="false"/>
+    <requestFederationRestore section="4.24" isCallback="false" isUsed="1"/>
+    <confirmFederationRestorationRequest section="4.25" isCallback="true" isUsed="0"/>
+    <federationRestoreBegun section="4.26" isCallback="true"/>
+    <initiateFederateRestore section="4.27" isCallback="true" isUsed="true"/>
+    <federateRestoreComplete section="4.28" isCallback="false" isUsed="false"/>
+    <federationRestored section="4.29" isCallback="true" isUsed="1"/>
+    <abortFederationRestore section="4.30" isCallback="false" isUsed="0"/>
+    <queryFederationRestoreStatus section="4.31" isCallback="false"/>
+    <federationRestoreStatusResponse section="4.32" isCallback="true" isUsed="true"/>
+    <publishObjectClassAttributes section="5.2" isCallback="false" isUsed="false"/>
+    <unpublishObjectClassAttributes section="5.3" isCallback="false" isUsed="1"/>
+    <publishInteractionClass section="5.4" isCallback="false" isUsed="0"/>
+    <unpublishInteractionClass section="5.5" isCallback="false"/>
+    <subscribeObjectClassAttributes section="5.6" isCallback="false" isUsed="true"/>
+    <unsubscribeObjectClassAttributes section="5.7" isCallback="false" isUsed="false"/>
+    <subscribeInteractionClass section="5.8" isCallback="false" isUsed="1"/>
+    <unsubscribeInteractionClass section="5.9" isCallback="false" isUsed="0"/>
+    <startRegistrationForObjectClass section="5.10" isCallback="true"/>
+    <stopRegistrationForObjectClass section="5.11" isCallback="true" isUsed="true"/>
+    <turnInteractionsOn section="5.12" isCallback="true" isUsed="false"/>
+    <turnInteractionsOff section="5.13" isCallback="true" isUsed="1"/>
+    <reserveObjectInstanceName section="6.2" isCallback="false" isUsed="0"/>
+    <objectInstanceNameReserved section="6.3" isCallback="true"/>
+    <releaseObjectInstanceName section="6.4" isCallback="false" isUsed="true"/>
+    <reserveMultipleObjectInstanceNames section="6.5" isCallback="false" isUsed="false"/>
+    <multipleObjectInstanceNamesReserved section="6.6" isCallback="true" isUsed="1"/>
+    <releaseMultipleObjectInstanceNames section="6.7" isCallback="false" isUsed="0"/>
+    <registerObjectInstance section="6.8" isCallback="false"/>
+    <discoverObjectInstance section="6.9" isCallback="true" isUsed="true"/>
+    <updateAttributeValues section="6.10" isCallback="false" isUsed="false"/>
+    <reflectAttributeValues section="6.11" isCallback="true" isUsed="1"/>
+    <sendInteraction section="6.12" isCallback="false" isUsed="0"/>
+    <receiveInteraction section="6.13" isCallback="true"/>
+    <deleteObjectInstance section="6.14" isCallback="false" isUsed="true"/>
+    <removeobjectinstance section="6.15" isCallback="true" isUsed="false"/>
+    <localDeleteObjectInstance section="6.16" isCallback="false" isUsed="1"/>
+    <attributesInScope section="6.17" isCallback="true" isUsed="0"/>
+    <attributesOutOfScope section="6.18" isCallback="true"/>
+    <requestAttributeValueUpdate section="6.19" isCallback="false" isUsed="true"/>
+    <provideAttributeValueUpdate section="6.20" isCallback="true" isUsed="false"/>
+    <turnUpdatesOnForObjectInstance section="6.21" isCallback="true" isUsed="1"/>
+    <turnUpdatesOffForObjectInstance section="6.22" isCallback="true" isUsed="0"/>
+    <requestAttributeTransportationTypeChange section="6.23" isCallback="false"/>
+    <confirmAttributeTransportationTypeChange section="6.24" isCallback="true" isUsed="true"/>
+    <queryAttributeTransportationType section="6.25" isCallback="false" isUsed="false"/>
+    <reportAttributeTransportationType section="6.26" isCallback="true" isUsed="1"/>
+    <requestInteractionTransportationTypeChange section="6.27" isCallback="false" isUsed="0"/>
+    <confirmInteractionTransportationTypeChange section="6.28" isCallback="true"/>
+    <queryInteractionTransportationType section="6.29" isCallback="false" isUsed="true"/>
+    <reportInteractionTransportationType section="6.30" isCallback="true" isUsed="false"/>
+    <unconditionalAttributeOwnershipDivestiture section="7.2" isCallback="false" isUsed="1"/>
+    <negotiatedAttributeOwnershipDivestiture section="7.3" isCallback="false" isUsed="0"/>
+    <requestAttributeOwnershipAssumption section="7.4" isCallback="true"/>
+    <requestDivestitureConfirmation section="7.5" isCallback="true" isUsed="true"/>
+    <confirmDivestiture section="7.6" isCallback="false" isUsed="false"/>
+    <attributeOwnershipAcquisitionNotification section="7.7" isCallback="true" isUsed="1"/>
+    <attributeOwnershipAcquisition section="7.8" isCallback="false" isUsed="0"/>
+    <attributeOwnershipAcquisitionIfAvailable section="7.9" isCallback="false"/>
+    <attributeOwnershipUnavailable section="7.10" isCallback="true" isUsed="true"/>
+    <requestAttributeOwnershipRelease section="7.11" isCallback="true" isUsed="false"/>
+    <attributeOwnershipReleaseDenied section="7.12" isCallback="false" isUsed="1"/>
+    <attributeOwnershipDivestitureIfWanted section="7.13" isCallback="false" isUsed="0"/>
+    <cancelNegotiatedAttributeOwnershipDivestiture section="7.14" isCallback="false"/>
+    <cancelAttributeOwnershipAcquisition section="7.15" isCallback="false" isUsed="true"/>
+    <confirmAttributeOwnershipAcquisitionCancellation section="7.16" isCallback="true" isUsed="false"/>
+    <queryAttributeOwnership section="7.17" isCallback="false" isUsed="1"/>
+    <informAttributeOwnership section="7.18" isCallback="true" isUsed="0"/>
+    <isAttributeOwnedByFederate section="7.19" isCallback="false"/>
+    <enableTimeRegulation section="8.2" isCallback="false" isUsed="true"/>
+    <timeRegulationEnabled section="8.3" isCallback="true" isUsed="false"/>
+    <disableTimeRegulation section="8.4" isCallback="false" isUsed="1"/>
+    <enableTimeConstrained section="8.5" isCallback="false" isUsed="0"/>
+    <timeConstrainedEnabled section="8.6" isCallback="true"/>
+    <disableTimeConstrained section="8.7" isCallback="false" isUsed="true"/>
+    <timeAdvanceRequest section="8.8" isCallback="false" isUsed="false"/>
+    <timeAdvanceRequestAvailable section="8.9" isCallback="false" isUsed="1"/>
+    <nextMessageRequest section="8.10" isCallback="false" isUsed="0"/>
+    <nextMessageRequestAvailable section="8.11" isCallback="false"/>
+    <flushQueueRequest section="8.12" isCallback="false" isUsed="true"/>
+    <timeAdvanceGrant section="8.13" isCallback="true" isUsed="false"/>
+    <enableAsynchronousDelivery section="8.14" isCallback="false" isUsed="1"/>
+    <disableAsynchronousDelivery section="8.15" isCallback="false" isUsed="0"/>
+    <queryGALT section="8.16" isCallback="false"/>
+    <queryLogicalTime section="8.17" isCallback="false" isUsed="true"/>
+    <queryLITS section="8.18" isCallback="false" isUsed="false"/>
+    <modifyLookahead section="8.19" isCallback="false" isUsed="1"/>
+    <queryLookahead section="8.20" isCallback="false" isUsed="0"/>
+    <retract section="8.21" isCallback="false"/>
+    <requestRetraction section="8.22" isCallback="true" isUsed="true"/>
+    <changeAttributeOrderType section="8.23" isCallback="false" isUsed="false"/>
+    <changeInteractionOrderType section="8.24" isCallback="false" isUsed="1"/>
+    <createRegion section="9.2" isCallback="false" isUsed="0"/>
+    <commitRegionModifications section="9.3" isCallback="false"/>
+    <deleteRegion section="9.4" isCallback="false" isUsed="true"/>
+    <registerObjectInstanceWithRegions section="9.5" isCallback="false" isUsed="false"/>
+    <associateRegionsForUpdates section="9.6" isCallback="false" isUsed="1"/>
+    <unassociateRegionsForUpdates section="9.7" isCallback="false" isUsed="0"/>
+    <subscribeObjectClassAttributesWithRegions section="9.8" isCallback="false"/>
+    <unsubscribeObjectClassAttributesWithRegions section="9.9" isCallback="false" isUsed="true"/>
+    <subscribeInteractionClassWithRegions section="9.10" isCallback="false" isUsed="false"/>
+    <unsubscribeInteractionClassWithRegions section="9.11" isCallback="false" isUsed="1"/>
+    <sendInteractionWithRegions section="9.12" isCallback="false" isUsed="0"/>
+    <requestAttributeValueUpdateWithRegions section="9.13" isCallback="false"/>
+    <getAutomaticResignDirective section="10.2" isCallback="false" isUsed="true"/>
+    <setAutomaticResignDirective section="10.3" isCallback="false" isUsed="false"/>
+    <getFederateHandle section="10.4" isCallback="false" isUsed="1"/>
+    <getFederateName section="10.5" isCallback="false" isUsed="0"/>
+    <getObjectClassHandle section="10.6" isCallback="false"/>
+    <getObjectClassName section="10.7" isCallback="false" isUsed="true"/>
+    <getKnownObjectClassHandle section="10.8" isCallback="false" isUsed="false"/>
+    <getObjectInstanceHandle section="10.9" isCallback="false" isUsed="1"/>
+    <getObjectInstanceName section="10.10" isCallback="false" isUsed="0"/>
+    <getAttributeHandle section="10.11" isCallback="false"/>
+    <getAttributeName section="10.12" isCallback="false" isUsed="true"/>
+    <getUpdateRateValue section="10.13" isCallback="false" isUsed="false"/>
+    <getUpdateRateValueForAttribute section="10.14" isCallback="false" isUsed="1"/>
+    <getInteractionClassHandle section="10.15" isCallback="false" isUsed="0"/>
+    <getInteractionClassName section="10.16" isCallback="false"/>
+    <getParameterHandle section="10.17" isCallback="false" isUsed="true"/>
+    <getParameterName section="10.18" isCallback="false" isUsed="false"/>
+    <getOrderType section="10.19" isCallback="false" isUsed="1"/>
+    <getOrderName section="10.20" isCallback="false" isUsed="0"/>
+    <getTransportationTypeHandle section="10.21" isCallback="false"/>
+    <getTransportationTypeName section="10.22" isCallback="false" isUsed="true"/>
+    <getAvailableDimensionsForClassAttribute section="10.23" isCallback="false" isUsed="false"/>
+    <getAvailableDimensionsForInteractionClass section="10.24" isCallback="false" isUsed="1"/>
+    <getDimensionHandle section="10.25" isCallback="false" isUsed="0"/>
+    <getDimensionName section="10.26" isCallback="false"/>
+    <getDimensionUpperBound section="10.27" isCallback="false" isUsed="true"/>
+    <getDimensionHandleSet section="10.28" isCallback="false" isUsed="false"/>
+    <getRangeBounds section="10.29" isCallback="false" isUsed="1"/>
+    <setRangeBounds section="10.30" isCallback="false" isUsed="0"/>
+    <normalizeFederateHandle section="10.31" isCallback="false"/>
+    <normalizeServiceGroup section="10.32" isCallback="false" isUsed="true"/>
+    <enableObjectClassRelevanceAdvisorySwitch section="10.33" isCallback="false" isUsed="false"/>
+    <disableObjectClassRelevanceAdvisorySwitch section="10.34" isCallback="false" isUsed="1"/>
+    <enableAttributeRelevanceAdvisorySwitch section="10.35" isCallback="false" isUsed="0"/>
+    <disableAttributeRelevanceAdvisorySwitch section="10.36" isCallback="false"/>
+    <enableAttributeScopeAdvisorySwitch section="10.37" isCallback="false" isUsed="true"/>
+    <disableAttributeScopeAdvisorySwitch section="10.38" isCallback="false" isUsed="false"/>
+    <enableInteractionRelevanceAdvisorySwitch section="10.39" isCallback="false" isUsed="1"/>
+    <disableInteractionRelevanceAdvisorySwitch section="10.40" isCallback="false" isUsed="0"/>
+    <evokeCallback section="10.41" isCallback="false"/>
+    <evokeMultipleCallbacks section="10.42" isCallback="false" isUsed="true"/>
+    <enableCallbacks section="10.43" isCallback="false" isUsed="false"/>
+    <disableCallbacks section="10.44" isCallback="false" isUsed="1"/>
+  </serviceUtilization>
+  <objects>
+    <objectClass><name>HLAobjectRoot</name></objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <transportation>HLAreliable</transportation>
+      <order>Receive</order>
+    </interactionClass>
+  </interactions>
+  <dimensions/>
+  <time>
+    <timeStamp><dataType>HLAfloat64BE</dataType><semantics>Logical timestamp</semantics></timeStamp>
+    <lookahead><dataType>HLAfloat64BE</dataType><semantics>Lookahead interval</semantics></lookahead>
+  </time>
+  <transportations>
+    <transportation><name>HLAreliable</name><reliable>Yes</reliable></transportation>
+  </transportations>
+  <switches>
+    <autoProvide/>
+    <conveyRegionDesignatorSets/>
+    <conveyProducingFederate/>
+    <attributeScopeAdvisory/>
+    <attributeRelevanceAdvisory/>
+    <objectClassRelevanceAdvisory/>
+    <interactionRelevanceAdvisory/>
+    <serviceReporting/>
+    <exceptionReporting/>
+    <delaySubscriptionEvaluation/>
+  </switches>
+</objectModel>

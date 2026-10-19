@@ -6,7 +6,7 @@ Boot:
   2. Honor the model's bridge-protocol surface:
        - publish_object_class for each entry of
          ``model.object_class_publications()``
-       - register_object_instance for each entry of
+       - reserve, await the success callback, then register each entry of
          ``model.register_instances()``
   3. Tick loop: call ``model.attribute_update_handler()``;
      for each (instance_name, attrs) pair, issue
@@ -33,6 +33,10 @@ from _federate_common import (  # type: ignore[import-not-found]
     write_result,
 )
 from rti1516e.connection import RtiConnection  # type: ignore[import-not-found]
+from rti1516e.events import (
+    ObjectInstanceNameReservationFailed,
+    ObjectInstanceNameReservationSucceeded,
+)
 from sensor import Sensor  # type: ignore[import-not-found]
 
 
@@ -63,6 +67,16 @@ async def run(
 
             instance_handles: dict[str, int] = {}
             for instance_name, class_name in model.register_instances().items():
+                await fed.reservation.reserve(instance_name)
+                async with asyncio.timeout(5):
+                    async for event in fed.events():
+                        if isinstance(event, ObjectInstanceNameReservationFailed):
+                            raise RuntimeError(f"name reservation failed: {event.object_name}")
+                        if (isinstance(event, ObjectInstanceNameReservationSucceeded)
+                                and event.object_name == instance_name):
+                            break
+                    else:
+                        raise RuntimeError("callback stream ended before name reservation")
                 handle = await fed.register_object_instance(
                     class_name,
                     instance_name=instance_name,

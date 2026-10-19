@@ -120,7 +120,9 @@ func execute(args []string) error {
 		return metricErr
 	}
 	if cfg.CompactSummary {
-		if err := writeParticipantSummary(cfg, plan, p.state, log); err != nil {
+		if err := writeParticipantSummary(cfg, plan, p.state, log, participantTransportStats{
+			Callbacks: p.fed.CallbackReportTransportStats(), LocalLRC: p.fed.LocalLRCStats(),
+		}); err != nil {
 			return err
 		}
 	}

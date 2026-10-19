@@ -48,6 +48,7 @@ type eventState struct {
 
 	self                     uint64
 	participants             []uint64
+	registered               map[string]bool
 	announced                map[string]bool
 	announcementParticipants map[string][]uint64
 	synchronized             map[string]bool
@@ -78,6 +79,7 @@ type eventState struct {
 	interactionArrivalDigest hash.Hash
 	callbackTraceDigest      hash.Hash
 	nextCallbackOrdinal      int
+	dispatching              int
 	failureErr               error
 	closing                  bool
 }
@@ -127,6 +129,7 @@ func newEventStateWithExpectedPayloads(
 	}
 	state := &eventState{
 		cfg: cfg, activeBatch: -1,
+		registered:               make(map[string]bool),
 		announced:                make(map[string]bool),
 		announcementParticipants: make(map[string][]uint64),
 		synchronized:             make(map[string]bool),
@@ -201,6 +204,10 @@ func (s *eventState) accept(event federate.Event, receivedAt counterStamp) {
 	}
 	var err error
 	switch value := event.(type) {
+	case federate.SynchronizationPointRegistrationSucceeded:
+		err = s.acceptRegistration(value.Label)
+	case federate.SynchronizationPointRegistrationFailed:
+		err = fmt.Errorf("synchronization registration %q failed: reason=%d", value.Label, value.Reason)
 	case federate.SynchronizationPointAnnounced:
 		err = s.acceptAnnouncement(value)
 	case federate.FederationSynchronized:
@@ -248,6 +255,17 @@ func (s *eventState) acceptNameReservation(name string, succeeded bool) error {
 		return fmt.Errorf("object name reservation failed for %q", name)
 	}
 	s.nameReserved = true
+	return nil
+}
+
+func (s *eventState) acceptRegistration(label string) error {
+	if !s.expectedSynchronizationLabel(label) || !s.cfg.registersSynchronization(label) {
+		return fmt.Errorf("unexpected synchronization registration success %q", label)
+	}
+	if s.registered[label] {
+		return fmt.Errorf("duplicate synchronization registration success %q", label)
+	}
+	s.registered[label] = true
 	return nil
 }
 
@@ -833,6 +851,28 @@ func (s *eventState) failure() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.failureErr
+}
+
+func (s *eventState) fail(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil && s.failureErr == nil {
+		s.failureErr = err
+		s.notifyLocked()
+	}
+}
+
+func (s *eventState) beginDispatch() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dispatching++
+}
+
+func (s *eventState) endDispatch() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dispatching--
+	s.notifyLocked()
 }
 
 func (s *eventState) grants() int {

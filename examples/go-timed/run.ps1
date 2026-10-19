@@ -136,6 +136,7 @@ try {
             "--lookahead=$($Spec.Lookahead)",
             "--primitive=TAR",
             "--constrained=true",
+            "--participants=3",
             "--cycles=$Cycles",
             "--tick-step=$TickStep",
             "--result=$ResultPath",

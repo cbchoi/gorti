@@ -32,6 +32,7 @@ Runnable standalone via:
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -155,6 +156,11 @@ def run_publisher(
         # 3. Reserve an instance name (IEEE 1516 object-name reservation flow).
         pub.reserveObjectInstanceName("car-7")
         fired = pub.evokeMultipleCallbacks(approx_min_time=0.1, approx_max_time=0.5)
+        deadline = time.monotonic() + 5
+        while "car-7" not in pub.reservations_ok:
+            if "car-7" in pub.reservations_fail or time.monotonic() >= deadline:
+                raise RuntimeError("car-7 reservation did not succeed")
+            fired = pub.evokeCallback(0.1) or fired
 
         # 4. Register the object — return value is a typed
         #    ``ObjectInstanceHandle``.

@@ -73,4 +73,3 @@ func writeProjection(cfg config, payloads []encodedIteration) error {
 	}
 	return file.Close()
 }
-

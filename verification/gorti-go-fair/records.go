@@ -200,13 +200,16 @@ func (log *runLog) sample(operation string, durationNS int64, service, sampleKin
 
 func (log *runLog) timed(service, metric string, call func() error) error {
 	if log.compact {
-		return call()
+		if err := call(); err != nil {
+			return fmt.Errorf("%s.%s: %w", service, metric, err)
+		}
+		return nil
 	}
 	started := counterNow()
 	err := call()
 	metricErr := log.metric(service, "call_latency."+metric, "nanoseconds", float64(counterElapsed(started)))
 	if err != nil {
-		return err
+		return fmt.Errorf("%s.%s: %w", service, metric, err)
 	}
 	return metricErr
 }

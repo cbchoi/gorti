@@ -283,7 +283,8 @@ func parseDiscInt16(raw any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return int32(int16(f)), nil
+	value, err := toInt16(f)
+	return int32(value), err
 }
 
 func parseDiscInt32(raw any) (any, error) {
@@ -291,7 +292,7 @@ func parseDiscInt32(raw any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return int32(f), nil
+	return toInt32(f)
 }
 
 func parseDiscInt64(raw any) (any, error) {

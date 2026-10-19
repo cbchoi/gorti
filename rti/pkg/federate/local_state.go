@@ -33,6 +33,7 @@ func (f *Federate) rememberPublishedInteraction(classHandle uint64) {
 func (f *Federate) rememberRegisteredObject(objectHandle, classHandle uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.discardDeletionKnowledgeLocked(objectHandle)
 	if f.objectClasses == nil {
 		f.objectClasses = make(map[uint64]uint64)
 	}

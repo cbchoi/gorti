@@ -12,6 +12,14 @@ option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1"
 // federation_name so a single rtid serving multiple federations can
 // answer for each independently.
 service SupportService {
+  rpc ReportCallbackInvocation(ReportCallbackInvocationRequest) returns (Empty);
+  rpc NormalizeFederateHandle(NormalizeFederateHandleRequest) returns (NormalizeFederateHandleResponse);
+  rpc NormalizeServiceGroup(NormalizeServiceGroupRequest) returns (NormalizeServiceGroupResponse);
+  rpc GetUpdateRateValue(GetUpdateRateValueRequest) returns (GetUpdateRateValueResponse);
+  rpc GetUpdateRateValueForAttribute(GetUpdateRateValueForAttributeRequest) returns (GetUpdateRateValueForAttributeResponse);
+  rpc GetAvailableDimensionsForClassAttribute(GetAvailableDimensionsForClassAttributeRequest) returns (GetAvailableDimensionsForClassAttributeResponse);
+  rpc GetAvailableDimensionsForInteractionClass(GetAvailableDimensionsForInteractionClassRequest) returns (GetAvailableDimensionsForInteractionClassResponse);
+  rpc GetDimensionHandleSet(GetDimensionHandleSetRequest) returns (GetDimensionHandleSetResponse);
   // §10.2 handle ↔ name
   rpc GetObjectClassHandle(GetObjectClassHandleRequest) returns (GetObjectClassHandleResponse);
   rpc GetObjectClassName(GetObjectClassNameRequest) returns (GetObjectClassNameResponse);
@@ -44,7 +52,38 @@ service SupportService {
   // recover the handle without having received the Discover callback.
   rpc GetObjectInstanceHandle(GetObjectInstanceHandleRequest) returns (GetObjectInstanceHandleResponse);
   rpc GetObjectInstanceName(GetObjectInstanceNameRequest) returns (GetObjectInstanceNameResponse);
+  rpc GetKnownObjectClassHandle(GetKnownObjectClassHandleRequest) returns (GetKnownObjectClassHandleResponse);
 }
+
+message ReportCallbackInvocationRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  reserved 4;
+  bytes callback_receipt = 5;
+  bool success = 6;
+  string exception = 7;
+  // False/absent retains completion reporting; entry precedes user invocation.
+  bool invocation_entry = 8;
+}
+
+message NormalizeFederateHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint64 target_handle = 4;
+}
+
+message NormalizeFederateHandleResponse { uint64 value = 1; }
+
+message NormalizeServiceGroupRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 federate_handle = 3;
+  uint32 service_group = 4;
+}
+
+message NormalizeServiceGroupResponse { uint64 value = 1; }
 
 message GetObjectClassHandleRequest {
   WireVersion wire_version = 1;
@@ -186,6 +225,7 @@ message GetObjectInstanceHandleRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
   string object_name = 3;
+  uint64 federate_handle = 4; // Nonzero selects caller-scoped object knowledge.
 }
 message GetObjectInstanceHandleResponse {
   uint64 object_handle = 1;
@@ -196,7 +236,71 @@ message GetObjectInstanceNameRequest {
   WireVersion wire_version = 1;
   string federation_name = 2;
   uint64 object_handle = 3;
+  uint64 federate_handle = 4; // Zero retains the legacy administrative lookup.
 }
 message GetObjectInstanceNameResponse {
   string object_name = 1;
+}
+
+message GetKnownObjectClassHandleRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 object_handle = 3;
+  uint64 federate_handle = 4;
+}
+
+message GetKnownObjectClassHandleResponse {
+  uint64 class_handle = 1;
+}
+
+message GetUpdateRateValueRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  string update_rate_designator = 3;
+  uint64 federate_handle = 4;
+}
+message GetUpdateRateValueResponse {
+  double update_rate = 1;
+}
+
+message GetUpdateRateValueForAttributeRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 object_handle = 3;
+  uint64 attribute_handle = 4;
+  uint64 federate_handle = 5;
+}
+message GetUpdateRateValueForAttributeResponse {
+  double update_rate = 1;
+}
+
+message GetAvailableDimensionsForClassAttributeRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 object_class_handle = 3;
+  uint64 attribute_handle = 4;
+  uint64 federate_handle = 5;
+}
+message GetAvailableDimensionsForClassAttributeResponse {
+  repeated uint64 dimension_handles = 1;
+}
+
+message GetAvailableDimensionsForInteractionClassRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 interaction_class_handle = 3;
+  uint64 federate_handle = 4;
+}
+message GetAvailableDimensionsForInteractionClassResponse {
+  repeated uint64 dimension_handles = 1;
+}
+
+message GetDimensionHandleSetRequest {
+  WireVersion wire_version = 1;
+  string federation_name = 2;
+  uint64 region_handle = 3;
+  uint64 federate_handle = 4;
+}
+message GetDimensionHandleSetResponse {
+  repeated uint64 dimension_handles = 1;
 }

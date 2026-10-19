@@ -28,6 +28,8 @@ def test_mypy_strict_clean() -> None:
     result = subprocess.run(  # noqa: S603 — argv built from sys.executable + literals
         [
             sys.executable,
+            "-X",
+            "utf8",
             "-m",
             "mypy",
             "--strict",
@@ -35,7 +37,7 @@ def test_mypy_strict_clean() -> None:
             str(PYSDK_ROOT / "pyjevsim_bridge"),
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
         cwd=str(PYSDK_ROOT),
     )
@@ -49,9 +51,9 @@ def test_mypy_strict_clean() -> None:
 def test_ruff_clean() -> None:
     """``ruff check pysdk/`` exits 0 with no diagnostics."""
     result = subprocess.run(  # noqa: S603 — argv built from sys.executable + literals
-        [sys.executable, "-m", "ruff", "check", str(PYSDK_ROOT)],
+        [sys.executable, "-X", "utf8", "-m", "ruff", "check", str(PYSDK_ROOT)],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
         cwd=str(PYSDK_ROOT),
     )

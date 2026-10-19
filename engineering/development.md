@@ -1,220 +1,156 @@
 # Development guide
 
-Commands in this file run from the repository root unless noted otherwise.
+Run commands from the repository root.
 
-## Architecture at a glance
+## Architecture
 
-gorti separates federate processes from the authoritative RTI process:
-
-```text
-federate model
-    -> Go, Python, or C++ SDK
-    -> confirmed RPC or pipelined stream
-    -> rti/internal/transport/grpc
-    -> federation service managers
-    -> event log and per-federate outboxes
-    -> ordered callback stream
-```
-
-The important ownership boundaries are:
+Federates use Go, Python, or Java SDKs to call the standalone `rtid` server.
+Go LocalLRC performs local admission and queues eligible receive-order traffic.
+The server validates operations and owns authoritative federation state.
 
 | Path | Responsibility |
 |---|---|
-| `proto/rti/v1/` | Shared wire contract and source for generated bindings |
-| `rti/cmd/rtid/` | Process lifecycle, configuration, and composition root |
-| `rti/internal/core/` | Shared domain contracts, errors, clocks, and event interfaces |
-| `rti/internal/federation/` | Federation generations and membership |
-| `rti/internal/declaration/` | Publication and subscription state |
-| `rti/internal/object/` | Object registry, interactions, validation, and fanout |
-| `rti/internal/time/` | Logical time, TSO queues, LBTS, requests, and grants |
-| `rti/internal/ownership/` | Attribute ownership transitions |
-| `rti/internal/ddm/` | Dimensions, regions, and routing predicates |
-| `rti/internal/mom/` | Management Object Model state and requests |
-| `rti/internal/savepoint/` | Save/restore orchestration and storage |
-| `rti/internal/eventlog/` | Ordered persistence, reading, and replay |
-| `rti/internal/transport/grpc/` | RPC handlers, streams, ACKs, and callbacks |
-| `rti/internal/research/` | Opt-in strategy registration without coupling service packages |
-| `rti/pkg/federate/` | Standalone public Go federate client |
+| `proto/rti/v1/` | Wire schema |
+| `rti/cmd/rtid/` | Executable entry point |
+| `rti/internal/hla/` | HLA service state, algorithms, and typed callbacks |
+| `rti/internal/application/` | Configuration, composition, lifecycle, and bootstrap |
+| `rti/internal/adapters/grpc/` | RPC validation, service invocation, error mapping, callback streams |
+| `rti/internal/adapters/protobuf/` | Generated Go wire types |
+| `rti/internal/adapters/delivery/` | Atomic recipient reservation, outboxes, batching, backpressure |
+| `rti/internal/adapters/eventlog/` and `savebundle/` | Journal and snapshot formats and storage |
+| `rti/internal/adapters/sdkstate/` | SDK checkpoint validation and identity translation |
+| `rti/internal/compatibility/` and `rti/experiments/` | Research configuration and non-default algorithms |
+| `rti/pkg/federate/` | Go SDK, LocalLRC, callback dispatch and reporting |
 | `pysdk/` | Python SDK and pyjevsim bridge |
-| `cppsdk/` | C++17 DLC-shaped SDK and conformance fixtures |
-| `tests/` | Cross-package specification and conformance scenarios |
-| `verification/` | Comparison harnesses and reproducibility evidence |
+| `javasdk/` | IEEE Java API, generated wire module, and provider |
+| `rti/tests/integration/` and `tests/` | Integration, conformance, and architecture tests |
+| `benchmark/` and `verification/` | Workloads, comparison runners, and analysis |
 
-Service managers own mutable state by federation name and generation. The
-transport validates and translates wire requests, but service rules belong in
-the manager packages. Public client code under `rti/pkg/` must not import
-`rti/internal/`; `.golangci.yml` enforces that boundary.
+HLA packages cannot import gRPC, generated Protobuf, filesystem, HTTP, or
+metrics packages. `tests/architecture` checks that dependency rule. Unit tests
+also live beside their owning Go packages; the refactoring did not move every
+test into a separate tree.
 
-Before changing a service path, read the current
-[SDD](specifications/current/SDD.md) and the package's `doc.go`. Preserve these
-cross-cutting invariants:
+Read the current [SDD](specifications/current/SDD.md) and
+[IDD](specifications/current/IDD.md) before changing a service. Preserve:
 
-- generation evidence fences stale work from a replacement federation;
-- recipient capacity is reserved before a multi-recipient transition commits;
-- timestamp-order callbacks are visible before the corresponding time grant;
-- ACK, callback, persistence, and backpressure boundaries remain explicit; and
-- committed ordering is deterministic and uses `core.Clock` where wall time
-  would otherwise enter behavior.
+- federation-generation and member-incarnation checks;
+- atomic recipient reservation before committing multi-recipient delivery;
+- required timestamp-order callbacks before a time grant;
+- explicit local admission, server completion, and callback execution boundaries;
+- callback recovery state and compatible snapshot decoding.
 
-## Toolchain and bootstrap
+## Setup and build
 
-The common path needs Go 1.22 or later, Python 3.11 or later, Buf, and a POSIX
-shell with Make. Make recipes use tools such as `find`, `xargs`, and `rm`, so
-Windows contributors should run them in WSL or Git Bash. Direct Go and Python
-commands can be run in PowerShell.
+Use Go 1.22+, Python 3.11+, and Buf. Java work requires JDK 11+ and Maven 3.9.
+Make targets use POSIX utilities; run them in Linux, macOS, WSL, or Git Bash.
+Direct Go, Python, and Maven commands also work in PowerShell.
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e "./pysdk[dev]"
-
+python -m pip install -e "./pysdk[dev,rl]" -r scripts/validation-requirements.txt
 buf generate
-make help
+go build ./...
+mvn -f javasdk/pom.xml verify
 ```
 
-Buf uses remote plugins from `buf.gen.yaml`, so first-time generation requires
-network access. C++ work additionally requires a C++17 compiler, CMake 3.18 or
-later, Conan 2, and the gRPC, protobuf, and GoogleTest packages resolved by
-`cppsdk/conanfile.txt`. Go lint uses golangci-lint 1.61.0 in CI.
+For the locked Python environment, use the [Python SDK commands](../pysdk/README.md#verification).
+`make build` writes `bin/rtid` and `bin/rti-top`. Experimental DDS builds use
+`make build-dds` and require Cyclone DDS.
 
-## Build paths
+## Protocol generation
 
-The portable, DDS-free binaries are the default build:
-
-```bash
-make build
-```
-
-This writes `bin/rtid` and `bin/rti-top`. Use `make rti-top` when changing only
-the TUI. The experimental DDS adapter is opt-in and requires Cyclone DDS:
-
-```bash
-make build-dds
-make test-dds
-```
-
-For the C++ SDK, generate stubs first, then reproduce the CI dependency and
-build path:
-
-```bash
-buf generate
-conan profile detect --force
-conan install cppsdk --output-folder=cppsdk/build --build=missing \
-  -s build_type=Release -s compiler.cppstd=17
-cmake -S cppsdk -B cppsdk/build \
-  -DCMAKE_TOOLCHAIN_FILE=cppsdk/build/conan_toolchain.cmake \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build cppsdk/build -j
-ctest --test-dir cppsdk/build --output-on-failure
-```
-
-The Linux conformance lane is the maintained C++ CI environment. See
-[`cppsdk/README.md`](../cppsdk/README.md) for system-package builds and public
-header layout.
-
-## Protocol code generation
-
-`proto/` is the only hand-edited protocol source. The canonical command is:
-
-```bash
-make proto
-```
-
-`make proto` runs `buf generate` and updates three consumers:
-
-| Output | Version-control policy | Used by |
-|---|---|---|
-| `rti/internal/genproto/` | Committed | Go server, tools, and Go SDK |
-| `pysdk/rti1516e/_generated/` | Ignored | Python runtime, tests, wheel, and sdist |
-| `cppsdk/_generated/` | Ignored | C++ library and tests |
-
-After a protocol change:
+Edit `proto/`, then run:
 
 ```bash
 make proto
 buf lint
 buf breaking --against ".git#branch=main"
-git diff -- rti/internal/genproto
+git diff -- rti/internal/adapters/protobuf
+mvn -f javasdk/pom.xml verify
 ```
 
-Commit the Go binding changes with the `.proto` files. Regenerate ignored
-Python and C++ bindings in every clean build environment. Do not hand-edit any
-generated tree. The separate `make py-codegen` target uses the protobuf-7
-compatible `grpcio-tools` version from the Python development extra.
-
-## Test and quality gates
-
-Start with the smallest command that covers the change, then broaden before a
-pull request.
-
-| Command | Scope |
-|---|---|
-| `go test ./rti/internal/time -run TestName` | Focused Go package or test |
-| `make go-test` | Race-enabled Go tests for maintained package roots |
-| `go test ./...` | All Go packages in the module; used by release preflight |
-| `make determinism` | Ten race-enabled determinism runs |
-| `make py-test` | Python SDK pytest suite |
-| `make py-lint` | Ruff over `pysdk/` |
-| `make py-typecheck` | Strict mypy over `pysdk/` |
-| `make docs` | Strict MkDocs build into `site/` |
-| `bash scripts/ci-gates.sh` | Full generated-stub, Go, C++, static, sweep, and IVCT gate |
-
-The conformance script accepts ordered stage names: `stubs`, `go`, `cpp`,
-`lockfile`, `static`, `sweep`, and `ivct`. The `cpp` stage needs the Conan
-toolchain above; `sweep` and `ivct` need `bin/rtid`, so include the `go` stage
-or build it first. `sweep` compares every fixture in both directions against
-`cppsdk/tests/dlc/conformance/EXPECTED_VERDICTS.txt`; an undocumented
-improvement fails just like a regression until the expected verdict is
-reviewed.
-
-Formatting and aggregate targets are:
-
-```bash
-make go-fmt-check
-make lint
-make typecheck
-make verify
-```
-
-`make verify` runs `fmt`, `lint`, `test`, and `determinism`. It mutates files
-through `gofmt`, optional `goimports`, optional Black, and optional Ruff fixes,
-so inspect the resulting diff. It also skips tools that are optional in its
-recipes and does not include `typecheck`, docs, protocol breaking checks, or
-the C++ conformance gate. Run those explicitly when relevant.
-
-The pre-commit configuration runs repository scripts that reject emojis in
-source and debug `fmt.Print*` or Python `print()` calls. Go lint also protects
-deterministic clock use, the public/internal import boundary, and newly
-introduced lint findings relative to `origin/main`.
-
-## CI map
-
-The workflow trigger matters because not every lane runs on each pull request.
-
-| Workflow | Trigger | What it checks |
+| Output | Generator | Git policy |
 |---|---|---|
-| `.github/workflows/docs.yml` | Documentation-related PRs and pushes to `main`; manual | Strict MkDocs build, `site/index.html`, Pages artifact |
-| `.github/workflows/ci.yml` | Manual | Go format/lint/coverage/determinism, Python Ruff/mypy/pytest/metadata, Buf lint/breaking |
-| `.github/workflows/conformance.yml` | Manual | All `scripts/ci-gates.sh` stages on Ubuntu 24.04 |
-| `.github/workflows/release.yml` | Pushed `v*` tag | Metadata, Go/Python/docs preflight, then GoReleaser |
-| `.github/workflows/pypi.yml` | Pushed `v*` tag; manual build | Generated-stub package check and trusted PyPI publishing on tags |
+| `rti/internal/adapters/protobuf/` | Buf | Commit with the schema |
+| `pysdk/rti1516e/_generated/` | Buf or `python -m rti1516e._proto` | Ignored; regenerate before tests or packaging |
+| `javasdk/wire/target/` | Maven | Ignored |
 
-For protocol changes, the manual validation workflow regenerates Go bindings
-and fails if the committed output differs. Its Buf breaking check compares
-against the local `main` branch from full checkout history.
+`make proto` runs both generators. C++ generation is no longer part of Buf or
+the default validation commands. Retained C++ source and reports are historical.
+The Go plugin import mappings in `buf.gen.yaml` place every wire type in the
+adapter package without rewriting historical `go_package` descriptor options.
+Add a mapping when adding a schema file; the configuration test checks the set.
 
-## Change paths
+## Tests
 
-- Go service change: update the owning manager package and focused tests, then
-  run `make go-test`, `make determinism` when ordering is involved, and any
-  affected cross-process scenario.
-- SDK change: run that SDK's unit tests and a live-`rtid` integration path.
-- Protocol change: update `proto/`, regenerate all languages, commit Go output,
-  run Buf lint/breaking checks, and test every affected SDK.
-- C++ surface change: run the CMake tests, lockfile stage, affected fixture,
-  and full sweep before changing an expected verdict.
-- Documentation change: follow the
-  [documentation guide](maintenance/documentation.md) and run `make docs`.
-- Release preparation: follow the [release guide](maintenance/release.md);
-  never infer release readiness from a single aggregate target.
+| Command | Purpose |
+|---|---|
+| `go test ./rti/internal/hla/time -run TestName` | Focused service regression |
+| `go test ./tests/architecture` | Source dependency rules |
+| `go test ./...` | Module-wide Go tests |
+| `make go-test` | Race-enabled maintained Go package roots |
+| `make determinism` | Repeated deterministic execution |
+| `make py-test` | Python HLA inventory, including live-server cases |
+| `make py-lint` / `make py-typecheck` | Ruff / mypy |
+| `mvn -f javasdk/pom.xml verify` | Java unit and transport tests |
+| `make java-test` | Java unit, transport, live-server and Python interoperation tests |
+| `make sdk-test` | Python/Java tests and internal IVCT-derived subset |
+| `make validation-test` | Workflow, generation, runner and version metadata tests |
+| `bash scripts/ci-gates.sh` | `stubs go python java static ivct` stages |
+| `make docs` | Strict MkDocs build |
+
+Enable live-server and fixture settings from the SDK guides when running
+integration campaigns. The [full service report](verification/ieee2010-full-service-rerun-post-sync-20261004.md)
+records exact test selections and prerequisites. The
+[requirements inventory](verification/requirements2010/README.md) connects
+service requirements to assertions and execution results.
+
+`make verify` runs formatting, lint, tests, and determinism. It can modify
+formatting and skips optional lint tools that are absent. Test prerequisites
+must be installed. Run type checking, documentation, and protocol checks
+separately when affected.
+
+For PowerShell or a focused SDK run, use:
+
+```sh
+python scripts/validate_sdks.py python java ivct
+```
+
+The runner builds current `rtid` source, selects that binary for live tests,
+starts and stops the Java test server, and writes reports outside the repository.
+Use `--artifacts PATH` to retain them at a chosen location. `--maven PATH` or
+`GORTI_MAVEN` selects Maven; `GORTI_MAVEN_REPO` selects its local cache.
+The HLA inventory explicitly excludes legacy C++, RL/PPO and standalone model
+applications. The `rl` extra is needed for whole-package mypy checks, not HLA
+service execution. Java source-archive/schema diagnostics and cross-binding
+checkpoint fixture tests require their separately supplied inputs; JUnit reports
+show them as skipped when those inputs are absent.
+
+## Callback performance builds
+
+The default Go build confirms callback reports synchronously. Build both the
+server and Go application with `-tags=callback_async` to enable negotiated
+local callback entry and pipelined reporting for eligible receive-order data.
+Use `DispatchEvent` and `FlushCallbackInvocationReports` to preserve entry,
+completion, and recovery accounting. See [LocalLRC](../docs/local-lrc.md).
+
+## CI and release
+
+| Workflow | Trigger | Checks |
+|---|---|---|
+| `docs.yml` | Documentation PRs, main pushes, manual | Strict MkDocs build and Pages artifact; no deployment job |
+| `ci.yml` | Manual | Go, Python, Java, metadata, benchmark contract, and Protobuf checks |
+| `conformance.yml` | Manual | Go race, Python/Java live SDK, architecture and internal IVCT-derived checks |
+| `release.yml` | `v*` tag | Release preflight and GoReleaser |
+| `pypi.yml` | `v*` tag or manual build | Generated bindings and Python packaging |
+
+The manual Go job checks that regeneration matches the committed Go bindings.
+Its configured lint version is 1.61.0. The Java job builds generated wire types
+with Maven and checks the generated ambassador facade. CI and release preflight
+use the same SDK runner as local validation.
+
+For documentation edits, follow [documentation publishing](maintenance/documentation.md).
+For releases, follow the [release guide](maintenance/release.md). Keep raw
+execution logs and local paths out of Git.

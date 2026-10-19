@@ -1,8 +1,7 @@
 package main
 
 const (
-	objectClass     = "VerifierEntity"
+	objectClass      = "VerifierEntity"
 	interactionClass = "VerifierMessage"
-	objectName      = "CommercialRtiVerifierEntity"
+	objectName       = "CommercialRtiVerifierEntity"
 )
-

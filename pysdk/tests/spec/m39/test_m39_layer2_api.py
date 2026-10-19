@@ -54,12 +54,12 @@ from rti1516e.errors import (
     FederationExecutionAlreadyExists,
     FederationExecutionDoesNotExist,
     ObjectClassNotPublished,
+    OwnershipAcquisitionPending,
     RtiError,
 )
 from rti1516e.handles import AttributeHandle
+from tests._legacy_server import build_rtid, spawn_rtid
 
-BIN_DIR = REPO_ROOT / "bin"
-RTID_BINARY = BIN_DIR / "rtid"
 FOM = str(REPO_ROOT / "examples" / "ieee1516e-typed-smoke" / "federation.fom.xml")
 VEHICLE_ATTRS: list[int | str | AttributeHandle] = ["Position", "Velocity"]
 WAIT = 5.0
@@ -72,10 +72,7 @@ def _free_port() -> int:
 
 
 def _build_rtid() -> Path:
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    argv = ["go", "build", "-o", str(RTID_BINARY), "./rti/cmd/rtid"]  # noqa: S607
-    subprocess.run(argv, cwd=REPO_ROOT, check=True)  # noqa: S603
-    return RTID_BINARY
+    return build_rtid()
 
 
 async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: ASYNC109
@@ -97,30 +94,23 @@ async def _wait_for_grpc(port: int, *, timeout: float = 10.0) -> None:  # noqa: 
 
 @pytest.fixture(scope="module")
 def rtid_url() -> Iterator[str]:
-    if shutil.which("go") is None and not RTID_BINARY.exists():
-        pytest.skip("no prebuilt rtid and no go toolchain to build one")
-    binary = RTID_BINARY if RTID_BINARY.exists() else _build_rtid()
+    if shutil.which("go") is None:
+        pytest.skip("Go toolchain required to build a fresh rtid")
+    binary = _build_rtid()
     listen_port = _free_port()
     metrics_port = _free_port()
     if metrics_port == listen_port:
         metrics_port = _free_port()
-    proc = subprocess.Popen(  # noqa: S603
-        [
-            str(binary),
-            "--listen", f":{listen_port}",
-            "--metrics-listen", f":{metrics_port}",
-            "--log-level", "warn",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    proc = spawn_rtid(binary, listen_port, metrics_port)
     try:
         asyncio.run(_wait_for_grpc(listen_port))
         yield f"grpc://127.0.0.1:{listen_port}"
     finally:
         proc.terminate()
-        with contextlib.suppress(Exception):
+        try:
+            proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            proc.kill()
             proc.wait(timeout=5.0)
 
 
@@ -253,7 +243,7 @@ def _join(url: str, federation: str, federate: str) -> _Recorder:
 def _leave(amb: _Recorder) -> None:
     try:
         if amb._federate is not None:  # noqa: SLF001 — teardown introspection
-            amb.resignFederationExecution()
+            amb.resignFederationExecution("CANCEL_THEN_DELETE_THEN_DIVEST")
     finally:
         amb.disconnect()
 
@@ -467,6 +457,8 @@ def test_plain_acquire_fires_release_request_at_owner(
         got = pub.wait_for("releaseRequested", object_handle=obj)
         assert pos in got["attribute_handles"]
         assert got["tag"] == b"please"
+        with pytest.raises(OwnershipAcquisitionPending, match="pending ownership acquisitions"):
+            sub.resignFederationExecution("NO_ACTION")
     finally:
         _leave(sub)
         _leave(pub)

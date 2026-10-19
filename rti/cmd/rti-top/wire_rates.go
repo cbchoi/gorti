@@ -25,7 +25,7 @@ package main
 import (
 	"time"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 // wireColumnID enumerates the Wire-view's toggleable columns. Phase 3

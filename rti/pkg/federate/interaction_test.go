@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 type captureInteractionClient struct {
@@ -379,7 +379,7 @@ func TestP0ResignWaitsForWireACK(t *testing.T) {
 	close(drainDone)
 	fed := &Federate{
 		conn:           &Connection{cc: cc, fed: rtiv1.NewFederationServiceClient(cc), interactionStreamEnabled: true},
-		federationName: "fed", federateHandle: 1,
+		federationName: testFederationName, federateHandle: 1,
 		interactionContext: interactionContext, interactionCancel: interactionCancel,
 		streamCancel: func() {}, drainDone: drainDone,
 	}
@@ -392,8 +392,8 @@ func TestP0ResignWaitsForWireACK(t *testing.T) {
 	}
 	resignDone := make(chan error, 1)
 	go func() { resignDone <- fed.ResignWithAction(context.Background(), ResignActionNoAction) }()
-	deadline := time.Now().Add(time.Second)
-	for !fed.interactionClosing.Load() && time.Now().Before(deadline) {
+	deadline := time.Now().Add(time.Second)                             //nolint:forbidigo // This deadline bounds a real asynchronous transport test.
+	for !fed.interactionClosing.Load() && time.Now().Before(deadline) { //nolint:forbidigo // This deadline bounds a real asynchronous transport test.
 		time.Sleep(time.Millisecond)
 	}
 	if !fed.interactionClosing.Load() {

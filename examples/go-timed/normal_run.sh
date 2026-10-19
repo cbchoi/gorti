@@ -19,6 +19,7 @@ echo "normal_run: dialing ${RTID_URL}, writing ${RESULT_PATH}" >&2
     --lookahead 1.0 \
     --primitive "${PRIMITIVE}" \
     --constrained=true \
+    --participants=3 \
     --cycles "${CYCLES}" \
     --tick-step "${TICK_STEP}" \
     --result "${RESULT_PATH}" \

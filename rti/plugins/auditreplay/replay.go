@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/eventlog"
+	"github.com/cbchoi/gorti/rti/internal/adapters/eventlog"
+	"github.com/cbchoi/gorti/rti/internal/hla/core"
 )
 
 // ReplayFile replays one audit journal into a new generation log file.

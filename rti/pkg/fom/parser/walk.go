@@ -2,9 +2,11 @@ package parser
 
 import (
 	"encoding/xml"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/cbchoi/gorti/rti/pkg/fom/mim"
 	"github.com/cbchoi/gorti/rti/pkg/fom/model"
 )
 
@@ -12,11 +14,27 @@ import (
 // DIF XML (Annex A) for cut-1 parsing. Only sections needed by the current
 // diagnostic passes are mapped; later tasks add more nodes.
 type xmlObjectModel struct {
-	XMLName      xml.Name         `xml:"objectModel"`
-	Objects      *xmlObjects      `xml:"objects"`
-	Interactions *xmlInteractions `xml:"interactions"`
-	DataTypes    *xmlDataTypes    `xml:"dataTypes"`
-	Dimensions   *xmlDimensions   `xml:"dimensions"`
+	XMLName         xml.Name             `xml:"objectModel"`
+	Objects         *xmlObjects          `xml:"objects"`
+	Interactions    *xmlInteractions     `xml:"interactions"`
+	DataTypes       *xmlDataTypes        `xml:"dataTypes"`
+	Dimensions      *xmlDimensions       `xml:"dimensions"`
+	Time            *xmlTime             `xml:"time"`
+	UpdateRates     *xmlUpdateRates      `xml:"updateRates"`
+	Switches        *xmlAdvisorySwitches `xml:"switches"`
+	Transportations *xmlTransportations  `xml:"transportations"`
+}
+
+// Time descriptions participate in reference validation, not runtime factory
+// selection. The exported FOM model currently has no descriptive metadata API.
+type xmlTime struct {
+	TimeStamp *xmlTimeRepresentation `xml:"timeStamp"`
+	Lookahead *xmlTimeRepresentation `xml:"lookahead"`
+}
+
+type xmlTimeRepresentation struct {
+	DataType  *string `xml:"dataType"`
+	Semantics string  `xml:"semantics"`
 }
 
 // xmlDimensions mirrors the <dimensions> block (1516.2-2010 Annex A).
@@ -28,9 +46,11 @@ type xmlDimensions struct {
 }
 
 type xmlDimension struct {
-	Name          string `xml:"name"`
-	UpperBound    string `xml:"upperBound"`
-	Normalization string `xml:"normalization"`
+	Name          string  `xml:"name"`
+	DataType      *string `xml:"dataType"`
+	UpperBound    *string `xml:"upperBound"`
+	Normalization *string `xml:"normalization"`
+	DefaultValue  *string `xml:"value"`
 }
 
 type xmlObjects struct {
@@ -40,18 +60,22 @@ type xmlObjects struct {
 type xmlObjectClass struct {
 	Name       string           `xml:"name"`
 	Sharing    string           `xml:"sharing"`
+	Semantics  *string          `xml:"semantics"`
 	Attributes []xmlAttribute   `xml:"attribute"`
 	Children   []xmlObjectClass `xml:"objectClass"`
 }
 
 type xmlAttribute struct {
-	Name           string `xml:"name"`
-	DataType       string `xml:"dataType"`
-	UpdateType     string `xml:"updateType"`
-	Ownership      string `xml:"ownership"`
-	Sharing        string `xml:"sharing"`
-	Transportation string `xml:"transportation"`
-	Order          string `xml:"order"`
+	Name            string   `xml:"name"`
+	DataType        string   `xml:"dataType"`
+	UpdateType      string   `xml:"updateType"`
+	UpdateCondition *string  `xml:"updateCondition"`
+	Ownership       string   `xml:"ownership"`
+	Sharing         string   `xml:"sharing"`
+	Transportation  string   `xml:"transportation"`
+	Order           string   `xml:"order"`
+	Dimensions      []string `xml:"dimensions>dimension"`
+	Semantics       *string  `xml:"semantics"`
 }
 
 type xmlInteractions struct {
@@ -65,11 +89,14 @@ type xmlInteractionClass struct {
 	Order          string                `xml:"order"`
 	Parameters     []xmlParameter        `xml:"parameter"`
 	Children       []xmlInteractionClass `xml:"interactionClass"`
+	Dimensions     []string              `xml:"dimensions>dimension"`
+	Semantics      *string               `xml:"semantics"`
 }
 
 type xmlParameter struct {
-	Name     string `xml:"name"`
-	DataType string `xml:"dataType"`
+	Name      string  `xml:"name"`
+	DataType  string  `xml:"dataType"`
+	Semantics *string `xml:"semantics"`
 }
 
 // flattenObjectClasses walks the recursive xmlObjectClass tree and emits a
@@ -80,13 +107,21 @@ func flattenObjectClasses(node *xmlObjectClass, parent string, out *[]model.Obje
 	if node == nil {
 		return
 	}
+	class := model.ClassPath(parent, node.Name)
+	attributes := convertAttributes(node.Attributes)
+	for i := range attributes {
+		attributes[i].Name = mim.CanonicalAttributeName(class, attributes[i].Name)
+	}
 	*out = append(*out, model.ObjectClass{
-		Name:       node.Name,
-		ParentName: parent,
-		Attributes: convertAttributes(node.Attributes),
+		Name:          node.Name,
+		ParentName:    model.LocalClassName(parent),
+		QualifiedName: model.ClassPath(parent, node.Name),
+		Sharing:       node.Sharing,
+		Semantics:     model.OptionalStringFrom(node.Semantics),
+		Attributes:    attributes,
 	})
 	for i := range node.Children {
-		flattenObjectClasses(&node.Children[i], node.Name, out)
+		flattenObjectClasses(&node.Children[i], model.ClassPath(parent, node.Name), out)
 	}
 }
 
@@ -97,13 +132,16 @@ func convertAttributes(in []xmlAttribute) []model.Attribute {
 	out := make([]model.Attribute, len(in))
 	for i, a := range in {
 		out[i] = model.Attribute{
-			Name:           a.Name,
-			DataType:       a.DataType,
-			UpdateType:     a.UpdateType,
-			Ownership:      a.Ownership,
-			Sharing:        a.Sharing,
-			Transportation: a.Transportation,
-			Order:          a.Order,
+			Name:            a.Name,
+			DataType:        a.DataType,
+			UpdateType:      a.UpdateType,
+			UpdateCondition: model.OptionalStringFrom(a.UpdateCondition),
+			Semantics:       model.OptionalStringFrom(a.Semantics),
+			Ownership:       a.Ownership,
+			Sharing:         a.Sharing,
+			Transportation:  a.Transportation,
+			Order:           a.Order,
+			Dimensions:      convertDimensionReferences(a.Dimensions),
 		}
 	}
 	return out
@@ -117,14 +155,17 @@ func flattenInteractionClasses(node *xmlInteractionClass, parent string, out *[]
 	}
 	*out = append(*out, model.InteractionClass{
 		Name:           node.Name,
-		ParentName:     parent,
+		ParentName:     model.LocalClassName(parent),
+		QualifiedName:  model.ClassPath(parent, node.Name),
 		Sharing:        node.Sharing,
+		Semantics:      model.OptionalStringFrom(node.Semantics),
 		Transportation: node.Transportation,
 		Order:          node.Order,
 		Parameters:     convertParameters(node.Parameters),
+		Dimensions:     convertDimensionReferences(node.Dimensions),
 	})
 	for i := range node.Children {
-		flattenInteractionClasses(&node.Children[i], node.Name, out)
+		flattenInteractionClasses(&node.Children[i], model.ClassPath(parent, node.Name), out)
 	}
 }
 
@@ -135,8 +176,9 @@ func convertParameters(in []xmlParameter) []model.Parameter {
 	out := make([]model.Parameter, len(in))
 	for i, p := range in {
 		out[i] = model.Parameter{
-			Name:     p.Name,
-			DataType: p.DataType,
+			Name:      p.Name,
+			DataType:  p.DataType,
+			Semantics: model.OptionalStringFrom(p.Semantics),
 		}
 	}
 	return out
@@ -171,11 +213,12 @@ type xmlSimpleDataTypes struct {
 }
 
 type xmlSimpleData struct {
-	Name           string `xml:"name"`
-	Representation string `xml:"representation"`
-	Units          string `xml:"units"`
-	Resolution     string `xml:"resolution"`
-	Accuracy       string `xml:"accuracy"`
+	Name           string  `xml:"name"`
+	Representation string  `xml:"representation"`
+	Units          string  `xml:"units"`
+	Resolution     string  `xml:"resolution"`
+	Accuracy       string  `xml:"accuracy"`
+	Semantics      *string `xml:"semantics"`
 }
 
 type xmlEnumDataTypes struct {
@@ -185,12 +228,14 @@ type xmlEnumDataTypes struct {
 type xmlEnumeratedData struct {
 	Name           string          `xml:"name"`
 	Representation string          `xml:"representation"`
+	Semantics      *string         `xml:"semantics"`
 	Enumerator     []xmlEnumerator `xml:"enumerator"`
 }
 
 type xmlEnumerator struct {
-	Name   string `xml:"name"`
-	Values string `xml:"values"`
+	Name      string   `xml:"name"`
+	Values    string   `xml:"values"`
+	ValueList []string `xml:"value"`
 }
 
 type xmlArrayDataTypes struct {
@@ -198,10 +243,11 @@ type xmlArrayDataTypes struct {
 }
 
 type xmlArrayData struct {
-	Name        string `xml:"name"`
-	DataType    string `xml:"dataType"`
-	Cardinality string `xml:"cardinality"`
-	Encoding    string `xml:"encoding"`
+	Name        string  `xml:"name"`
+	DataType    string  `xml:"dataType"`
+	Cardinality string  `xml:"cardinality"`
+	Encoding    string  `xml:"encoding"`
+	Semantics   *string `xml:"semantics"`
 }
 
 type xmlFixedRecTypes struct {
@@ -209,14 +255,16 @@ type xmlFixedRecTypes struct {
 }
 
 type xmlFixedRecordData struct {
-	Name     string        `xml:"name"`
-	Encoding string        `xml:"encoding"`
-	Field    []xmlRecField `xml:"field"`
+	Name      string        `xml:"name"`
+	Encoding  string        `xml:"encoding"`
+	Semantics *string       `xml:"semantics"`
+	Field     []xmlRecField `xml:"field"`
 }
 
 type xmlRecField struct {
-	Name     string `xml:"name"`
-	DataType string `xml:"dataType"`
+	Name      string  `xml:"name"`
+	DataType  string  `xml:"dataType"`
+	Semantics *string `xml:"semantics"`
 }
 
 type xmlVariantRecTypes struct {
@@ -226,15 +274,17 @@ type xmlVariantRecTypes struct {
 type xmlVariantRecordData struct {
 	Name             string          `xml:"name"`
 	Encoding         string          `xml:"encoding"`
+	Semantics        *string         `xml:"semantics"`
 	DiscriminantName string          `xml:"discriminant"`
 	DataType         string          `xml:"dataType"`
 	Alternative      []xmlVariantAlt `xml:"alternative"`
 }
 
 type xmlVariantAlt struct {
-	Enumerator string `xml:"enumerator"`
-	Name       string `xml:"name"`
-	DataType   string `xml:"dataType"`
+	Enumerator string  `xml:"enumerator"`
+	Name       string  `xml:"name"`
+	DataType   string  `xml:"dataType"`
+	Semantics  *string `xml:"semantics"`
 }
 
 // convertDataTypes flattens the <dataTypes> XML section into a slice of
@@ -282,6 +332,7 @@ func convertSimpleData(in *xmlSimpleDataTypes) []model.DataType {
 			Units:          s.Units,
 			Resolution:     s.Resolution,
 			Accuracy:       s.Accuracy,
+			Semantics:      model.OptionalStringFrom(s.Semantics),
 		})
 	}
 	return out
@@ -296,11 +347,18 @@ func convertEnumeratedData(in *xmlEnumDataTypes) []model.DataType {
 		enums := make([]model.Enumerator, len(e.Enumerator))
 		for i, en := range e.Enumerator {
 			enums[i] = model.Enumerator{Name: en.Name, Values: en.Values}
+			if len(en.ValueList) > 0 {
+				enums[i].ValueList = append([]string(nil), en.ValueList...)
+				if enums[i].Values == "" {
+					enums[i].Values = en.ValueList[0]
+				}
+			}
 		}
 		out = append(out, &model.EnumeratedData{
 			NameField:      e.Name,
 			Representation: e.Representation,
 			Enumerators:    enums,
+			Semantics:      model.OptionalStringFrom(e.Semantics),
 		})
 	}
 	return out
@@ -316,6 +374,7 @@ func convertArrayData(in *xmlArrayDataTypes) []model.DataType {
 			NameField:   a.Name,
 			DataType:    a.DataType,
 			Cardinality: a.Cardinality,
+			Semantics:   model.OptionalStringFrom(a.Semantics),
 			Encoding:    a.Encoding,
 		})
 	}
@@ -330,67 +389,82 @@ func convertFixedRecordData(in *xmlFixedRecTypes) []model.DataType {
 	for _, f := range in.FixedRecordData {
 		fields := make([]model.RecordField, len(f.Field))
 		for i, ff := range f.Field {
-			fields[i] = model.RecordField{Name: ff.Name, DataType: ff.DataType}
+			fields[i] = model.RecordField{Name: ff.Name, DataType: ff.DataType, Semantics: model.OptionalStringFrom(ff.Semantics)}
 		}
 		out = append(out, &model.FixedRecordData{
 			NameField: f.Name,
 			Fields:    fields,
+			Semantics: model.OptionalStringFrom(f.Semantics),
 			Encoding:  f.Encoding,
 		})
 	}
 	return out
 }
 
-// convertDimensions flattens the <dimensions> XML section into a slice
-// of model.Dimension. Returns nil if no dimensions are declared. M10 /
-// FR-DDM-1.
-//
-// upperBound parsing (cut-2 minimal):
-//   - Empty / whitespace-only → 0 (treated as "unbounded" by the
-//     caller; the DDM manager defaults the initial region range to
-//     [0, dim.UpperBound)).
-//   - Numeric prefix; trailing non-digits are ignored (the FOM may
-//     spell the bound as "1000" or "1000 (meters)" — we keep cut-2
-//     forgiving).
-//   - Negative or unparseable → 0 (no diagnostic; FOM-009 already
-//     guards element-name correctness).
-func convertDimensions(in *xmlDimensions) []model.Dimension {
-	if in == nil || len(in.Dimension) == 0 {
-		return nil
-	}
-	out := make([]model.Dimension, 0, len(in.Dimension))
-	for _, d := range in.Dimension {
-		out = append(out, model.Dimension{
-			Name:             d.Name,
-			UpperBound:       parseUpperBound(d.UpperBound),
-			NormalizationKey: strings.TrimSpace(d.Normalization),
-		})
+func convertDimensionReferences(in []string) []string {
+	var out []string
+	for _, name := range in {
+		out = append(out, strings.TrimSpace(name))
 	}
 	return out
 }
 
-// parseUpperBound extracts a uint64 from the FOM <upperBound> text. The
-// 1516.2-2010 schema declares upperBound as xs:positiveInteger; we
-// accept the leading numeric prefix and silently drop trailing chars
-// (some FOMs spell units inline).
-func parseUpperBound(s string) uint64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0
+// The official FDD 2010 dimensionType makes upperBound optional, but a
+// supplied value must be a positive integer representable by our uint64 model.
+func convertDimensions(in *xmlDimensions) ([]model.Dimension, []Diagnostic) {
+	if in == nil || len(in.Dimension) == 0 {
+		return nil, nil
 	}
-	// Find the longest leading run of digits.
-	end := 0
-	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
-		end++
+	out := make([]model.Dimension, 0, len(in.Dimension))
+	var diags []Diagnostic
+	for _, d := range in.Dimension {
+		// Existing production modules use NA as an unspecified legacy value.
+		// Retain it verbatim; the FDD exporter still rejects this non-XSD value.
+		if invalidDimensionMetadata(d) {
+			diags = append(diags, Diagnostic{Code: "FOM-015", Message: fmt.Sprintf("dimension %q has invalid dataType, normalization, or value metadata", d.Name)})
+			continue
+		}
+		var upperBound uint64
+		if d.UpperBound != nil {
+			var err error
+			upperBound, err = parseUpperBound(*d.UpperBound)
+			if err != nil {
+				diags = append(diags, Diagnostic{Code: "FOM-015", Message: fmt.Sprintf("dimension %q has invalid upperBound %q: %v", d.Name, *d.UpperBound, err)})
+				continue
+			}
+		}
+		dimension := model.Dimension{
+			Name:       strings.TrimSpace(d.Name),
+			UpperBound: upperBound,
+		}
+		if d.DataType != nil {
+			dimension.DataType = strings.TrimSpace(*d.DataType)
+		}
+		if d.Normalization != nil {
+			dimension.NormalizationKey = *d.Normalization
+		}
+		if d.DefaultValue != nil {
+			dimension.DefaultValue = *d.DefaultValue
+		}
+		if _, _, _, err := model.DimensionDefaultRange(dimension); err != nil {
+			diags = append(diags, Diagnostic{Code: "FOM-015", Message: fmt.Sprintf("dimension %q has invalid default range: %v", d.Name, err)})
+			continue
+		}
+		out = append(out, dimension)
 	}
-	if end == 0 {
-		return 0
-	}
-	v, err := strconv.ParseUint(s[:end], 10, 64)
+	return out, diags
+}
+
+func parseUpperBound(s string) (uint64, error) {
+	s = strings.TrimPrefix(strings.TrimSpace(s), "+")
+	v, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return v
+	if v == 0 {
+		return 0, fmt.Errorf("must be positive")
+	}
+	return v, nil
 }
 
 func convertVariantRecordData(in *xmlVariantRecTypes) []model.DataType {
@@ -405,6 +479,7 @@ func convertVariantRecordData(in *xmlVariantRecTypes) []model.DataType {
 				Enumerator: a.Enumerator,
 				Name:       a.Name,
 				DataType:   a.DataType,
+				Semantics:  model.OptionalStringFrom(a.Semantics),
 			}
 		}
 		out = append(out, &model.VariantRecordData{
@@ -412,8 +487,13 @@ func convertVariantRecordData(in *xmlVariantRecTypes) []model.DataType {
 			DiscriminantName: v.DiscriminantName,
 			DiscriminantType: v.DataType,
 			Alternatives:     alts,
+			Semantics:        model.OptionalStringFrom(v.Semantics),
 			Encoding:         v.Encoding,
 		})
 	}
 	return out
+}
+
+func invalidDimensionMetadata(d xmlDimension) bool {
+	return d.DataType != nil && strings.TrimSpace(*d.DataType) == "" || d.Normalization != nil && *d.Normalization == "" || d.DefaultValue != nil && *d.DefaultValue != "NA" && !model.ValidDimensionDefaultValue(*d.DefaultValue)
 }

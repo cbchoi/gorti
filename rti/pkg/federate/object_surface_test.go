@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 const objectSurfaceFOM = `<?xml version="1.0" encoding="UTF-8"?>
@@ -87,9 +87,9 @@ func (c *captureObjectClient) UpdateAttributeValues(
 
 func objectSurfaceTables() *fomTables {
 	return &fomTables{
-		objectByName:   map[string]uint64{"Vehicle": 7},
-		attrByName:     map[string]map[string]uint64{"Vehicle": {"Position": 2, "Speed": 3}},
-		objectByHandle: map[uint64]string{7: "Vehicle"},
+		objectByName:   map[string]uint64{testVehicleClass: 7},
+		attrByName:     map[string]map[string]uint64{testVehicleClass: {"Position": 2, "Speed": 3}},
+		objectByHandle: map[uint64]string{7: testVehicleClass},
 		attrByHandle:   map[uint64]map[uint64]string{7: {2: "Position", 3: "Speed"}},
 	}
 }
@@ -99,15 +99,15 @@ func TestBuildFOMTablesResolvesObjectAttributes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildFOMTables: %v", err)
 	}
-	classHandle, found := tables.objectClassHandle("Vehicle")
+	classHandle, found := tables.objectClassHandle(testVehicleClass)
 	if !found {
 		t.Fatal("Vehicle object class was not indexed")
 	}
-	attributeHandle, found := tables.attributeHandle("Vehicle", "Position")
+	attributeHandle, found := tables.attributeHandle(testVehicleClass, "Position")
 	if !found {
 		t.Fatal("Vehicle.Position attribute was not indexed")
 	}
-	if got, ok := tables.objectClassName(classHandle); !ok || got != "Vehicle" {
+	if got, ok := tables.objectClassName(classHandle); !ok || got != testVehicleClass {
 		t.Fatalf("objectClassName(%d) = (%q, %v), want (Vehicle, true)", classHandle, got, ok)
 	}
 	if got, ok := tables.attributeName(classHandle, attributeHandle); !ok || got != "Position" {
@@ -117,7 +117,7 @@ func TestBuildFOMTablesResolvesObjectAttributes(t *testing.T) {
 
 func TestObjectHandleLookups(t *testing.T) {
 	fed := &Federate{handles: objectSurfaceTables()}
-	classHandle, found := fed.ObjectClassHandle("Vehicle")
+	classHandle, found := fed.ObjectClassHandle(testVehicleClass)
 	if !found || classHandle != 7 {
 		t.Fatalf("ObjectClassHandle(Vehicle) = (%d, %v), want (7, true)", classHandle, found)
 	}
@@ -174,7 +174,7 @@ func TestObjectClassDeclarationsResolveNames(t *testing.T) {
 	}
 
 	attributes := []string{"Speed", "Position"}
-	if err := fed.PublishObjectClassAttributes(context.Background(), "Vehicle", attributes); err != nil {
+	if err := fed.PublishObjectClassAttributes(context.Background(), testVehicleClass, attributes); err != nil {
 		t.Fatalf("PublishObjectClassAttributes: %v", err)
 	}
 	attributes[0] = "mutated"
@@ -185,14 +185,14 @@ func TestObjectClassDeclarationsResolveNames(t *testing.T) {
 		t.Fatalf("published attribute handles = %v, want [3 2]", got)
 	}
 
-	if err := fed.SubscribeObjectClassAttributes(context.Background(), "Vehicle", []string{"Position"}); err != nil {
+	if err := fed.SubscribeObjectClassAttributes(context.Background(), testVehicleClass, []string{"Position"}); err != nil {
 		t.Fatalf("SubscribeObjectClassAttributes: %v", err)
 	}
 	if got := decl.subscribe.GetAttributeHandles(); len(got) != 1 || got[0] != 2 {
 		t.Fatalf("subscribed attribute handles = %v, want [2]", got)
 	}
 
-	err := fed.PublishObjectClassAttributes(context.Background(), "Vehicle", []string{"Missing"})
+	err := fed.PublishObjectClassAttributes(context.Background(), testVehicleClass, []string{"Missing"})
 	if err == nil || !strings.Contains(err.Error(), `attribute "Missing"`) {
 		t.Fatalf("unknown attribute error = %v", err)
 	}
@@ -207,7 +207,7 @@ func TestRegisterAndUpdateAttributeValuesResolveNamesAndCopyInputs(t *testing.T)
 		handles:        objectSurfaceTables(),
 	}
 
-	objectHandle, err := fed.RegisterObjectInstance(context.Background(), "Vehicle", "vehicle-1")
+	objectHandle, err := fed.RegisterObjectInstance(context.Background(), testVehicleClass, "vehicle-1")
 	if err != nil {
 		t.Fatalf("RegisterObjectInstance: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestTranslateDiscoverAndReflectAttributeValues(t *testing.T) {
 	if !ok {
 		t.Fatalf("discover translation type = %T", discovered)
 	}
-	if discover.ObjectHandle != 42 || discover.ClassName != "Vehicle" || discover.ObjectName != "vehicle-1" {
+	if discover.ObjectHandle != 42 || discover.ClassName != testVehicleClass || discover.ObjectName != "vehicle-1" {
 		t.Fatalf("discover translation = %+v", discover)
 	}
 	if class, found := fed.objectClassFor(42); !found || class != 7 {
@@ -299,7 +299,7 @@ func TestTranslateDiscoverAndReflectAttributeValues(t *testing.T) {
 		t.Fatalf("reflect translation type = %T", reflected)
 	}
 	payload[0] = 77
-	if reflect.ObjectHandle != 42 || reflect.ClassName != "Vehicle" {
+	if reflect.ObjectHandle != 42 || reflect.ClassName != testVehicleClass {
 		t.Fatalf("reflect identity = %+v", reflect)
 	}
 	if got := reflect.Attributes["Position"]; len(got) != 2 || got[0] != 8 {

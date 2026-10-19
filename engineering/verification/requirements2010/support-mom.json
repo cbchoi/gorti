@@ -1,0 +1,618 @@
+{
+  "schema_version": 1,
+  "source_id": "S1516.1",
+  "reviewed_units": ["10.2", "10.3", "10.13", "10.14", "10.31", "10.32", "11.4.2", "13.1", "13.2"],
+  "coverage_complete": false,
+  "requirements": [
+    {
+      "id": "SM-SUPPORT-RESIGN-GET",
+      "source_id": "S1516.1", "clause": "10.2", "pdf_pages": [249, 250],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Return the current automatic resign directive without requiring a state mutation.",
+      "conditions": "No supplied arguments; caller connected and joined to an existing execution. Nonmembership, disconnection and RTI internal failure are exception facets; no state chart is specified.",
+      "review_status": "source-reviewed",
+      "implementation": ["javasdk/client/src/main/java/org/gorti/rti/SupportServices.java", "rti/internal/adapters/grpc/support.go"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "allSixResignActionsRoundTripWithExplicitWireValuesAndNoCache", "oracle": "All six actions round-trip; changing the stub server directive changes the next query, proving no cached answer; unknown response enums throw RTIinternalError."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "allFourteenServicesRequireConnectionAndMembership", "oracle": "Injected NotConnected and FederateNotExecutionMember propagate identically for each service and no request is sent."}],
+      "open_items": ["The Java fixture is an in-process stub, not an independent live server directive oracle.", "Review federation-wide wording versus product per-member directive semantics, including two-member observations; do not infer agreement from a single-member round-trip."]
+    },
+    {
+      "id": "SM-SUPPORT-RESIGN-SET",
+      "source_id": "S1516.1", "clause": "10.3", "pdf_pages": [250],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Set the automatic resign directive to the supplied action and reject an invalid action.",
+      "conditions": "No returned arguments; caller connected and joined to an existing execution. Invalid action, nonmembership, disconnection and RTI internal failure are exception facets; no state chart is specified.",
+      "review_status": "source-reviewed",
+      "implementation": ["javasdk/client/src/main/java/org/gorti/rti/SupportServices.java", "rti/internal/adapters/grpc/support.go"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "allSixResignActionsRoundTripWithExplicitWireValuesAndNoCache", "oracle": "Each Java action produces its explicit expected wire enum and the corresponding query returns that action."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "invalidArgumentsAndUnknownObjectsNeverReachTheServer", "oracle": "Null resign action throws InvalidResignAction and the request list remains empty."}],
+      "open_items": ["Add live positive and invalid-action/no-change observations, including another member's directive view.", "No linked oracle exercises the eventual automatic resignation effect; the setter round-trip is narrower."]
+    },
+    {
+      "id": "SM-SUPPORT-UPDATE-RATE-NAME",
+      "source_id": "S1516.1", "clause": "10.13", "pdf_pages": [257],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Return the maximum update rate associated with the supplied FDD update-rate name.",
+      "conditions": "Connected joined caller and existing execution; the rate name exists in the FDD. Invalid name, nonmembership, disconnection and RTI internal error are exception facets; no state chart is specified.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/support_update_rate.go", "javasdk/client/src/main/java/org/gorti/rti/SupportServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "queriesUseRpcResultsAndExactJoinedIdentity", "oracle": "The rate query returns stub value 12.5 and sends the exact requested name fast."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "exactServerExceptionsAndUnavailableFailuresNeverBecomeSuccess", "oracle": "InvalidUpdateRateDesignator remains that Java exception; unavailable RPCs throw RTIinternalError rather than returning a rate."}],
+      "open_items": ["Link an independent FDD-derived live value and unknown-name/no-effect oracle.", "Negative/nonfinite server response checks are defensive product behavior, not additional source-prescribed rate definitions."]
+    },
+    {
+      "id": "SM-SUPPORT-UPDATE-RATE-ATTRIBUTE",
+      "source_id": "S1516.1", "clause": "10.14", "pdf_pages": [257, 258],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Return the maximum update rate for the specified instance attribute.",
+      "conditions": "Connected joined caller, existing execution and object, and valid instance attribute. Invalid instance, unknown instance, invalid attribute, nonmembership, disconnection and internal error are exception facets; no state chart is specified.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/support_update_rate.go", "javasdk/client/src/main/java/org/gorti/rti/SupportServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "queriesUseRpcResultsAndExactJoinedIdentity", "oracle": "Zero returned rate is preserved and the request carries instance 31 and attribute 51."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "invalidArgumentsAndUnknownObjectsNeverReachTheServer", "oracle": "Null, foreign and locally unknown objects throw ObjectInstanceNotKnown; invalid attribute wrappers throw AttributeNotDefined; no RPC is sent."}],
+      "open_items": ["No linked live oracle independently derives the rate from changing subscriptions.", "The source distinguishes invalid instance from unknown instance; inspect standard-Java declarations and server mappings before claiming all negative facets."]
+    },
+    {
+      "id": "SM-SUPPORT-NORMALIZE-FEDERATE",
+      "source_id": "S1516.1", "clause": "10.31", "pdf_pages": [272, 273],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Return the supplied federate handle's normalized coordinate suitable for the MOM federate dimension.",
+      "conditions": "Connected invoking member and existing execution. Invalid target handle, nonmembership, disconnection and internal error are exception facets; no state chart is specified.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/support.go", "javasdk/client/src/main/java/org/gorti/rti/SupportServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "queriesUseRpcResultsAndExactJoinedIdentity", "oracle": "A handle wider than 32 bits is transmitted without truncation and server normalized value 1234 is returned."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "invalidArgumentsAndUnknownObjectsNeverReachTheServer", "oracle": "Null and foreign target handles throw InvalidFederateHandle before any RPC."}],
+      "open_items": ["No linked oracle obtains normalization through the standard Java API and uses that returned coordinate in a live MOM subscription.", "Coordinate collision, dimension upper-bound and invalid numeric handle tests remain unlinked."]
+    },
+    {
+      "id": "SM-SUPPORT-NORMALIZE-GROUP",
+      "source_id": "S1516.1", "clause": "10.32", "pdf_pages": [273, 274],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Return the supplied service group's normalized coordinate suitable for the MOM service-group dimension.",
+      "conditions": "Connected invoking member and existing execution. Invalid group, nonmembership, disconnection and internal error are exception facets; no state chart is specified.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/support.go", "rti/internal/hla/mom/service_groups.go", "javasdk/client/src/main/java/org/gorti/rti/SupportServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "queriesUseRpcResultsAndExactJoinedIdentity", "oracle": "Each ServiceGroup sends its expected ordinal and returns the changing stub normalized value."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/SupportServicesTest.java", "name": "invalidArgumentsAndUnknownObjectsNeverReachTheServer", "oracle": "Null service group throws InvalidServiceGroup before any RPC."}],
+      "open_items": ["Use actual returned normalization in a live two-dimensional MOM filter; the inspected regional fixture instead uses literal coordinate 2.", "Full seven-group consistency and out-of-domain negative oracles remain unlinked."]
+    },
+    {
+      "id": "SM-SUPPORT-EVOKE-SINGLE",
+      "source_id": "S1516.1", "clause": "10.41", "pdf_pages": [283],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "In evoked mode, invoke at most one callback or wait out the requested duration and report whether callbacks remain pending; do nothing in immediate mode.",
+      "conditions": "Time argument supports at least millisecond precision; connection and execution preconditions, nonmembership/disconnection/internal-error exceptions also apply.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/CallbackGateTest.java","name":"switchesRemainLocalAndDisabledCallbacksStayQueued","oracle":"Connected, nonjoined SDK with injected callback: disabled pending callback yields true without invocation; enable then evoke invokes it once and returns false. Initial empty evoke has no return assertion. Local gate/pending subset, not live execution-precondition proof."}],
+      "open_items": ["Need a multi-callback backlog proving at most one per call, idle minimum wait, millisecond precision, immediate-mode no-effect and execution/exception matrix. This connected nonjoined fixture does not reconcile source admission conditions."]
+    },
+    {
+      "id": "SM-SUPPORT-EVOKE-MULTIPLE",
+      "source_id": "S1516.1",
+      "clause": "10.42",
+      "pdf_pages": [
+        283,
+        284
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "In evoked mode, process callbacks through the minimum duration and continue while work exists until the maximum duration, returning the pending indicator; do nothing in immediate mode.",
+      "conditions": "Both duration arguments support millisecond precision; connection and execution preconditions and nonmembership/disconnection/internal-error exceptions apply.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"
+      ],
+      "tests": [
+        {
+          "path": "javasdk/client/src/test/java/org/gorti/rti/ApplicableSupportEvoke20261004Test.java",
+          "name": "multipleWaitsForMinimumAndStopsBacklogAtMaximum",
+          "oracle": "Connected Java HLA_EVOKED queue: empty queue returns false after at least 19 ms for minimum 20 ms; 1000 queued callbacks with 2 ms bodies cause multiple deliveries, leave a true pending indicator, and stop between 40 and 500 ms for maximum 45 ms. Mock connection and injected callbacks, not real server callbacks. First run timed out including setup; final test separates setup while retaining the 5-second body timeout and timing assertions."
+        }
+      ],
+      "open_items": [
+        "Immediate callback model is rejected at connect; its prescribed no-op branch is not evidenced. The timing tolerance is not a guarantee under arbitrary load.",
+        "Membership/errors, exact callback overloads, throwing callbacks and real-backend traffic remain separate facets."
+      ]
+    },
+    {
+      "id": "SM-SUPPORT-CALLBACK-SWITCH-DELIVERY",
+      "source_id": "S1516.1", "clause": "10.43", "pdf_pages": [284, 285],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Start with callbacks enabled and resume available callback delivery when callbacks are enabled.",
+      "conditions": "Evoked delivery uses evocation services; immediate delivery occurs as callbacks become available. No supplied or returned arguments; no state chart specified.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveCallbackGateContractTest.java", "name": "switchesDeferDeliveryAndReconnectRestoresTheEnabledDefault", "oracle": "A save-status callback remains absent while disabled, arrives after enable, and arrives after reconnect/rejoin without another enable."}],
+      "open_items": ["Immediate-model resume/default and first-connection default remain unlinked."]
+    },
+    {
+      "id": "SM-SUPPORT-CALLBACK-SWITCH-DEFER",
+      "source_id": "S1516.1", "clause": "10.44", "pdf_pages": [285, 286],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Defer pending callbacks for existing and later evocation calls until callbacks are re-enabled.",
+      "conditions": "No supplied or returned arguments; connection/execution and no-active-save/no-active-restore conditions apply; no state chart specified.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveCallbackGateContractTest.java", "name": "switchesDeferDeliveryAndReconnectRestoresTheEnabledDefault", "oracle": "After disable, evokeMultipleCallbacks cannot invoke the requested status callback; enable permits its subsequent invocation."}],
+      "open_items": ["Concurrent already-running evocation, immediate delivery and all callback kinds remain unlinked."]
+    },
+    {
+      "id": "SM-SUPPORT-CALLBACK-SAVE-GUARD",
+      "source_id": "S1516.1", "clause": "10.43.3", "pdf_pages": [284, 285],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Reject callback switching during federate save without changing delivery state.",
+      "conditions": "Applies to enable and disable under 10.43 and 10.44; distinguish initiation callback ENTRY from stream arrival.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveCallbackGateContractTest.java", "name": "disableDuringSaveThrowsSaveInProgressWithoutDisablingDelivery", "oracle": "Disable throws SaveInProgress; FederationSaved still enters and switching works afterward."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/LiveCallbackGateContractTest.java", "name": "initiallyDisabledPeerSaveCanBeEnabledBeforeInitiateEntry", "oracle": "Helper observes queued initiation without user entry, permits enable, then requires SaveInProgress for both switch operations after entry and completes both peers' save."}],
+      "open_items": ["Immediate-model and overlapping/reentrant user callback switch cases remain unlinked."]
+    },
+    {
+      "id": "SM-SUPPORT-CALLBACK-RESTORE-GUARD",
+      "source_id": "S1516.1", "clause": "10.44.3", "pdf_pages": [285],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Reject callback switching during federate restore without changing delivery state.",
+      "conditions": "Applies to enable and disable under 10.43 and 10.44; distinguish initiation ENTRY from transport admission and SDK validation.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"],
+      "tests": [{"path": "javasdk/client/src/test/java/org/gorti/rti/LiveCallbackGateContractTest.java", "name": "disableDuringRestoreThrowsRestoreInProgressWithoutDisablingDelivery", "oracle": "Disable throws RestoreInProgress, restored callback still enters, subsequent switches succeed and idle completion throws RestoreNotRequested."}, {"path": "javasdk/client/src/test/java/org/gorti/rti/LiveCallbackGateContractTest.java", "name": "initiallyDisabledPeerRestoreCanBeEnabledBeforeInitiateEntry", "oracle": "Queued initiation does not block enable before entry; after actual restore entry both switches throw RestoreInProgress and both peers restore successfully."}],
+      "open_items": ["Immediate-model and failed-restore live state-preservation controls remain unlinked."]
+    },
+    {
+      "id": "SM-SUPPORT-CALLBACK-ADMISSION-TENSION",
+      "source_id": "S1516.1", "clause": "10.43.5", "pdf_pages": [284, 285],
+      "subject": "rti", "applicability": "unresolved",
+      "statement": "Reconcile source callback-switch connection/execution and exception conditions with the standard Java binding.",
+      "conditions": "Projection lists nonmembership and NotConnected for both switch services; current Java declarations omit NotConnected and connected nonjoined switching is supported. Do not silently equate defensive RTIinternalError with a prescribed exception.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/AmbassadorServices.java"],
+      "tests": [],
+      "open_items": ["Visually reconcile pages 284-285 with normative Java declarations and applicable API-specific conditions; retain unresolved until adjudicated.", "This prevents treating 10.43 or 10.44 as fully reviewed units."]
+    },
+    {
+      "id": "SM-MOM-STANDARD-CHANNEL",
+      "source_id": "S1516.1", "clause": "11.1", "pdf_pages": [286],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Expose MOM operating information and control through predefined OMT object and interaction constructs using ordinary HLA exchange.",
+      "conditions": "The FDD contains MOM elements even when federates use none or only some; product snapshot RPCs do not replace standard callbacks.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/instances.go", "rti/internal/hla/mom/emitter.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_attribute_points_production_test.go", "name": "TestProductionMOMAttributePointGlobalAndRegionalBothFamilies", "oracle": "Production subscriptions receive standard reflection events with mandatory receipts in both time families, including late, refreshed and periodic delivery."}],
+      "open_items": ["Link standard-Java MOM publish/send/subscribe/receive and object lifecycle oracles; product RPC evidence alone is insufficient."]
+    },
+    {
+      "id": "SM-MOM-PREDEFINED-IMMUTABLE",
+      "source_id": "S1516.1", "clause": "11.1", "pdf_pages": [286],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Predefine all MOM classes, attributes and parameters without revising them; permit additive extensions without direct RTI action on new elements.",
+      "conditions": "Additional subclasses, attributes and parameters may be used by federation participants; definitions of existing standard elements remain unchanged.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/catalog.go", "rti/pkg/fom/mim/selected.go"],
+      "tests": [{"path":"rti/pkg/fom/mim/selected_test.go","name":"TestSelectedMIMSupportedProfileAndRejections","oracle":"Selected-MIM parser preserves changed descriptive semantics while rejecting selected predefined encoding, required-attribute and reliability alterations; all positive and negative variants retained."}],
+      "open_items": ["Need positive structural additive extensions, unchanged complete predefined inventory and no direct RTI action on added elements. Selected parser rejection is not complete FDD/MIM merge or whole 11.1 proof."]
+    },
+    {
+      "id": "SM-MOM-OBJECT-CARDINALITY",
+      "source_id": "S1516.1", "clause": "11.2", "pdf_pages": [286],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Publish and register one federation MOM instance per execution and one federate MOM instance per federate, providing state and queue information.",
+      "conditions": "Federate information is periodically updated according to managing-federate timing adjustments; cardinality concerns actual standard objects, not only query snapshots.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/instances.go", "rti/internal/hla/mom/timing.go"],
+      "tests": [{"path":"rti/tests/integration/spec/M36/mom_instances_test.go","name":"TestSpec_M36_FederateJoin_FansOutDiscoverAndReflect","oracle":"Production manager stack emits exactly Discover/Scope/Reflect for the new subject to its subscribed observer, with matching object handles, two attributes and decoded name; unsubscribed subject receives none."},{"path":"rti/tests/integration/spec/M36/mom_instances_test.go","name":"TestSpec_M36_FederateResign_FansOutRemove","oracle":"Resigning subject produces exactly one removal event to the observer."},{"path":"rti/tests/integration/spec/M36/mom_instances_test.go","name":"TestSpec_M36_FederationClassSubscriber_SeesFederatesInFederation","oracle":"Federation MOM discovery/reflection exposes a decoded two-handle roster after join; selected delivery and roster subset, not exact global object cardinality."}],
+      "open_items": ["Need independent exact federation singleton and per-federate uniqueness across multiple joins, destroy/restore, plus all state/queue and periodic-value facets. Event counts in selected observer deliveries are not global instance counts."]
+    },
+    {
+      "id": "SM-MOM-OBJECT-EXTENSION-ISOLATION",
+      "source_id": "S1516.1",
+      "clause": "11.2.1",
+      "pdf_pages": [
+        287
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Publish only predefined MOM attributes, never subscribe to object classes, and do not update inherited attributes of participant-created extension subclasses.",
+      "conditions": "An extension-subclass instance is separate from the RTI MOM instance; participant publication and ownership govern its values.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/mom/instances.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/mom/applicable_support_actor_20261004_test.go",
+          "name": "TestApplicableSupportMOMExtensionOwnershipAndIsolation",
+          "oracle": "Parsed MIM-backed subclass registers a separate instance; participant reflects its added attribute bytes 0,0,0,42 to a subclass subscriber. Subsequent RTI refresh never reflects that participant instance. Declaration snapshot shows no RTI object subscriptions or subclass publication."
+        }
+      ],
+      "open_items": [
+        "Added attributes on the predefined RTI-created class remain unevidenced: ordinary FOM additions reject and selected-MIM parsing currently supports an unchanged structural profile. New-subclass coverage is distinct.",
+        "No claim about arbitrary user models or all lifecycle operations."
+      ]
+    },
+    {
+      "id": "SM-MOM-OWNERSHIP-PROHIBITIONS",
+      "source_id": "S1516.1",
+      "clause": "11.2.1",
+      "pdf_pages": [
+        287,
+        290
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Retain ownership of predefined MOM attributes and never acquire newly added extension attributes.",
+      "conditions": "Added attributes can be participant-owned on the same RTI-created instance; 11.4.1 also forbids MOM ownership transfer by the RTI.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/mom/instances.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/mom/applicable_support_actor_20261004_test.go",
+          "name": "TestApplicableSupportMOMExtensionOwnershipAndIsolation",
+          "oracle": "Predefined HLAfederateName belongs to the internal RTI actor; participant acquisition-if-available leaves that owner unchanged. Participant owns, updates and retains a subclass extension attribute after RTI refresh. Not an added attribute on the RTI-created instance."
+        }
+      ],
+      "open_items": [
+        "Need normal acquisition/divestiture variants, exact ownership callbacks and Java errors.",
+        "Same-instance added-attribute acquisition/update remains blocked by the selected-MIM structural profile; subclass ownership is not a substitute."
+      ]
+    },
+    {
+      "id": "SM-MOM-REQUEST-ATTRIBUTE-REFRESH",
+      "source_id": "S1516.1",
+      "clause": "11.2.1",
+      "pdf_pages": [
+        287
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Answer value-update requests for predefined MOM class or instance attributes through normal attribute updates.",
+      "conditions": "Both object-class and object-instance request forms and each requested predefined attribute require assessment.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/mom/instances.go",
+        "rti/internal/application/server/mom_attribute_points.go",
+        "rti/internal/hla/mom/request_refresh.go",
+        "rti/internal/hla/object/region_requests.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/mom/applicable_support_actor_20261004_test.go",
+          "name": "TestApplicableSupportMOMRequestRefreshBothForms",
+          "oracle": "Registry class and instance request services run after changing each subject's convey-producing-federate switch. Observer receives exactly three class-request reflections or one instance-request reflection, each with only the requested attribute and literal integer32BE true. Requests previously targeted the nonexistent RTI owner queue; dispatcher-backed metric publication fixes this path."
+        }
+      ],
+      "open_items": [
+        "Only one predefined attribute; need every attribute, unavailable-source behavior, invalid-input no-effects and Java invocation.",
+        "Mixed participant/RTI ownership, multi-target delivery failure atomicity and regional requests remain unverified."
+      ]
+    },
+    {
+      "id": "SM-MOM-INTERACTION-ROLES",
+      "source_id": "S1516.1", "clause": "11.3", "pdf_pages": [288],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Act on adjustment and request interactions, emit corresponding reports, and execute service interactions as the designated federate.",
+      "conditions": "Class hierarchy separates adjustment, request, report and service roles; a managing sender is distinct from the target member.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/dispatch.go", "rti/internal/application/server/mom_service_execution.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_full_standard_reports_test.go", "name": "TestMOMFullStandardReportsActualServer", "oracle": "Fifteen request cases in both time families produce each expected report exactly once with matching subjects; malformed requests reject without changing fixture state."}, {"path": "rti/internal/application/server/mom_service_execution_admission_test.go", "name": "TestMOMServiceAdmissionRPCResignDoesNotHoldMembershipReader", "oracle": "Authenticated MOM resignation removes the target membership while leaving the managing sender joined."}],
+      "open_items": ["Neither test covers every service's actual target-side effect or every adjustment; broad role row is not a complete 11.3 verdict."]
+    },
+    {
+      "id": "SM-MOM-REPORT-EXTENSIONS",
+      "source_id": "S1516.1",
+      "clause": "11.3.1",
+      "pdf_pages": [
+        288
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Publish reports at standard leaf classes with predefined parameters only, never send extension subclasses, and preserve normal participant interaction promotion.",
+      "conditions": "Participant-created report subclasses may be exchanged between participants; promotion to an ancestor drops new parameters. Added parameters are not emitted by the RTI.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/mom/emitter.go",
+        "rti/internal/hla/object/interaction.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/mom/applicable_support_actor_20261004_test.go",
+          "name": "TestApplicableSupportMOMReportExtensionPromotion",
+          "oracle": "Participant report subclass sends four parameters: subclass subscriber receives all four exact values; leaf subscriber receives the predefined leaf with exactly three inherited values. RTI failure reporting emits one predefined reportException with exactly its three named parameters. Report recipient provider is explicit fixture wiring, not production DDM routing."
+        }
+      ],
+      "open_items": [
+        "Selected reportException subclass only; all report leaves and added parameters on predefined classes remain open.",
+        "Immediate ancestor projection is exercised; regional, delayed and cross-binding combinations need separate coverage."
+      ]
+    },
+    {
+      "id": "SM-MOM-RECEIVE-EXTENSIONS",
+      "source_id": "S1516.1", "clause": "11.3.1", "pdf_pages": [288, 289],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Subscribe to standard receiving leaves, process predefined parameters, promote extension subclasses, and ignore declared extra parameters.",
+      "conditions": "Applies to adjustment, request and service subclasses; unrelated neither-sent-nor-received classes are ignored. Declared extension parameters are distinct from invalid unknown numeric parameter handles.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/dispatch.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_service_execution_admission_test.go", "name": "TestMOMServiceAdmissionRPCUndefinedParameterHasNoEffect", "oracle": "Unknown parameter handle 999 rejects and leaves target asynchronous-delivery state unchanged; this tests invalid handles, not valid declared extension parameters."}],
+      "open_items": ["Need positive declared-extra-parameter acceptance with unchanged standard result, and subclass promotion stripping new parameters.", "Need unrelated extension interactions ignored without target effects; unknown-handle rejection cannot establish that behavior."]
+    },
+    {
+      "id": "SM-MOM-LEAF-ADMINISTRATION",
+      "source_id": "S1516.1",
+      "clause": "11.4.1",
+      "pdf_pages": [
+        289,
+        290,
+        292,
+        293,
+        294
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Publish exactly the designated MOM object leaves and attributes, publish designated report leaves, and actively subscribe to designated receiving leaves.",
+      "conditions": "Table 4/5 publication/subscription flags and Table 6 attribute flags are authoritative; no additional attributes are published by the RTI.",
+      "review_status": "source-reviewed",
+      "implementation": [
+        "rti/internal/hla/mom/catalog.go",
+        "rti/internal/hla/mom/instances.go"
+      ],
+      "tests": [
+        {
+          "path": "rti/internal/hla/mom/applicable_support_actor_20261004_test.go",
+          "name": "TestApplicableSupportMOMPredefinedPublicationSet",
+          "oracle": "After real MOM federation/join registration, exact RTI publication handles equal independently listed 32 federate and 12 federation predefined attributes plus inherited delete privilege. Initial publication was only three/two attributes; implementation now publishes predefined sets before initial ownership."
+        }
+      ],
+      "open_items": [
+        "Table 5 exact report publication and receiving-leaf active-subscription inventory remains untested; object publication is not a whole-row verdict.",
+        "Table 6 save-label spelling is resolved by Clause 11 precedence; the wider discrepancy review in SM-MOM-TABLE-SOURCE-PRECEDENCE remains open."
+      ]
+    },
+    {
+      "id": "SM-MOM-NULL-REPORTS",
+      "source_id": "S1516.1", "clause": "11.4.1", "pdf_pages": [289, 290],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Send the corresponding NULL report when requested information does not exist, and encode undefined array values as empty arrays.",
+      "conditions": "NULL conditions and parameter inclusion follow Tables 15/17; an undefined array is not a fabricated finite value or omitted callback.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/handlers_request.go", "rti/internal/hla/mom/handlers_catalog.go", "rti/internal/hla/mom/time_values.go"],
+      "tests": [{"path": "rti/internal/hla/mom/integer64_review_test.go", "name": "TestReviewMOMExactIntegerAndLegacyFloatMetrics", "oracle": "Undefined LITS encodes exactly a four-byte zero-length array rather than its supplied finite payload."}],
+      "open_items": ["Review all Table 15 NULL conditions and Table 17 inclusion rules; they are not fully assessed in this bounded pass.", "No linked missing-information request-to-NULL callback oracle for each report class."]
+    },
+    {
+      "id": "SM-MOM-PARAMETER-EXACTNESS",
+      "source_id": "S1516.1", "clause": "11.4.1", "pdf_pages": [290, 299, 300, 301, 302, 303, 304, 305],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Include exactly all Table 7 parameters in each non-NULL standard leaf report.",
+      "conditions": "Inherited parameters must be included; NULL inclusion rules are separately governed by Table 17.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/emitter.go", "rti/internal/hla/mom/handlers_catalog.go"],
+      "tests": [{"path": "rti/internal/hla/mom/reporting_catalog_test.go", "name": "TestMOMServiceReportsEncodingAndSerialRestore", "oracle": "First service report has seven parameters, serial zero and empty exception; later failed invocation after restore has serial one and an empty returned-argument array."}],
+      "open_items": ["The inspected test's seven-field count is not an independent source-derived key-set oracle for every report.", "Full-standard-report test checks selected fields, count-array shape and some values but not every Table 7 datatype, inherited key or absence of extras."]
+    },
+    {
+      "id": "SM-MOM-UNTIMED-UNTAGGED",
+      "source_id": "S1516.1", "clause": "11.4.1", "pdf_pages": [290],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Keep the RTI MOM actor neither time-regulating nor time-constrained and omit timestamps and user tags on its updates, interactions and deletions.",
+      "conditions": "A timestamp carried as a report parameter is not an interaction delivery timestamp; managing-federate service arguments are also distinct.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/instances.go", "rti/internal/hla/mom/emitter.go"],
+      "tests": [{"path":"rti/tests/integration/spec/M36/applicable_time_support_mom_20261003_test.go","name":"TestApplicableTimeSupportMOMUntimedUntaggedLifecycle","oracle":"Actual production MOM lifecycle outbox emits exactly two reflections and one removal on join/resign; each has nil LogicalTime and LogicalTimeValue and an empty user-supplied tag. Component events, not public Java callbacks."}],
+      "open_items": ["Need interaction, periodic and service-report delivery absence oracles, selected Java callback metadata, and direct RTI MOM actor regulation/constraint-state observation. Default fields alone do not discharge those facets; arbitrary user-federate compliance is not required."]
+    },
+    {
+      "id": "SM-MOM-FEDERATE-ATTRIBUTE-DDM",
+      "source_id": "S1516.1", "clause": "11.4.1", "pdf_pages": [290],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Update federate MOM attributes with one region containing only the federate dimension and a point range around the normalized subject handle.",
+      "conditions": "Applies to every Table 6 federate attribute, not federation attributes; use Normalize Federate Handle semantics.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/application/server/mom_attribute_points.go", "rti/internal/hla/core/mom_attribute_point.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_attribute_points_production_test.go", "name": "TestProductionMOMAttributePointGlobalAndRegionalBothFamilies", "oracle": "In both time families and late/refresh/periodic phases, global subscription observes all subject handles while regional subscription observes only the selected subject; reflections carry receipts."}],
+      "open_items": ["Fixture observes HLAfederateHandle only; add every federate attribute and explicit exact one-region/one-dimension metadata assertions.", "Fixture constructs uint32(handle) coordinate rather than comparing with the public normalization service result."]
+    },
+    {
+      "id": "SM-MOM-SERVICE-REPORT-DDM",
+      "source_id": "S1516.1", "clause": "11.4.1", "pdf_pages": [290],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Route service-invocation reports through one point region with exactly the normalized subject-federate and service-group dimensions.",
+      "conditions": "The service named by the report determines its service group; both dimensions constrain overlap.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/application/server/mom_regional_reports.go", "rti/internal/hla/mom/service_groups.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_regional_reports_test.go", "name": "TestMOMRegionalServiceReportFiltersBothDimensions", "oracle": "A two-axis subscription selects updateAttributeValues and reflectAttributeValues but excludes enableTimeRegulation and sendInteractionWithRegions; unknown service cannot silently acquire a group."}],
+      "open_items": ["Test calls ReportRecipients directly, not standard-Java report delivery, and does not vary the federate axis independently.", "Need explicit region cardinality, no-extra-dimension and all normalized groups oracles."]
+    },
+    {
+      "id": "SM-MOM-OTHER-REPORT-DDM",
+      "source_id": "S1516.1", "clause": "11.4.1", "pdf_pages": [290],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Route other federate reports through one point region containing only the normalized subject-federate dimension.",
+      "conditions": "Federation reports and service-invocation reports have different Table 7 dimension sets.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/application/server/mom_regional_reports.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_regional_reports_test.go", "name": "TestMOMRegionalReportsUseCommittedSubjectRange", "oracle": "Matching committed range selects recipient; an uncommitted change does not affect routing; committing nonoverlap excludes it; ordinary subscription restores reception."}],
+      "open_items": ["Direct provider test does not prove metadata or standard callback delivery for every report leaf."]
+    },
+    {
+      "id": "SM-MOM-PROHIBITED-MUTATIONS",
+      "source_id": "S1516.1",
+      "clause": "11.4.1",
+      "pdf_pages": [
+        290
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Do not change MOM transportation/order types or perform other MOM DDM operations beyond those explicitly permitted.",
+      "conditions": "The RTI's MOM administration is restricted to registration/deletion, attribute updates and interaction send/receive plus the listed point-region exceptions; target simulation-object service effects are not changes to MOM objects.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [
+        {
+          "path": "rti/internal/hla/mom/applicable_support_actor_20261004_test.go",
+          "name": "TestApplicableSupportMOMActorPreservesTransportAndOrder",
+          "oracle": "RTI metrics refresh emits an ordinary MOM reflection with Reliable transportation, Receive sent order, no timestamp and empty tag. Attribute/interaction transport/order override snapshots remain identical. Observes the RTI actor, not a command changing simulation objects."
+        }
+      ],
+      "open_items": [
+        "Fixture has no DDM point publisher; permitted point exceptions and absence of all other RTI DDM operations are not proved.",
+        "Only metrics refresh is observed; complete lifecycle/periodic/report action matrix remains open."
+      ]
+    },
+    {
+      "id": "SM-MOM-FEDERATE-SEND-PARAMETERS",
+      "source_id": "S1516.1", "clause": "11.4.1", "pdf_pages": [290],
+      "subject": "federate", "applicability": "not-applicable",
+      "statement": "A MOM sender supplies available predefined parameters, respecting optional service arguments and supplying at least one adjustment switch.",
+      "conditions": "Federate-side obligation outside the RTI-only claim; Table 17 exceptions apply. Service parameters corresponding to optional service arguments may be omitted; setSwitches requires at least one switch parameter.",
+      "review_status": "source-reviewed", "implementation": [], "tests": [],
+      "open_items": ["No arbitrary federation/federate compliance conclusion is supported.", "Separately inventory server validation positive omitted-optional-argument cases and empty-switch rejection without mutation."]
+    },
+    {
+      "id": "SM-MOM-CHECKPOINT-SEND-EXCEPTIONS",
+      "source_id": "S1516.1", "clause": "11.4.2", "pdf_pages": [290, 291],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Permit MOM save-begun/save-complete during federate save and MOM restore-complete during federate restore despite the normal send prohibition.",
+      "conditions": "Sender is joined and has the correct publications; the named checkpoint state must be in progress. These exceptions do not authorize other MOM services or waive ordinary target service preconditions.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/application/server/mom_service_execution_admission.go", "rti/internal/adapters/grpc/mom_stream_admission.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_service_execution_admission_test.go", "name": "TestMOMServiceAdmissionRPCCorrectCheckpointControls", "oracle": "Each of the three checkpoint confirmations succeeds in its fixture; enableAsynchronousDelivery is then rejected with FailedPrecondition and leaves target time state unchanged."}],
+      "open_items": ["Inspect fixture checkpoint phases independently before treating success as exact active-save/restore evidence.", "Need actual full save/restore lifecycle delivery, success and failure indicators, cross-phase rejection and missing-publication controls for all three exceptions."]
+    },
+    {
+      "id": "SM-MOM-SERVICE-REPORT-SWITCH",
+      "source_id": "S1516.1", "clause": "11.5", "pdf_pages": [292],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Report each joined-federate or RTI service invocation when that member's service-reporting switch is enabled, starting from the FDD default and following the latest switch adjustment.",
+      "conditions": "Reporting is per designated federate; both directions of service invocation and actual invocation boundaries matter.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/reporting.go"],
+      "tests": [{"path": "rti/internal/hla/mom/reporting_catalog_test.go", "name": "TestMOMServiceReportsEncodingAndSerialRestore", "oracle": "With reporting enabled, success and failure invocations produce reports with continuing serials across import; contradictory outcome input rejects without consuming state."}],
+      "open_items": ["Test directly invokes reporting, so it does not prove every service hook or actual callback-entry boundary.", "FDD-enabled/disabled defaults, last-adjustment precedence, disabled no-report and all service groups remain unlinked."]
+    },
+    {
+      "id": "SM-MOM-SERVICE-REPORT-EXCLUSION",
+      "source_id": "S1516.1", "clause": "11.5", "pdf_pages": [292],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Reject enabling service reporting for a report subscriber and reject subscribing to service-invocation reports when reporting is enabled.",
+      "conditions": "The enabled-switch attempt is reported using normal MOM failure reporting; both operation orders must be tested.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/handlers_switches.go"],
+      "tests": [{"path": "rti/internal/hla/mom/reporting_catalog_test.go", "name": "TestMOMServiceReportingExclusionAndFailure", "oracle": "Subscriber cannot enable reporting, the switch remains disabled and a MOM failure report distinguishes precondition error from malformed-parameter error."}, {"path": "rti/internal/hla/mom/reporting_catalog_test.go", "name": "TestMOMServiceReportingAncestorSubscriptionRejected", "oracle": "An active report-ancestor subscription also prevents enabling reporting."}],
+      "open_items": ["Reverse operation order (enable then subscribe), active/passive and regional subscription combinations remain unlinked."]
+    },
+    {
+      "id": "SM-MOM-TABLE6-STATIC-CONDITIONAL-VALUES",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [294, 295, 298, 299],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Publish Table 6 identity, roster, FDD/module/MIM, time-state, switch and save-state attributes with their specified types and static or conditional triggers.",
+      "conditions": "Federate time/state changes follow successful named services including MOM equivalents; no corresponding federate-state reflection enters a member while that member is saving. Last-save values require successful save; next-save values follow accepted requests.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/instances.go", "rti/internal/hla/mom/metrics.go"],
+      "tests": [{"path": "rti/internal/hla/mom/mom_test.go", "name": "TestFederateResigned_RemovesAndUpdatesList", "oracle": "Resigned member is no longer queryable and roster has exactly two remaining handles, excluding the departed member."}],
+      "open_items": ["This snapshot oracle does not prove wire attribute values, encodings, or successful-service-triggered conditional reflections.", "Missing positive/negative trigger oracles for time constrained/manager state, failed saves, pending save metadata, FDD changes and saving-recipient reflection suppression. See JAVA2010-MIM-TABLE-PRECEDENCE for the separately verified save-label subset."]
+    },
+    {
+      "id": "SM-MOM-TABLE6-PERIODIC-VALUES",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [295, 297],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Update Table 6 periodic logical-time, queue, traffic, object-count and elapsed-time attributes according to the member's timing adjustment.",
+      "conditions": "Use the declared Table 6 datatypes, reliable transportation and receive order with federate dimension; table review is selective, not complete.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/timing.go", "rti/internal/hla/mom/metrics.go"],
+      "tests": [{"path": "rti/internal/hla/mom/timing_catalog_test.go", "name": "TestMOMTimingPeriodicUpdatesAndCancellation", "oracle": "Period two schedules two seconds, scheduler tick emits scope/reflection with updatesSent=1, period zero cancels with no stale tick output, negative period rejects, import replaces scheduler and resigned subject has no later publication."}],
+      "open_items": ["Every other periodic attribute's actual value, datatype, reliable/RO metadata and update timing need independent oracles.", "Object counters require distinct-object versus message-count, delete/remove, reflected known-class and overflow boundary assessments."]
+    },
+    {
+      "id": "SM-MOM-RECEIPT-BOUNDARY-METRICS",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [182, 297, 307],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Report queue and received-traffic metrics at their actual delivery boundary, without counting mere transport arrival as callback receipt.",
+      "conditions": "8.1.1(b), page 182, defines message receipt as callback invocation; 11.6 Table 6, page 297, assigns HLAcount to received counters and Tables 9/10, page 307, define it as a 32-bit big-endian integer. Authenticated ENTRY is a product mechanism for measuring that boundary, not a prescribed IEEE protocol; queue removal and periodic standard attribute delivery require separate oracles.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/data_callback_entry.go", "rti/internal/application/server/mom_entry_metrics.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_received_entry_boundary_review_test.go", "name": "TestMOMReceivedBoundaryReviewCountsOnlyInvokedInteraction", "oracle": "Class traffic count is zero before send, while time-waiting and after wire arrival; ENTRY changes it to one; duplicate ENTRY and completion leave it one. Waiting TSO queue is asserted as one."}, {"path": "rti/internal/hla/mom/completion_counter_test.go", "name": "TestMOMCompletionStandardCountersRequireAuthenticatedEntry", "oracle": "Literal four-byte integer32BE zero/one/two payloads assert HLAinteractionsReceived and HLAreflectionsReceived at the standard metric snapshot boundary. Delivery commit, absent/foreign session tokens, duplicate ENTRY and repeated successful/failed completion cannot inflate counts. Two authenticated reflection entries on one object with two attributes each produce reflection count two and HLAobjectInstancesReflected count one; the unrelated received counter stays zero. Uses production membership, session authentication, receipt manager and MOM accounting, with explicitly wired in-process observers, not a server executable or Java callback campaign."}],
+      "open_items": ["The existing server test still only logs the standard encoded counter. The new component test asserts exact encoded metric snapshots; public QueryFederateAttributes and periodic standard reflection payloads still need equivalent server/selected-Java delivery assertions.", "Need restored/stale receipt lifecycle, cross-execution receipt replay, malformed receipt and terminal RO/TSO queue oracles. The focused test covers absent/foreign credentials and duplicate ENTRY/completion only, not every authentication or lifecycle condition.", "Failed completion after successful ENTRY preserves the received count in the focused test, but actual throwing user callback and selected-SDK propagation/receipt sequencing remain separate unverified facets."]
+    },
+    {
+      "id": "SM-MOM-TABLE7-REPORT-VALUES",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [300, 301, 302, 305],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Populate declaration, traffic, object information, module/MIM and synchronization reports using their Table 7 fields and actual target information.",
+      "conditions": "Include inherited subject parameters and correct per-class counts/transportation partitions; federation reports do not gain federate dimensions.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/handlers_catalog.go", "rti/internal/application/server/mom_catalog_sources.go"],
+      "tests": [{"path": "rti/internal/application/server/mom_full_standard_reports_test.go", "name": "TestMOMFullStandardReportsActualServer", "oracle": "Selected reports preserve target subject, nonempty encoded count arrays, real objectModel module text, registered/known class handles and actual object publication/subscription class/count fields."}],
+      "open_items": ["Nonzero count-array checks do not prove exact counts or every transportation partition.", "Need exact active flag, max update rate, owned attribute list, synchronization status tuples, missing-data NULL and malformed-encoding oracles."]
+    },
+    {
+      "id": "SM-MOM-TABLE7-SERVICE-DATATYPES",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [299, 302, 303, 304, 305],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Decode standard MOM adjustment and service parameters using the Table 7 handle, list, boolean, time, interval, transportation, order and opaque-data types.",
+      "conditions": "Optional service arguments remain optional; successful decode does not waive target-service preconditions or imply successful target effects.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/servicecatalog.go", "rti/internal/application/server/mom_service_execution.go"],
+      "tests": [{"path":"rti/internal/hla/mom/servicecatalog_test.go","name":"TestMOMServiceCatalogPositiveAndMalformedEachLeaf","oracle":"All 32 catalog leaves dispatch encoded positive parameters to the expected target/service; truncated target handle rejects without executor invocation and reports parameterError. Not every decoded parameter value is independently asserted."},{"path":"rti/internal/hla/mom/servicecatalog_test.go","name":"TestMOMServiceCatalogMissingMandatoryAndExecutorFailure","oracle":"Missing required parameters prevent execution and report parameter failure; executor errors remain failures rather than decode success or silent success."},{"path":"rti/internal/hla/mom/servicecatalog_test.go","name":"TestMOMServiceCatalogOptionalAttributePresence","oracle":"Two optional-attribute services preserve absent versus present encoded empty-list argument semantics."},{"path":"rti/internal/hla/mom/servicecatalog_test.go","name":"TestMOMServiceCatalogPresentNilOptionalArgumentIsNotOmitted","oracle":"Present nil optional list is rejected with no executor call, rather than treated as omitted."},{"path":"rti/internal/application/server/mom_service_catalog_rpc_acceptance_test.go","name":"TestMOMServiceCatalogAll32LeavesOverRPC","oracle":"32 leaves each run valid and unresolved-parameter RPC variants through production managers and in-process gRPC; selected actual declaration, membership, ownership, object, transport, async and time effects are checked, and bad parameter rejects with tracked state unchanged."}],
+      "open_items": ["Need independent source-derived byte vectors and exact decoded values for every datatype/service, malformed alignment/enums and both logical time families. Encoders shared with fixtures and selected target effects are not complete Table 7 datatype coverage."]
+    },
+    {
+      "id": "SM-MOM-ENCODING-HANDLES",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [294, 298, 300, 301],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Preserve full handle identity and list framing in MOM fields declared as handles or handle lists.",
+      "conditions": "Table 6/7 assign the types; byte-level normative datatype definitions require separate reconciliation. Product handles are eight-byte encodings inside length-framed arrays.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/instances.go"],
+      "tests": [{"path": "rti/internal/hla/mom/handle_encoding_test.go", "name": "TestMOMHandleEncodingPreservesUint64", "oracle": "Literal byte vectors cover small, above-uint32, high-bit and max-uint64 handles; report routing and subject encoding preserve each identity."}, {"path": "rti/internal/hla/mom/handle_encoding_test.go", "name": "TestMOMHandleListEncodingFramesEachUint64", "oracle": "Exact literal two-element list framing and four-byte zero-length empty list are compared byte-for-byte."}],
+      "open_items": ["Vectors reference the C++ product codec, not an independently adjudicated standard byte definition; do not claim external C++ binding verification.", "Need Java independent decode, malformed framing and valid opaque handle representations beyond the product's chosen encoding."]
+    },
+    {
+      "id": "SM-MOM-ENCODING-LOGICAL-TIME",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [295, 297, 298, 299, 304],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Preserve the execution's logical-time and interval representation in corresponding MOM fields and represent undefined arrays as empty.",
+      "conditions": "Exact Integer64 values must not pass through floating-point narrowing; datatype definition and API-specific factory interpretation remain separate source-review facets.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/time_values.go"],
+      "tests": [{"path": "rti/internal/hla/mom/integer64_review_test.go", "name": "TestReviewMOMExactIntegerAndLegacyFloatMetrics", "oracle": "Values above 2^53 and MaxInt64 retain exact length-eight framed payloads in logicalTime/lookahead/GALT/lastSaveTime/nextSaveTime; undefined LITS is empty; Float64 payload bits are retained."}],
+      "open_items": ["Stub metrics do not prove source service triggers or cross-binding live decode.", "Malformed logical-time lengths, factory mismatch, time/interval distinction and all Table 7 time parameters remain unlinked."]
+    },
+    {
+      "id": "SM-MOM-ENCODING-ARGUMENT-LISTS",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [301],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Encode service-report supplied and returned arguments using the declared argument-list type, with correct success, exception and serial fields.",
+      "conditions": "This is report payload encoding, not a requirement to use a particular textual rendering for every service argument without consulting datatype semantics.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/reporting.go"],
+      "tests": [{"path": "rti/internal/hla/mom/reporting_catalog_test.go", "name": "TestMOMServiceReportsEncodingAndSerialRestore", "oracle": "Literal UTF-16 argument-array bytes for a and bb verify framing/alignment; failed invocation returns empty array, advances serial after restore and emits an exception report."}],
+      "open_items": ["Need independent standard-Java decoder, non-ASCII/surrogate/alignment boundary and malformed argument array oracles.", "The complete datatype tables are not reviewed here; do not infer whole encoding conformance from selected literal vectors."]
+    },
+    {
+      "id": "SM-MOM-TABLE-SOURCE-PRECEDENCE",
+      "source_id": "S1516.1", "clause": "11.6", "pdf_pages": [292, 298, 299, 307],
+      "subject": "rti", "applicability": "unresolved",
+      "statement": "Use Clause 11 MOM definitions unchanged and give them precedence over conflicting Annex G MIM definitions.",
+      "conditions": "The active_candidate projection is an exact-red exclusion candidate, not an authoritative resolved edition. Visually reviewed page 296 is blank; page 298 retains apparent spelling/path anomalies.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/hla/mom/catalog.go"], "tests": [],
+      "open_items": ["HLAAnnexSaveName versus next-save naming is resolved and tested under JAVA2010-MIM-TABLE-PRECEDENCE. Reconcile the remaining conveyProducingFederate spelling/path variants and datatype/table line breaks against visual source and Annex G.", "Tables 8 onward and Tables 15/17 are not fully decomposed; 11.6 is deliberately omitted from reviewed_units.", "No raw standard text or table reproduction is included in this file."]
+    },
+    {
+      "id": "SM-CONFORMANCE-CERTIFIED-LABEL",
+      "source_id": "S1516.1",
+      "clause": "13",
+      "pdf_pages": [
+        390
+      ],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Use the HLA Conforming label only when publicly available results are certified by a recognized authority.",
+      "conditions": "Local engineering reviews and trusted Go/Python/Java result records are internal evidence, not recognized external certification. 2026-10-04 conditional audit: no recognized certificate or authority-certified public result is supplied; runtime tests cannot establish certification.",
+      "review_status": "source-reviewed",
+      "implementation": ["scripts/ieee2010_requirements_review.py"],
+      "tests": [{"path": "scripts/tests/test_ieee2010_certification_claim_guard.py", "name": "test_green_mapping_and_records_cannot_claim_hla_conforming", "oracle": "Runs the actual report builder with a fully linked applicable synthetic inventory, declared reviewed unit and exact passing execution record. JSON and printed summary still have full_conformance=false, coverage remains incomplete, semantic verdict remains open, the missing-certificate facet is retained and neither output emits the HLA Conforming label. This is a partial conservative product-claim guard, not certification evidence."}],
+      "open_items": [
+        "External certification/label entitlement remains unestablished, not waived. Applicability is retained as a conditional product-claim obligation. The linked report-claim guard cannot satisfy the external certificate/public-results condition.",
+        "This work makes no HLA Conforming claim. Later use requires independently recognized certification and public results, not internal passing records."
+      ]
+    },
+    {
+      "id": "SM-CONFORMANCE-FEDERATE-SOM",
+      "source_id": "S1516.1", "clause": "13.1", "pdf_pages": [390],
+      "subject": "federate", "applicability": "not-applicable",
+      "statement": "A conforming federate records the interface elements it uses in its SOM conformance table.",
+      "conditions": "SOM documentation follows IEEE 1516.2; arbitrary federate models and their SOMs are outside this RTI-only assessment.",
+      "review_status": "source-reviewed", "implementation": [], "tests": [],
+      "open_items": ["No federate-specific SOM was assessed; SDK service availability and RTI tests cannot substitute for this obligation."]
+    },
+    {
+      "id": "SM-CONFORMANCE-RTI-SERVICES",
+      "source_id": "S1516.1", "clause": "13.2", "pdf_pages": [390],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Implement all joined-federate initiated services and invoke all RTI-initiated services according to the specification.",
+      "conditions": "All normative service conditions, errors, side effects and callbacks count; selected test campaign success is not an exhaustive service census.",
+      "review_status": "source-reviewed", "implementation": ["rti/internal/application/server/mom_service_execution.go"],
+      "tests": [{"path":"rti/internal/application/server/mom_service_catalog_rpc_acceptance_test.go","name":"TestMOMServiceCatalogAll32LeavesOverRPC","oracle":"Selected 32 MOM service-bridge leaves exercise valid effects and invalid-parameter rejection with unchanged tracked state over in-process gRPC. Narrow service implementation evidence, not all RTI services or callbacks."}],
+      "open_items": ["Requires the main full-clause/service census and all conditions, errors, effects and callbacks; coverage_complete remains false. A linked MOM subset cannot establish 13.2 conformance or recognized certification."]
+    },
+    {
+      "id": "SM-CONFORMANCE-RTI-LANGUAGE-SCOPE",
+      "source_id": "S1516.1", "clause": "13.2", "pdf_pages": [390],
+      "subject": "rti", "applicability": "applicable",
+      "statement": "Implement at least one language API following Clause 12, assess the implemented language APIs and identify verified APIs in certified results.",
+      "conditions": "Current assessment scope is standard Java binding with Go/Python product interfaces; none of the retained campaign totals is a whole-API or external certification verdict.",
+      "review_status": "source-reviewed", "implementation": ["javasdk/client/src/main/java/org/gorti/rti/GortiRtiFactory.java"],
+      "tests": [{"path":"javasdk/client/src/test/java/org/gorti/rti/ProviderTest.java","name":"standardFactoryDiscovery","oracle":"Default/named/enumerated Java factory discovery yields the Gorti ambassador, integer32BE 42 encodes as bytes 0,0,0,42, and the selected time factory names Float64. Selected Java factory/encoding behavior only."}],
+      "open_items": ["Reconcile all Java declarations and semantic oracles with Clause 12; selected factory/encoding evidence is not whole API verification. Certified-results identification remains unevidenced.", "Do not infer C++ verification from prerequisite skips or extend this RTI assessment to arbitrary federation models. Separate campaign totals and executable hashes are provenance, not discharge of this requirement."]
+    }
+  ]
+}

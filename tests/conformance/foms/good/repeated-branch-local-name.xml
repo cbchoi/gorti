@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  HLAobjectRoot.A and HLAobjectRoot.B.A have distinct qualified identities.
+  Neither class has multiple parents.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>RepeatedBranchLocalName</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-29</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Distinct classes with the same local name in different branches.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>A</name>
+        <sharing>Neither</sharing>
+        <semantics>Class A directly under the root.</semantics>
+      </objectClass>
+      <objectClass>
+        <name>B</name>
+        <sharing>Neither</sharing>
+        <semantics>Container with its own class named A.</semantics>
+        <objectClass>
+          <name>A</name>
+          <sharing>Neither</sharing>
+          <semantics>A distinct class under B.</semantics>
+        </objectClass>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

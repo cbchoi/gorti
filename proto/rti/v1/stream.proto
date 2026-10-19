@@ -3,6 +3,8 @@ syntax = "proto3";
 package rti.v1;
 
 import "rti/v1/common.proto";
+import "rti/v1/object.proto";
+import "rti/v1/callback.proto";
 
 option go_package = "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1;rtiv1";
 
@@ -42,6 +44,14 @@ message FederateEventBatch {
 // tags. The 99 tag is reserved for FederationHalted (terminal).
 message FederateEvent {
   uint64 seq = 1;
+  // Opaque receipt for authenticated, actual SDK callback-invocation reports.
+  bytes callback_receipt = 2;
+  OwnershipCallbackReceipt ownership_receipt = 4;
+  // Per-recipient knowledge identity; changes on local-delete/rediscovery.
+  uint64 object_knowledge_epoch = 5;
+  // Restored invocation identity is not an authorization capability. An
+  // outcome-only carrier must never invoke its callback body again.
+  CallbackRecovery callback_recovery = 6;
   oneof event {
     DiscoverObjectInstance discover = 10;
     ReflectAttributeValues reflect = 11;
@@ -64,6 +74,7 @@ message FederateEvent {
     RequestAttributeOwnershipRelease ownership_release_requested = 33;
     // Ownership unavailable (§7.10) — M37.
     AttributeOwnershipUnavailable ownership_unavailable = 34;
+    ConfirmAttributeOwnershipAcquisitionCancellation ownership_acquisition_cancelled = 35;
     // Save (§4.8 / §4.9).
     InitiateFederateSave save_initiate = 40;
     FederationSaved save_completed = 41;
@@ -91,14 +102,36 @@ message FederateEvent {
     AttributesOutOfScope attributes_out_of_scope = 65;
     // Retraction (§8.22) — M37.
     RequestRetraction retraction_requested = 66;
+    TurnUpdatesOnForObjectInstance turn_updates_on = 67;
+    TurnUpdatesOffForObjectInstance turn_updates_off = 68;
+    LocalValidationBarrier local_validation_barrier = 69;
+    TimeRegulationEnabled time_regulation_enabled = 70;
+    TimeConstrainedEnabled time_constrained_enabled = 71;
+    // Activate the prepared ticket before invoking the transportation confirmation.
+    TransportationChange transportation_change_confirmed = 72;
     FederationHalted halted = 99;
   }
+}
+
+message CallbackRecovery {
+  bytes invocation_identity = 1;
+  bool outcome_only = 2;
+  // The server already applied the outcome; no receipt or body is carried.
+  bool completed = 3;
+}
+
+// Internal SDK snapshot marker, not an HLA federate callback.
+message LocalValidationBarrier {
+  uint64 snapshot_id = 1;
+  uint64 federate_handle = 2;
+  uint64 callback_epoch = 3;
 }
 
 message DiscoverObjectInstance {
   uint64 object_handle = 1;
   uint64 object_class_handle = 2;
   string object_name = 3;
+  optional uint64 producing_federate = 4;
 }
 
 message ReflectAttributeValues {
@@ -106,13 +139,18 @@ message ReflectAttributeValues {
   uint64 object_class_handle = 2;
   map<uint64, bytes> attributes = 3;
   optional double logical_time = 4;
+  LogicalTimeValue logical_time_value = 7;
+  bytes user_supplied_tag = 5;
+  ObjectCallbackMetadata metadata = 6;
 }
 
 message RemoveObjectInstance {
   uint64 object_handle = 1;
   optional double logical_time = 2;
+  LogicalTimeValue logical_time_value = 5;
   // M23 — user-supplied tag from the deleter (IEEE 1516.1-2010 §6.16).
   bytes user_supplied_tag = 3;
+  ObjectCallbackMetadata metadata = 4;
 }
 
 // ProvideAttributeValueUpdate — IEEE 1516.1-2010 §6.26 callback (M23).
@@ -130,10 +168,51 @@ message ReceiveInteraction {
   uint64 interaction_class_handle = 1;
   map<uint64, bytes> parameters = 2;
   optional double logical_time = 3;
+  LogicalTimeValue logical_time_value = 6;
+  bytes user_supplied_tag = 4;
+  ObjectCallbackMetadata metadata = 5;
+}
+
+// Absence means unavailable, including callbacks from legacy peers.
+message ObjectCallbackMetadata {
+  optional OrderType sent_order = 1;
+  optional OrderType received_order = 2;
+  optional TransportationType transportation_type = 3;
+  optional uint64 producing_federate = 4;
+  optional uint64 message_retraction_handle = 5;
+  ReceivedRegions received_regions = 6;
+}
+
+message ReceivedRegions {
+  repeated uint64 region_handles = 1;
+}
+
+message TurnUpdatesOnForObjectInstance {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+  optional string update_rate_designator = 3;
+}
+
+message TurnUpdatesOffForObjectInstance {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
 }
 
 message TimeAdvanceGrant {
   double logical_time = 1;
+  LogicalTimeValue logical_time_value = 2;
+}
+
+// IEEE 1516.1-2010 sections 8.3 and 8.6. Request acceptance is not
+// activation: these callbacks report the safe logical time chosen by the RTI.
+message TimeRegulationEnabled {
+  double logical_time = 1;
+  LogicalTimeValue logical_time_value = 2;
+}
+
+message TimeConstrainedEnabled {
+  double logical_time = 1;
+  LogicalTimeValue logical_time_value = 2;
 }
 
 message FederationHalted {
@@ -211,6 +290,7 @@ message AttributeOwnershipAcquisitionNotification {
   // this callback). Echoed in the body so federates with multiple
   // streams can correlate without consulting their own state.
   uint64 owning_federate = 3;
+  bytes tag = 4;
 }
 
 // RequestDivestitureConfirmation — IEEE 1516.1-2010 §7.3 (divestee
@@ -226,6 +306,12 @@ message RequestDivestitureConfirmation {
 // (owned by another federate with no completed divest). No pending
 // acquire is queued for these. M37.
 message AttributeOwnershipUnavailable {
+  uint64 object_handle = 1;
+  repeated uint64 attribute_handles = 2;
+}
+
+// Terminal cancellation confirmation for explicitly negotiated SDK clients.
+message ConfirmAttributeOwnershipAcquisitionCancellation {
   uint64 object_handle = 1;
   repeated uint64 attribute_handles = 2;
 }
@@ -251,6 +337,7 @@ message RequestAttributeOwnershipRelease {
 message InitiateFederateSave {
   string label = 1;
   optional double save_time = 2;
+  LogicalTimeValue save_time_value = 3;
 }
 
 // FederationSaved — IEEE 1516.1-2010 §4.9 federationSaved. Fires on
@@ -263,6 +350,10 @@ message FederationSaved {
 // on every federate when the save aborts.
 message FederationNotSaved {
   string label = 1;
+  // IEEE save failure: 1 RTI unable, 2 federate reported failure,
+  // 3 federate resigned, 4 RTI detected failure, 5 time cannot be honored,
+  // 6 save aborted. Absent means a legacy peer did not supply the cause.
+  optional int32 reason = 2;
 }
 
 // InitiateFederateRestore — IEEE 1516.1-2010 §4.13 initiateFederateRestore.
@@ -279,6 +370,8 @@ message InitiateFederateRestore {
   // carries the federate name alongside the handle). Empty when the
   // manager has no name on record. M37 (additive, tag 3).
   string federate_name = 3;
+  // Saved SDK runtime state for this participant; empty for legacy checkpoints.
+  bytes client_state = 4;
 }
 
 // RequestFederationRestoreSucceeded — IEEE 1516.1-2010 §4.25
@@ -311,6 +404,9 @@ message FederationRestoreBegun {
 // M17.25 (Cut-4).
 message FederationRestored {
   string label = 1;
+  optional uint64 federate_handle = 2;
+  optional uint64 callback_epoch = 3;
+  optional uint64 next_retraction_handle = 4;
 }
 
 // FederationNotRestored — IEEE 1516.1-2010 §4.14 federationNotRestored.
@@ -318,6 +414,9 @@ message FederationRestored {
 // not-complete or the bundle couldn't be loaded). M17.25 (Cut-4).
 message FederationNotRestored {
   string label = 1;
+  // IEEE restore failure: 1 RTI unable, 2 federate reported failure,
+  // 3 federate resigned, 4 RTI detected failure, 5 restore aborted.
+  optional int32 reason = 2;
 }
 
 // StartRegistrationForObjectClass — IEEE 1516.1-2010 §5.10. Fires on

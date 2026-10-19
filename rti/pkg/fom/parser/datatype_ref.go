@@ -2,13 +2,14 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cbchoi/gorti/rti/pkg/fom/mim"
 )
 
-// datatypeRefValidator emits FOM-001 for every attribute or parameter
-// whose declared dataType name does not resolve to either a MIM-provided
-// dataType or a type declared in the FOM module.
+// datatypeRefValidator emits FOM-001 for attribute, parameter, and time
+// descriptions whose dataType does not resolve to a MIM-provided type or
+// a type declared in the FOM module.
 //
 // The MIM-provided set is sourced from the embedded standard MIM via
 // mim.StandardMIMHandle (TASK-008 / TASK-009). Names covered include the
@@ -62,11 +63,16 @@ func (datatypeRefValidator) Run(in diagnosticInput) []Diagnostic {
 	}
 
 	var diags []Diagnostic
+	for _, dimension := range in.fom.Dimensions() {
+		if !resolves(dimension.DataType) {
+			diags = append(diags, Diagnostic{Code: undefinedDataTypeCode, ModulePath: in.modulePath, Message: fmt.Sprintf("DataType %q referenced by dimension %s but not defined", dimension.DataType, dimension.Name)})
+		}
+	}
 	for _, oc := range in.fom.ObjectClasses() {
 		for _, a := range oc.Attributes {
 			if !resolves(a.DataType) {
 				diags = append(diags, Diagnostic{
-					Code: "FOM-001",
+					Code: undefinedDataTypeCode,
 					Message: fmt.Sprintf(
 						"DataType %q referenced by attribute %s.%s but not defined",
 						a.DataType, oc.Name, a.Name,
@@ -80,11 +86,38 @@ func (datatypeRefValidator) Run(in diagnosticInput) []Diagnostic {
 		for _, p := range ic.Parameters {
 			if !resolves(p.DataType) {
 				diags = append(diags, Diagnostic{
-					Code: "FOM-001",
+					Code: undefinedDataTypeCode,
 					Message: fmt.Sprintf(
 						"DataType %q referenced by parameter %s.%s but not defined",
 						p.DataType, ic.Name, p.Name,
 					),
+					ModulePath: in.modulePath,
+				})
+			}
+		}
+	}
+	diags = append(diags, timeDataTypeDiagnostics(in, resolves)...)
+	return diags
+}
+
+func timeDataTypeDiagnostics(in diagnosticInput, resolves func(string) bool) []Diagnostic {
+	var diags []Diagnostic
+	if in.raw != nil && in.raw.Time != nil {
+		for _, field := range []struct {
+			name  string
+			value *xmlTimeRepresentation
+		}{
+			{"timeStamp", in.raw.Time.TimeStamp},
+			{"lookahead", in.raw.Time.Lookahead},
+		} {
+			if field.value == nil || field.value.DataType == nil {
+				continue
+			}
+			name := strings.TrimSpace(*field.value.DataType)
+			if name == "" || !resolves(name) {
+				diags = append(diags, Diagnostic{
+					Code:       undefinedDataTypeCode,
+					Message:    fmt.Sprintf("DataType %q referenced by time/%s but not defined", name, field.name),
 					ModulePath: in.modulePath,
 				})
 			}

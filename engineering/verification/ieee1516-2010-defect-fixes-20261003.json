@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-03",
+  "report": "engineering/verification/ieee1516-2010-defect-fixes-20261003.md",
+  "claim": "bounded-reproduced-defect-corrections",
+  "coverage_complete": false,
+  "full_conformance": false,
+  "server": {
+    "path": "D:/workspace/gorti/defect-fix-20261003/rtid-final.exe",
+    "sha256": "fc2bd04a5e64970e2dd0f6cb37f98741a257a578e273cae6458d4fd9602d75e8"
+  },
+  "live_defect_campaign": {
+    "passed": 22,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "fm": 6,
+    "object_time": 8,
+    "fom_admission": 8
+  },
+  "focused_sdk_recovery": {
+    "passed": 85,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "go_configured_retry": {
+    "top_level_passed": 3258,
+    "nested_passed": 6531,
+    "failed": 0,
+    "skipped_tests": 0,
+    "first_attempt_readiness_failures": 2,
+    "first_attempt_retained": true
+  },
+  "linux_race": {
+    "top_level_passed": 1459,
+    "nested_passed": 2290,
+    "failed": 0,
+    "race_warnings": 0,
+    "top_level_skipped": 2,
+    "nested_skipped": 8,
+    "skipped_scope": "real-endpoint DDM; executed by configured non-race campaign"
+  },
+  "python_hla_sdk": {
+    "passed": 2068,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 1,
+    "skipped_scope": "Optional C++ interoperability publisher binary not built",
+    "scope": "Selected HLA/SDK files; RL/pyjevsim optional-dependency suites not covered",
+    "earlier_stale_offline_contract_failures": 10,
+    "earlier_attempts_retained": true
+  },
+  "java": {
+    "passed": 540,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "live_endpoint": 66,
+    "live_restart": 6,
+    "historical_fixture": 6,
+    "other_unit_fixture": 462,
+    "invalid_name_ErrorReadingFDD_runtime_oracle": false
+  },
+  "evidence": [
+    {
+      "path": "D:/workspace/gorti/defect-fix-20261003/python-final/hla-sdk-final/results.xml",
+      "sha256": "a3e876453dd5ccb61f0251d48411ac55052a745d6dffb677f445851773824bdd"
+    },
+    {
+      "path": "D:/workspace/gorti/defect-fix-20261003/live-final-reviewed.xml",
+      "sha256": "016ea92fc7cb606ea7ddd36c7782011ca8c37899f10b84a6d4a719fd2103b3bc"
+    },
+    {
+      "path": "D:/workspace/gorti/defect-fix-20261003/join-heuristic-final.xml",
+      "sha256": "403615c69b00732dc28ff48219d9f576f32c80d175930f730532c2691e6bfea1"
+    },
+    {
+      "path": "D:/workspace/gorti/defect-fix-20261003/final-go-all-configured-retry-p2.jsonl",
+      "sha256": "bcd5a9173bccdfb35470cdccdb490222b238da33446a6f43a18efc63b1becd0e"
+    },
+    {
+      "path": "D:/workspace/gorti/defect-fix-20261003/final-go-race.jsonl",
+      "sha256": "5f4df811bd9cd1ef2a065ff968412ff4a691d2c9093b5fd14bcf3af9a182c760"
+    },
+    {
+      "path": "D:/workspace/gorti/defect-fix-20261003/java-final/results-summary.json",
+      "sha256": "d35bc3ab59fd98a3d8da7a40496d6bfa065e09b6d2ead6037471ce64702b005b"
+    }
+  ],
+  "scope_limited_source_hashes": [
+    {
+      "path": "rti/internal/hla/core/errors.go",
+      "sha256": "2a9457ce5caa8e133ef37de7898710317a158c73c520301bfb5bcaea786b7426"
+    },
+    {
+      "path": "rti/internal/hla/federation/manager.go",
+      "sha256": "7f560f6cf7a87bf89b1de46ee2773e2842b207ee66e1d953e61e3495992f16f8"
+    },
+    {
+      "path": "rti/internal/hla/object/update.go",
+      "sha256": "2048b2518323f7cdcf6adc20024969f5ff3987f7624ebc1c35c539ca3f3a61a0"
+    },
+    {
+      "path": "rti/internal/hla/time/asyncdelivery.go",
+      "sha256": "7c574276f5b8df952c99c8efd9657ad7a849094bdb422be1a324d722a929166a"
+    },
+    {
+      "path": "rti/internal/hla/time/deletion_ties.go",
+      "sha256": "ba8c4c7b622f46059f470466eba94deef2c776ca952db19b900e31df2059e945"
+    },
+    {
+      "path": "rti/pkg/fom/parser/local_names.go",
+      "sha256": "b75dc5b5c3ec96793b4e1516dc357aed920c36f5bb9e4b3ffa8e247f43f3192f"
+    },
+    {
+      "path": "rti/internal/application/composition/fom_repository.go",
+      "sha256": "520db8d4bdf24168f5ee867f1b40b69f71196a68459fc36bbac39166f15259ce"
+    },
+    {
+      "path": "rti/internal/adapters/grpc/errs.go",
+      "sha256": "69f198c776ba57341b14cb653ded57ab73be6f7ca9c909e44045e169f2e6734d"
+    },
+    {
+      "path": "rti/internal/adapters/grpc/spec_exception.go",
+      "sha256": "4e2d14d115b91c334eafae8696e71f8d50b8b4eb543b70aba126d050d6581d2c"
+    },
+    {
+      "path": "pysdk/rti1516e/standard.py",
+      "sha256": "72959045b35e735e5680c2413784bb5f652ea8406ab1f0bb0d099a6aad5ea999"
+    },
+    {
+      "path": "pysdk/rti1516e/connection.py",
+      "sha256": "84cbbae5d354eae893d106bd3f7f368d924cee9f08fdd59f80860cb523ff2d39"
+    },
+    {
+      "path": "pysdk/rti1516e/errors.py",
+      "sha256": "7055fda9fd595c63b9e14f7fdd89dc869fdc7a85581583b92c1cb44132019e69"
+    },
+    {
+      "path": "pysdk/tests/test_ieee2010_fm_completion_live.py",
+      "sha256": "738d322c31db4ec651f70e9b47b92c64a62e89b5d4c75da8b896c6c3c003fd41"
+    },
+    {
+      "path": "pysdk/tests/test_ieee2010_order_completion_live.py",
+      "sha256": "e260111b3e334bafbef828d27e0de582184217cdc8db755ed90612aab11637fb"
+    },
+    {
+      "path": "pysdk/tests/test_ieee2010_fom_name_completion_live.py",
+      "sha256": "fb837d1c1f14a2f401d909c38ae6e89870b53487e023477a9c8a9919d7266551"
+    },
+    {
+      "path": "pysdk/rti1516e/_grpc_errors.py",
+      "sha256": "922a8060ab1acb5b4191102f3dad0f41b8191bc596aea9ef963d4b9eab4aaf52"
+    },
+    {
+      "path": "pysdk/tests/test_join_rejection_recovery.py",
+      "sha256": "c68f18c8a68a9e756388046211009344d7b86018e321f547aa121afaa0f12e48"
+    }
+  ],
+  "remaining_proof": [
+    "Whole clauses are not closed by bounded passing oracles.",
+    "Unlinked source obligations, applicability and callback/statechart/table/schema/API coverage remain.",
+    "This source hash list is not a complete working-tree inventory.",
+    "Python HLA/SDK broad results are recorded separately in the report; unrestricted repository suite dependencies are not implied available."
+  ]
+}

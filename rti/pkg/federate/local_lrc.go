@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -47,6 +47,7 @@ type localLRC struct {
 	closing     bool
 	closingFlag atomic.Bool
 	next        uint64
+	ticketBase  uint64 // immutable offset for public tickets; wire sequences restart
 
 	stateMu         sync.Mutex
 	acked           uint64
@@ -80,6 +81,9 @@ func (f *Federate) QueueAttributeValuesByHandle(
 	objectHandle uint64,
 	attributes map[uint64][]byte,
 ) (uint64, error) {
+	if f != nil && f.restoreLocalDisabled.Load() {
+		return 0, ErrLocalLRCRestoreStateUnavailable
+	}
 	if err := f.validateQueuedAttributeUpdate(objectHandle, attributes); err != nil {
 		return 0, err
 	}
@@ -88,7 +92,7 @@ func (f *Federate) QueueAttributeValuesByHandle(
 		return 0, err
 	}
 	owned := cloneLocalLRCPayloads(attributes)
-	return lrc.enqueue(ctx, func(sequence uint64) *rtiv1.LocalLRCOperation {
+	return lrc.enqueueTicket(ctx, func(sequence uint64) *rtiv1.LocalLRCOperation {
 		return &rtiv1.LocalLRCOperation{Body: &rtiv1.LocalLRCOperation_AttributeUpdate{
 			AttributeUpdate: &rtiv1.LocalLRCAttributeUpdate{
 				Sequence: sequence, ObjectHandle: objectHandle, Attributes: owned,
@@ -104,6 +108,9 @@ func (f *Federate) QueueInteractionByHandle(
 	classHandle uint64,
 	parameters map[uint64][]byte,
 ) (uint64, error) {
+	if f != nil && f.restoreLocalDisabled.Load() {
+		return 0, ErrLocalLRCRestoreStateUnavailable
+	}
 	if err := f.validateQueuedInteraction(classHandle, parameters); err != nil {
 		return 0, err
 	}
@@ -112,7 +119,7 @@ func (f *Federate) QueueInteractionByHandle(
 		return 0, err
 	}
 	owned := cloneLocalLRCPayloads(parameters)
-	return lrc.enqueue(ctx, func(sequence uint64) *rtiv1.LocalLRCOperation {
+	return lrc.enqueueTicket(ctx, func(sequence uint64) *rtiv1.LocalLRCOperation {
 		return &rtiv1.LocalLRCOperation{Body: &rtiv1.LocalLRCOperation_Interaction{
 			Interaction: &rtiv1.LocalLRCInteraction{
 				Sequence: sequence, InteractionClassHandle: classHandle, Parameters: owned,
@@ -141,12 +148,18 @@ func (f *Federate) AwaitLocalLRC(ctx context.Context, sequence uint64) error {
 		return nil
 	}
 	f.localLRCMu.Lock()
+	for _, retired := range f.retiredLocalLRC {
+		if sequence > retired.base && sequence <= retired.last {
+			f.localLRCMu.Unlock()
+			return retired.result(sequence)
+		}
+	}
 	lrc := f.localLRC
 	f.localLRCMu.Unlock()
-	if lrc == nil {
+	if lrc == nil || sequence <= lrc.ticketBase {
 		return fmt.Errorf("%w: %d", ErrLocalLRCSequenceNotAdmitted, sequence)
 	}
-	return lrc.await(ctx, sequence)
+	return lrc.await(ctx, sequence-lrc.ticketBase)
 }
 
 func (f *Federate) LocalLRCStats() LocalLRCStats {
@@ -174,6 +187,9 @@ func (f *Federate) LocalLRCStats() LocalLRCStats {
 }
 
 func (f *Federate) ensureLocalLRC(ctx context.Context) (*localLRC, error) {
+	if f.restoreLocalDisabled.Load() {
+		return nil, ErrLocalLRCRestoreStateUnavailable
+	}
 	if f.localLRCUnsupported.Load() {
 		return nil, ErrLocalLRCUnavailable
 	}
@@ -182,6 +198,9 @@ func (f *Federate) ensureLocalLRC(ctx context.Context) (*localLRC, error) {
 	}
 	f.localLRCMu.Lock()
 	defer f.localLRCMu.Unlock()
+	if f.restoreLocalDisabled.Load() {
+		return nil, ErrLocalLRCRestoreStateUnavailable
+	}
 	if f.localLRCClosing.Load() {
 		return nil, ErrLocalLRCClosed
 	}
@@ -199,19 +218,21 @@ func (f *Federate) ensureLocalLRC(ctx context.Context) (*localLRC, error) {
 		}
 		return nil, wrapStatusErr(err)
 	}
+	lrc.ticketBase = f.localTicketBase
 	f.localLRC = lrc
 	return lrc, nil
 }
 
 func (f *Federate) useLocalLRCForReceiveOrder() bool {
 	return f != nil && f.conn != nil &&
+		!f.restoreLocalDisabled.Load() &&
 		f.conn.receiveOrderTransport == ReceiveOrderTransportLocalLRC &&
 		f.conn.localLRCEnabled && f.conn.localLRC != nil &&
 		!f.localLRCUnsupported.Load()
 }
 
 func openLocalLRC(ctx context.Context, f *Federate) (*localLRC, error) {
-	streamCtx, cancel := context.WithCancel(context.Background())
+	streamCtx, cancel := context.WithCancel(f.sessionContext(f.transportLifetime().ctx))
 	stopCaller := context.AfterFunc(ctx, cancel)
 	stream, err := f.conn.localLRC.Exchange(streamCtx)
 	if err != nil {
@@ -223,7 +244,7 @@ func openLocalLRC(ctx context.Context, f *Federate) (*localLRC, error) {
 		Open: &rtiv1.LocalLRCOpen{
 			WireVersion:                  rtiv1.WireVersion_WIRE_VERSION_V1,
 			FederationName:               f.federationName,
-			FederateHandle:               f.federateHandle,
+			FederateHandle:               f.CurrentHandle(),
 			ExpectedFederationGeneration: f.federationGeneration,
 			AckEvery:                     f.conn.localLRCAckEvery,
 			RequestedMaxBatchOperations:  f.conn.localLRCBatchSize,
@@ -276,6 +297,9 @@ func (l *localLRC) enqueue(
 	defer l.admitMu.Unlock()
 	if l.closing {
 		return 0, ErrLocalLRCClosed
+	}
+	if l.next == ^uint64(0)-l.ticketBase {
+		return 0, fmt.Errorf("federate: LocalLRC public tickets exhausted")
 	}
 	if err := l.failureErr(); err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrLocalLRCIndeterminate, err)
@@ -382,46 +406,11 @@ func (l *localLRC) sendLoop() {
 			continue
 		}
 
-		operations := make([]*rtiv1.LocalLRCOperation, 0, l.batchSize)
-		operations = append(operations, item.operation)
-		sentThrough := item.sequence
-		timer.Reset(localLRCBatchDelay)
-		timerFired := false
-	collect:
-		for len(operations) < l.batchSize {
-			select {
-			case next := <-l.queue:
-				if next.operation == nil {
-					pending = next
-					hasPending = true
-					break collect
-				}
-				operations = append(operations, next.operation)
-				sentThrough = next.sequence
-			case <-timer.C:
-				timerFired = true
-				break collect
-			case <-l.stop:
-				stopAndDrainLocalLRCTimer(timer, timerFired)
-				return
-			}
-		}
-		stopAndDrainLocalLRCTimer(timer, timerFired)
-		// Publish the upper bound before Send: the peer may process and ACK
-		// the frame before grpc.Send returns to this goroutine.
-		l.counters.sent.Store(sentThrough)
-		request := &rtiv1.LocalLRCRequest{Body: &rtiv1.LocalLRCRequest_Batch{
-			Batch: &rtiv1.LocalLRCBatch{Operations: operations},
-		}}
-		if len(operations) == 1 {
-			request = localLRCRequestForOperation(operations[0])
-		}
-		if err := l.stream.Send(request); err != nil {
-			l.fail(err)
+		var sent bool
+		pending, hasPending, sent = l.sendLocalLRCBatch(item, timer)
+		if !sent {
 			return
 		}
-		l.counters.operationFrames.Add(1)
-		recordLocalLRCMaxFrameOperations(&l.counters.maxFrameOperations, uint64(len(operations)))
 	}
 }
 
@@ -496,6 +485,10 @@ func (l *localLRC) receiveLoop() {
 			return
 		}
 		l.stateMu.Lock()
+		if l.failure != nil {
+			l.stateMu.Unlock()
+			return
+		}
 		if committed < l.acked {
 			previous := l.acked
 			l.stateMu.Unlock()
@@ -647,4 +640,50 @@ func cloneLocalLRCPayloads(input map[uint64][]byte) map[uint64][]byte {
 		output[handle] = append([]byte(nil), payload...)
 	}
 	return output
+}
+
+func (l *localLRC) sendLocalLRCBatch(item localLRCQueueItem, timer *time.Timer) (localLRCQueueItem, bool, bool) {
+	var pending localLRCQueueItem
+	hasPending := false
+	operations := make([]*rtiv1.LocalLRCOperation, 0, l.batchSize)
+	operations = append(operations, item.operation)
+	sentThrough := item.sequence
+	timer.Reset(localLRCBatchDelay)
+	timerFired := false
+collect:
+	for len(operations) < l.batchSize {
+		select {
+		case next := <-l.queue:
+			if next.operation == nil {
+				pending = next
+				hasPending = true
+				break collect
+			}
+			operations = append(operations, next.operation)
+			sentThrough = next.sequence
+		case <-timer.C:
+			timerFired = true
+			break collect
+		case <-l.stop:
+			stopAndDrainLocalLRCTimer(timer, timerFired)
+			return pending, hasPending, false
+		}
+	}
+	stopAndDrainLocalLRCTimer(timer, timerFired)
+	// Publish the upper bound before Send: the peer may process and ACK
+	// the frame before grpc.Send returns to this goroutine.
+	l.counters.sent.Store(sentThrough)
+	request := &rtiv1.LocalLRCRequest{Body: &rtiv1.LocalLRCRequest_Batch{
+		Batch: &rtiv1.LocalLRCBatch{Operations: operations},
+	}}
+	if len(operations) == 1 {
+		request = localLRCRequestForOperation(operations[0])
+	}
+	if err := l.stream.Send(request); err != nil {
+		l.fail(err)
+		return pending, hasPending, false
+	}
+	l.counters.operationFrames.Add(1)
+	recordLocalLRCMaxFrameOperations(&l.counters.maxFrameOperations, uint64(len(operations)))
+	return pending, hasPending, true
 }

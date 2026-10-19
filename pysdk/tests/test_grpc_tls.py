@@ -43,6 +43,7 @@ if str(PYSDK) not in sys.path:
 from rti1516e._transport import build_grpc_transport
 from rti1516e.connection import FederationSpec, RtiConnection
 from rti1516e.events import ReceiveInteraction
+from tests._legacy_server import build_rtid, spawn_rtid
 
 if TYPE_CHECKING:
     from rti1516e._transport import GrpcTransport
@@ -195,19 +196,11 @@ def test_rti_connection_rejects_unknown_scheme() -> None:
 
 
 def _build_rtid_binary() -> Path | None:
-    """Build the rtid binary into ``bin/rtid``. Returns None when ``go`` is
+    """Build a fresh external rtid. Returns None when ``go`` is
     not available (test will skip)."""
     if shutil.which("go") is None:
         return None
-    bin_dir = REPO_ROOT / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    binary = bin_dir / "rtid"
-    subprocess.run(  # noqa: S603 — controlled args
-        ["go", "build", "-o", str(binary), "./rti/cmd/rtid"],  # noqa: S607 — ``go`` is the standard toolchain
-        cwd=REPO_ROOT,
-        check=True,
-    )
-    return binary
+    return build_rtid()
 
 
 async def _wait_for_tcp(port: int, timeout: float = 10.0) -> None:  # noqa: ASYNC109 — explicit timeout matches cross_lang_runner pattern
@@ -256,18 +249,8 @@ def test_grpcs_end_to_end_connects_to_tls_rtid(tmp_path: Path) -> None:
         / "pyjevsim-bridge.xml"
     )
 
-    proc = subprocess.Popen(  # noqa: S603 — controlled args
-        [
-            str(binary),
-            "--listen", f":{port}",
-            "--metrics-listen", f":{metrics_port}",
-            "--log-level", "warn",
-            "--tls-cert", str(cert_path),
-            "--tls-key", str(key_path),
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,  # noqa: S101 — detach so test signals don't kill rtid early
+    proc = spawn_rtid(
+        binary, port, metrics_port, tls_cert=cert_path, tls_key=key_path,
     )
 
     async def _exercise() -> None:

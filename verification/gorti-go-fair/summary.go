@@ -6,29 +6,39 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/cbchoi/gorti/rti/pkg/federate"
 )
 
 const participantSummarySchema = "gorti.devstone.participant-summary/v1"
 
 type participantSummary struct {
-	Schema                        string                    `json:"schema"`
-	Role                          role                      `json:"role"`
-	Seed                          uint64                    `json:"seed"`
-	Count                         int                       `json:"count"`
-	PlanSHA256                    string                    `json:"plan_sha256"`
-	TopologySHA256                string                    `json:"topology_sha256"`
-	Status                        string                    `json:"status"`
-	Ready                         bool                      `json:"ready"`
-	Measure                       bool                      `json:"measure"`
-	Start                         bool                      `json:"start"`
-	Done                          bool                      `json:"done"`
-	CallbackAccounting            callbackAccountingSummary `json:"callback_accounting"`
-	AttributeArrivalOrderSHA256   string                    `json:"attribute_arrival_order_sha256"`
-	InteractionArrivalOrderSHA256 string                    `json:"interaction_arrival_order_sha256"`
-	CallbackTraceSHA256           string                    `json:"callback_trace_sha256"`
-	UpdateAttributeValuesMedianNS *int64                    `json:"update_attribute_values_median_ns,omitempty"`
-	SendInteractionMedianNS       *int64                    `json:"send_interaction_median_ns,omitempty"`
-	CompletedReceiveOrderBatchNS  *int64                    `json:"completed_receive_order_batch_ns,omitempty"`
+	Schema                        string                                 `json:"schema"`
+	Role                          role                                   `json:"role"`
+	Seed                          uint64                                 `json:"seed"`
+	Count                         int                                    `json:"count"`
+	PlanSHA256                    string                                 `json:"plan_sha256"`
+	TopologySHA256                string                                 `json:"topology_sha256"`
+	Status                        string                                 `json:"status"`
+	Ready                         bool                                   `json:"ready"`
+	Measure                       bool                                   `json:"measure"`
+	Start                         bool                                   `json:"start"`
+	Done                          bool                                   `json:"done"`
+	CallbackAccounting            callbackAccountingSummary              `json:"callback_accounting"`
+	AttributeArrivalOrderSHA256   string                                 `json:"attribute_arrival_order_sha256"`
+	InteractionArrivalOrderSHA256 string                                 `json:"interaction_arrival_order_sha256"`
+	CallbackTraceSHA256           string                                 `json:"callback_trace_sha256"`
+	UpdateAttributeValuesMedianNS *int64                                 `json:"update_attribute_values_median_ns,omitempty"`
+	SendInteractionMedianNS       *int64                                 `json:"send_interaction_median_ns,omitempty"`
+	CompletedReceiveOrderBatchNS  *int64                                 `json:"completed_receive_order_batch_ns,omitempty"`
+	CallbackReportingProfile      string                                 `json:"callback_reporting_profile,omitempty"`
+	CallbackReportTransport       *federate.CallbackReportTransportStats `json:"callback_report_transport,omitempty"`
+	LocalLRCTransport             *federate.LocalLRCStats                `json:"local_lrc_transport,omitempty"`
+}
+
+type participantTransportStats struct {
+	Callbacks federate.CallbackReportTransportStats
+	LocalLRC  federate.LocalLRCStats
 }
 
 type callbackAccountingSummary struct {
@@ -72,6 +82,7 @@ func writeParticipantSummary(
 	plan *workloadPlan,
 	state *eventState,
 	log *runLog,
+	transport ...participantTransportStats,
 ) error {
 	if !cfg.CompactSummary || plan == nil || state == nil || log == nil || !log.compact {
 		return errors.New("compact participant summary is not initialized")
@@ -116,6 +127,11 @@ func writeParticipantSummary(
 		UpdateAttributeValuesMedianNS: measurements.UpdateAttributeValuesMedianNS,
 		SendInteractionMedianNS:       measurements.SendInteractionMedianNS,
 		CompletedReceiveOrderBatchNS:  measurements.CompletedReceiveOrderBatchNS,
+	}
+	if len(transport) != 0 {
+		summary.CallbackReportingProfile = federate.CallbackReportingProfile()
+		summary.CallbackReportTransport = &transport[0].Callbacks
+		summary.LocalLRCTransport = &transport[0].LocalLRC
 	}
 	encoded, err := json.Marshal(summary)
 	if err != nil {

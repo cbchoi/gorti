@@ -25,10 +25,13 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.spec.m5._helpers import _build_rtid, _free_port, _spawn_rtid, _wait_for_grpc
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 EXAMPLES_DIR = REPO_ROOT / "examples" / "pyjevsim"
@@ -53,11 +56,23 @@ def test_spec_m5_python_federate_joins_go_federation() -> None:
     # Lazy import: keeps the module-level test-collection cost low and
     # lets the skip above fire BEFORE we try to import code that may
     # itself require a running rtid (or a freshly built one).
-    from cross_lang_runner import (
-        run_cross_language_smoke,
-    )
+    from cross_lang_runner import _drive_python_federates
 
-    result = asyncio.run(run_cross_language_smoke(rounds=5))
+    async def run_isolated_smoke():
+        port = _free_port()
+        proc = _spawn_rtid(_build_rtid(), port, 0)
+        try:
+            await _wait_for_grpc(port)
+            return await _drive_python_federates(url=f"grpc://127.0.0.1:{port}", rounds=5)
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+
+    result = asyncio.run(run_isolated_smoke())
     assert result["py_pub_sent"] == 5, (
         f"publisher sent {result['py_pub_sent']} interactions; "
         f"expected exactly 5"

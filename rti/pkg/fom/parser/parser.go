@@ -8,7 +8,6 @@
 package parser
 
 import (
-	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -50,6 +49,17 @@ type Diagnostic struct {
 // failure the FOM field is nil; callers must inspect Diagnostics. The error
 // return is reserved for I/O / encoding failures unrelated to FOM content.
 func Parse(modules []Module) (Result, error) {
+	return parseModules(modules)
+}
+
+// ParseAdditive combines class contributions using the same admission rules as
+// Parse. New classes and scaffolding completion are allowed, but a complete
+// class's local member set cannot change. This is not a complete FOM validator.
+func ParseAdditive(modules []Module) (Result, error) {
+	return parseModules(modules)
+}
+
+func parseModules(modules []Module) (Result, error) {
 	var (
 		objectClasses      []model.ObjectClass
 		interactionClasses []model.InteractionClass
@@ -58,6 +68,11 @@ func Parse(modules []Module) (Result, error) {
 	)
 
 	var dimensions []model.Dimension
+	var updateRates []model.UpdateRate
+	var transportations []model.Transportation
+	var advisorySwitches []model.AdvisorySwitch
+	var automaticResign string
+	var dimensionInputs []diagnosticInput
 
 	for _, m := range modules {
 		om, err := decodeModule(m)
@@ -75,9 +90,25 @@ func Parse(modules []Module) (Result, error) {
 			flattenInteractionClasses(om.Interactions.InteractionClass, "", &modInteractions)
 		}
 		modDataTypes := convertDataTypes(om.DataTypes)
-		modDimensions := convertDimensions(om.Dimensions)
+		modDimensions, dimensionDiags := convertDimensions(om.Dimensions)
+		var updateRateDiags []Diagnostic
+		updateRates, updateRateDiags = mergeUpdateRateDeclarations(m.Path, updateRates, om.UpdateRates)
+		diagnostics = append(diagnostics, updateRateDiags...)
+		var transportationDiags []Diagnostic
+		transportations, transportationDiags = mergeTransportationDeclarations(m.Path, transportations, om.Transportations)
+		diagnostics = append(diagnostics, transportationDiags...)
+		var advisoryDiags []Diagnostic
+		advisorySwitches, advisoryDiags = mergeAdvisoryDeclarations(m.Path, advisorySwitches, om.Switches)
+		diagnostics = append(diagnostics, advisoryDiags...)
+		automaticResign, advisoryDiags = mergeAutomaticResign(m.Path, automaticResign, om.Switches)
+		diagnostics = append(diagnostics, advisoryDiags...)
+		for i := range dimensionDiags {
+			dimensionDiags[i].ModulePath = m.Path
+		}
+		diagnostics = append(diagnostics, dimensionDiags...)
 
 		modFOM := model.NewFOMWithDimensions(modObjects, modInteractions, modDataTypes, modDimensions)
+		dimensionInputs = append(dimensionInputs, diagnosticInput{modulePath: m.Path, fom: modFOM})
 		modDiags := runDiagnosers(diagnosticInput{
 			modulePath: m.Path,
 			xml:        m.XML,
@@ -89,16 +120,30 @@ func Parse(modules []Module) (Result, error) {
 		}
 		diagnostics = append(diagnostics, modDiags...)
 
-		objectClasses = append(objectClasses, modObjects...)
-		interactionClasses = append(interactionClasses, modInteractions...)
+		var mergeDiags []Diagnostic
+		objectClasses, interactionClasses, mergeDiags = mergeClassDeclarations(m.Path, objectClasses, interactionClasses, modObjects, modInteractions)
+		diagnostics = append(diagnostics, mergeDiags...)
 		dataTypes = append(dataTypes, modDataTypes...)
-		dimensions = append(dimensions, modDimensions...)
+		dimensions, dimensionDiags = mergeDimensionDeclarations(m.Path, dimensions, modDimensions)
+		diagnostics = append(diagnostics, dimensionDiags...)
 	}
 
 	if len(diagnostics) > 0 {
 		return Result{Diagnostics: diagnostics}, nil
 	}
-	fom := model.NewFOMWithDimensions(objectClasses, interactionClasses, dataTypes, dimensions)
+	fom := model.NewFOMWithUpdateRates(objectClasses, interactionClasses, dataTypes, dimensions, updateRates)
+	fom = fom.WithTransportations(transportations)
+	fom = fom.WithAdvisorySwitches(advisorySwitches)
+	fom = fom.WithAutomaticResignAction(automaticResign)
+	diagnostics = append(diagnostics, validateDimensionReferences(dimensionInputs, dimensions)...)
+	if len(modules) > 1 {
+		merged := diagnosticInput{modulePath: "<merged>", fom: fom}
+		diagnostics = append(diagnostics, (duplicateAttributeValidator{}).Run(merged)...)
+		diagnostics = append(diagnostics, (duplicateParameterValidator{}).Run(merged)...)
+	}
+	if len(diagnostics) > 0 {
+		return Result{Diagnostics: diagnostics}, nil
+	}
 	return Result{FOM: fom}, nil
 }
 
@@ -107,7 +152,7 @@ func Parse(modules []Module) (Result, error) {
 // returns an error. Schema-level validation (unknown elements, required
 // attributes) is handled by later TASK-002..009 diagnostic passes.
 func decodeModule(m Module) (*xmlObjectModel, error) {
-	dec := xml.NewDecoder(bytes.NewReader(m.XML))
+	dec := xml.NewTokenDecoder(newSemanticXMLTokens(m.XML))
 	var om xmlObjectModel
 	if err := dec.Decode(&om); err != nil {
 		return nil, err

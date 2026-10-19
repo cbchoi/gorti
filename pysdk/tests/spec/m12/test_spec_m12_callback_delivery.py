@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-import sys
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 
+from rti1516e.errors import SynchronizationPointLabelNotAnnounced
 from rti1516e.events import (
     FederationSynchronized,
     SynchronizationPointAnnounced,
@@ -40,8 +40,6 @@ def _go_or_skip() -> None:
     """Skip the test when the go toolchain is not on PATH."""
     if shutil.which("go") is None:
         pytest.skip("go toolchain not on PATH; cannot build rtid for the smoke test")
-    if sys.platform == "win32":  # pragma: no cover - CI is linux/mac
-        pytest.skip("rtid subprocess harness is POSIX-only at this cut")
 
 
 # noqa: ASYNC109 — ``timeout`` is the deadline for the entire poll
@@ -124,10 +122,15 @@ async def _run() -> None:
         assert announced_b.label == label
         assert announced_b.tag == b"hello"
 
-        # 3. Both federates achieve. The manager closes out and emits
-        #    FederationSynchronized to every required federate.
-        await fed_a.sync.synchronization_point_achieved(label)
-        await fed_b.sync.synchronization_point_achieved(label)
+        for fed, announcement in ((fed_a, announced_a), (fed_b, announced_b)):
+            with pytest.raises(SynchronizationPointLabelNotAnnounced):
+                await fed.sync.synchronization_point_achieved(label)
+
+            async def achieve(event, participant=fed):
+                assert event.label == label
+                await participant.sync.synchronization_point_achieved(event.label)
+
+            await fed.dispatch_event(announcement, achieve)
 
         # 4. Drain the FederationSynchronized callback on both sides.
         sync_a, sync_b = await asyncio.gather(
@@ -144,16 +147,5 @@ async def _run() -> None:
         assert sync_a.label == label
         assert isinstance(sync_b, FederationSynchronized)
         assert sync_b.label == label
-
-
-# Save-side callback delivery deferred: the production rtid wires
-# savepoint.Manager without a MembersResolver (see
-# rti/cmd/rtid/main.go around line 664), so the request-save fan-out
-# fires a single broadcast envelope addressed to InvalidFederateHandle.
-# multiOutbox.Send drops events with no matching subscription, so the
-# typed InitiateFederateSave never reaches the federate's stream
-# until rtid wires MembersResolver. The proto + manager + emission
-# wiring are all in place; this is an rtid composition gap, not a
-# proto / SDK gap. The sync-side test above is the definitive
-# deferral-#1-closed assertion (it pins the required set explicitly,
-# so the fan-out targets real federate handles).
+        await fed_a.dispatch_event(sync_a, lambda event: None)
+        await fed_b.dispatch_event(sync_b, lambda event: None)

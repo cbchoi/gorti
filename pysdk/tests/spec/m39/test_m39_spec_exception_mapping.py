@@ -132,6 +132,27 @@ def test_metadata_value_accepts_bytes() -> None:
         translate_rpc_error(exc)
 
 
+@pytest.mark.parametrize("detail", ["federate has pending ownership acquisitions", ""])
+@pytest.mark.parametrize(
+    "wire_name", ["OwnershipAcquisitionPending", b"OwnershipAcquisitionPending"]
+)
+def test_pending_ownership_metadata_preserves_exact_public_exception(detail, wire_name):
+    import rti1516e
+
+    original = FakeAioRpcError(
+        code="FAILED_PRECONDITION", details=detail,
+        trailing=[("rti-spec-exception", wire_name)],
+    )
+    with pytest.raises(RtiError) as caught:
+        translate_rpc_error(original)
+    assert type(caught.value).__name__ == "OwnershipAcquisitionPending"
+    assert type(caught.value) is rti1516e.OwnershipAcquisitionPending
+    assert "OwnershipAcquisitionPending" in rti1516e.__all__
+    assert spec_exception_table()["OwnershipAcquisitionPending"] is type(caught.value)
+    assert caught.value.__cause__ is original
+    assert str(caught.value) == (detail or "FAILED_PRECONDITION")
+
+
 def test_unknown_metadata_name_falls_back_to_heuristics() -> None:
     """A spec name this pysdk predates falls through to the code/detail
     heuristics instead of failing the translation."""
@@ -173,7 +194,7 @@ def test_table_covers_every_rtierror_subclass_by_name() -> None:
 def test_table_covers_every_server_sent_name() -> None:
     """Drift guard against server half: every Annex C name the
     rtid's specExceptionTable can attach (quoted strings in
-    rti/internal/transport/grpc/spec_exception.go) must resolve to a
+    rti/internal/adapters/grpc/spec_exception.go) must resolve to a
     pysdk class of the same name. Skipped when the Go tree is absent
     (pysdk packaged standalone)."""
     import re
@@ -181,7 +202,7 @@ def test_table_covers_every_server_sent_name() -> None:
 
     server_table = (
         Path(__file__).resolve().parents[4]
-        / "rti" / "internal" / "transport" / "grpc" / "spec_exception.go"
+        / "rti" / "internal" / "adapters" / "grpc" / "spec_exception.go"
     )
     if not server_table.is_file():
         pytest.skip("Go server tree not present; cross-check n/a")

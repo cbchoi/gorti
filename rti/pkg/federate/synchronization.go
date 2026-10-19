@@ -3,7 +3,7 @@ package federate
 import (
 	"context"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 )
 
 // RegisterFederationSynchronizationPoint registers an HLA synchronization
@@ -15,7 +15,7 @@ func (f *Federate) RegisterFederationSynchronizationPoint(
 	_, err := f.conn.sync.RegisterFederationSynchronizationPoint(ctx, &rtiv1.RegisterSyncPointRequest{
 		WireVersion:       rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName:    f.federationName,
-		FederateHandle:    f.federateHandle,
+		FederateHandle:    f.CurrentHandle(),
 		Label:             label,
 		Tag:               append([]byte(nil), tag...),
 		RequiredFederates: append([]uint64(nil), requiredFederates...),
@@ -32,7 +32,7 @@ func (f *Federate) SynchronizationPointAchieved(
 	_, err := f.conn.sync.SynchronizationPointAchieved(ctx, &rtiv1.AchieveSyncPointRequest{
 		WireVersion:    rtiv1.WireVersion_WIRE_VERSION_V1,
 		FederationName: f.federationName,
-		FederateHandle: f.federateHandle,
+		FederateHandle: f.CurrentHandle(),
 		Label:          label,
 		Successfully:   &value,
 	})

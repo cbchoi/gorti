@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Distinct qualified classes may reuse an ancestor's local name.
+  HLAobjectRoot.A and HLAobjectRoot.A.B.A are different nodes, not a cycle.
+-->
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>RepeatedAncestorLocalName</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-04-28</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Class identities retain their full ancestry.</description>
+    <useHistory>None</useHistory>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <objectClass>
+        <name>A</name>
+        <sharing>Neither</sharing>
+        <semantics>First class named A.</semantics>
+        <objectClass>
+          <name>B</name>
+          <sharing>Neither</sharing>
+          <semantics>Nested inside A.</semantics>
+          <objectClass>
+            <name>A</name>
+            <sharing>Neither</sharing>
+            <semantics>Distinct descendant whose local name is also A.</semantics>
+          </objectClass>
+        </objectClass>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+    </interactionClass>
+  </interactions>
+</objectModel>

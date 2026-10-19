@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <objects><objectClass><name>HLAobjectRoot</name></objectClass></objects>
+  <interactions><interactionClass><name>HLAinteractionRoot</name><transportation>HLAreliable</transportation><order>Receive</order></interactionClass></interactions>
+  <dimensions/>
+  <transportations>
+    <transportation><name>HLAreliable</name><reliable>Yes</reliable><semantics>  Delivery &amp; acknowledgement.  </semantics></transportation>
+    <transportation><name>HLAbestEffort</name><reliable>No</reliable><semantics/></transportation>
+  </transportations>
+  <switches><autoProvide isEnabled="true"/><conveyRegionDesignatorSets isEnabled="false"/><conveyProducingFederate isEnabled="true"/><attributeScopeAdvisory isEnabled="true"/><attributeRelevanceAdvisory isEnabled="false"/><objectClassRelevanceAdvisory isEnabled="true"/><interactionRelevanceAdvisory isEnabled="false"/><serviceReporting isEnabled="true"/><exceptionReporting isEnabled="false"/><delaySubscriptionEvaluation isEnabled="true"/></switches>
+  <updateRates>
+    <updateRate><name>Precise</name><rate>1.0000000000000000000000000001</rate><semantics>  exact &amp; explicit  </semantics></updateRate>
+    <updateRate><name>Empty</name><rate>0.00000000000000000000000000000000000001</rate><semantics/></updateRate>
+    <updateRate><name>Absent</name><rate>0.25</rate></updateRate>
+  </updateRates>
+</objectModel>

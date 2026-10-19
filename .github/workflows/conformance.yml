@@ -1,18 +1,4 @@
-# DLC conformance gate for explicit, manually requested remote runs.
-#
-# Runs the full gate sequence from scripts/ci-gates.sh:
-#   stubs → go → cpp → lockfile → static → sweep → ivct
-#
-# The sweep re-runs every conformance fixture against a fresh rtid and
-# compares verdicts to cppsdk/tests/dlc/conformance/EXPECTED_VERDICTS.txt
-# in both directions (regression AND unrecorded improvement fail).
-#
-# The reference_rti parity lane (capturing goldens from a live commercial RTI) remains
-# local-only, gated on an external REFERENCE_RTI_LAUNCHER and licensed API JAR.
-#
-# First run builds gRPC/protobuf via conan (~40-60 min); later runs hit
-# the conan cache (~10-15 min total).
-
+# Manually requested internal service validation for the supported SDKs.
 name: Conformance
 
 on:
@@ -27,58 +13,34 @@ concurrency:
 
 jobs:
   gates:
-    name: DLC gates (stubs → go → cpp → lockfile → static → sweep → ivct)
+    name: Go, Python, Java and internal IVCT-derived checks
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    env:
+      GORTI_VALIDATION_ARTIFACTS: ${{ runner.temp }}/sdk-validation
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version-file: go.mod
           cache: true
-
-      - uses: bufbuild/buf-setup-action@v1
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: conan cache
-        uses: actions/cache@v4
+      - uses: actions/setup-java@v4
         with:
-          path: ~/.conan2
-          key: conan2-${{ runner.os }}-gcc-${{ hashFiles('cppsdk/conanfile.txt') }}
-          restore-keys: conan2-${{ runner.os }}-gcc-
-
-      - name: conan install (grpc + protobuf + gtest)
-        run: |
-          pip install "conan>=2.4"
-          conan profile detect --force
-          conan install cppsdk \
-            --output-folder=cppsdk/build \
-            --build=missing \
-            -s build_type=Release \
-            -s compiler.cppstd=17
-
-      # ivct stage deps — pysdk drives a live rtid over gRPC; the stubs
-      # stage already generated pysdk/rti1516e/_generated from proto/.
-      # Pins are loose on purpose: the generated stubs track whatever
-      # protobuf/grpcio the runner resolves.
-      - name: python deps for ivct subset (grpcio protobuf pytest)
-        run: |
-          pip install "grpcio>=1.60" "protobuf>=4.25" \
-                      "pytest>=8" "pytest-asyncio>=0.23"
-
-      - name: gates
-        run: |
-          chmod +x scripts/ci-gates.sh
-          scripts/ci-gates.sh stubs go cpp lockfile static sweep ivct
-
-      - name: upload sweep logs on failure
-        if: failure()
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - uses: bufbuild/buf-setup-action@v1
+      - name: Python validation dependencies
+        run: python -m pip install -e './pysdk[dev]' -r scripts/validation-requirements.txt
+      - name: Supported SDK gates
+        run: bash scripts/ci-gates.sh
+      - name: Validation reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: conformance-sweep-logs
-          path: /tmp/ci-sweep-*.log
+          name: conformance-validation
+          path: ${{ runner.temp }}/sdk-validation
           if-no-files-found: ignore

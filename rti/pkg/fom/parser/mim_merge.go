@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"bytes"
 	"encoding/xml"
 	"strings"
 
@@ -88,7 +87,7 @@ func isMIMTypeModule(rawXML []byte) bool {
 		return false
 	}
 	var m xmlModelType
-	dec := xml.NewDecoder(bytes.NewReader(rawXML))
+	dec := xml.NewTokenDecoder(newSemanticXMLTokens(rawXML))
 	if err := dec.Decode(&m); err != nil {
 		return false
 	}

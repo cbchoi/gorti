@@ -93,16 +93,6 @@ func TestSpec_M1_BadFOMDiagnostics(t *testing.T) {
 			description: "attribute references an undeclared dataType",
 		},
 		{
-			name:        "FOM-002-cyclic-class-hierarchy.xml",
-			expectCode:  "FOM-002",
-			description: "object class hierarchy contains a cycle",
-		},
-		{
-			name:        "FOM-003-multiple-parents.xml",
-			expectCode:  "FOM-003",
-			description: "object class declared under more than one parent",
-		},
-		{
 			name:        "FOM-004-duplicate-attribute.xml",
 			expectCode:  "FOM-004",
 			description: "attribute name duplicated within a class",
@@ -158,6 +148,22 @@ func TestSpec_M1_BadFOMDiagnostics(t *testing.T) {
 			}
 			if res.FOM != nil {
 				t.Errorf("%s: expected FOM nil on rejection, got non-nil", tc.name)
+			}
+		})
+	}
+}
+
+// Repeated local names are not identity cycles or multiple inheritance.
+// Explicit malformed Name/ParentName graphs remain covered in parser unit tests.
+func TestSpec_M1_QualifiedClassIdentity(t *testing.T) {
+	for _, path := range []string{"good/repeated-ancestor-local-name.xml", "good/repeated-branch-local-name.xml"} {
+		t.Run(path, func(t *testing.T) {
+			res, err := parser.Parse([]parser.Module{{Path: path, XML: loadFOM(t, path)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.FOM == nil || len(res.Diagnostics) != 0 {
+				t.Fatalf("distinct XML paths rejected: %+v", res.Diagnostics)
 			}
 		})
 	}

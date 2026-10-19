@@ -21,34 +21,33 @@ func (duplicateAttributeValidator) Run(in diagnosticInput) []Diagnostic {
 		return nil
 	}
 	classes := in.fom.ObjectClasses()
-	byName := map[string]model.ObjectClass{}
+	byKey := map[string]model.ObjectClass{}
 	for _, oc := range classes {
-		byName[oc.Name] = oc
+		byKey[oc.Key()] = oc
 	}
 
 	reported := map[string]struct{}{}
 	var diags []Diagnostic
 	for _, oc := range classes {
-		// Visit each (className, attrName) only once across re-declarations
-		// produced by the flat list. Skip a class whose ParentName forms a
-		// cycle so this pass terminates even when FOM-002 also fires.
+		// Report each (class key, attribute name) once across re-declarations.
+		// Ancestor traversal stops at cycles even when FOM-002 also fires.
 		ancestors := map[string]string{} // attrName -> declaring class
-		for _, owner := range walkAncestorsInclusive(oc, byName) {
+		for _, owner := range walkAncestorsInclusive(oc, byKey) {
 			for _, a := range owner.Attributes {
 				if prev, dup := ancestors[a.Name]; dup {
-					key := oc.Name + "\x00" + a.Name
+					key := oc.Key() + "\x00" + a.Name
 					if _, already := reported[key]; already {
 						continue
 					}
 					reported[key] = struct{}{}
 					msg := fmt.Sprintf(
 						"attribute %q duplicated in object class %q (also declared on %q)",
-						a.Name, oc.Name, prev,
+						a.Name, oc.Key(), prev,
 					)
-					if prev == owner.Name {
+					if prev == owner.Key() {
 						msg = fmt.Sprintf(
 							"attribute %q duplicated in object class %q",
-							a.Name, owner.Name,
+							a.Name, owner.Key(),
 						)
 					}
 					diags = append(diags, Diagnostic{
@@ -58,32 +57,31 @@ func (duplicateAttributeValidator) Run(in diagnosticInput) []Diagnostic {
 					})
 					continue
 				}
-				ancestors[a.Name] = owner.Name
+				ancestors[a.Name] = owner.Key()
 			}
 		}
 	}
 	return diags
 }
 
-// walkAncestorsInclusive returns the class itself followed by each ancestor
-// (parent, grandparent, ...) up to the root. Stops if the chain loops or
-// names a parent not in byName (other diagnostics handle those cases).
-// Returned order: ancestor-first then self, so a child redeclaring an
-// inherited attribute reports the ancestor as the prior owner.
-func walkAncestorsInclusive(start model.ObjectClass, byName map[string]model.ObjectClass) []model.ObjectClass {
+// walkAncestorsInclusive returns ancestors followed by the class itself,
+// so an inherited duplicate reports the ancestor as the prior owner.
+// Stops if the chain repeats a class key or references a parent not in
+// byKey (other diagnostics handle those cases).
+func walkAncestorsInclusive(start model.ObjectClass, byKey map[string]model.ObjectClass) []model.ObjectClass {
 	var chain []model.ObjectClass
 	visited := map[string]struct{}{}
 	cur := start
 	for {
-		if _, loop := visited[cur.Name]; loop {
+		if _, loop := visited[cur.Key()]; loop {
 			break
 		}
-		visited[cur.Name] = struct{}{}
+		visited[cur.Key()] = struct{}{}
 		chain = append([]model.ObjectClass{cur}, chain...)
-		if cur.ParentName == "" {
+		if cur.ParentKey() == "" {
 			break
 		}
-		next, ok := byName[cur.ParentName]
+		next, ok := byKey[cur.ParentKey()]
 		if !ok {
 			break
 		}

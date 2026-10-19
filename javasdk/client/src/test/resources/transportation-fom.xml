@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>GoRTI Java Transportation</name>
+    <type>FOM</type>
+    <version>1.0</version>
+    <modificationDate>2026-09-29</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Transportation confirmation, query, ownership, and ordering tests.</description>
+  </modelIdentification>
+  <objects>
+    <objectClass>
+      <name>HLAobjectRoot</name>
+      <sharing>Neither</sharing>
+      <objectClass>
+        <name>TransportItem</name>
+        <sharing>PublishSubscribe</sharing>
+        <attribute>
+          <name>value</name>
+          <dataType>HLAinteger32BE</dataType>
+          <updateType>Conditional</updateType>
+          <updateCondition>On change</updateCondition>
+          <ownership>DivestAcquire</ownership>
+          <sharing>PublishSubscribe</sharing>
+          <transportation>HLAbestEffort</transportation>
+          <order>TimeStamp</order>
+          <semantics>Transferable test value.</semantics>
+        </attribute>
+      </objectClass>
+    </objectClass>
+  </objects>
+  <interactions>
+    <interactionClass>
+      <name>HLAinteractionRoot</name>
+      <sharing>Neither</sharing>
+      <transportation>HLAreliable</transportation>
+      <order>TimeStamp</order>
+      <interactionClass>
+        <name>TransportPulse</name>
+        <sharing>PublishSubscribe</sharing>
+        <transportation>HLAbestEffort</transportation>
+        <order>TimeStamp</order>
+        <semantics>Per-producer transportation test interaction.</semantics>
+      </interactionClass>
+    </interactionClass>
+  </interactions>
+  <switches>
+    <autoProvide isEnabled="false"/>
+    <conveyRegionDesignatorSets isEnabled="false"/>
+    <conveyProducingFederate isEnabled="true"/>
+    <attributeScopeAdvisory isEnabled="false"/>
+    <attributeRelevanceAdvisory isEnabled="false"/>
+    <objectClassRelevanceAdvisory isEnabled="false"/>
+    <interactionRelevanceAdvisory isEnabled="false"/>
+    <serviceReporting isEnabled="false"/>
+    <exceptionReporting isEnabled="false"/>
+    <delaySubscriptionEvaluation isEnabled="false"/>
+    <automaticResignAction resignAction="CancelThenDeleteThenDivest"/>
+  </switches>
+</objectModel>

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	rtiv1 "github.com/cbchoi/gorti/rti/internal/genproto/rti/v1"
+	rtiv1 "github.com/cbchoi/gorti/rti/internal/adapters/protobuf/rti/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -98,20 +98,28 @@ func (f *Federate) SendInteractionByHandle(
 func (f *Federate) SendInteractionByHandleConfirmed(
 	ctx context.Context, classHandle uint64, parameters map[uint64][]byte, timestamp *float64,
 ) error {
+	return f.sendInteractionByHandleConfirmed(ctx, classHandle, parameters, timestamp, MessageOptions{})
+}
+
+func (f *Federate) sendInteractionByHandleConfirmed(ctx context.Context, classHandle uint64, parameters map[uint64][]byte, timestamp any, options MessageOptions) error {
+	legacy, exact, encodeErr := f.optionalTimeWire(timestamp)
+	if encodeErr != nil {
+		return encodeErr
+	}
 	f.interactionStats.total.Add(1)
 	if f.interactionClosing.Load() {
 		return ErrNotJoined
 	}
 	req := &rtiv1.SendInteractionRequest{
-		WireVersion:            rtiv1.WireVersion_WIRE_VERSION_V1,
-		FederationName:         f.federationName,
-		FederateHandle:         f.federateHandle,
-		InteractionClassHandle: classHandle,
-		Parameters:             parameters,
+		UserSuppliedTag:         append([]byte(nil), options.Tag...),
+		MessageRetractionHandle: options.RetractionHandle,
+		WireVersion:             rtiv1.WireVersion_WIRE_VERSION_V1,
+		FederationName:          f.federationName,
+		FederateHandle:          f.CurrentHandle(),
+		InteractionClassHandle:  classHandle,
+		Parameters:              parameters,
 	}
-	if timestamp != nil {
-		req.LogicalTime = timestamp
-	}
+	req.LogicalTime, req.LogicalTimeValue = legacy, exact
 	// Keep update/interaction stream use and every pre-send fallback in one
 	// ordered critical section so confirmed Object Management calls cannot
 	// overtake by selecting different transports.
@@ -123,9 +131,9 @@ func (f *Federate) SendInteractionByHandleConfirmed(
 	if err := ctx.Err(); err != nil {
 		return status.FromContextError(err).Err()
 	}
-	if f.interactionContext != nil {
+	if lifetime := f.transportLifetime(); lifetime != nil {
 		select {
-		case <-f.interactionContext.Done():
+		case <-lifetime.ctx.Done():
 			return ErrNotJoined
 		default:
 		}
@@ -165,16 +173,7 @@ func (f *Federate) SendInteractionByHandleConfirmed(
 func (f *Federate) sendInteractionStreamLocked(
 	ctx context.Context, request *rtiv1.SendInteractionRequest,
 ) (bool, error) {
-	if f.conn == nil || f.conn.cc == nil || !f.conn.interactionStreamEnabled {
-		f.interactionStats.fallbackDisabled.Add(1)
-		return false, nil
-	}
-	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok && len(outgoing) > 0 {
-		f.interactionStats.fallbackMetadata.Add(1)
-		return false, nil
-	}
-	if f.interactionStreamUnsupported {
-		f.interactionStats.fallbackUnsupported.Add(1)
+	if !f.interactionStreamEligible(ctx) {
 		return false, nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -249,12 +248,9 @@ func interactionResultIndeterminate(err error) bool {
 }
 
 func (f *Federate) openInteractionStream(ctx context.Context) (*interactionRPCStream, error) {
-	parent := f.interactionContext
-	if parent == nil {
-		parent = context.Background()
-	}
-	streamCtx, cancel := context.WithCancel(parent)
-	stream, err := f.conn.cc.NewStream(
+	parent := f.transportLifetime().ctx
+	streamCtx, cancel := context.WithCancel(f.sessionContext(parent))
+	stream, err := f.conn.rpcConnection().NewStream(
 		streamCtx, &interactionStreamDescription, interactionStreamMethod, grpc.StaticMethod(),
 	)
 	if err != nil {
@@ -319,4 +315,20 @@ func (f *Federate) drainAndCloseInteractionStream(ctx context.Context) error {
 		f.interactionStreamMu.Unlock()
 		return status.FromContextError(ctx.Err()).Err()
 	}
+}
+
+func (f *Federate) interactionStreamEligible(ctx context.Context) bool {
+	if f.conn == nil || f.conn.cc == nil || !f.conn.interactionStreamEnabled {
+		f.interactionStats.fallbackDisabled.Add(1)
+		return false
+	}
+	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok && len(outgoing) > 0 {
+		f.interactionStats.fallbackMetadata.Add(1)
+		return false
+	}
+	if f.interactionStreamUnsupported {
+		f.interactionStats.fallbackUnsupported.Add(1)
+		return false
+	}
+	return true
 }

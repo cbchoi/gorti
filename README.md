@@ -8,14 +8,16 @@
 
 gorti is an open-source IEEE 1516-2010 (HLA Evolved) Run-Time
 Infrastructure written in Go. It includes a standalone RTI server and federate
-SDKs for Go, Python, and C++.
+SDKs for Go, Python, and Java. The [Java SDK](javasdk/) provides the
+`hla.rti1516e` language mapping. All three clients use the same server for
+federation services, Float64 and Integer64 logical time, and save/restore.
 
 ## The problem HLA solves
 
-Large simulations are rarely one program. A vehicle model may be written in
-C++, an environment model in Python, and a hardware-in-the-loop simulator may
+Federated simulations combine independently developed models. A vehicle model
+may be written in Java, an environment model in Python, and a hardware-in-the-loop simulator may
 run on another machine. Those programs need a shared model of data, time, and
-ownership, not just a network connection.
+ownership.
 
 [High Level Architecture (HLA)](https://standards.ieee.org/ieee/1516/4118/)
 is the international standard used to connect these independently developed
@@ -40,54 +42,56 @@ flowchart LR
 
 ## Why another open RTI?
 
-[Portico](https://github.com/openlvc/portico) is active, mature, and supports
-several generations of HLA APIs. [OpenHLA](https://sourceforge.net/projects/ohla/)
-is another useful open-source implementation, although its public development
-has been inactive for years. The ecosystem benefits from independent RTIs with
-different implementation languages and architectures: they make
-cross-implementation testing possible and give researchers and students more
-than one codebase to study.
+[Portico](https://github.com/openlvc/portico) and
+[OpenHLA](https://sourceforge.net/projects/ohla/) provide open-source HLA
+implementations. gorti adds a Go server and native Go and Python interfaces
+alongside the standard Java mapping. Developers can reuse models across these
+languages, compare RTI behavior, and study service algorithms in separate Go
+packages.
 
-gorti uses Go for a small deployment footprint, simple cross-platform builds,
-and a concurrency model that fits callbacks and ordered event streams. The
-choice of Go is not a claim that an RTI will automatically be faster. Protocol
-boundaries, acknowledgement policy, queueing, and callback delivery usually
-matter more than the implementation language.
+The Go server builds as a standalone executable. Goroutines handle concurrent
+requests and callback streams, while bounded queues control admission and
+backpressure. LocalLRC batching and cumulative acknowledgements reduce
+per-message network round trips.
 
 | | Portico | gorti |
 |---|---|---|
-| Implementation | Java core; C++ binding through the Java runtime | Go RTI server |
-| Federate APIs | Java and C++; HLA 1.3, IEEE 1516, and IEEE 1516e | Go, Python, and C++; current work targets IEEE 1516-2010 |
+| Implementation | Java RTI core | Go RTI server |
+| Standards target | HLA 1.3, IEEE 1516, and IEEE 1516e | IEEE 1516-2010 |
 | License | CDDL | MIT |
 | Project emphasis | Mature deployment and broad legacy API coverage | Inspectable implementation, documented contracts, and reproducible tests |
 
-This is a scope comparison, not a performance ranking. gorti is not presented
-as a replacement for every Portico deployment.
+Measured Portico comparisons are reported separately in
+[performance](docs/performance.md), with their workloads and timing boundaries.
 
 ## Current scope
 
 The supported deployment is one authoritative `rtid` process with Go, Python,
-or C++ federates. The repository covers federation, declaration, object, time,
+or Java federates. The repository covers federation, declaration, object, time,
 ownership, data distribution, synchronization, save/restore, and management
 object services.
+
+Go and Python are the primary development interfaces. Java provides the
+IEEE 1516.1-2010 language mapping, including ownership, DDM, save/restore,
+callbacks, and encoding helpers. See its
+[service coverage](javasdk/README.md#service-coverage) for API details.
+C++ is outside the supported SDK set; retained C++ code and fixtures are legacy
+development material.
+
+The [requirements inventory](engineering/verification/requirements2010/README.md)
+links reviewed IEEE clauses to implementation locations, test assertions, and
+recorded executions. [Verification](docs/verification.md) summarizes the latest
+complete service run and subsequent regressions.
 
 `rtid` runs the HLA core profile by default. Binary audit journaling and
 bounded replay are provided by the optional `auditreplay` runtime plugin, so
 their encoding and storage work is absent from the normal federation path.
 See the [operations guide](docs/operations.md) to enable it.
 
-The v0.9 line is intended for research, teaching, CI, federate development,
-and controlled single-node experiments. It does not claim:
-
-- formal IVCT certification;
-- production multi-node failover;
-- a Java federate SDK;
-- HLA 1.3 or IEEE 1516-2000 compatibility; or
-- equivalence outside the retained verification scenarios.
-
-See the [verification scope](docs/verification.md) and
-[Software Test Description](engineering/specifications/current/STD.md) before
-using gorti in a critical federation.
+The single-server deployment supports model integration, distributed-simulation
+teaching, federate development, and repeatable experiments. Cluster algorithms
+remain experimental. The standards target is the 2010 family; older HLA API
+generations are not provided.
 
 ## Try it
 
@@ -131,40 +135,35 @@ All runnable scenarios are listed in the [example catalog](examples/README.md).
 
 | SDK | Use case | Documentation |
 |---|---|---|
-| Go | Native Go federates and the lowest-overhead gorti client path | [`rti/pkg/federate`](rti/pkg/federate/) |
+| Go | Native federates, LocalLRC admission, and explicit confirmed operations | [`rti/pkg/federate`](rti/pkg/federate/) |
 | Python | Async federates, automation, experiments, and simulator adapters | [`pysdk`](pysdk/) |
-| C++ | IEEE 1516.1-2010 DLC-style federates on Linux and macOS | [`cppsdk`](cppsdk/) |
+| Java | `hla.rti1516e` provider, evoked callbacks, Float64/Integer64 time, ownership, DDM, save/restore, and encoding helpers | [`javasdk`](javasdk/) |
 
-The SDKs use gRPC to communicate with `rtid`. They do not implement another
-RTI's private wire protocol. Cross-RTI tests compare behavior visible through
-the standard API, not transport compatibility.
+The SDKs communicate with `rtid` through the versioned `rti.v1` Protobuf/gRPC
+protocol. Cross-RTI tests run a separate federation on each RTI and compare
+service results and callbacks.
 
 ## Verification
 
-The repository tests service invariants, FOM handling, encodings, callback
-order, timestamp-order delivery, teardown, race behavior, and deterministic
-replay. Cross-RTI workloads use the same FOM bytes, seed, process choreography,
-callback boundary, logging policy, warmups, measurements, and AB/BA run order.
+Tests cover HLA service state, FOM handling, encodings, callback ordering,
+time advancement, teardown, and save/restore. The 4 October 2026 full service
+run passed 3,349 Go tests, 2,157 Python tests, 591 Java tests, and 35 internal
+IVCT-derived cases. The same Go service selection passed with the Linux race
+detector. Subsequent callback optimizations passed 978 required IEEE-service
+cases in each Go reporting profile on 8 October. The linked reports identify
+the tested source, configuration, and runtime.
 
-The retained comparison is intentionally small: two independent federate
-processes. FM, DM, and receive-order OM scenarios passed against gorti and the
-tested reference implementations. A callback-before-grant difference in one
-Portico TM scenario is recorded rather than hidden; TM performance is not
-compared when the observable behavior differs.
+The traceability inventory contains 712 records: 639 applicable requirements
+linked to passing tests, 48 not applicable, and 25 awaiting interpretation.
+External certification and the remaining source review are tracked in
+[verification](docs/verification.md).
 
-These tests do not prove wire compatibility, unrestricted scale, formal
-certification, or equivalence for every federation. Results and limitations
-are in [verification](docs/verification.md), the
-[comparison harness](verification/README.md), and the
-[TM analysis](verification/TIME_MANAGEMENT_PERFORMANCE.md).
-
-Performance experiments live separately under [`benchmark`](benchmark/).
-The publication profile derives a deterministic LI or HI workload from
-DEVStone and projects every atomic event-value onto one receive-order object
-update and one receive-order interaction. Portico and gorti use the same FOM,
-payload seed, two-federate choreography, callback boundary, five warm-up runs,
-and 30 measured AB/BA runs per implementation. This is an RTI workload derived
-from DEVStone, not a DEVStone simulation-kernel score.
+Performance experiments live under [`benchmark`](benchmark/). DEVStone-HLA
+generates receive-order object updates and interactions for two independent
+federate processes. The paired and crossover runners record FOM bytes, payload
+seeds, timing boundaries, logging settings, warm-ups, and execution order.
+See [performance](docs/performance.md) for the October Portico results and
+[reproducibility](docs/reproducibility.md) for the run designs.
 
 ## Connecting an existing simulator
 
@@ -199,7 +198,7 @@ documents:
 
 Historical baselines are kept under `engineering/specifications/history` so a
 requirement can be traced to the release in which it changed. The same material
-is used in classroom exercises that turn standalone simulators into federates
+supports classroom exercises that turn standalone simulators into federates
 and inspect their callback and logical-time behavior.
 
 ## Build and test
@@ -211,7 +210,7 @@ make verify
 make docs
 ```
 
-The full local toolchain and C++ prerequisites are documented in
+The local toolchain and SDK prerequisites are documented in
 [installation](docs/installation.md). The CI policy and contribution workflow
 are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -221,7 +220,7 @@ are in [CONTRIBUTING.md](CONTRIBUTING.md).
 |---|---|
 | [`rti`](rti/) | Go RTI server, services, FOM support, optional audit/replay plugin, and Go SDK |
 | [`pysdk`](pysdk/) | Python SDK and pyjevsim bridge |
-| [`cppsdk`](cppsdk/) | C++ DLC-style federate SDK |
+| [`javasdk`](javasdk/) | Java `hla.rti1516e` API and service provider |
 | [`examples`](examples/) | Runnable federations and simulator adapters |
 | [`verification`](verification/) | Semantic and performance comparison harnesses |
 | [`benchmark`](benchmark/) | Reproducible DEVStone-HLA Portico/gorti experiment |

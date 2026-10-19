@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/cbchoi/gorti/rti/internal/core"
-	"github.com/cbchoi/gorti/rti/internal/runtimeplugin"
+	"github.com/cbchoi/gorti/rti/internal/application/runtimeplugin"
+	"github.com/cbchoi/gorti/rti/internal/hla/core"
 )
 
 type testRecord struct {

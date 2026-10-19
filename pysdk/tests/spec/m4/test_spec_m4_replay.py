@@ -36,22 +36,10 @@ from pathlib import Path
 
 import pytest
 
+from tests._legacy_server import build_rtid
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
-RTID_PKG = "./rti/cmd/rtid"
 FEDERATION = "pyspec-m4-replay"
-
-
-def _build_rtid_binary(target: Path) -> Path:
-    """Compile rtid into ``target``. Raises ``CalledProcessError`` on
-    build failure (so the test surfaces a clear go-build error instead of
-    a confusing missing-binary one)."""
-    target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(  # noqa: S603 — controlled args
-        ["go", "build", "-o", str(target), RTID_PKG],  # noqa: S607 — ``go`` is the standard toolchain
-        cwd=REPO_ROOT,
-        check=True,
-    )
-    return target
 
 
 def _sha256(path: Path) -> str:
@@ -83,12 +71,7 @@ def test_spec_m4_python_example_replays_byte_identical(tmp_path: Path) -> None:
     if shutil.which("go") is None:
         pytest.skip("go toolchain not on PATH; cannot build rtid for replay test")
 
-    # Use a stable bin directory under the repo's bin/ so concurrent
-    # tests reuse the same compiled binary; a tempdir would force a
-    # rebuild per test run.
-    bin_dir = REPO_ROOT / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
-    rtid_bin = _build_rtid_binary(bin_dir / "rtid")
+    rtid_bin = build_rtid()
 
     dir_a = tmp_path / "logsA"
     dir_b = tmp_path / "logsB"

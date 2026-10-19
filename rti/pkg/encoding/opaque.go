@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // HLAopaqueData is the simplest composite codec per IEEE 1516.2-2010 §4:
@@ -49,8 +50,12 @@ func (opaqueDataCodec) Encode(v any) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("encoding: HLAopaqueData cannot encode %T (want []byte or hex string)", v)
 	}
+	length := uint64(len(xs))
+	if length > math.MaxUint32 {
+		return nil, fmt.Errorf("encoding: length %d exceeds the uint32 wire limit", len(xs))
+	}
 	out := make([]byte, 4+len(xs))
-	binary.BigEndian.PutUint32(out[:4], uint32(len(xs)))
+	binary.BigEndian.PutUint32(out[:4], uint32(length))
 	copy(out[4:], xs)
 	return out, nil
 }

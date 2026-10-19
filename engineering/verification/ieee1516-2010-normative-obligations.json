@@ -1,0 +1,407 @@
+{
+  "schema_version": 1,
+  "coverage_complete": false,
+  "sources": [
+    {
+      "id": "S1516",
+      "standard": "IEEE 1516-2010",
+      "filename": "1516_2010-2000_redline.pdf",
+      "sha256": "6ac0b36add984f2f2e772b8c070f75e8172fd1cd3ab55dd65defe3066e46b086"
+    },
+    {
+      "id": "S1516.1",
+      "standard": "IEEE 1516.1-2010",
+      "filename": "15161_2010-2004_redline.pdf",
+      "sha256": "789780a38898bd513fe1dbdb877433e6518dac8d0eb577056fc0bbe9e5b5a9d4"
+    },
+    {
+      "id": "S1516.2",
+      "standard": "IEEE 1516.2-2010",
+      "filename": "15162_2010-2000_redline.pdf",
+      "sha256": "e0ec65cb99b9a9e47cb21cd1d003b78df76e18cddd5ab2f0fd1e3a60e5223f09"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "FW-FEDERATION-FOM",
+      "source_id": "S1516",
+      "clause": "5.1",
+      "pdf_pages": [33],
+      "subject": "federation",
+      "applicability": "applicable",
+      "statement": "The federation must document its agreed exchanged data in an OMT FOM.",
+      "conditions": "For an HLA federation; the FOM is composed from one or more FOM modules and one MIM.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/pkg/fom/parser/parser.go", "rti/internal/application/composition/fom_repository.go"],
+      "tests": [],
+      "open_items": [
+        "These paths consume federation models; they do not establish completeness or correctness of a federation author's declarations.",
+        "Review each claimed federation model against its exchange agreement and the applicable OMT content rules; no dedicated model-author oracle is linked."
+      ]
+    },
+    {
+      "id": "FW-FEDERATE-ATTRIBUTE-VALUES",
+      "source_id": "S1516",
+      "clause": "5.2",
+      "pdf_pages": [33],
+      "subject": "federate",
+      "applicability": "applicable",
+      "statement": "Joined federates, rather than the RTI, must maintain simulation-associated instance attribute values.",
+      "conditions": "Simulation state, not federation MOM state; RTI retention or use of data to provide its services is not itself simulation-model maintenance.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Determine and review the particular federates in the claim; server routing or checkpoint tests cannot prove their simulation-state responsibility.",
+        "No independent federate-state ownership oracle is linked."
+      ]
+    },
+    {
+      "id": "FW-ATTRIBUTE-AT-MOST-ONE-OWNER",
+      "source_id": "S1516",
+      "clause": "5.5",
+      "pdf_pages": [34],
+      "subject": "federation",
+      "applicability": "applicable",
+      "statement": "A given object instance attribute must never have more than one joined-federate owner simultaneously.",
+      "conditions": "Throughout a federation execution, including ownership transfers; the rule allows an attribute to have no joined-federate owner.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/ownership/manager.go", "rti/internal/hla/ownership/release.go", "rti/internal/hla/object/ownership_acquisition.go"],
+      "tests": [
+        {"path": "rti/internal/hla/ownership/ownership_test.go", "name": "TestAcquire_BeforeDivest_QueuesThenTransfersOnDivest"}
+      ],
+      "open_items": [
+        "The linked local transfer case is not proof of the invariant over every concurrent acquisition, divestiture, resign, deletion, and restore path.",
+        "Inventory independent concurrent negative cases and standard-Java ownership client cases; none is linked for this row.",
+        "This is a federation rule with an RTI enforcement surface, not a whole ownership-clause verdict."
+      ]
+    },
+    {
+      "id": "FW-FEDERATE-SOM",
+      "source_id": "S1516",
+      "clause": "6.1",
+      "pdf_pages": [34],
+      "subject": "federate",
+      "applicability": "applicable",
+      "statement": "A federate must document its externally available information in an OMT SOM.",
+      "conditions": "For each claimed HLA federate; the SOM uses one or more SOM modules and may include a MIM.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Identify the claimed federates and their SOM artifacts; no federate-specific SOM completeness assessment is linked.",
+        "An RTI FOM parser test does not discharge the federate developer's SOM responsibility."
+      ]
+    },
+    {
+      "id": "FW-FEDERATE-TIME-POLICY",
+      "source_id": "S1516",
+      "clause": "6.5",
+      "pdf_pages": [35],
+      "subject": "federate",
+      "applicability": "applicable",
+      "statement": "A federate must manage its local time according to its federation's selected time-management approach.",
+      "conditions": "The federation designers choose the approach; no particular time-advance choreography is universally imposed by this rule.",
+      "review_status": "source-reviewed",
+      "implementation": [],
+      "tests": [],
+      "open_items": [
+        "Identify the federation time agreement and assess each claimed federate against it.",
+        "No dedicated federate-policy or policy-violation test is linked; RTI time-service tests are a different responsibility."
+      ]
+    },
+    {
+      "id": "IND-FM-DUPLICATE",
+      "source_id": "S1516.1",
+      "clause": "4.5.3(b); 4.5.5(g)",
+      "pdf_pages": [53],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Creation must reject an execution name that already identifies an existing federation execution.",
+      "conditions": "A connected caller invokes Create Federation Execution for an existing execution name, with otherwise admissible inputs.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/federation/manager.go"],
+      "tests": [
+        {"path": "rti/internal/hla/federation/manager_test.go", "name": "TestCreateFederation_DuplicateName_ReturnsSentinel"},
+        {"path": "pysdk/tests/test_ieee2010_independent_contract_live.py", "name": "test_duplicate_create_preserves_original_model"}
+      ],
+      "open_items": [
+        "The independent Python case verifies the connected-call rejection and original class usability, not exact exclusion of all competitor module content; standard-Java exception translation is a separate binding assessment. Execution evidence is imported separately."
+      ]
+    },
+    {
+      "id": "IND-FM-DESTROY-JOINED",
+      "source_id": "S1516.1",
+      "clause": "4.6.3(c); 4.6.5(a)",
+      "pdf_pages": [54],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Destruction must reject a federation execution that still has joined federates.",
+      "conditions": "A connected caller invokes Destroy Federation Execution for an existing execution with at least one joined member.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/federation/manager.go"],
+      "tests": [
+        {"path": "rti/internal/hla/federation/manager_test.go", "name": "TestDestroyFederation_RejectsWhenJoined"},
+        {"path": "pysdk/tests/test_ieee2010_independent_contract_live.py", "name": "test_destroy_joined_preserves_execution_until_resign"}
+      ],
+      "open_items": [
+        "The independent Python case verifies joined rejection, continuing membership, successful empty destruction and recreation; standard-Java exception translation is a separate binding assessment. Execution evidence is imported separately."
+      ]
+    },
+    {
+      "id": "FM-DEFAULT-MIM",
+      "source_id": "S1516.1",
+      "clause": "4.1.4; 4.5",
+      "pdf_pages": [48, 52],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "The RTI must automatically load the standard MIM when creation supplies no explicit MIM.",
+      "conditions": "Create Federation Execution with otherwise compliant supplied FOM modules and an omitted MIM argument.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/application/composition/fom_repository.go"],
+      "tests": [],
+      "open_items": [
+        "Link a focused public-create oracle that checks actual standard MOM declarations, not only a MIM label or digest.",
+        "The repository's empty-module shortcut requires separate admission review; no missing-FOM negative case is linked, and the at-least-one-FOM obligation is not inventoried here.",
+        "Independent and standard-Java default-MIM cases are not linked."
+      ]
+    },
+    {
+      "id": "FM-RESERVED-EXPLICIT-MIM",
+      "source_id": "S1516.1",
+      "clause": "4.5; 4.5.5(d)",
+      "pdf_pages": [52, 53],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Creation must reject the reserved explicit MIM designator HLAstandardMIM.",
+      "conditions": "An explicit MIM argument equals the exact reserved designator; a filename with a suffix is not that same designator.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/federation/selected_mim.go", "rti/internal/application/composition/fom_repository.go"],
+      "tests": [
+        {"path": "rti/internal/hla/federation/selected_mim_test.go", "name": "TestIEEE2010CreateRejectsReservedMIMBeforeLoadingOrPublication"}
+      ],
+      "open_items": [
+        "Review public standard-binding exception identity and unchanged state on rejection; this local negative link does not establish end-to-end conformance.",
+        "No independent or standard-Java reserved-MIM case is linked."
+      ]
+    },
+    {
+      "id": "IND-OM-DELETE-UNKNOWN",
+      "source_id": "S1516.1",
+      "clause": "6.14.3(e); 6.14.5(c)",
+      "pdf_pages": [132],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Deletion must reject an object instance that is not known to the invoking joined federate.",
+      "conditions": "A connected joined caller invokes Delete Object Instance for an instance it does not know; global RTI existence alone does not establish caller knowledge.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/object/delete.go", "rti/internal/hla/object/knowledge_epoch.go"],
+      "tests": [
+        {"path": "rti/internal/adapters/grpc/ieee2010_object_ownership_ddm_test.go", "name": "TestIEEE2010ObjectDeleteKnowledgeRealWire"},
+        {"path": "pysdk/tests/test_ieee2010_independent_contract_live.py", "name": "test_delete_unknown_precedes_privilege_and_preserves_object"}
+      ],
+      "open_items": [
+        "The independent Python case distinguishes existing-but-undiscovered, known-but-nonowner and already-deleted instances and verifies continued updates and the eventual owner deletion. No universal exception-precedence rule is inferred; standard-Java translation remains a separate binding assessment."
+      ]
+    },
+    {
+      "id": "SUPPORT-OBJECT-CLASS-NAME-ERROR",
+      "source_id": "S1516.1",
+      "clause": "10.6.3(d); 10.6.5(a); Annex B",
+      "pdf_pages": [252, 439, 440],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Lookup of an object-class name not defined in the FDD must report the appropriate lookup error, represented as NameNotFound in the incorporated standard Java API.",
+      "conditions": "Get Object Class Handle is invoked by name in an otherwise legal service state; this is not the by-handle ObjectClassNotDefined lookup. Python product interfaces are assessed separately from the standardized language mapping.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/adapters/grpc/support.go", "pysdk/rti1516e/support.py", "pysdk/rti1516e/_grpc_errors.py"],
+      "tests": [
+        {"path": "pysdk/tests/test_ieee2010_independent_support_gaps_live.py", "name": "test_missing_object_class_lookup_raises_name_not_found"},
+        {"path": "pysdk/tests/test_support_name_error.py", "name": "test_missing_object_class_name_has_public_name_not_found"},
+        {"path": "rti/internal/adapters/grpc/support_name_error_test.go", "name": "TestSupportObjectClassNameErrorRealWire"}
+      ],
+      "open_items": [
+        "Historical actual-server runs reproduced SyncPointNotFound. The 2026-10-01 follow-up repairs the Python public mapping, adds a server NameNotFound trailer and reruns real TCP contracts; see ieee1516-2010-sdk-gap-fixes-20261001.md for candidate hashes and bounded execution evidence. This inventory remains source links, not an automatic closure verdict.",
+        "Separately execute the selected standard Java API case and the remaining applicable service states and exceptions. Passing Python product tests do not establish complete standardized Java mapping conformance.",
+        "The earlier exploratory ObjectClassNotFound exact-name expectation was incorrect; Annex B's supplied Java API and the C++ API both identify NameNotFound for this by-name service. API/member/source hashes are retained in the private gap findings."
+      ]
+    },
+    {
+      "id": "IND-FOM-CONTRIBUTOR-PERSISTENCE",
+      "source_id": "S1516.1",
+      "clause": "4.1.4.1",
+      "pdf_pages": [49],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Accepted FDD contributions must remain available for the lifetime of the federation execution after their contributing federates resign.",
+      "conditions": "A compliant additional FOM module has been accepted on join; resignation is not destruction of the federation execution.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/application/composition/fom_repository.go", "rti/internal/hla/federation/manager.go"],
+      "tests": [
+        {"path": "pysdk/tests/test_ieee2010_independent_contract_live.py", "name": "test_contributed_fom_survives_last_resigner"}
+      ],
+      "open_items": [
+        "The independent Python case verifies contribution retention and usability after all members resign. Contribution absence after recreation, arbitrary module merge compatibility and standard-Java translation require separate evidence."
+      ]
+    },
+    {
+      "id": "FDD-TRANSPORT-DESCRIPTION-EXCLUDED",
+      "source_id": "S1516.1",
+      "clause": "4.1.4; 4.1.4.1",
+      "pdf_pages": [48],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Transportation description differences alone must not cause RTI module combination to fail.",
+      "conditions": "Create or additional-module join combines compliant declarations with identical transportation name and reliability; the description is outside FDD.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/pkg/fom/parser/transportations.go", "rti/pkg/fom/parser/mim_merge.go", "rti/pkg/fom/model/transportations.go"],
+      "tests": [
+        {"path": "rti/pkg/fom/parser/fdd_merge_normative_test.go", "name": "TestFDDTransportationDescriptionsDoNotRejectMerge"},
+        {"path": "rti/pkg/fom/parser/fdd_merge_normative_test.go", "name": "TestFDDTransportRateMIMMergeUsesOnlyOperationalFields"}
+      ],
+      "open_items": [
+        "First-description retention is implementation policy, not the obligation recorded here.",
+        "Independently review reliability-conflict negative cases and public create/join atomicity; local parser links do not prove every admission path.",
+        "No independent public-client or standard-Java module-combination case is linked."
+      ]
+    },
+    {
+      "id": "FDD-RATE-DESCRIPTION-EXCLUDED",
+      "source_id": "S1516.1",
+      "clause": "4.1.4; 4.1.4.1",
+      "pdf_pages": [48],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "Update-rate description differences alone must not cause RTI module combination to fail.",
+      "conditions": "Create or additional-module join combines compliant declarations with identical update-rate name and exact maximum rate; descriptive fields are outside the listed FDD rate columns.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/pkg/fom/parser/update_rates.go", "rti/pkg/fom/parser/mim_merge.go", "rti/pkg/fom/model/update_rates.go"],
+      "tests": [
+        {"path": "rti/pkg/fom/parser/fdd_merge_normative_test.go", "name": "TestFDDUpdateRateDescriptionsDoNotRejectMerge"},
+        {"path": "rti/pkg/fom/parser/fdd_merge_normative_test.go", "name": "TestFDDTransportRateMIMMergeUsesOnlyOperationalFields"}
+      ],
+      "open_items": [
+        "Independently review unequal exact-rate negative cases and public create/join atomicity; rounded numeric equality must not replace exact decimal comparison.",
+        "No independent public-client or standard-Java module-combination case is linked; descriptive retention policy is not mandated by this row."
+      ]
+    },
+    {
+      "id": "TIME-INTEGER64-REPRESENTATION",
+      "source_id": "S1516.1",
+      "clause": "12.3",
+      "pdf_pages": [325],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "An implemented C++ or Java API must provide the HLAinteger64Time logical-time implementation based on HLAinteger64BE.",
+      "conditions": "For each C++ or Java API included in the supported claim; this does not require every RTI to implement both language APIs.",
+      "review_status": "source-reviewed",
+      "implementation": ["cppsdk/src/dlc/Integer64Time.cpp", "cppsdk/include/RTI/time/HLAinteger64TimeFactory.h", "javasdk/client/src/main/java/org/gorti/rti/types/Integer64TimeFactory.java"],
+      "tests": [
+        {"path": "javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java", "name": "standardFactoryIsDiscoverableByNameAndInterface"}
+      ],
+      "open_items": [
+        "The linked standard-Java factory-discovery case is only a local subset; missing independent standard-Java runtime and encoding cases remain to be linked.",
+        "Link literal C++ behavioral case names and independently review big-endian vectors, unsupported selection, boundary arithmetic, and factory-to-runtime composition.",
+        "Factory/header presence is not full logical-time correctness."
+      ]
+    },
+    {
+      "id": "TIME-FLOAT64-REPRESENTATION",
+      "source_id": "S1516.1",
+      "clause": "12.3",
+      "pdf_pages": [325],
+      "subject": "rti",
+      "applicability": "applicable",
+      "statement": "An implemented C++ or Java API must provide the HLAfloat64Time logical-time implementation based on HLAfloat64BE.",
+      "conditions": "For each C++ or Java API included in the supported claim; providing integer64 does not replace this representation.",
+      "review_status": "source-reviewed",
+      "implementation": ["cppsdk/src/dlc/LogicalTime.cpp", "cppsdk/include/RTI/time/HLAfloat64TimeFactory.h", "javasdk/client/src/main/java/org/gorti/rti/types/Float64TimeFactory.java"],
+      "tests": [
+        {"path": "javasdk/client/src/test/java/org/gorti/rti/types/Integer64TimeFactoryTest.java", "name": "enumerationContainsBothStandardFactories"}
+      ],
+      "open_items": [
+        "The linked standard-Java enumeration case is only a local subset; missing independent standard-Java runtime and encoding cases remain to be linked.",
+        "Link literal C++ behavioral case names and independently review big-endian vectors, invalid values, boundary arithmetic, and runtime factory selection.",
+        "The separate epsilon and arithmetic obligations are not closed or fully inventoried by a representation-availability row."
+      ]
+    },
+    {
+      "id": "OMT-RATE-STRICTLY-POSITIVE",
+      "source_id": "S1516.2",
+      "clause": "4.11.2; 6.2.11(2)",
+      "pdf_pages": [60, 84],
+      "subject": "federation",
+      "applicability": "applicable",
+      "statement": "Each declared maximum update rate must be a strictly positive decimal value measured in hertz.",
+      "conditions": "A federation FOM or FOM module declares an update-rate entry; XML lexical validity alone is insufficient. The same model-content rule also applies to SOM entries, which require a separate federate assessment.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/pkg/fom/model/update_rates.go", "rti/pkg/fom/parser/update_rates.go", "rti/internal/application/composition/fom_update_rates.go"],
+      "tests": [
+        {"path": "rti/pkg/fom/model/update_rates_test.go", "name": "TestIEEE2010UpdateRateStrictlyPositive"},
+        {"path": "rti/pkg/fom/model/update_rates_test.go", "name": "TestIEEE2010UpdateRatePositivePrecision"},
+        {"path": "rti/internal/application/composition/fom_update_rates_test.go", "name": "TestFOMUpdateRateNonpositiveRejectedBeforeRepositoryMutation"}
+      ],
+      "open_items": [
+        "These links concern local RTI ingestion of the model-content obligation, not the correctness of every supplied federation model.",
+        "Independently review zero, negative, signed-zero, and extremely small positive decimal cases across public admission paths; no independent or standard-Java case is linked.",
+        "Do not equate a product numeric range restriction with the standard's positivity condition."
+      ]
+    },
+    {
+      "id": "OMT-TOOL-ACCEPT-CONFORMING-MODEL",
+      "source_id": "S1516.2",
+      "clause": "6.1.2",
+      "pdf_pages": [82],
+      "subject": "omt-tool",
+      "applicability": "unresolved",
+      "statement": "A claimed conforming OMT tool must accept and parse any conforming object model's XML product form.",
+      "conditions": "Only for a component claimed as an OMT object-model tool; the full OMT model domain is broader than RTI FDD consumption.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/pkg/fom/parser/parser.go", "rti/pkg/fom/parser/strict.go"],
+      "tests": [],
+      "open_items": [
+        "Decide whether any gorti component is claimed as a conforming OMT tool; mapped parser files are candidate review surfaces, not an applicability conclusion.",
+        "No full-OMT acceptance corpus or independent tool oracle is linked; an FDD subset parser is not automatically a conforming OMT tool.",
+        "Inventory invalid-input negative cases separately; this row records acceptance of conforming models only."
+      ]
+    },
+    {
+      "id": "OMT-TOOL-VALID-XML-OUTPUT",
+      "source_id": "S1516.2",
+      "clause": "6.1.2",
+      "pdf_pages": [82],
+      "subject": "omt-tool",
+      "applicability": "unresolved",
+      "statement": "A claimed conforming OMT tool with XML output must express the object model in valid XML.",
+      "conditions": "Only for an OMT-tool claim whose component provides XML output; RTI FDD export and full OMT XML-product conformance are distinct scopes.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/pkg/fom/exporter/exporter.go"],
+      "tests": [],
+      "open_items": [
+        "Decide the OMT-tool and XML-output claim before assigning this requirement to the RTI exporter.",
+        "No independent full-OMT XML-output oracle is linked; validation against the relaxed FDD schema does not establish full OMT XML-product conformance.",
+        "The separate user-input diagnostics and Annex E schema obligations are not inventoried by this atomic XML-output row."
+      ]
+    },
+    {
+      "id": "RTI-FULL-CLAIM-SERVICE-SCOPE",
+      "source_id": "S1516.1",
+      "clause": "13.2",
+      "pdf_pages": [390],
+      "subject": "rti",
+      "applicability": "unresolved",
+      "statement": "An RTI claiming HLA conformance must implement every joined-federate-initiated service specified by the interface standard.",
+      "conditions": "For a full RTI conformance claim, with the supported language API and platform profile explicitly identified; this seed inventory does not define or establish that claim.",
+      "review_status": "source-reviewed",
+      "implementation": ["rti/internal/hla/federation/manager.go", "cppsdk/include/RTI/RTIambassador.h", "javasdk/ieee1516-api/src/main/java/hla/rti1516e/RTIambassador.java"],
+      "tests": [],
+      "open_items": [
+        "Resolve the intended claim and supported standard API profile; Go/Python product APIs do not substitute for the language mapping requirement.",
+        "Enumerate remaining service obligations atomically; RTI-initiated callbacks, at least one standard language API, mapping, and certification provisions need separate rows.",
+        "All tests entries in this inventory are source links only, not runtime evidence, PASS verdicts, coverage measures, or closure claims.",
+        "Independent public-client, negative-service, and complete standard-Java evidence remain unestablished by this seed; existing Java subset links do not establish whole-binding conformance.",
+        "No full-clause completion or HLA Conforming label is asserted; separately assess the publicly certified-results condition in Clause 13."
+      ]
+    }
+  ]
+}

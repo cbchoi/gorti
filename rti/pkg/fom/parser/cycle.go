@@ -9,13 +9,12 @@ import (
 
 // cycleValidator emits FOM-002 when the object class parent graph contains
 // a cycle. A cycle includes:
-//   - a self-loop (Name == ParentName);
+//   - a self-loop (Key() == ParentKey());
 //   - any back-edge in the parent chain (A -> B -> ... -> A).
 //
-// Because the structural walk may produce multiple flat entries for the
-// same class name (e.g. A nested both directly under HLAobjectRoot and
-// re-declared inside B), the graph is the union: each class name maps to
-// the set of declared parents observed across all entries.
+// Each class key maps to the union of parents across its declarations.
+// Equal XML leaf names in different branches have distinct keys; legacy
+// programmatic Name/ParentName graphs can still declare cyclic edges.
 type cycleValidator struct{}
 
 func init() {
@@ -45,17 +44,18 @@ func (cycleValidator) Run(in diagnosticInput) []Diagnostic {
 	return diags
 }
 
-// buildObjectClassParentSets returns name -> set-of-parent-names for every
+// buildObjectClassParentSets returns class key -> set-of-parent-keys for every
 // object class in classes. The empty parent (root) is excluded from the
 // set so traversal naturally terminates at HLAobjectRoot.
 func buildObjectClassParentSets(classes []model.ObjectClass) map[string]map[string]struct{} {
 	out := map[string]map[string]struct{}{}
 	for _, oc := range classes {
-		if _, ok := out[oc.Name]; !ok {
-			out[oc.Name] = map[string]struct{}{}
+		classKey, parentKey := oc.Key(), oc.ParentKey()
+		if _, ok := out[classKey]; !ok {
+			out[classKey] = map[string]struct{}{}
 		}
-		if oc.ParentName != "" {
-			out[oc.Name][oc.ParentName] = struct{}{}
+		if parentKey != "" {
+			out[classKey][parentKey] = struct{}{}
 		}
 	}
 	return out

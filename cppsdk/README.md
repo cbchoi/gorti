@@ -1,9 +1,11 @@
-# gorti C++ SDK
+# Legacy gorti C++ SDK
 
-The C++ SDK is an IEEE 1516-2010 DLC-shaped federate API for gorti. It uses
-C++17 and maps ambassador calls and callbacks to the gorti wire services.
+This directory retains the earlier C++ implementation and fixtures. C++ is no
+longer a supported gorti SDK. Current development uses Go and Python, with
+[Java](../javasdk/README.md) as the IEEE 1516.1-2010 language mapping.
+The build notes below describe the retained legacy source.
 
-## Supported profile
+## Historical profile
 
 The tested profile covers connection and federation lifecycle, declarations,
 Object Management, Time Management, synchronization, ownership, save/restore,
@@ -11,8 +13,7 @@ DDM, MOM, callback evocation, typed handles and collections, standard exception
 classes, and Annex B encoding helpers. Build and conformance tests define the
 precise supported overloads.
 
-Asynchronous ambassador variants, a Java SDK, HLA 1.3, and IEEE 1516-2000 are
-outside this SDK profile.
+These historical tests do not define the current Go/Python/Java release selection.
 
 ## Requirements
 

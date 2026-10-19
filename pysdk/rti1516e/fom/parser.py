@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET  # noqa: N817
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from rti1516e.fom.model import (
@@ -29,8 +29,10 @@ from rti1516e.fom.model import (
     ObjectClass,
     Parameter,
     SimpleData,
+    UpdateRate,
     VariantRecordData,
 )
+from rti1516e.fom.modules import MIMInput, MIMModule, load_mim_module, module_paths
 
 # --- Public types -----------------------------------------------------------
 
@@ -199,6 +201,8 @@ class _ParsedModule:
     interaction_classes: list[InteractionClass] = field(default_factory=list)
     data_types: list[DataType] = field(default_factory=list)
     variant_records_missing_disc: list[str] = field(default_factory=list)
+    update_rates: list[UpdateRate] = field(default_factory=list)
+    update_rate_errors: list[str] = field(default_factory=list)
 
 
 # --- XML helpers -----------------------------------------------------------
@@ -261,13 +265,19 @@ def _strict_unknown_elements(xml_bytes: bytes) -> list[tuple[str, int]]:
 def _flatten_object_classes(
     node: ET.Element, parent: str | None, out: list[ObjectClass]
 ) -> None:
-    """Walk recursive <objectClass> nodes; emit flat list with parent names."""
+    """Retain XML ancestry separately from the compatible local-name fields."""
     name = _child_text(node, "name")
+    qualified_name = f"{parent}.{name}" if parent else name
     attributes: list[Attribute] = []
     for a in _children(node, "attribute"):
+        attribute_name = _child_text(a, "name")
+        # Clause 11.6 gives Table 6 precedence over the original Annex G XML.
+        if (qualified_name == "HLAobjectRoot.HLAmanager.HLAfederation"
+                and attribute_name == "HLAnextSaveName"):
+            attribute_name = "HLAAnnexSaveName"
         attributes.append(
             Attribute(
-                name=_child_text(a, "name"),
+                name=attribute_name,
                 data_type=_child_text(a, "dataType"),
                 order=_child_text(a, "order") or "TimeStamp",
                 transportation=_child_text(a, "transportation") or "HLAreliable",
@@ -276,19 +286,21 @@ def _flatten_object_classes(
     out.append(
         ObjectClass(
             name=name,
-            parent=parent,
+            parent=parent.rsplit(".", 1)[-1] if parent else None,
             attributes=tuple(attributes),
+            qualified_name=qualified_name,
         )
     )
     for child in _children(node, "objectClass"):
-        _flatten_object_classes(child, name, out)
+        _flatten_object_classes(child, qualified_name, out)
 
 
 def _flatten_interaction_classes(
     node: ET.Element, parent: str | None, out: list[InteractionClass]
 ) -> None:
-    """Walk recursive <interactionClass> nodes; emit flat list with parent names."""
+    """Retain XML ancestry separately from the compatible local-name fields."""
     name = _child_text(node, "name")
+    qualified_name = f"{parent}.{name}" if parent else name
     parameters: list[Parameter] = []
     for p in _children(node, "parameter"):
         parameters.append(
@@ -300,14 +312,15 @@ def _flatten_interaction_classes(
     out.append(
         InteractionClass(
             name=name,
-            parent=parent,
+            parent=parent.rsplit(".", 1)[-1] if parent else None,
             parameters=tuple(parameters),
             order=_child_text(node, "order") or "TimeStamp",
             transportation=_child_text(node, "transportation") or "HLAreliable",
+            qualified_name=qualified_name,
         )
     )
     for child in _children(node, "interactionClass"):
-        _flatten_interaction_classes(child, name, out)
+        _flatten_interaction_classes(child, qualified_name, out)
 
 
 def _convert_data_types(
@@ -452,6 +465,17 @@ def _parse_xml_bytes(xml_bytes: bytes) -> _ParsedModule:
 
     data_section = _find_first(root, "dataTypes")
     pm.data_types, pm.variant_records_missing_disc = _convert_data_types(data_section)
+    rates = _find_first(root, "updateRates")
+    if rates is not None:
+        for entry in _children(rates, "updateRate"):
+            semantics = _find_first(entry, "semantics")
+            try:
+                pm.update_rates.append(UpdateRate.from_decimal(
+                    _child_text(entry, "name"), _child_text(entry, "rate"),
+                    None if semantics is None else (semantics.text or ""),
+                ))
+            except ValueError as exc:
+                pm.update_rate_errors.append(str(exc))
     return pm
 
 
@@ -524,9 +548,9 @@ def _build_object_parent_sets(
     """Name -> set-of-parent-names (excluding root sentinel)."""
     out: dict[str, set[str]] = {}
     for oc in classes:
-        out.setdefault(oc.name, set())
-        if oc.parent:
-            out[oc.name].add(oc.parent)
+        out.setdefault(oc.key, set())
+        if oc.parent_key:
+            out[oc.key].add(oc.parent_key)
     return out
 
 
@@ -593,6 +617,26 @@ def _diag_multiple_parents(pm: _ParsedModule, source: str) -> list[Diagnostic]:
     return diags
 
 
+def _diag_duplicate_classes(pm: _ParsedModule, source: str) -> list[Diagnostic]:
+    """FOM-014: the same qualified class is declared twice in one module."""
+    diags: list[Diagnostic] = []
+    for kind, classes in (("object", pm.object_classes), ("interaction", pm.interaction_classes)):
+        seen: set[str] = set()
+        for cls in classes:
+            if cls.key in seen:
+                diags.append(_class_conflict(kind, cls.key, source))
+            seen.add(cls.key)
+    return diags
+
+
+def _class_conflict(kind: str, key: str, source: str) -> Diagnostic:
+    return Diagnostic(
+        code="FOM-014",
+        message=f"duplicate or conflicting {kind} class definition {key!r}",
+        source=source,
+    )
+
+
 def _walk_object_ancestors_inclusive(
     start: ObjectClass, by_name: dict[str, ObjectClass]
 ) -> list[ObjectClass]:
@@ -601,13 +645,13 @@ def _walk_object_ancestors_inclusive(
     visited: set[str] = set()
     cur: ObjectClass | None = start
     while cur is not None:
-        if cur.name in visited:
+        if cur.key in visited:
             break
-        visited.add(cur.name)
+        visited.add(cur.key)
         chain.insert(0, cur)
-        if not cur.parent:
+        if not cur.parent_key:
             break
-        cur = by_name.get(cur.parent)
+        cur = by_name.get(cur.parent_key)
     return chain
 
 
@@ -619,13 +663,13 @@ def _walk_interaction_ancestors_inclusive(
     visited: set[str] = set()
     cur: InteractionClass | None = start
     while cur is not None:
-        if cur.name in visited:
+        if cur.key in visited:
             break
-        visited.add(cur.name)
+        visited.add(cur.key)
         chain.insert(0, cur)
-        if not cur.parent:
+        if not cur.parent_key:
             break
-        cur = by_name.get(cur.parent)
+        cur = by_name.get(cur.parent_key)
     return chain
 
 
@@ -633,7 +677,7 @@ def _diag_duplicate_attributes(
     pm: _ParsedModule, source: str
 ) -> list[Diagnostic]:
     """FOM-004: attribute name duplicated within a class (incl. inherited)."""
-    by_name: dict[str, ObjectClass] = {oc.name: oc for oc in pm.object_classes}
+    by_name: dict[str, ObjectClass] = {oc.key: oc for oc in pm.object_classes}
     reported: set[tuple[str, str]] = set()
     diags: list[Diagnostic] = []
     for oc in pm.object_classes:
@@ -641,26 +685,26 @@ def _diag_duplicate_attributes(
         for owner in _walk_object_ancestors_inclusive(oc, by_name):
             for a in owner.attributes:
                 if a.name in ancestors_attrs:
-                    key = (oc.name, a.name)
+                    key = (oc.key, a.name)
                     if key in reported:
                         continue
                     reported.add(key)
                     prev = ancestors_attrs[a.name]
-                    if prev == owner.name:
+                    if prev == owner.key:
                         msg = (
                             f"attribute {a.name!r} duplicated in object class "
-                            f"{owner.name!r}"
+                            f"{owner.key!r}"
                         )
                     else:
                         msg = (
                             f"attribute {a.name!r} duplicated in object class "
-                            f"{oc.name!r} (also declared on {prev!r})"
+                            f"{oc.key!r} (also declared on {prev!r})"
                         )
                     diags.append(
                         Diagnostic(code="FOM-004", message=msg, source=source)
                     )
                     continue
-                ancestors_attrs[a.name] = owner.name
+                ancestors_attrs[a.name] = owner.key
     return diags
 
 
@@ -669,7 +713,7 @@ def _diag_duplicate_parameters(
 ) -> list[Diagnostic]:
     """FOM-005: parameter name duplicated within an interaction (incl. inherited)."""
     by_name: dict[str, InteractionClass] = {
-        ic.name: ic for ic in pm.interaction_classes
+        ic.key: ic for ic in pm.interaction_classes
     }
     reported: set[tuple[str, str]] = set()
     diags: list[Diagnostic] = []
@@ -678,26 +722,26 @@ def _diag_duplicate_parameters(
         for owner in _walk_interaction_ancestors_inclusive(ic, by_name):
             for p in owner.parameters:
                 if p.name in ancestors_params:
-                    key = (ic.name, p.name)
+                    key = (ic.key, p.name)
                     if key in reported:
                         continue
                     reported.add(key)
                     prev = ancestors_params[p.name]
-                    if prev == owner.name:
+                    if prev == owner.key:
                         msg = (
                             f"parameter {p.name!r} duplicated in interaction "
-                            f"class {owner.name!r}"
+                            f"class {owner.key!r}"
                         )
                     else:
                         msg = (
                             f"parameter {p.name!r} duplicated in interaction "
-                            f"class {ic.name!r} (also declared on {prev!r})"
+                            f"class {ic.key!r} (also declared on {prev!r})"
                         )
                     diags.append(
                         Diagnostic(code="FOM-005", message=msg, source=source)
                     )
                     continue
-                ancestors_params[p.name] = owner.name
+                ancestors_params[p.name] = owner.key
     return diags
 
 
@@ -705,14 +749,14 @@ def _diag_object_parents(pm: _ParsedModule, source: str) -> list[Diagnostic]:
     """FOM-011: object class references non-existent parent."""
     known: set[str] = {_OBJECT_ROOT}
     for oc in pm.object_classes:
-        known.add(oc.name)
+        known.add(oc.key)
     reported: set[tuple[str, str]] = set()
     diags: list[Diagnostic] = []
     for oc in pm.object_classes:
-        if oc.name == _OBJECT_ROOT:
+        if oc.key == _OBJECT_ROOT:
             continue
-        if not oc.parent:
-            key = (oc.name, "<root>")
+        if not oc.parent_key:
+            key = (oc.key, "<root>")
             if key in reported:
                 continue
             reported.add(key)
@@ -720,15 +764,15 @@ def _diag_object_parents(pm: _ParsedModule, source: str) -> list[Diagnostic]:
                 Diagnostic(
                     code="FOM-011",
                     message=(
-                        f"object class {oc.name!r} is not nested under "
+                        f"object class {oc.key!r} is not nested under "
                         f"{_OBJECT_ROOT}; missing parent class"
                     ),
                     source=source,
                 )
             )
             continue
-        if oc.parent not in known:
-            key = (oc.name, oc.parent)
+        if oc.parent_key not in known:
+            key = (oc.key, oc.parent_key)
             if key in reported:
                 continue
             reported.add(key)
@@ -736,8 +780,8 @@ def _diag_object_parents(pm: _ParsedModule, source: str) -> list[Diagnostic]:
                 Diagnostic(
                     code="FOM-011",
                     message=(
-                        f"object class {oc.name!r} references non-existent "
-                        f"parent {oc.parent!r}"
+                        f"object class {oc.key!r} references non-existent "
+                        f"parent {oc.parent_key!r}"
                     ),
                     source=source,
                 )
@@ -751,14 +795,14 @@ def _diag_interaction_parents(
     """FOM-012: interaction class references non-existent parent."""
     known: set[str] = {_INTERACTION_ROOT}
     for ic in pm.interaction_classes:
-        known.add(ic.name)
+        known.add(ic.key)
     reported: set[tuple[str, str]] = set()
     diags: list[Diagnostic] = []
     for ic in pm.interaction_classes:
-        if ic.name == _INTERACTION_ROOT:
+        if ic.key == _INTERACTION_ROOT:
             continue
-        if not ic.parent:
-            key = (ic.name, "<root>")
+        if not ic.parent_key:
+            key = (ic.key, "<root>")
             if key in reported:
                 continue
             reported.add(key)
@@ -766,15 +810,15 @@ def _diag_interaction_parents(
                 Diagnostic(
                     code="FOM-012",
                     message=(
-                        f"interaction class {ic.name!r} is not nested under "
+                        f"interaction class {ic.key!r} is not nested under "
                         f"{_INTERACTION_ROOT}; missing parent class"
                     ),
                     source=source,
                 )
             )
             continue
-        if ic.parent not in known:
-            key = (ic.name, ic.parent)
+        if ic.parent_key not in known:
+            key = (ic.key, ic.parent_key)
             if key in reported:
                 continue
             reported.add(key)
@@ -782,8 +826,8 @@ def _diag_interaction_parents(
                 Diagnostic(
                     code="FOM-012",
                     message=(
-                        f"interaction class {ic.name!r} references non-existent "
-                        f"parent {ic.parent!r}"
+                        f"interaction class {ic.key!r} references non-existent "
+                        f"parent {ic.parent_key!r}"
                     ),
                     source=source,
                 )
@@ -820,31 +864,9 @@ def _load_mim() -> _ParsedModule | None:
     an undefined reference, surfacing the build-config issue loudly via the
     existing diagnostic channel rather than masking it with a silent error).
 
-    Cross-language handle alignment (M6 follow-up): the IEEE 1516.1-2010
-    standard MIM declares several interaction class names twice under
-    different parents (for example ``HLAadjust`` appears once under
-    ``HLAmanager.HLAfederate`` and again under ``HLAmanager.HLAfederation``;
-    same for ``HLArequest``, ``HLAreport``, ``HLAreportFOMmoduleData``,
-    ``HLArequestFOMmoduleData`` and ``HLAsetSwitches``). It also declares a
-    few classes that, when flattened, end up sharing the SAME (name,
-    parent_name_string) key because their parents themselves share a name
-    (e.g. two distinct ``HLAreport`` containers — one nested under
-    ``HLAfederate``, one under ``HLAfederation`` — each carry a child
-    ``HLAreportFOMmoduleData``, and after flattening both children list
-    parent="HLAreport"). Go's ``model.NewFOM`` keeps every one of these
-    flat entries verbatim (no dedup, just a stable name sort) and the
-    production ``*fomHandle.LookupInteractionClass`` resolves a leaf name
-    by 1-based position in that slice. If the Python side dedupes the MIM
-    by name (or even by (name, parent_name)), the user FOM's class lands
-    at a SMALLER handle than the Go side assigns, and Go's
-    ``OrderForInteraction`` lookup against its own table either returns a
-    different class or hits an out-of-range slot — both fall back to TSO,
-    defeating the per-class FOM order contract. So we mirror Go: append
-    every MIM interaction/object class verbatim. Data types ARE name-unique
-    by IEEE schema and stay deduped across MIM files (Go's MIM corpus is
-    a single XML in cut-1 so the cross-file dedup is a no-op for it; we
-    keep it on the Python side as defense-in-depth for the second wrapper
-    XML the Python loader still consumes for forward compatibility).
+    Repeated local names in different MIM branches are distinct qualified
+    classes. Preserve every class and stable local-name ordering. Runtime
+    handles come from the authoritative server view, not a name-only merge.
     """
     global _MIM_CACHE, _MIM_LOAD_FAILED
     if _MIM_CACHE is not None:
@@ -865,6 +887,8 @@ def _load_mim() -> _ParsedModule | None:
         # the docstring above for the cross-language alignment rationale.
         merged.object_classes.extend(pm.object_classes)
         merged.interaction_classes.extend(pm.interaction_classes)
+        merged.update_rates.extend(pm.update_rates)
+        merged.update_rate_errors.extend(pm.update_rate_errors)
         for dt in pm.data_types:
             if dt.name in seen_dt:
                 continue
@@ -888,24 +912,24 @@ def _diag_mim_redefinition(
     pm: _ParsedModule, source: str, mim: _ParsedModule
 ) -> list[Diagnostic]:
     """FOM-101: user FOM redefines a MIM type / class."""
-    mim_obj = {oc.name for oc in mim.object_classes}
-    mim_int = {ic.name for ic in mim.interaction_classes}
+    mim_obj = {oc.key for oc in mim.object_classes}
+    mim_int = {ic.key for ic in mim.interaction_classes}
     mim_dt = {dt.name for dt in mim.data_types}
     diags: list[Diagnostic] = []
     for oc in pm.object_classes:
-        if oc.name not in mim_obj:
+        if oc.key not in mim_obj:
             continue
         if _is_object_class_passthrough(oc):
             continue
         diags.append(
             Diagnostic(
                 code="FOM-101",
-                message=f"user module redefines MIM object class {oc.name!r}",
+                message=f"user module redefines MIM object class {oc.key!r}",
                 source=source,
             )
         )
     for ic in pm.interaction_classes:
-        if ic.name not in mim_int:
+        if ic.key not in mim_int:
             continue
         if _is_interaction_class_passthrough(ic):
             continue
@@ -913,7 +937,7 @@ def _diag_mim_redefinition(
             Diagnostic(
                 code="FOM-101",
                 message=(
-                    f"user module redefines MIM interaction class {ic.name!r}"
+                    f"user module redefines MIM interaction class {ic.key!r}"
                 ),
                 source=source,
             )
@@ -934,37 +958,21 @@ def _diag_mim_redefinition(
 def _merge_user_onto_mim(
     user: _ParsedModule, mim: _ParsedModule
 ) -> _ParsedModule:
-    """Union MIM + user, MIM names winning on collision (callers reject those
-    via FOM-101 before reaching this step).
-
-    The MIM side is appended verbatim — including duplicate (name, parent)
-    pairs from the standard MIM (see ``_load_mim`` docstring on cross-language
-    handle alignment). The user side is filtered by NAME against the MIM
-    name set, mirroring Go's ``mim.mergeNoCollision``: a user re-mention of
-    an MIM root (HLAobjectRoot / HLAinteractionRoot) is the canonical
-    pass-through pattern and must be skipped. Beyond that, user-vs-user
-    dedup is also by NAME — matching Go's ``mergeNoCollision`` which uses
-    the same name-keyed map (so a user FOM with two ``Foo`` siblings would
-    keep both on Go's side because Go's map check is against the MIM-only
-    set, but Go's ``model.NewFOM`` would still flatten and append both).
-    To preserve cross-language handle parity even for that edge case we
-    mirror Go's appending behavior for user classes whose name is unique
-    relative to the MIM but may repeat among user siblings.
-    """
+    """Union validated user modules onto MIM by qualified class identity."""
     out = _ParsedModule()
-    mim_oc_names: set[str] = {oc.name for oc in mim.object_classes}
-    mim_ic_names: set[str] = {ic.name for ic in mim.interaction_classes}
+    mim_oc_names: set[str] = {oc.key for oc in mim.object_classes}
+    mim_ic_names: set[str] = {ic.key for ic in mim.interaction_classes}
     seen_dt: set[str] = set()
     for oc in mim.object_classes:
         out.object_classes.append(oc)
     for oc in user.object_classes:
-        if oc.name in mim_oc_names:
+        if oc.key in mim_oc_names:
             continue
         out.object_classes.append(oc)
     for ic in mim.interaction_classes:
         out.interaction_classes.append(ic)
     for ic in user.interaction_classes:
-        if ic.name in mim_ic_names:
+        if ic.key in mim_ic_names:
             continue
         out.interaction_classes.append(ic)
     for dt in mim.data_types:
@@ -978,6 +986,57 @@ def _merge_user_onto_mim(
     return out
 
 
+def _merge_update_rates(
+    base: list[UpdateRate], incoming: list[UpdateRate], source: str,
+) -> tuple[list[UpdateRate], list[Diagnostic]]:
+    rates: dict[str, UpdateRate] = {}
+    for rate in [*base, *incoming]:
+        old = rates.get(rate.name)
+        if old is None:
+            rates[rate.name] = rate
+        elif old.rate != rate.rate:
+            return [], [Diagnostic(
+                code="FOM-016", message=f"conflicting update rate {rate.name!r}", source=source,
+            )]
+        elif old.semantics is None:
+            rates[rate.name] = replace(old, semantics=rate.semantics)
+    return list(rates.values()), []
+
+
+def _merge_user_modules(
+    previous: _ParsedModule, incoming: _ParsedModule, source: str
+) -> tuple[_ParsedModule, list[Diagnostic]]:
+    """Collapse repeated containers; reject conflicting class declarations."""
+    out = _merge_user_onto_mim(incoming, previous)
+    out.update_rates, diags = _merge_update_rates(
+        previous.update_rates, incoming.update_rates, source,
+    )
+    objects = {oc.key: i for i, oc in enumerate(out.object_classes)}
+    for oc in incoming.object_classes:
+        index = objects[oc.key]
+        old = out.object_classes[index]
+        if old.parent_key != oc.parent_key or (
+            old.attributes and oc.attributes and old.attributes != oc.attributes
+        ):
+            diags.append(_class_conflict("object", oc.key, source))
+        elif not old.attributes:
+            out.object_classes[index] = oc
+    interactions = {ic.key: i for i, ic in enumerate(out.interaction_classes)}
+    for ic in incoming.interaction_classes:
+        index = interactions[ic.key]
+        old_interaction = out.interaction_classes[index]
+        if old_interaction.parent_key != ic.parent_key or (
+            old_interaction.parameters and ic.parameters and (
+                old_interaction.parameters != ic.parameters or old_interaction.order != ic.order
+                or old_interaction.transportation != ic.transportation
+            )
+        ):
+            diags.append(_class_conflict("interaction", ic.key, source))
+        elif not old_interaction.parameters:
+            out.interaction_classes[index] = ic
+    return out, diags
+
+
 def _to_fom(pm: _ParsedModule) -> FOM:
     """Materialize the immutable FOM dataclass with sorted-by-name members."""
     return FOM(
@@ -986,13 +1045,14 @@ def _to_fom(pm: _ParsedModule) -> FOM:
             sorted(pm.interaction_classes, key=lambda ic: ic.name)
         ),
         data_types=tuple(sorted(pm.data_types, key=lambda dt: dt.name)),
+        update_rates=tuple(sorted(pm.update_rates, key=lambda rate: rate.name)),
     )
 
 
 # --- Public entry point ----------------------------------------------------
 
 
-def parse(modules: list[str | Path]) -> ParseResult:
+def parse(modules: list[str | Path], *, mim_module: MIMInput | None = None) -> ParseResult:
     """Parse a list of FOM module file paths and return a ParseResult.
 
     On success: ParseResult.fom is the merged FOM (MIM + user modules);
@@ -1002,14 +1062,8 @@ def parse(modules: list[str | Path]) -> ParseResult:
     problem found, each with a FOM-NNN code matching the Go side.
     """
     diagnostics: list[Diagnostic] = []
-    parsed_modules: list[_ParsedModule] = []
-
-    mim = _load_mim()
-    mim_data_type_names: set[str] = (
-        {dt.name for dt in mim.data_types} if mim is not None else set()
-    )
-
-    for module in modules:
+    sources: list[tuple[str, bytes]] = []
+    for module in module_paths(modules, "modules"):
         path = Path(module)
         source = str(path)
         try:
@@ -1024,6 +1078,41 @@ def parse(modules: list[str | Path]) -> ParseResult:
             )
             continue
 
+        sources.append((source, xml_bytes))
+    if diagnostics:
+        return ParseResult(diagnostics=diagnostics)
+    try:
+        selected = load_mim_module(mim_module)
+    except OSError as exc:
+        return ParseResult(diagnostics=[Diagnostic(
+            code="FOM-INTERNAL", message=f"cannot read MIM: {exc}", source=str(mim_module))])
+    return _parse_sources(sources, mim_module=selected)
+
+
+def _parse_sources(
+    sources: list[tuple[str, bytes]], *, mim_module: MIMModule | None = None,
+) -> ParseResult:
+    """Hydrate wire modules directly, without rereading client-local paths."""
+    diagnostics: list[Diagnostic] = []
+    parsed_modules: list[tuple[str, _ParsedModule]] = []
+    try:
+        mim = _parse_xml_bytes(mim_module.xml) if mim_module is not None else _load_mim()
+    except ET.ParseError as exc:
+        return ParseResult(diagnostics=[Diagnostic(
+            code="FOM-INTERNAL", message=f"malformed MIM XML: {exc}",
+            source=mim_module.designator if mim_module else "<MIM>")])
+    mim_data_type_names = {dt.name for dt in mim.data_types} if mim is not None else set()
+    if mim is not None:
+        source = mim_module.designator if mim_module else "<MIM>"
+        diagnostics.extend(
+            Diagnostic(code="FOM-016", message=message, source=source)
+            for message in mim.update_rate_errors
+        )
+        mim_rates, rate_diags = _merge_update_rates([], mim.update_rates, source)
+        diagnostics.extend(rate_diags)
+        mim = replace(mim, update_rates=mim_rates)
+
+    for source, xml_bytes in sources:
         # FOM-009 strict whitelist runs against the raw bytes — independent
         # of the structural decode so unknown elements get flagged even when
         # the encoding/xml-style walk silently discards them.
@@ -1043,10 +1132,16 @@ def parse(modules: list[str | Path]) -> ParseResult:
             continue
 
         # Run the structural diagnostic passes against the user module.
-        module_diags: list[Diagnostic] = []
+        module_diags = [
+            Diagnostic(code="FOM-016", message=message, source=source)
+            for message in pm.update_rate_errors
+        ]
+        pm.update_rates, rate_diags = _merge_update_rates([], pm.update_rates, source)
+        module_diags.extend(rate_diags)
         module_diags.extend(_diag_datatype_refs(pm, source, mim_data_type_names))
         module_diags.extend(_diag_cycle(pm, source))
         module_diags.extend(_diag_multiple_parents(pm, source))
+        module_diags.extend(_diag_duplicate_classes(pm, source))
         module_diags.extend(_diag_duplicate_attributes(pm, source))
         module_diags.extend(_diag_duplicate_parameters(pm, source))
         module_diags.extend(_diag_object_parents(pm, source))
@@ -1059,13 +1154,24 @@ def parse(modules: list[str | Path]) -> ParseResult:
             module_diags.extend(_diag_mim_redefinition(pm, source, mim))
 
         diagnostics.extend(module_diags)
-        parsed_modules.append(pm)
+        parsed_modules.append((source, pm))
 
     if diagnostics:
         return ParseResult(fom=None, diagnostics=diagnostics)
 
-    # Success: union user modules onto the MIM and build the immutable FOM.
-    merged = mim if mim is not None else _ParsedModule()
-    for pm in parsed_modules:
-        merged = _merge_user_onto_mim(pm, merged)
-    return ParseResult(fom=_to_fom(merged), diagnostics=[])
+    merged = _ParsedModule()
+    for source, pm in parsed_modules:
+        merged, merge_diags = _merge_user_modules(merged, pm, source)
+        diagnostics.extend(merge_diags)
+    if len(parsed_modules) > 1 and not diagnostics:
+        diagnostics.extend(_diag_duplicate_attributes(merged, "<merged>"))
+        diagnostics.extend(_diag_duplicate_parameters(merged, "<merged>"))
+    if diagnostics:
+        return ParseResult(fom=None, diagnostics=diagnostics)
+    with_mim = _merge_user_onto_mim(merged, mim or _ParsedModule())
+    with_mim.update_rates, rate_diags = _merge_update_rates(
+        mim.update_rates if mim is not None else [], merged.update_rates, "<merged>",
+    )
+    if rate_diags:
+        return ParseResult(fom=None, diagnostics=rate_diags)
+    return ParseResult(fom=replace(_to_fom(with_mim), mim_module=mim_module), diagnostics=[])
