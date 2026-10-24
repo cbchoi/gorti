@@ -17,6 +17,11 @@ width 10, depth 10, 100 injected events, 40,600 expected interactions, and
 
 ## Runners
 
+The [7-8 October receive-order record](callback-reporting/historical-results-20261007-08.md)
+consolidates the historical Portico comparison, measurement boundary, confidence
+intervals, binary identities, and separate SDK optimization. It is not a
+benchmark of the later publication commit; raw execution artifacts stay outside Git.
+
 - `portico-gorti/` runs the paired container experiment described below.
 - `callback-reporting/` runs native callback-reporting comparisons, including
   ABBA/BAAB crossover blocks and before/after Go SDK experiments.

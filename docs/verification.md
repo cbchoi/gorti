@@ -1,79 +1,107 @@
-# Verification and interoperability
+# Verification results
 
-Verification connects service requirements, implementation code, executable
-assertions, and recorded test results. It has four levels:
+gorti maintains requirement-derived test cases for conformance assessment and
+regression testing. The tests connect reviewed IEEE 1516-2010 clauses to
+inputs, expected observations, implementation locations, and execution reports.
+See [test-case design](test-cases.md) for a worked example.
 
-1. Unit and integration tests exercise service invariants and generated
-   protocol handlers.
-2. Cross-language tests compare Go and Python encodings and callbacks. Java
-   binding tests exercise its API, transport, and live-server callbacks.
-3. Clause-level requirements link to tests and their execution records.
-4. Two-federate scenarios compare service results and callbacks with reference
-   RTIs.
+## Latest retained service campaign
 
-## Service coverage
+The [19 October 2026 Linux campaign](https://github.com/cbchoi/gorti/blob/main/engineering/verification/linux-publication-validation-20261019.md)
+assessed commit `4b11da478f423c0776f6ba6ae580f1670b61f2a9`.
+It ran on Ubuntu 24.04 under WSL 2 with sources on the native Linux filesystem,
+Go 1.22.2, Python 3.12.3, Temurin JDK 11.0.32.1, and Maven 3.9.16.
 
-Internal tests cover federation, declaration, object, time, ownership, DDM,
-synchronization, save/restore, MOM, Support, FOM parsing, and encodings. Live
-tests exercise dynamic FOM joins, Float64 and Integer64 execution, timed saves,
-callback recovery, restored SDK state, and authenticated session controls.
+| Selection | Passed | Failed/errors | Skipped | Counting unit |
+|---|---:|---:|---:|---|
+| Go default build with race detector | 3,533 | 0 | 19 | Top-level tests in 80 packages |
+| Go asynchronous build with race detector | 972 | 0 | 0 | Top-level tests in three packages |
+| Python SDK and selected HLA services | 2,127 | 0 | 0 | Reported tests |
+| Java SDK and live services | 581 | 0 | 7 | Reported invocations |
+| Internal IVCT-derived subset | 35 | 0 | 0 | Reported cases |
 
-The cross-RTI scenarios cover FM, DM, OM, and selected TM sequences. Their
-canonical logs and performance statistics are separate from the internal
-service-test inventory.
+The default Go run also contains 7,020 passing subtests; the asynchronous
+selection contains 2,357. Subtests, overlapping selections, and repeated
+runs are not additional independent requirements.
 
-## Recorded execution results
+Sixteen default Go skips are asynchronous-only cases exercised in the tagged
+run; three require FDD-schema resources. Java skips comprise one comparison
+against an external IEEE API archive, three FDD-schema checks, and three
+cross-binding fixtures. Static/protocol checks, lint, the strict documentation
+build, and ten repeated determinism runs also passed. These are recorded local
+results, not a claim that hosted CI executed the same campaign.
 
-The [4 October 2026 full service run](https://github.com/cbchoi/gorti/blob/main/engineering/verification/ieee2010-full-service-rerun-post-sync-20261004.md)
-recorded:
+## Requirement-to-result reconciliation
 
-| Selection | Passed | Failed | Skipped |
-|---|---:|---:|---:|
-| Windows Go RTI and conformance tests | 3,349 | 0 | 0 |
-| Linux same Go selection with `-race` | 3,349 | 0 | 0 |
-| Python SDK/service suite, live server enabled | 2,157 | 0 | 0 |
-| Java SDK suite, live and diagnostic cases enabled | 591 | 0 | 0 |
-| Internal IVCT-derived subset | 35 | 0 | 0 |
+The [23 October reconciliation](https://github.com/cbchoi/gorti/blob/main/engineering/verification/ieee1516-2010-execution-reconciliation-20261023.md)
+checked all 205 linked test-source files against the retained campaign source.
+They matched byte for byte. It added one focused reporting-guard execution;
+it did not repeat the complete service campaign.
 
-Go counts are top-level tests. Repeated platform runs are not additional unique
-tests. The Python service selection excludes legacy C++ interoperability and
-RL/PPO work. The report lists additional checkpoint, architecture, and tooling
-tests separately.
+| Status | Records |
+|---|---:|
+| Applicable, passing linked invocations only | 635 |
+| Applicable, linked results include skips | 4 |
+| Not applicable | 48 |
+| Unresolved | 25 |
+| Total reviewed records | 712 |
 
-The [8 October callback-report optimization](https://github.com/cbchoi/gorti/blob/main/engineering/design/consistent-performance-plan-20261007.md)
-passed all 978 required IEEE-service cases in each Go reporting build, including
-the selected live checkpoint cases. The full Python, Java, and Linux race
-campaign was not repeated for that change. Each report identifies the source,
-build, configuration, and execution artifacts to which its result applies.
+All 639 applicable records have linked results, with no linked failures.
+Of 877 requirement-test links, 870 contain only passing imported invocations
+and seven contain skips; one skipped link belongs to a not-applicable record.
 
-## Requirements traceability
+The four applicable records with skips are
+`JAVA2010-API-EXACT-PACKAGE`, `JAVA2010-FDD-SCHEMA-VALIDITY`,
+`JAVA2010-VALID-FDD-ADMISSION`, and `OMTSLICE2010-DIF-VALID-XML`.
+Their missing resources are the external API archive or FDD schemas.
 
-The [requirements inventory](https://github.com/cbchoi/gorti/tree/main/engineering/verification/requirements2010)
-records the standard and clause, applicability, implementation locations, test
-names, and expected behavior. The 4 October reconciliation linked all 639
-applicable records to passing executions across 877 test links. Of 712 total
-records, 48 were not applicable and 25 remained unresolved.
+The unresolved records retain questions about source interpretation,
+callback-exception responsibilities, custom-time conditions, and the
+decomposition of state charts and tables. These counts describe a reviewed
+inventory and its linked executions, not a percentage of the standard proved.
 
-This is internal verification evidence. The remaining source interpretations
-and independent assessment are tracked separately; formal certification has not
-been obtained. The [Software Test Description](https://github.com/cbchoi/gorti/blob/main/engineering/specifications/current/STD.md)
-defines test selection and acceptance criteria.
+## What the evidence measures
 
-## Canonical logs
+| Primary class | Requirement-test links | Distinct named targets |
+|---|---:|---:|
+| Service/SDK behavior | 766 | 388 |
+| API/structure | 110 | 75 |
+| Documentation/reporting | 1 | 1 |
+| Total | 877 | 464 |
 
-Each implementation writes a detailed raw log. A validator projects it to the
-same FM, DM, OM, and TM records only after checking required calls, callbacks,
-payloads, synchronization points, and logical times. Semantic equality is a
-full canonical-record comparison, not an event-count comparison.
+Behavioral evidence includes controlled unit/SDK tests and live service tests.
+API/structure checks cover interface shape, encodings, time/handle helpers,
+and FOM/MIM/XML parsing. The reporting guard tests the report tool, not an
+RTI service. MOM reporting remains a service case.
 
-Reference RTI evidence consists of standard API returns, callbacks, and
-runtime records. gorti's event journal is optional and enabled only for
-profiles that require replay evidence. Performance profiles record summaries
-without per-message diagnostic logging.
+The contribution is an inspectable collection of test cases, oracles, and
+traceability records that can be reused and extended. It is not an independent
+conformance certificate. The [detailed guide](https://github.com/cbchoi/gorti/blob/main/engineering/verification/ieee1516-2010-test-case-guide.md)
+provides record groups, representative cases, source identities, and
+classification rules.
 
-## Run the release checks
+## Service and cross-language coverage
 
-Run the local implementation checks first:
+Internal tests exercise federation, declaration, object, time, ownership, DDM,
+synchronization, save/restore, MOM, Support, FOM handling, and encodings.
+Live cases include dynamic FOM joins, Float64 and Integer64 time, timed saves,
+callback recovery, SDK state restoration, and session controls.
+
+Go/Python cases check timestamped delivery and grants under controlled peer
+bounds. Java/Python cases check opaque parameter bytes, tags, order,
+transport, producer identity, and evoked dispatch. The
+[model integration example](model-integration.md) adds a reusable simulation
+workflow with an independent trajectory reference.
+
+Cross-RTI scenarios separately compare FM, DM, OM, and selected TM behavior.
+Their validators compare complete canonical service records after checking
+payloads, callbacks, and times; equal event counts alone are insufficient.
+Portico performance trials do not establish that Portico passed gorti's
+internal requirement inventory.
+
+## Run checks for your checkout
+
+From the repository root, after [installing the required SDK tools](installation.md):
 
 ```text
 go test ./...
@@ -81,18 +109,13 @@ python -m pytest pysdk/tests verification/common verification/gorti
 mvn -f javasdk/pom.xml verify
 ```
 
-The reproducible Portico/gorti comparison is launched from PowerShell:
+These are developer entry points, not a command set that reproduces all counts
+above. Live endpoints, fixtures, build tags, race settings, and selection
+filters must match the recorded campaign to reproduce its scope. Use the
+[Linux campaign commands](https://github.com/cbchoi/gorti/blob/main/engineering/verification/linux-publication-validation-20261019.md)
+and SDK guides for those settings.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass `
-  -File verification/portico/RunComparison.ps1
-```
-
-The comparison defaults to five warm-up pairs and thirty measured pairs with
-alternating AB/BA order. The October callback-reporting runner also supports
-ABBA/BAAB crossover blocks. See [Reproducibility](reproducibility.md) for both
-designs and [Performance](performance.md) for the recorded results.
-
-Live SDK tests need their documented endpoint and fixture settings. Use the
-commands and environment recorded in the full-run report when reproducing its
-counts; the default test commands alone do not enable every optional live case.
+[Reproducibility](reproducibility.md) separates fresh executions from
+aggregation of archived results. The
+[STD](https://github.com/cbchoi/gorti/blob/main/engineering/specifications/current/STD.md)
+records test design and acceptance criteria.

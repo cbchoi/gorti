@@ -1,47 +1,56 @@
 # gorti documentation
 
-gorti implements an IEEE 1516-2010 (HLA Evolved) RTI in Go. The distribution
-contains the `rtid` server, Go/Python/Java federate SDKs, and tools for logging
-and cross-RTI verification.
+gorti is an open-source RTI written in Go, targeting the IEEE 1516-2010 HLA
+family. One server coordinates federates written in Go, Python, and Java.
+Models retain their own logic; federate adapters connect their inputs,
+outputs, and execution steps to HLA services.
 
 ## Start here
 
-1. [Install gorti](installation.md). Building the server requires Go 1.22 or
-   later; Python and Java are optional.
-2. Run the [two-federate quickstart](quickstart.md) from the repository root.
-3. Read the [user guide](user-guide.md) for the federation, FOM, callback, and
-   SDK lifecycle.
-4. Check [operations](operations.md) before exposing a server endpoint outside
-   the local machine.
+| Task | Guide |
+|---|---|
+| Install the server and an SDK | [Installation](installation.md) |
+| Run a server and two time-coordinated federates | [Quickstart](quickstart.md) |
+| Connect existing Python models to a Go model | [Model integration](model-integration.md) |
+| Write or adapt a federate | [Runtime and SDKs](user-guide.md) |
+| Configure a server for other hosts | [Operations and security](operations.md) |
+| Study or change a service algorithm | [Architecture](architecture.md) and [education](education.md) |
 
-[Time management](time-management.md) explains why a request from one federate
-can remain blocked until another federate advances.
+The [example catalog](https://github.com/cbchoi/gorti/blob/main/examples/README.md)
+provides Windows and Linux launchers, including Java object and interaction
+exchange.
 
-## Supported deployment
+## Services and deployment
 
 The supported topology is one authoritative `rtid` process with local or remote
-federates. Bind all endpoints to `127.0.0.1` for a first run. The unqualified
-federate and metrics defaults, `:8442` and `:9090`, listen on all interfaces;
-the admin default is plaintext on `localhost:8443`.
+federates. It provides federation, declaration, object, time, ownership, DDM,
+synchronization, save/restore, MOM, and Support services. Federations select
+Float64 or Integer64 logical time. The default HLA core profile runs without
+the optional audit journal.
 
-Federation, declaration, object, time, ownership, data distribution,
-synchronization, save/restore, and management object services are included.
-Federations select Float64 or exact Integer64 logical time. Dynamic FOM joins,
-timed save/restore, callback recovery, and SDK state restoration are implemented.
-Go and Python provide the primary SDKs; Java provides the `hla.rti1516e`
-mapping. [Verification](verification.md) links requirements to test results.
+For a first run, bind all endpoints to `127.0.0.1`. The unqualified federate
+and metrics defaults, `:8442` and `:9090`, listen on all interfaces; the admin
+default is plaintext on `localhost:8443`.
+Read [operations](operations.md) before exposing them.
 
-## Reproducing results
+## Test cases and experiments
 
-Cross-RTI performance runs record FOM bytes, random seeds, two-process
-choreography, callbacks, logging, warm-ups, and measurement boundaries. Paired
-AB/BA and crossover ABBA/BAAB designs are available. Runs require matching
-callback accounting and semantic evidence. See the
-[comparison protocol](reproducibility.md) and [performance notes](performance.md).
+The project supplies reusable, requirement-derived test cases for conformance
+assessment and regression testing. The [test-case guide](test-cases.md)
+walks from a reviewed requirement to an executable assertion.
+[Verification results](verification.md) distinguish service behavior,
+API/structure checks, skipped cases, and unresolved records.
+
+The [Python-Go model example](model-integration.md) checks simulation
+trajectories against an independent reference. The
+[performance page](performance.md) reports historical Portico comparisons,
+including their uncertainty and measurement boundaries.
+[Reproducibility](reproducibility.md) explains how to rerun experiments or
+regenerate tables from retained reports.
 
 ## Project links
 
-- Source: <https://github.com/cbchoi/gorti>
-- Releases: <https://github.com/cbchoi/gorti/releases>
-- License: MIT
-- Citation: [citation metadata](citation.md)
+- [Source and issue tracker](https://github.com/cbchoi/gorti)
+- [Releases](https://github.com/cbchoi/gorti/releases)
+- [Citation metadata](citation.md)
+- [Development roadmap](roadmap.md)

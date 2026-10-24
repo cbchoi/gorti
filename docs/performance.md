@@ -14,6 +14,12 @@ comparing implementations.
 
 ## October 2026 Portico comparisons
 
+These are historical 7--8 October measurements. Their binaries predate the
+19 October service-validation baseline `4b11da478f423c0776f6ba6ae580f1670b61f2a9`.
+The later test campaign verifies behavior; it does not remeasure performance.
+Use the [retained experiment record](https://github.com/cbchoi/gorti/blob/main/benchmark/callback-reporting/historical-results-20261007-08.md)
+for artifact identities, methods, and the separate SDK-change experiment.
+
 Both campaigns used Portico 2.1.4 with Java federates and gorti with Go federates
 on Windows 11, an Intel Core i7-12700, and loopback TCP. Each RTI ran two
 independent federate processes; gorti also ran its standalone server. gorti
@@ -36,13 +42,19 @@ central estimates. Portico's JAR, JVM, compiled participants, and FOM were
 unchanged between these sessions; the gorti server was also unchanged.
 Session variability therefore matters when interpreting the ranking.
 
+These runs show that gorti can provide comparable or higher throughput in
+this tested configuration, but they do not show a stable ranking across
+sessions. They compare the complete Go/gorti and Java/Portico stacks, not
+Go and Java as programming languages in isolation.
+
 The isolated, same-session old/new Go SDK experiment measured a 4.88%
 throughput improvement from lazy callback-report completion signals
 (95% ratio interval 1.014--1.088). That result measures the SDK change;
 the 60.8% cross-RTI difference on 8 October measures the complete tested stacks.
 
-Source reports contain manifests, artifact hashes, individual-run summaries,
-and exact commands:
+Source reports record methods, artifact hashes, result summaries, commands,
+and references to retained external artifacts. Raw execution output is not
+stored in Git:
 
 - [7 October comparison](https://github.com/cbchoi/gorti/blob/main/engineering/verification/portico-fom-static-metadata-20261007.md)
 - [8 October comparison](https://github.com/cbchoi/gorti/blob/main/engineering/verification/portico-report-signal-20261008.md)
@@ -86,6 +98,22 @@ event encoding and storage and is measured separately as `gorti-audit-replay`.
 Confirmed calls wait for the server's result. Local admission returns earlier
 and reports remote failures through completion/drain operations. Neither
 boundary is a substitute for the receiver's completion time.
+
+Record these choices explicitly in a new experiment:
+
+| Choice | What to report |
+|---|---|
+| Server profile | HLA core or audit/replay, with logging settings |
+| Producer transport | Confirmed or LocalLRC, batch size, admission and ACK counters |
+| Callback reporting | Default/`callback_sync` or `callback_async`, with both binary hashes |
+| Completion boundary | Receiver completion, callback-body completion, or remote report drain |
+| Workload | FOM, payload size/seed, object and interaction counts, RO or TSO |
+| Topology | Federate count, process placement, hosts, and network |
+
+The default build uses synchronous callback reporting. The faster asynchronous
+reporting profile is selected at build time; it is separate from receive-order
+LocalLRC send admission. The [callback-reporting guide](https://github.com/cbchoi/gorti/blob/main/benchmark/callback-reporting/README.md)
+gives the build commands and eligible callback types.
 
 ## Earlier measurements
 

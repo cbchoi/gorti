@@ -64,8 +64,6 @@ loopback:
       --listen 127.0.0.1:8442 \
       --admin-listen 127.0.0.1:8443 \
       --metrics-listen 127.0.0.1:9090 \
-      --audit-replay-plugin event-journal \
-      --log-dir ./eventlogs \
       --save-dir ./gorti-saves \
       --log-format text
     ```
@@ -77,14 +75,16 @@ loopback:
       --listen 127.0.0.1:8442 `
       --admin-listen 127.0.0.1:8443 `
       --metrics-listen 127.0.0.1:9090 `
-      --audit-replay-plugin event-journal `
-      --log-dir .\eventlogs `
       --save-dir .\gorti-saves `
       --log-format text
     ```
 
 Wait for a log record containing `rtid serving`. It reports the actual gRPC,
 metrics, and admin addresses. Leave this terminal running.
+
+This uses the default HLA core profile. Console diagnostics remain enabled;
+the optional binary audit journal is not needed for this example. See
+[operations](operations.md) to enable audit/replay or configure save storage.
 
 ## Start two federates
 
@@ -138,8 +138,8 @@ is available at <http://127.0.0.1:9090/> and Prometheus metrics at
 ## Stop and run again
 
 Return to terminal 1 and press `Ctrl-C`. `rtid` logs `rtid shutting down`,
-gracefully stops its gRPC listeners, closes event-log resources, and exits.
-The `eventlogs` and `gorti-saves` directories remain on disk.
+gracefully stops its listeners, releases resources, and exits. Saved bundles,
+if created, remain in `gorti-saves`; this example does not request a save.
 
 For another run, start `rtid` again and repeat the two federate commands. The
 server's live federation state is process-local. If a federate was interrupted
@@ -157,4 +157,5 @@ the simplest clean reset.
 | A rerun reports that a federate name is already in use | Stop both example processes and restart `rtid` to clear interrupted in-memory membership. |
 
 See [time management](time-management.md) for ordering and lookahead rules and
-the [user guide](user-guide.md) for the normal SDK lifecycle.
+the [user guide](user-guide.md) for the normal SDK lifecycle. Continue with
+[model integration](model-integration.md) to run Python and Go models together.

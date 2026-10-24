@@ -62,3 +62,14 @@ Default HLA algorithms remain with their service modules. Experimental LBTS,
 grant, or ownership strategies live outside the core and are selected when the
 server is composed. This makes the implementation easier to study and extend
 without changing the standard network interface.
+
+## Read the implementation
+
+The [education guide](education.md) connects these modules to the current
+SRS, SDD, IDD, and STD and provides exercises in model reuse, test design,
+and algorithm changes. [Test-case design](test-cases.md) follows a concrete
+time-management requirement into a live SDK assertion.
+
+The diagram above shows runtime message flow. Compile-time dependencies remain
+directed toward service types and ports; a callback leaving a service does not
+mean that the service imports the delivery or gRPC implementation.

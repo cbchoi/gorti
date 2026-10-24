@@ -67,7 +67,7 @@ outside the repository.
 Windows PowerShell:
 
 ```powershell
-$env:PORTICO_HOME = 'D:\workspace\gorti\gorti\.tools\portico-extracted\portico-2.1.4'
+$env:PORTICO_HOME = 'C:\tools\portico-2.1.4'
 $env:GORTI_BENCHMARK_OUTPUT = 'D:\benchmark-results\devstone-hla-001'
 .\benchmark\portico-gorti\run.ps1
 ```

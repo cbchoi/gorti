@@ -15,6 +15,12 @@ bash examples/go-pingpong/run.sh
 
 ## Catalog
 
+Start with `go-tar-wait` for a real server and two time-coordinated federates.
+Continue with [multilanguage-queue](multilanguage-queue/) to reuse Python
+models with a Go workstation, or [java-exchange](java-exchange/) for Java
+object and interaction callbacks. The [model integration guide](../docs/model-integration.md)
+explains the shared FOM, encodings, and reference model.
+
 | Directory | Scenario | Needs |
 |---|---|---|
 | `go-pingpong/` | Two in-process Go federates exchange interactions | Go |
@@ -29,6 +35,7 @@ bash examples/go-pingpong/run.sh
 | `pyjevsim-dashboard-bridged/` | The dashboard flow with declarations owned by model hooks | Go, Python |
 | `pyjevsim-object-tracking/` | Time-managed vehicle updates drive tracker models | Go, Python |
 | `pyjevsim-real-model/` | Actual pyjevsim `BehaviorModel` subclasses exchange pulses | Go, Python with the `pyjevsim` extra |
+| [`multilanguage-queue/`](multilanguage-queue/) | Existing Python DEVS models and a Go workstation reproduce reference queue trajectories | Go, Python with the `pyjevsim` extra; explicit output directory |
 | `pyjevsim-relay-cross-process/` | Generator, bounded buffer, and processor accounting | Go, Python |
 | `pyjevsim-sync-points/` | Three federates rendezvous at two synchronization points | Go, Python |
 | `pyjevsim-time-advance/` | Python federates run NER cycles with different lookaheads | Go, Python |
@@ -46,7 +53,8 @@ python -m pip install -e "./pysdk[dev]"
 python -m rti1516e._proto
 ```
 
-Install `./pysdk[dev,pyjevsim]` instead for `pyjevsim-real-model`.
+Install `./pysdk[dev,pyjevsim]` instead for `pyjevsim-real-model` and
+`multilanguage-queue`. The latter requires a new output directory outside Git.
 
 For `java-exchange`, build and install the Java SDK once before starting its two
 roles. Its launchers use an explicitly supplied RTI endpoint and do not start a

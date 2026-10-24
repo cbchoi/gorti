@@ -1,5 +1,11 @@
 # Verification Records
 
+The [IEEE 1516-2010 test-case guide](ieee1516-2010-test-case-guide.md) explains
+requirements-based case design, evidence classes, the retained Linux results,
+and model/table reproduction. It also maps the SRS/SDD/IDD/STD documents to
+educational exercises. Its purpose is reusable tests for conformance assessment,
+not a certification verdict.
+
 The [2026-10-19 Linux publication validation](linux-publication-validation-20261019.md)
 records the Go/Python/Java service results on a main-based candidate that
 excludes separate unpublished RL work, the timed-example startup fix, and

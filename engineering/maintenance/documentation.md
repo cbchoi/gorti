@@ -5,7 +5,8 @@
 Choose the document set by audience:
 
 - `docs/` is the MkDocs source for installation, use, operations, public
-  verification summaries, reproducibility, performance, releases, and citation.
+  model integration, educational use, test-case design, verification summaries,
+  reproducibility, performance, releases, and citation.
 - `engineering/` holds repository-facing architecture, formal specifications,
   verification records, and maintainer procedures. It is not copied into the
   published site by default.
@@ -16,6 +17,17 @@ Choose the document set by audience:
 Avoid duplicating normative behavior. Link user explanations to the current
 engineering baseline and keep command details near the automation that owns
 them.
+
+Keep detailed methods, model mappings, execution conditions, and maintained
+result summaries here even when a short software article cannot include them.
+The manuscript itself, licensed standard documents, and raw experiment output
+are not part of the public documentation source.
+
+Use dated, source-identified results. Distinguish new service executions from
+reconciliation of older reports, and behavioral tests from API/structure and
+reporting checks. A passing test collection supports conformance assessment;
+it is not a certificate. Historical performance results do not become current
+measurements when the documentation is updated.
 
 ## Local build and preview
 
@@ -57,7 +69,7 @@ are ignored and must not be committed.
 
 ```bash
 make docs
-bash scripts/check-no-emojis.sh
+bash scripts/check-no-emojis.sh README.md docs/*.md engineering/maintenance/documentation.md
 ```
 
 MkDocs only builds the `docs/` tree. A change limited to `engineering/` still
@@ -70,7 +82,7 @@ review those relative paths directly.
 pushes to `main`, including changes under `docs/`, `engineering/`, the MkDocs
 and Read the Docs configuration, and citation metadata. It:
 
-1. installs `docs/requirements.txt` with Python 3.11;
+1. installs `docs/requirements.txt` with Python 3.12;
 2. runs `mkdocs build --strict`;
 3. verifies `site/index.html`; and
 4. uploads a GitHub Pages-compatible artifact.
@@ -80,7 +92,7 @@ no Pages deployment job in the repository.
 
 ## Read the Docs
 
-`.readthedocs.yaml` selects Ubuntu 22.04, Python 3.11, `mkdocs.yml`, the pinned
+`.readthedocs.yaml` selects Ubuntu 24.04, Python 3.12, `mkdocs.yml`, the pinned
 requirements file, and warning-as-error behavior. In the Read the Docs project:
 
 1. use `.readthedocs.yaml` as the configuration path;

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModel xmlns="http://standards.ieee.org/IEEE1516-2010">
+  <modelIdentification>
+    <name>multilanguage-queue</name><type>FOM</type><version>1.0</version>
+    <modificationDate>2026-10-23</modificationDate>
+    <securityClassification>Unclassified</securityClassification>
+    <description>Periodic jobs from a Python DEVS model to a Go FCFS workstation.</description>
+  </modelIdentification>
+  <objects><objectClass><name>HLAobjectRoot</name></objectClass></objects>
+  <interactions><interactionClass><name>HLAinteractionRoot</name>
+    <interactionClass>
+      <name>Job</name><sharing>PublishSubscribe</sharing>
+      <transportation>HLAreliable</transportation><order>TimeStamp</order>
+      <semantics>Job arrival after one logical unit of transfer delay.</semantics>
+      <parameter><name>seq</name><dataType>HLAinteger32BE</dataType><semantics>Positive job identifier.</semantics></parameter>
+      <parameter><name>service</name><dataType>HLAinteger32BE</dataType><semantics>Positive integer service duration in logical time units.</semantics></parameter>
+    </interactionClass>
+    <interactionClass>
+      <name>Completion</name><sharing>PublishSubscribe</sharing>
+      <transportation>HLAreliable</transportation><order>TimeStamp</order>
+      <semantics>Workstation departure at the interaction timestamp.</semantics>
+      <parameter><name>seq</name><dataType>HLAinteger32BE</dataType><semantics>Completed job identifier.</semantics></parameter>
+    </interactionClass>
+  </interactionClass></interactions>
+</objectModel>

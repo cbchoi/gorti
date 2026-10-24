@@ -7,7 +7,7 @@
 | Run a published `rtid` archive | No separate language runtime |
 | Build `rtid`, `rti-top`, or the Go examples | Git and Go 1.22 or later |
 | Use the Python SDK from this checkout | Python 3.11+ and `pip` |
-| Build the Java SDK | JDK 11+ and Maven |
+| Build the Java SDK | JDK 11+ and Maven 3.9+ |
 
 The portable `rtid` and `rti-top` builds do not require CGo or a DDS runtime.
 Go dependencies require network access the first time they are downloaded.
@@ -134,26 +134,27 @@ SDK dependencies isolated.
     python -m pip install --upgrade pip
     python -m pip install -e './pysdk[dev]'
     python -m rti1516e._proto
-    python -m pytest pysdk/tests
     ```
 
 === "Windows PowerShell"
 
     ```powershell
-    py -3.11 -m venv .venv
+    python -m venv .venv
     .\.venv\Scripts\Activate.ps1
     python -m pip install --upgrade pip
     python -m pip install -e '.\pysdk[dev]'
     python -m rti1516e._proto
-    python -m pytest pysdk/tests
     ```
 
 The runtime package is `rti1516e`. Add the `pyjevsim` extra only for the DEVS
 bridge: `python -m pip install -e './pysdk[dev,pyjevsim]'`.
+The [model integration guide](model-integration.md) uses this extra. Full SDK
+test execution is a separate step; see [verification](verification.md) for
+live-server prerequisites and the recorded test selections.
 
 ## Java SDK from source
 
-With JDK 11 or later and Maven installed, run from the repository root:
+With JDK 11 or later and Maven 3.9 or later installed, run from the repository root:
 
 ```bash
 mvn -f javasdk/pom.xml verify
