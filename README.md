@@ -3,6 +3,7 @@
 [![Manual validation](https://github.com/cbchoi/gorti/actions/workflows/ci.yml/badge.svg)](https://github.com/cbchoi/gorti/actions/workflows/ci.yml)
 [![Documentation](https://github.com/cbchoi/gorti/actions/workflows/docs.yml/badge.svg)](https://github.com/cbchoi/gorti/actions/workflows/docs.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23619049.svg)](https://doi.org/10.5281/zenodo.23619049)
 
 gorti is an open-source Run-Time Infrastructure (RTI) written in Go, targeting
 the IEEE 1516-2010 High Level Architecture (HLA) family. It connects Go, Python,

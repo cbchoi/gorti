@@ -13,6 +13,7 @@ authors:
     given-names: Changbeom
 version: 1.0.0
 date-released: 2026-10-24
+doi: 10.5281/zenodo.23619049
 repository-code: "https://github.com/cbchoi/gorti"
 url: "https://gorti.readthedocs.io/en/latest/"
 license: MIT

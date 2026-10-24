@@ -5,6 +5,7 @@
   "description": "An open-source Run-Time Infrastructure implemented in Go, targeting the IEEE 1516-2010 HLA family, with Go, Python, and Java federate interfaces.",
   "version": "1.0.0",
   "datePublished": "2026-10-24",
+  "identifier": "https://doi.org/10.5281/zenodo.23619049",
   "url": "https://gorti.readthedocs.io/en/latest/",
   "codeRepository": "https://github.com/cbchoi/gorti",
   "issueTracker": "https://github.com/cbchoi/gorti/issues",

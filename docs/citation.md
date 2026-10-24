@@ -6,10 +6,15 @@ or GitHub's **Cite this repository** action. For release 1.0.0:
 
 ```text
 Changbeom Choi. (2026). gorti: An open-source HLA Run-Time Infrastructure
-in Go (1.0.0). https://github.com/cbchoi/gorti/releases/tag/1.0.0
+in Go (1.0.0). Zenodo. https://doi.org/10.5281/zenodo.23619049
 ```
 
-The GitHub release is submitted to Zenodo through the repository integration.
-Use the version-specific DOI once its record is available; do not substitute a
-DOI for another release. For a development checkout, cite its exact commit.
+The [version DOI](https://doi.org/10.5281/zenodo.23619049) identifies the
+archived `1.0.0` source at commit `2755ee64f701d16bca787bb15d865966fcd1ac9c`.
+The [concept DOI](https://doi.org/10.5281/zenodo.23619048) identifies the version
+series. Use the version DOI for a specific experiment; for a development
+checkout, record its exact commit instead.
+
+The software archive does not contain the separately retained raw test reports
+or benchmark measurements.
 For experiments, also record FOM hashes, runtime versions, and configuration.
