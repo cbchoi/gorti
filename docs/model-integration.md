@@ -4,7 +4,7 @@ The Python-Go queue example connects an existing Python DEVS source and sink
 to a Go workstation. It is a small production-flow model: jobs arrive
 periodically, wait for one workstation, and leave after service.
 
-The example keeps model behavior separate from HLA integration. Python reuses
+Python reuses
 `PulseGenerator` and `PulseSink` from the
 [pyjevsim model example](https://github.com/cbchoi/gorti/blob/main/examples/pyjevsim-real-model/models.py)
 without changing their transition functions. Go implements a nonpreemptive,
@@ -20,10 +20,9 @@ flowchart LR
     R -->|ReceiveInteraction| P
 ```
 
-There are three independent processes: the two federates and the RTI server.
-A startup-only ready/start barrier waits for declarations and time-management
-callbacks. Jobs, completions, model state, and per-step decisions do not pass
-through that barrier; job and completion messages use the RTI.
+The two federates and RTI server run in separate processes. A startup barrier
+waits for declarations and time-management callbacks. Job and completion
+messages use the RTI.
 
 ## Run on Windows or Linux
 
@@ -107,11 +106,9 @@ Python 3.12.3. Each row contains three 100-job runs:
 | 2 | 202 | 49.5 | 51.5 | 0 |
 | Seeded 1--3, seed 1516 | 206 | 49.85 | 51.89 | 0 |
 
-All times are logical-time units. All nine runs passed: 900 jobs and 1,800
-data callbacks. Repeats check deterministic behavior; this table does not
-estimate wall-clock performance or a statistical confidence interval.
-The reference is an independent queue implementation, not a full standalone
-pyjevsim simulator run.
+All nine runs passed: 900 jobs and 1,800 data callbacks. Times are logical-time
+units. The reference is an independent queue implementation, not a full
+standalone pyjevsim run.
 
 Each output directory contains inputs, reference and observed trajectories,
 checks, process records, and logs. The campaign summary records runtime
@@ -124,7 +121,7 @@ records the source baseline and retained results.
 1. Keep the model's state transitions independent of HLA. Put FOM handle
    lookup, encoding, and callback dispatch in the federate adapter.
 2. Define the shared quantities, units, identifiers, and byte encodings in the
-   FOM. A shared parameter name alone does not establish an encoding agreement.
+   FOM.
 3. Choose which model outputs become interactions or object attributes.
    Map each received callback to a model input.
 4. Define logical-time units, transfer delays, and lookahead. Ensure that
@@ -138,7 +135,7 @@ records the source baseline and retained results.
 For Java, the
 [two-process exchange example](https://github.com/cbchoi/gorti/blob/main/examples/java-exchange/README.md)
 shows synchronization, object updates, interactions, and evoked callbacks.
-It is a separate example, not a third federate in the queue experiment.
+
 
 ## Troubleshooting
 

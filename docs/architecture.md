@@ -26,7 +26,7 @@ The server keeps HLA behavior separate from transport and storage concerns:
 | HLA services | `federation`, `declaration`, `object`, `time`, `ownership`, `ddm`, `synchronization`, `save_restore`, `mom`, `support` | Validate and apply federation state transitions |
 | Application | `configuration`, `composition`, `lifecycle`, `server` | Select policies and assemble a runnable process |
 | Adapters | `grpc`, `protobuf`, `delivery`, `eventlog`, `savebundle`, `sdkstate`, `auth`, `observability`, `dds` | Transport, storage, SDK checkpoint translation, security, and operations |
-| Extensions | `experiments/algorithms`, `compatibility/researchconfig` | Compile and select optional algorithm variants |
+| Extensions | `rti/experiments/algorithms`, `rti/internal/compatibility/researchconfig` | Compile and select optional algorithm variants |
 
 HLA services produce typed domain callbacks. The gRPC adapter converts those
 callbacks to wire messages. The delivery adapter manages reservations, outboxes,
@@ -60,8 +60,7 @@ and SDK-state adapters independently of that plugin.
 
 Default HLA algorithms remain with their service modules. Experimental LBTS,
 grant, or ownership strategies live outside the core and are selected when the
-server is composed. This makes the implementation easier to study and extend
-without changing the standard network interface.
+server is composed. Algorithm changes can retain the existing wire interface.
 
 ## Read the implementation
 
@@ -70,6 +69,5 @@ SRS, SDD, IDD, and STD and provides exercises in model reuse, test design,
 and algorithm changes. [Test-case design](test-cases.md) follows a concrete
 time-management requirement into a live SDK assertion.
 
-The diagram above shows runtime message flow. Compile-time dependencies remain
-directed toward service types and ports; a callback leaving a service does not
-mean that the service imports the delivery or gRPC implementation.
+The diagram shows runtime message flow. Service packages depend on domain
+types and ports; application composition supplies their adapters.

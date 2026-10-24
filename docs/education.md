@@ -1,12 +1,7 @@
 # Development and educational use
 
-gorti exposes the implementation behind federation services. A reader can
-follow a requirement through the service module, SDK interface, callback path,
-and test assertion. The same structure supports algorithm experiments without
-putting model logic into the transport layer.
-
-The materials below are designed for teaching and self-study. No classroom
-learning outcome is claimed by the recorded software experiments.
+These exercises connect the service modules, SDKs, examples, and tests to the
+project's design documents.
 
 ## Read the design with the code
 
@@ -32,13 +27,11 @@ studied.
 | `rti/internal/adapters/delivery/` | Reservations, outboxes, batching, and backpressure | Follow accepted callbacks into transport queues |
 | `rti/internal/adapters/savebundle/` and `sdkstate/` | Persisted federation and SDK state | Study recovery separately from model-state persistence |
 | `rti/pkg/federate/`, `pysdk/`, `javasdk/` | Language interfaces and dispatch | Compare the same interaction in different languages |
-| `experiments/algorithms/` | Experimental strategies | Add an alternative implementation for an explicit experiment |
+| `rti/experiments/algorithms/` | Experimental strategies | Add an alternative implementation for an explicit experiment |
 
 Dependencies point toward the HLA service layer: service code does not import
 gRPC or generated Protobuf types to implement its decisions.
-The [architecture guide](architecture.md) describes the ports and dependency
-checks. Its diagram represents runtime flow, not permission for the domain
-to import adapters.
+See [architecture](architecture.md) for module boundaries and dependency checks.
 
 ## Exercise 1: explain a delayed time grant
 
@@ -88,15 +81,14 @@ go test ./rti/internal/hla/time
 go test ./tests/architecture
 ```
 
-Then run affected SDK and live contract cases. These two commands alone do not
-cover transport, recovery, or cross-language behavior. Use the
+Then select affected SDK and live contract cases using the
 [STD](https://github.com/cbchoi/gorti/blob/main/engineering/specifications/current/STD.md)
-and [verification guide](verification.md) to select additional cases.
+and [verification guide](verification.md).
 
 Deliverable: the algorithm change, its invariant tests, and a before/after
 experiment with the same workload and measurement boundary.
 
-## Contribute a reusable example
+## Add an example
 
 Keep model code, federate adaptation, and result validation distinguishable.
 Provide a FOM, prerequisites, Windows and Linux entry points, expected results,

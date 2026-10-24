@@ -18,10 +18,8 @@ Avoid duplicating normative behavior. Link user explanations to the current
 engineering baseline and keep command details near the automation that owns
 them.
 
-Keep detailed methods, model mappings, execution conditions, and maintained
-result summaries here even when a short software article cannot include them.
-The manuscript itself, licensed standard documents, and raw experiment output
-are not part of the public documentation source.
+Document model mappings, execution conditions, and maintained result summaries.
+Keep licensed standard documents and raw experiment output outside Git.
 
 Use dated, source-identified results. Distinguish new service executions from
 reconciliation of older reports, and behavioral tests from API/structure and

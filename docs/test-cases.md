@@ -1,10 +1,8 @@
 # Requirement-derived test cases
 
-The verification contribution is a reusable collection of test cases for
-IEEE 1516-2010 conformance assessment. Reviewed requirements are expressed as
-testable observations, linked to named tests, and reconciled with execution
-reports. This makes a behavior check inspectable and repeatable without
-equating one passing test with complete conformance.
+The test inventory links reviewed IEEE 1516-2010 requirements to named tests
+and execution reports. Each case specifies its input conditions and expected
+result.
 
 ## From a requirement to an observation
 
@@ -22,9 +20,8 @@ reviewed requirement
   -> execution report and source identity
 ```
 
-Requirements may need several cases. Conversely, one test can exercise more
-than one requirement. The inventory retains these links instead of treating
-test counts as a coverage percentage.
+A requirement can link to several tests, and a test can check several
+requirements.
 
 ## Worked example: positive lookahead at a Float64 boundary
 
@@ -46,13 +43,10 @@ The implementation is
 | Accept | Sending at the expected bound returns a valid, non-null retraction handle. |
 | Clean up | Resign both sessions, destroy the federation, and disconnect. |
 
-The Java test creates two sessions in one test process connected to a live
-server; it is not a two-OS-process throughput experiment. It checks the
-specified query and send outcomes, not a delivered interaction callback.
-Both parameterized invocations passed in the retained Linux campaign.
-
-This is one boundary case linked to the requirement. Other service conditions
-and Integer64 behavior need their own tests and interpretation records.
+The test uses two RTI sessions in one Java process connected to a live server.
+Both parameterized invocations passed in the retained Linux campaign. This
+case checks Float64 query and send outcomes; it does not check delivery of the
+interaction callback.
 
 ## Other observable behaviors
 
@@ -66,7 +60,7 @@ and Integer64 behavior need their own tests and interpretation records.
 Paths, clause identifiers, and the complete assertions are listed in the
 [technical test-case guide](https://github.com/cbchoi/gorti/blob/main/engineering/verification/ieee1516-2010-test-case-guide.md).
 
-## Classify evidence before counting it
+## Evidence classes
 
 The
 [classification manifest](https://github.com/cbchoi/gorti/blob/main/engineering/verification/requirements2010-evidence-classes-20261023.json)
@@ -75,8 +69,8 @@ assigns a primary class, rationale, and source/oracle hashes to each named targe
 - **Service/SDK behavior:** controlled unit or SDK tests and live service cases.
 - **API/structure:** interface shape, encodings, time/handle helpers, and
   FOM/MIM/XML parsing.
-- **Documentation/reporting:** the reporting tool's guard against unsupported
-  certification claims. It does not exercise an RTI service.
+- **Documentation/reporting:** checks of the report tool, separate from RTI
+  service tests.
 
 The retained inventory has 464 distinct targets and 877 requirement-test links.
 One reporting guard is counted separately from 388 behavioral and 75
@@ -93,9 +87,8 @@ skipped, not-applicable, and unresolved records separately.
 3. Implement a named test through the appropriate service or SDK interface.
    Avoid using the implementation under test to compute the expected result.
 4. Link the case and oracle to the requirement, and classify its evidence.
-5. Record the source, selection, environment, result, and skips. When sources
-   change, rerun affected cases instead of carrying old results forward as new
-   executions.
+5. Record the source, selection, environment, result, and skips. Rerun affected
+   cases when their sources change.
 
 Use [reproducibility](reproducibility.md) for result-table generation and
 [verification](verification.md) for the latest retained service campaign.

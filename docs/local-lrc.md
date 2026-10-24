@@ -1,6 +1,6 @@
-# LocalLRC fast path
+# LocalLRC transport
 
-LocalLRC is the Go SDK's same-host fast path for receive-order attribute
+LocalLRC is the Go SDK's queued transport for receive-order attribute
 updates and interactions. The authoritative federation, declaration,
 ownership, Object Management, and Time Management state remains in `rtid`.
 
@@ -49,24 +49,18 @@ stream before membership is removed.
 The Go SDK exposes the completion contract as
 `ConnectOptions.AdmissionMode`:
 
-- **`pipelined`** (default, also selected by the empty string) — standard
-  receive-order calls complete on bounded LocalLRC local admission. IEEE 1516
-  requires no server confirmation for receive-order delivery, so this is the
-  production mode. The pipelined LocalLRC transport, the shared synchronous
-  streams, and the fixed transport contract (8192-entry outbox, 32-op batches,
-  1 ms flush, 32-op LRC frames, ack-every 32) all stay active.
-- **`confirmed`** — a documented **debug option**. Every standard
-  receive-order call waits for the server result on the unary confirmed path;
-  the LocalLRC fast path and shared streams are forced off for the
-  Connection. Use it to isolate admission behavior or to obtain a
-  server-confirmed return boundary in experiments; it is not the production
-  default.
+- **`pipelined`** (default, also selected by the empty string): standard
+  receive-order calls return after bounded LocalLRC admission. Shared streams
+  remain enabled.
+- **`confirmed`**: standard receive-order calls wait for the server result
+  through unary RPCs. LocalLRC and shared streams are disabled for the
+  connection. Use this mode when the application needs server-confirmed returns.
 
 ```go
 // Default: pipelined LocalLRC admission.
 conn, err := federate.ConnectWithOptions(ctx, address, federate.ConnectOptions{})
 
-// Debug: server-confirmed unary path.
+// Server-confirmed unary path.
 conn, err = federate.ConnectWithOptions(ctx, address, federate.ConnectOptions{
     AdmissionMode: federate.AdmissionModeConfirmed,
 })
@@ -127,9 +121,7 @@ to its advertised maximum. Concurrent admissions share one observable FIFO
 order, and cancellation does not create a sequence gap.
 
 `Federate.LocalLRCStats()` reports the requested size, peer limit, and largest
-frame actually sent. These values make it possible to verify that a benchmark
-used the intended transport contract rather than inferring batching from
-elapsed time.
+frame sent. Record these values when measuring the transport.
 
 ## Callback representation
 
@@ -207,10 +199,6 @@ finishes, including work already acknowledged on the wire. Confirmed control
 reports do not require those completion slots, allowing checkpoint service
 barriers to progress while local bookkeeping waits for the checkpoint lock.
 
-ACK and retirement signals allocate a channel only when a caller waits before
-completion. Already-completed reports reuse a closed signal. This reduces
-per-report allocation without changing acknowledgement or drain behavior.
-
 After an outcome is acknowledged and its local entry bookkeeping is complete,
 the SDK releases the retained application event. It keeps the invocation
 identity, result and receipt needed for duplicate detection and result-only
@@ -221,7 +209,7 @@ TSO, callbacks carrying region handles, ownership, checkpoint, recovery and
 other control callbacks retain confirmed entry. Older servers and closed callback streams use confirmed entry
 as well. `ReportCallbackEntry` itself remains an explicitly confirmed operation.
 Inspect `CallbackReportTransportStats().LocalEntries` to check whether local
-admission was actually used; the build tag alone is not evidence of negotiation.
+admission was used.
 
 Server-side MOM counters are updated when ordered entry reports arrive, not
 when data is merely delivered. An SDK service call after local dispatch waits
@@ -247,11 +235,10 @@ receiver completion or release those receipts.
 The production server leaves 64 slots within that limit for non-data callbacks.
 New reflection/interaction fanouts must fit below the shared 8,128-slot threshold;
 control callbacks may use the remaining headroom, still within the 8,192 total.
-This keeps a saturated data stream from consuming all synchronization or
-save/restore admission capacity. It does not provide unlimited control capacity
-or discard already-pending callbacks during restore.
+This reserves capacity for synchronization and save/restore callbacks within
+the total limit. Pending callbacks remain in the ledger during restore.
 
-On the direct LocalLRC data path, a full receipt ledger or callback outbox now
+On the direct LocalLRC data path, a full receipt ledger or callback outbox
 pauses an uncommitted operation instead of terminating its stream. The server
 reserves receipt capacity for the whole recipient fanout, acknowledges the
 committed prefix and releases membership and checkpoint leases before waiting.
@@ -265,8 +252,7 @@ Keep processing and reporting callbacks while awaiting sender completion.
 Local queue acceptance still does not guarantee remote execution. Cancelling
 the stream terminates its wait. An atomic fanout too large for an empty queue,
 management requests, and failures after publication are not retried. Unary and
-confirmed transports retain their existing error behavior. No callback receipt
-checks are disabled and the pending limit remains 8,192.
+confirmed transports retain their existing error behavior.
 
 ## Verification
 

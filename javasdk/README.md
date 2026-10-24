@@ -9,8 +9,8 @@ the provider's interfaces and runtime options.
 
 ## Build
 
-Use JDK 11 or later and Maven 3.9. PowerShell and Bash launchers are provided.
-The recorded 4 October 2026 Java service campaign ran on Windows with Temurin 11.
+Use JDK 11+ and Maven 3.9+. PowerShell and Bash launchers are provided.
+See [verification results](../docs/verification.md) for the recorded campaigns.
 
 From the repository root:
 

@@ -128,8 +128,7 @@ Expected waiter records include:
 [waiter] GRANT(5) after 3s: PASS - peer TAR released the pending request
 ```
 
-The wait demonstrates that a grant is derived from federation-wide time state,
-rather than returned immediately to one federate.
+The wait shows how the peer's time state delays the grant.
 
 The server remains online after the examples finish. The metrics liveness page
 is available at <http://127.0.0.1:9090/> and Prometheus metrics at

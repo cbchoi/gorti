@@ -12,8 +12,7 @@ An empty `--admin-listen` value disables the admin listener. The TLS flags for
 the federate listener do not apply to the separate admin or metrics listeners.
 Use explicit addresses instead of relying on defaults.
 
-For a local development server, run in the foreground with durable event-log
-and save directories:
+To run a local server with audit journaling and save storage:
 
 === "Linux and macOS"
 
@@ -212,8 +211,7 @@ message-retraction ID history; a missing history is not treated as empty.
 The extended MOM snapshot format is not readable by older
 server versions. The bundle manifest, including encoded snapshots, is limited
 to 16 MiB; larger snapshots fail saving instead of creating an unreadable
-bundle. This checkpoint profile is not a declaration of full IEEE
-1516-2010 Save/Restore conformance.
+bundle.
 
 ### Authenticated automatic resignation
 
@@ -253,17 +251,11 @@ Keep callback accounting conditions identical when comparing performance.
 `--log-format` accepts `json` (the default) or `text`. Use JSON for log
 collection and text for an interactive development run.
 
-`--gc-percent` defaults to 400: at startup rtid raises the Go garbage
-collector's target percentage (`runtime/debug.SetGCPercent`) above the Go
-runtime default of 100, trading a larger peak heap for measurably lower
-allocation-driven latency on the callback fast path. An operator-set `GOGC`
-environment variable always wins over this product default, and an explicit
-`--gc-percent` flag wins over both (precedence: explicit flag, then `GOGC`,
-then the product default 400). Pass `--gc-percent=-1` to leave the Go runtime
-completely untouched and restore Go runtime defaults. On memory-constrained
-hosts, `--go-mem-limit` (a soft memory limit in bytes via
-`runtime/debug.SetMemoryLimit`; the default `0` makes no limit call) bounds
-the larger heap the relaxed GC target allows.
+`--gc-percent` defaults to 400. A higher garbage-collection target permits a
+larger heap between collections. Precedence is the explicit flag, then `GOGC`,
+then the product default. Set `--gc-percent=-1` to leave the Go runtime's
+GC setting unchanged. `--go-mem-limit` sets a soft memory limit in bytes;
+its default, `0`, leaves the runtime limit unchanged.
 
 ## Security boundary
 

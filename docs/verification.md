@@ -28,8 +28,7 @@ Sixteen default Go skips are asynchronous-only cases exercised in the tagged
 run; three require FDD-schema resources. Java skips comprise one comparison
 against an external IEEE API archive, three FDD-schema checks, and three
 cross-binding fixtures. Static/protocol checks, lint, the strict documentation
-build, and ten repeated determinism runs also passed. These are recorded local
-results, not a claim that hosted CI executed the same campaign.
+build, and ten repeated determinism runs also passed. This campaign ran locally.
 
 ## Requirement-to-result reconciliation
 
@@ -57,10 +56,9 @@ Their missing resources are the external API archive or FDD schemas.
 
 The unresolved records retain questions about source interpretation,
 callback-exception responsibilities, custom-time conditions, and the
-decomposition of state charts and tables. These counts describe a reviewed
-inventory and its linked executions, not a percentage of the standard proved.
+decomposition of state charts and tables.
 
-## What the evidence measures
+## Evidence classes
 
 | Primary class | Requirement-test links | Distinct named targets |
 |---|---:|---:|
@@ -74,9 +72,8 @@ API/structure checks cover interface shape, encodings, time/handle helpers,
 and FOM/MIM/XML parsing. The reporting guard tests the report tool, not an
 RTI service. MOM reporting remains a service case.
 
-The contribution is an inspectable collection of test cases, oracles, and
-traceability records that can be reused and extended. It is not an independent
-conformance certificate. The [detailed guide](https://github.com/cbchoi/gorti/blob/main/engineering/verification/ieee1516-2010-test-case-guide.md)
+These results support conformance assessment, not certification.
+The [detailed guide](https://github.com/cbchoi/gorti/blob/main/engineering/verification/ieee1516-2010-test-case-guide.md)
 provides record groups, representative cases, source identities, and
 classification rules.
 
@@ -90,14 +87,13 @@ callback recovery, SDK state restoration, and session controls.
 Go/Python cases check timestamped delivery and grants under controlled peer
 bounds. Java/Python cases check opaque parameter bytes, tags, order,
 transport, producer identity, and evoked dispatch. The
-[model integration example](model-integration.md) adds a reusable simulation
-workflow with an independent trajectory reference.
+[model integration example](model-integration.md) compares simulation trajectories
+with an independent reference.
 
 Cross-RTI scenarios separately compare FM, DM, OM, and selected TM behavior.
-Their validators compare complete canonical service records after checking
-payloads, callbacks, and times; equal event counts alone are insufficient.
-Portico performance trials do not establish that Portico passed gorti's
-internal requirement inventory.
+Their validators compare canonical service records, payloads, callbacks, and
+times. The requirement inventory above concerns gorti; cross-RTI comparisons
+are separate experiments.
 
 ## Run checks for your checkout
 
@@ -109,9 +105,8 @@ python -m pytest pysdk/tests verification/common verification/gorti
 mvn -f javasdk/pom.xml verify
 ```
 
-These are developer entry points, not a command set that reproduces all counts
-above. Live endpoints, fixtures, build tags, race settings, and selection
-filters must match the recorded campaign to reproduce its scope. Use the
+To reproduce the table, also match its live endpoints, fixtures, build tags,
+race settings, and selection filters. Use the
 [Linux campaign commands](https://github.com/cbchoi/gorti/blob/main/engineering/verification/linux-publication-validation-20261019.md)
 and SDK guides for those settings.
 

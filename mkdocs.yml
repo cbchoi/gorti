@@ -81,7 +81,7 @@ nav:
   - User Guide:
       - Runtime and SDKs: user-guide.md
       - Time Management: time-management.md
-      - LocalLRC Fast Path: local-lrc.md
+      - LocalLRC Transport: local-lrc.md
       - Operations: operations.md
   - Development and Education:
       - Architecture: architecture.md
@@ -95,7 +95,6 @@ nav:
       - DEVStone-HLA Benchmark: benchmark.md
   - Project:
       - Citation: citation.md
-      - v0.9 Release Candidate: releases/v0.9.0.md
 
 extra:
   social:

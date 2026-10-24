@@ -23,7 +23,7 @@ Restore checks the saved representation against the target execution before
 applying state. Integer64 requests, queries and callbacks use the selected exact
 representation throughout the server.
 
-### Exact typed foundation
+### Integer64 representation
 
 The typed time, object, delivery and save/restore domains retain nonnegative
 Integer64 values directly, including adjacent times above `2^53`. Finite final

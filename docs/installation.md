@@ -4,7 +4,6 @@
 
 | Goal | Required tools |
 |---|---|
-| Run a published `rtid` archive | No separate language runtime |
 | Build `rtid`, `rti-top`, or the Go examples | Git and Go 1.22 or later |
 | Use the Python SDK from this checkout | Python 3.11+ and `pip` |
 | Build the Java SDK | JDK 11+ and Maven 3.9+ |
@@ -60,71 +59,13 @@ required for the quickstart.
     .\bin\rti-top.exe --version
     ```
 
-An untagged source build can report a development version. Record the Git
-commit as well when a run must be reproducible. To exercise all Go packages in
-the checkout, run `go test ./...` from the repository root.
-
-## Release archives
-
-This checkout is a v0.9.0 release candidate. Until the corresponding tag and
-assets appear on GitHub Releases, build from source and cite the commit SHA.
-The instructions below apply after a release is published.
-
-The repository's release configuration produces `rtid` and `rti-top` archives
-for Linux, macOS, and Windows on amd64 and arm64. Linux and macOS archives are
-`.tar.gz`; Windows archives are `.zip`. Use the
-[GitHub releases](https://github.com/cbchoi/gorti/releases) page as the source
-of truth for published versions and assets.
-
-Download the archive for the required operating system and architecture plus
-the matching `gorti_<version>_SHA256SUMS` file. Verify the selected archive
-before extracting it. For example, for a `0.9.0` amd64 archive:
-
-=== "Linux"
-
-    ```bash
-    grep ' gorti_0.9.0_linux_amd64.tar.gz$' gorti_0.9.0_SHA256SUMS | sha256sum -c -
-    tar -xzf gorti_0.9.0_linux_amd64.tar.gz
-    ```
-
-=== "macOS"
-
-    ```bash
-    grep ' gorti_0.9.0_darwin_amd64.tar.gz$' gorti_0.9.0_SHA256SUMS | shasum -a 256 -c -
-    tar -xzf gorti_0.9.0_darwin_amd64.tar.gz
-    ```
-
-=== "Windows PowerShell"
-
-    ```powershell
-    Get-FileHash .\gorti_0.9.0_windows_amd64.zip -Algorithm SHA256
-    Select-String 'gorti_0.9.0_windows_amd64.zip' .\gorti_0.9.0_SHA256SUMS
-    Expand-Archive .\gorti_0.9.0_windows_amd64.zip -DestinationPath .\gorti
-    ```
-
-On Windows, compare the two displayed hashes before extraction. Replace
-`amd64` with `arm64` when appropriate.
-
-For a published release on Linux or macOS, the repository also provides a
-checksum-verifying installer. Download and inspect it before running it. A
-user-writable destination avoids requiring `sudo`:
-
-```bash
-curl -fsSLO https://raw.githubusercontent.com/cbchoi/gorti/main/scripts/install.sh
-INSTALL_DIR="$HOME/.local/bin" sh ./install.sh
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-The installer supports Linux and macOS only and installs `rtid` and `rti-top`.
-After the tag exists, set `VERSION=v0.9.0` before `sh ./install.sh` to request
-that release instead of the latest published version.
+Source builds may report a development version. Record the Git commit when
+retaining experiment results.
 
 ## Python SDK from source
 
-The generated Python gRPC bindings are not tracked in Git. The development
-extra installs a protobuf-7-compatible `grpcio-tools`; generate the bindings
-locally after installing the editable package. A virtual environment keeps the
-SDK dependencies isolated.
+Install the Python SDK in a virtual environment, then generate its gRPC
+bindings. The development extra includes the required generation tools.
 
 === "Linux and macOS"
 
@@ -148,9 +89,8 @@ SDK dependencies isolated.
 
 The runtime package is `rti1516e`. Add the `pyjevsim` extra only for the DEVS
 bridge: `python -m pip install -e './pysdk[dev,pyjevsim]'`.
-The [model integration guide](model-integration.md) uses this extra. Full SDK
-test execution is a separate step; see [verification](verification.md) for
-live-server prerequisites and the recorded test selections.
+The [model integration guide](model-integration.md) uses this extra.
+See [verification](verification.md) for live-server test prerequisites.
 
 ## Java SDK from source
 
@@ -174,6 +114,5 @@ for setup, test commands, and service coverage.
 | Go reports an older language version | Install Go 1.22 or later and confirm with `go version`. |
 | Dependency or plugin download fails | Confirm network and proxy access for the Go module proxy, GitHub, and `buf.build`. |
 | PowerShell blocks virtual-environment activation | Invoke `.\.venv\Scripts\python.exe -m pip ...` directly or use an execution policy approved for the machine. |
-| The installer cannot write its destination | Set `INSTALL_DIR` to a user-writable directory and add that directory to `PATH`. |
 
 The [quickstart](quickstart.md) runs a loopback-only two-federate federation.

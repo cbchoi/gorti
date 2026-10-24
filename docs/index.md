@@ -35,9 +35,8 @@ Read [operations](operations.md) before exposing them.
 
 ## Test cases and experiments
 
-The project supplies reusable, requirement-derived test cases for conformance
-assessment and regression testing. The [test-case guide](test-cases.md)
-walks from a reviewed requirement to an executable assertion.
+The [test-case guide](test-cases.md) shows how reviewed requirements become
+test inputs and assertions.
 [Verification results](verification.md) distinguish service behavior,
 API/structure checks, skipped cases, and unresolved records.
 
@@ -51,6 +50,5 @@ regenerate tables from retained reports.
 ## Project links
 
 - [Source and issue tracker](https://github.com/cbchoi/gorti)
-- [Releases](https://github.com/cbchoi/gorti/releases)
 - [Citation metadata](citation.md)
 - [Development roadmap](roadmap.md)

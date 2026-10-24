@@ -259,7 +259,7 @@ covers installation, connection setup, service coverage, and live-server tests.
 - [Integrating existing models](model-integration.md)
 - [Development and educational use](education.md)
 - [Time management](time-management.md)
-- [LocalLRC fast path](local-lrc.md)
+- [LocalLRC transport](local-lrc.md)
 - [Operations and security](operations.md)
 - [Requirement-derived test cases](test-cases.md)
 - [Verification results](verification.md)
