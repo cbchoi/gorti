@@ -22,7 +22,8 @@ reporter.
 
 ## Deployment boundary
 
-The plaintext federate and admin listeners assume a trusted network. Use TLS
-and the documented authentication options for untrusted networks, and keep
-the admin listener on loopback unless it is protected by an external access
-control layer.
+Use TLS and the documented authentication options when traffic crosses an
+untrusted network. Connected federate clients must still be trusted: transport
+authentication does not provide complete per-federate authorization. Keep
+the plaintext admin and metrics listeners on loopback unless they are protected
+by an external access-control layer. See [operations](docs/operations.md).

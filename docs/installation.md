@@ -17,12 +17,16 @@ The server, Go SDK, and Python SDK are supported on Linux, macOS, and Windows.
 
 ## Build from source
 
-Clone the repository, then keep the repository root as the working directory:
+Release 1.0.0 is distributed as source. Clone its tag, then keep the repository
+root as the working directory:
 
 ```bash
-git clone https://github.com/cbchoi/gorti.git
+git clone --branch 1.0.0 https://github.com/cbchoi/gorti.git
 cd gorti
 ```
+
+For ongoing development, use `--branch main` instead. The
+[release notes](releases/1.0.0.md) identify the included SDKs and retained tests.
 
 === "Linux and macOS"
 

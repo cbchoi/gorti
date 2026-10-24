@@ -35,7 +35,9 @@ its own manifest and external trial-evidence policy.
 
 The confirmed experiment contract is `environment/experiment.json`; the
 LocalLRC experiment is `environment/experiment-local-lrc.json`. Portico 2.1.4
-is implementation A and gorti 0.9.0 is implementation B. Each measured
+is implementation A and gorti is implementation B. The original tracked
+contract labels gorti as 0.9.0; use the run manifest's actual source and binary
+identities when interpreting a measurement. Each measured
 schedule contains 30 matched pairs:
 
 ```text

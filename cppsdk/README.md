@@ -43,8 +43,10 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Run `buf generate` from the repository root to regenerate protobuf and gRPC
-bindings under `cppsdk/_generated/rti/v1/`.
+The current `buf generate` configuration no longer produces C++ bindings.
+These historical build instructions require compatible bindings from the
+earlier C++ generation setup; current release commands validate Go, Python,
+and Java only.
 
 ## Layout
 

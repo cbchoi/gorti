@@ -49,7 +49,7 @@ Direct Go, Python, and Maven commands also work in PowerShell.
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install -e "./pysdk[dev,rl]" -r scripts/validation-requirements.txt
+python -m pip install -e "./pysdk[dev]" -r scripts/validation-requirements.txt
 buf generate
 go build ./...
 mvn -f javasdk/pom.xml verify
@@ -123,8 +123,7 @@ starts and stops the Java test server, and writes reports outside the repository
 Use `--artifacts PATH` to retain them at a chosen location. `--maven PATH` or
 `GORTI_MAVEN` selects Maven; `GORTI_MAVEN_REPO` selects its local cache.
 The HLA inventory explicitly excludes legacy C++, RL/PPO and standalone model
-applications. The `rl` extra is needed for whole-package mypy checks, not HLA
-service execution. Java source-archive/schema diagnostics and cross-binding
+applications. Java source-archive/schema diagnostics and cross-binding
 checkpoint fixture tests require their separately supplied inputs; JUnit reports
 show them as skipped when those inputs are absent.
 

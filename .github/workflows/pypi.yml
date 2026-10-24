@@ -11,7 +11,7 @@
 # One-time setup: configure a PyPI Trusted Publisher for this repo+workflow
 # (PyPI project → Settings → Publishing → add GitHub, owner=cbchoi,
 # repo=gorti, workflow=pypi.yml, environment=pypi). No API token needed once
-# trusted publishing is configured. See docs/DEPLOYMENT.md.
+# trusted publishing is configured. See engineering/maintenance/release.md.
 
 name: PyPI
 

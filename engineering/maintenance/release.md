@@ -1,22 +1,28 @@
 # Release and distribution
 
+Release `1.0.0` is a source release. The exact tag has no `v` prefix and does
+not run the optional binary/PyPI publication workflows. Build it using the
+[installation guide](../../docs/installation.md).
+
 ## Distribution matrix
 
 | Artifact | Platforms | Architectures or format | Channel |
 |---|---|---|---|
-| `rtid` and `rti-top` | Linux, macOS, Windows | amd64 and arm64 | GitHub Releases |
-| Python `rti1516e` | Platform independent | wheel and source distribution | PyPI |
+| `rtid` and `rti-top` | Linux, macOS, Windows | Go source build | Repository source |
+| Python `rti1516e` | Platform independent | Python source package | Repository source |
 | Java SDK | JVM with JDK 11+ | Maven source build | Repository source |
 
-GoReleaser builds the Go binaries with `CGO_ENABLED=0`; the experimental DDS
-binary is not released. Each platform archive contains both Go binaries plus
+For a separately requested binary release, GoReleaser builds the Go binaries
+with `CGO_ENABLED=0`; the experimental DDS binary is excluded. Each platform
+archive contains both Go binaries plus
 `LICENSE`, `README.md`, and `CHANGELOG.md`. Windows uses zip and other platforms
 use tar.gz. The Python wheel is pure Python, while `grpcio` and `protobuf`
 resolve their own runtime distributions.
 
 ## Version and release content
 
-Use an `X.Y.Z` package version and a matching `vX.Y.Z` tag. The metadata check
+Use an `X.Y.Z` package version and a matching `X.Y.Z` source-release tag.
+The optional packaged-release workflows use `vX.Y.Z`. The metadata check
 requires the same version in:
 
 - `pysdk/pyproject.toml`;
@@ -35,10 +41,39 @@ Verify metadata early:
 
 ```bash
 python scripts/check_release_metadata.py
-python scripts/check_release_metadata.py --tag vX.Y.Z
+python scripts/check_release_metadata.py --tag 1.0.0
 ```
 
-## Preflight
+## Source release and Zenodo
+
+1. Review current user docs, supported SDKs, citation metadata and release notes.
+2. Check metadata, the strict documentation build, and affected validation tests.
+   If implementation changes, run the affected service tests and record their
+   source identity separately from retained campaigns.
+3. Commit and push the reviewed changes to `main`.
+4. Enable `cbchoi/gorti` in the Zenodo account's GitHub integration before
+   publishing the GitHub release. `CITATION.cff` supplies the software metadata;
+   a second `.zenodo.json` is unnecessary and would override it.
+5. Create the annotated tag and publish the GitHub release:
+
+```bash
+git tag -a 1.0.0 -m "gorti 1.0.0"
+git push origin 1.0.0
+gh release create 1.0.0 --verify-tag --title "gorti 1.0.0" --notes-file CHANGELOG.md
+```
+
+A tag alone does not trigger Zenodo archival; a published GitHub release does.
+Confirm the Zenodo record names the correct tag and commit, includes its source
+archive, and has a resolvable version DOI. Add the issued DOI to citation and
+documentation metadata on `main`, without moving the published tag. A concept
+DOI identifies the version series and should not replace the version DOI in
+an experiment citation. See the [Zenodo guide](https://help.zenodo.org/docs/github/archive-software/github-upload/).
+
+Raw test reports, model runs and benchmark observations are not in the source
+archive. Archive them separately when publishing research data. Do not describe
+the software DOI as a deposit of those results.
+
+## Optional packaged-release preflight
 
 Work from a clean checkout with full tag history. Generate all bindings first,
 then run the release workflow's local equivalents:
@@ -49,7 +84,7 @@ git diff --exit-code -- rti/internal/adapters/protobuf
 
 go test ./...
 
-python -m pip install -e "./pysdk[dev,rl]" -r scripts/validation-requirements.txt
+python -m pip install -e "./pysdk[dev]" -r scripts/validation-requirements.txt
 python scripts/validate_sdks.py python java ivct
 (cd pysdk && python -m mypy --strict rti1516e pyjevsim_bridge)
 
@@ -78,7 +113,7 @@ stubs and accidental recursive paths. Reproduce that exact package build in a
 disposable checkout when package layout changes; `pysdk/LICENSE` is a temporary
 workflow input and must not be committed.
 
-## Tag and publish
+## Optional binary and PyPI publication
 
 Do not push the tag until the release commit is reviewed, the worktree is
 clean, metadata matches, and the required manual workflows are green.
@@ -104,7 +139,7 @@ builds six platform/architecture archives, and uploads
 repository, `pypi.yml` workflow, and `pypi` environment before the tag is
 pushed.
 
-## Post-release verification
+## Packaged-release verification
 
 - Confirm both tag workflows completed successfully.
 - Confirm all six archives exist and each contains `rtid`, `rti-top`, and the

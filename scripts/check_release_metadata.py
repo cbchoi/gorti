@@ -69,7 +69,7 @@ def check_versions(root: Path, tag: str | None = None) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tag", help="release tag, for example v0.9.0")
+    parser.add_argument("--tag", help="release tag, for example 1.0.0 or v1.0.0")
     args = parser.parse_args()
     try:
         errors = check_versions(ROOT, args.tag)

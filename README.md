@@ -14,6 +14,7 @@ adapters, and examples for this integration. Service modules and design
 documents support development and teaching.
 
 [Documentation](https://gorti.readthedocs.io/en/latest/) |
+[Release 1.0.0](https://github.com/cbchoi/gorti/releases/tag/1.0.0) |
 [Installation](docs/installation.md) |
 [Examples](examples/README.md)
 
@@ -22,7 +23,7 @@ documents support development and teaching.
 Install Git and Go 1.22 or later:
 
 ```bash
-git clone https://github.com/cbchoi/gorti.git
+git clone --branch 1.0.0 https://github.com/cbchoi/gorti.git
 cd gorti
 ```
 

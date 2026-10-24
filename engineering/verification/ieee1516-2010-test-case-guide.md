@@ -153,8 +153,9 @@ checking uses the assessed checkout and the exporter's `--source-root` argument.
 Seven focused exporter tests exercise classifications, mixed profiles, skips,
 missing/failed results and hash rejection; they are not HLA service tests.
 
-For the model experiment, apply the source additions to the base checkout and
-follow the [Python-Go example](../../examples/multilanguage-queue/README.md).
+For the model experiment, use release `1.0.0` or the current checkout, which
+already includes the source additions, and follow the
+[Python-Go example](../../examples/multilanguage-queue/README.md).
 Install `./pysdk[dev,pyjevsim]`, generate bindings with
 `python -m rti1516e._proto`, and run:
 

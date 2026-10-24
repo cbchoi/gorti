@@ -30,7 +30,7 @@ cd gorti
 
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install -e "./pysdk[dev,rl]" -r scripts/validation-requirements.txt
+python -m pip install -e "./pysdk[dev]" -r scripts/validation-requirements.txt
 
 buf generate
 make build
@@ -63,8 +63,7 @@ individually. `validate_sdks.py` builds the current server and enables live SDK
 tests; Java validation also runs the Python interoperability peer. Logs and
 JUnit reports go to a temporary directory outside the repository. Use
 `--artifacts PATH` to choose that directory and `--maven PATH` to select Maven.
-The `rl` extra supplies NumPy for whole-package type checking; the HLA test
-selection does not include RL/PPO application tests.
+The HLA test selection does not include RL/PPO application tests.
 
 GitHub Actions workflows use different triggers:
 
@@ -73,6 +72,9 @@ GitHub Actions workflows use different triggers:
 - `.github/workflows/ci.yml` and `conformance.yml` are manually dispatched.
   Both validate the supported Go, Python and Java paths.
 - `release.yml` and `pypi.yml` run for `v*` tags.
+
+The `1.0.0` source-release tag has no `v` prefix and does not trigger binary or
+package-registry publication. See the [release guide](engineering/maintenance/release.md).
 
 Run relevant checks locally and arrange manual workflow runs when required;
 opening a pull request does not automatically execute every code gate.

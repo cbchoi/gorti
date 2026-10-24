@@ -94,6 +94,7 @@ nav:
       - Performance: performance.md
       - DEVStone-HLA Benchmark: benchmark.md
   - Project:
+      - Release 1.0.0: releases/1.0.0.md
       - Citation: citation.md
 
 extra:

@@ -50,5 +50,6 @@ regenerate tables from retained reports.
 ## Project links
 
 - [Source and issue tracker](https://github.com/cbchoi/gorti)
+- [Release 1.0.0](releases/1.0.0.md)
 - [Citation metadata](citation.md)
 - [Development roadmap](roadmap.md)
