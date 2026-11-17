@@ -1,0 +1,2 @@
+# Preserve published evidence bytes and the hashes in publication manifests.
+results/** -text

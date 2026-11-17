@@ -1,8 +1,8 @@
 # Software Requirements Specification
 
-Document version: 4.5
+Document version: 4.6
 Status: Current
-Updated: 2026-10-18
+Updated: 2026-11-17
 
 ## 1. Purpose
 
@@ -10,6 +10,26 @@ gorti shall provide an open-source Run-Time Infrastructure for interoperable
 distributed simulation using the IEEE 1516-2010 High Level Architecture. The
 implementation shall make federation behavior, logical-time decisions, and
 verification evidence inspectable and reproducible.
+
+### 1.1 Users and design goals
+
+The intended users are model developers integrating existing simulators, RTI
+developers checking service changes, and students studying distributed simulation.
+The following product goals supplement the service requirements in Section 3;
+they do not add requirements to the IEEE standard.
+
+| ID | Required capability | Evidence to inspect |
+|---|---|---|
+| DG-REUSE | Federates shall use Go, Python, or Java without moving application model logic into the RTI server. Shared FOM definitions and encodings shall carry exchanged values. | [Python--Go model example](../../../examples/multilanguage-queue/README.md); [Java SDK](../../../javasdk/README.md) |
+| DG-TEST | Requirement records shall distinguish the cited requirement, asserted observations, and execution results. Reusable public-API cases shall identify provider setup separately from service assertions. | [Requirement inventory](../../verification/requirements2010/README.md); [cross-RTI case transfer](../../../verification/cross-rti/README.md) |
+| DG-TEACH | HLA service algorithms shall be replaceable through explicit interfaces without changing the network protocol. Examples shall let students compare decisions against the default algorithm. | [Grant comparison](../../../rti/experiments/algorithms/time/eager_grant_test.go); [LBTS comparison](../../../rti/experiments/algorithms/time/max_projected_test.go) |
+| DG-BOUNDARY | HLA service code shall be independent of transport and persistence implementations. Experiments shall identify their observation and completion boundaries. | [Dependency checks](../../../tests/architecture/dependencies_test.go); [benchmark guide](../../../benchmark/README.md) |
+
+The SDD explains the structural choices and costs associated with these goals.
+The examples establish executable exercises, not measured educational outcomes.
+A passing linked test establishes its recorded assertions, not complete RTI
+conformance. Cross-RTI transfers shall retain failures and identify setup failures
+separately from service assertions that were actually reached.
 
 ## 2. Supported product scope
 
@@ -30,9 +50,10 @@ Per-federation Float64 and Integer64 execution is implemented. The
 [requirements inventory](../../verification/requirements2010/README.md) links
 reviewed clauses to implementation and tests. The
 [4 October service run](../../verification/ieee2010-full-service-rerun-post-sync-20261004.md)
-records passing executions for all 639 applicable records and 25 unresolved
-interpretations. C++ code is retained as legacy material outside this product
-scope.
+contains retained execution results. Applicability, test execution, and requirement
+coverage are separate assessments: a passing invocation does not establish every
+condition in a linked requirement, and unresolved interpretations remain open.
+C++ code is retained as legacy material outside this product scope.
 
 ## 3. Functional requirements
 

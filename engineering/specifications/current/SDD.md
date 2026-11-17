@@ -1,8 +1,8 @@
 # Software Design Description
 
-Document version: 4.6
+Document version: 4.7
 Status: Current implementation profile
-Updated: 2026-10-18
+Updated: 2026-11-17
 
 ## 1. Architecture
 
@@ -15,6 +15,40 @@ state recovery.
 gorti uses a standalone RTI process and separate federate processes. The
 server owns authoritative federation state; SDKs translate language-specific
 calls and callbacks to the common wire contract.
+
+### 1.1 Design goals, choices, and costs
+
+The goal identifiers below refer to [SRS Section 1.1](SRS.md#11-users-and-design-goals).
+They explain the current design rather than claim that a language or architecture
+is inherently faster than another RTI.
+
+| Goal | Current choice and reason | Cost or constraint |
+|---|---|---|
+| DG-REUSE | Go implements the shared service state; Go and Python product APIs and Java's `hla.rti1516e` mapping connect different model environments. Models run in federate processes. | Each SDK needs matching encodings, callbacks, and error behavior. The language mappings have different public surfaces. |
+| DG-REUSE, DG-BOUNDARY | A standalone server owns authoritative membership, object, and time state. Go interfaces and goroutines support separate service implementations and concurrent connections in one executable. | Remote calls incur serialization and network delays. The server is a shared capacity and failure boundary; Go alone does not guarantee a throughput advantage. |
+| DG-REUSE, DG-BOUNDARY | The versioned `rti.v1` Protobuf/gRPC schema supplies generated message bindings and streaming transport. FOM files define model classes at runtime; changing a FOM does not regenerate this protocol. | The custom wire protocol requires gorti SDKs or adapters; it is not an IEEE-standard wire interoperability protocol. Encoding, flow control, and remote completion affect cost. |
+| DG-TEACH, DG-BOUNDARY | HLA packages use shared domain types and narrow ports. Application composition injects transport, delivery, storage, and algorithm implementations. | Cross-service ordering and state invariants still constrain a replacement algorithm; modularity does not make an arbitrary replacement correct. |
+| DG-TEST | Public Java test setup selects a provider separately from the original service assertions. Reports retain both setup failures and assertion failures. | Some tests assume gorti-specific behavior or helpers. A failed transfer needs interpretation; a small passing subset is not a full-RTI assessment. |
+
+For a teaching exercise, `GrantStrategy` changes the decision to grant a pending
+request, while `LBTSStrategy` changes the lower-bound calculation. In
+[`eager_grant_test.go`](../../../rti/experiments/algorithms/time/eager_grant_test.go),
+the default strategy holds a request at time 5 when the lower bound is 5, whereas
+the experimental strategy grants the requested time 7. In
+[`max_projected_test.go`](../../../rti/experiments/algorithms/time/max_projected_test.go),
+the same regulator projections yield 11 with the default minimum and 33 with the
+experimental maximum. These deliberately unsafe alternatives expose the effect
+of changing a rule; they are not supported replacements for standard operation.
+Students can modify these strategies, rerun the comparisons, and then check live
+service behavior. No educational-effectiveness measurement is implied.
+
+The [cross-RTI experiment](../../../verification/cross-rti/README.md) records the
+provider adaptation, commands, and observations for reused Java cases. Performance
+settings and observations belong in the [benchmark records](../../../benchmark/README.md),
+with each execution session kept separate. These records test particular behaviors
+and workloads rather than establish a universal RTI ranking.
+
+### 1.2 Service structure
 
 The federation manager owns the immutable logical-time implementation name.
 Create admission resolves it before FOM loading; list/join, MOM and save manifests

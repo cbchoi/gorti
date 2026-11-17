@@ -32,11 +32,15 @@ Portico had the lower mean completion time on 7 October; gorti had the lower
 mean on 8 October. The ordering changed between sessions, so these results
 do not establish a consistent advantage for either RTI.
 
-Portico's JAR, JVM, participants, and FOM were unchanged between sessions.
-The gorti server was unchanged; its Go SDK changed. The
+Portico's JAR, recorded Java runtime, participants, and FOM were unchanged between
+sessions. The gorti server was unchanged; its Go client binary changed. Effective
+JVM state and host load were not recorded sufficiently to explain why both rates
+decreased in the second session. The
 [experiment record](https://github.com/cbchoi/gorti/blob/main/benchmark/callback-reporting/historical-results-20261007-08.md)
 contains artifact hashes, per-session results, and a separate same-session
-measurement of that SDK change.
+comparison of the two client builds. Complete source snapshots for those modified
+builds are not retained, so the records do not independently isolate a single code
+change as the cause of the difference.
 
 These binaries predate the 19 October service-validation baseline
 `4b11da478f423c0776f6ba6ae580f1670b61f2a9`. The later validation did not

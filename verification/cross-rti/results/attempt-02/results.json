@@ -1,0 +1,152 @@
+{
+  "runtime": {
+    "implementation": "portico",
+    "java": {
+      "command": [
+        "java",
+        "-version"
+      ],
+      "returncode": 0
+    },
+    "classpath": [
+      {
+        "path": "${RUNS}\\attempt-02\\portico-tcp-override.jar",
+        "sha256": "e4a3f088e9c631c9fa71b6ed1f326c97e985af22fa98c3ee26aae70583554cc9"
+      },
+      {
+        "path": "${PORTICO_HOME}\\lib\\portico.jar",
+        "sha256": "146dc0a7916b168396c6e595c42aaed0bdc69d64c5c54e728b7cb53fdd94ea84"
+      }
+    ],
+    "junit_sha256": "b016ef6b1c3454d6d7c2c88ce081dabf289699686af6622d6e4e2e1b54b4a2fc",
+    "source_base": "cb9d28e7c7c95626ebe78a95d90fd06a01e3d2f8",
+    "topology": "two or three independent RTI ambassador sessions in one test JVM; not a benchmark"
+  },
+  "runs": [
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=portico",
+        "-Dcross.port.base=53451",
+        "-Dgorti.endpoint=",
+        "-Dgorti.fom=${RUNS}\\attempt-02\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[53451],127.0.0.1[53452],127.0.0.1[53453],127.0.0.1[53454],127.0.0.1[53455],127.0.0.1[53456],127.0.0.1[53457],127.0.0.1[53458],127.0.0.1[53459],127.0.0.1[53460],127.0.0.1[53461],127.0.0.1[53462],127.0.0.1[53463],127.0.0.1[53464],127.0.0.1[53465],127.0.0.1[53466]",
+        "-cp",
+        "${RUNS}\\attempt-02\\classes;${RUNS}\\attempt-02\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveFederationTest",
+        "--reports-dir",
+        "${RUNS}\\attempt-02\\LiveFederationTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 1,
+      "class": "LiveFederationTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveFederationTest",
+          "name": "twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants()",
+          "status": "fail",
+          "message": "Unexpected exception type thrown, expected: <hla.rti1516e.exceptions.FederateNameAlreadyInUse> but was: <hla.rti1516e.exceptions.FederateAlreadyExecutionMember>",
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    },
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=portico",
+        "-Dcross.port.base=63837",
+        "-Dgorti.endpoint=",
+        "-Dgorti.fom=${RUNS}\\attempt-02\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[63837],127.0.0.1[63838],127.0.0.1[63839],127.0.0.1[63840],127.0.0.1[63841],127.0.0.1[63842],127.0.0.1[63843],127.0.0.1[63844],127.0.0.1[63845],127.0.0.1[63846],127.0.0.1[63847],127.0.0.1[63848],127.0.0.1[63849],127.0.0.1[63850],127.0.0.1[63851],127.0.0.1[63852]",
+        "-cp",
+        "${RUNS}\\attempt-02\\classes;${RUNS}\\attempt-02\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveExchangeTest",
+        "--reports-dir",
+        "${RUNS}\\attempt-02\\LiveExchangeTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 1,
+      "class": "LiveExchangeTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveExchangeTest",
+          "name": "twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi()",
+          "status": "fail",
+          "message": "expected: <HLAreliable> but was: <null>",
+          "report": "TEST-junit-jupiter.xml"
+        },
+        {
+          "class": "org.gorti.rti.LiveExchangeTest",
+          "name": "explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl()",
+          "status": "fail",
+          "message": "peer callback contract: [sync announced] ==> expected: <null> but was: <sync announced must run on the caller thread inside evoke>",
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    },
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=portico",
+        "-Dcross.port.base=62923",
+        "-Dgorti.endpoint=",
+        "-Dgorti.fom=${RUNS}\\attempt-02\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[62923],127.0.0.1[62924],127.0.0.1[62925],127.0.0.1[62926],127.0.0.1[62927],127.0.0.1[62928],127.0.0.1[62929],127.0.0.1[62930],127.0.0.1[62931],127.0.0.1[62932],127.0.0.1[62933],127.0.0.1[62934],127.0.0.1[62935],127.0.0.1[62936],127.0.0.1[62937],127.0.0.1[62938]",
+        "-cp",
+        "${RUNS}\\attempt-02\\classes;${RUNS}\\attempt-02\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveTimeArithmeticTest",
+        "--reports-dir",
+        "${RUNS}\\attempt-02\\LiveTimeArithmeticTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 1,
+      "class": "LiveTimeArithmeticTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveTimeArithmeticTest",
+          "name": "sendGaltAndRetractionUseTheSameRepresentableBound(double)[2]",
+          "status": "fail",
+          "message": "Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt",
+          "report": "TEST-junit-jupiter.xml"
+        },
+        {
+          "class": "org.gorti.rti.LiveTimeArithmeticTest",
+          "name": "sendGaltAndRetractionUseTheSameRepresentableBound(double)[1]",
+          "status": "fail",
+          "message": "Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt",
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    }
+  ]
+}

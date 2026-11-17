@@ -1,0 +1,152 @@
+{
+  "runtime": {
+    "implementation": "portico",
+    "java": {
+      "command": [
+        "java",
+        "-version"
+      ],
+      "returncode": 0
+    },
+    "classpath": [
+      {
+        "path": "${RUNS}\\attempt-01\\portico-tcp-override.jar",
+        "sha256": "4a8ceceea564fec1cc4d61aab5b9ef27bb45f5dca0ce275e414618a13cfc5c66"
+      },
+      {
+        "path": "${PORTICO_HOME}\\lib\\portico.jar",
+        "sha256": "146dc0a7916b168396c6e595c42aaed0bdc69d64c5c54e728b7cb53fdd94ea84"
+      }
+    ],
+    "junit_sha256": "b016ef6b1c3454d6d7c2c88ce081dabf289699686af6622d6e4e2e1b54b4a2fc",
+    "source_base": "cb9d28e7c7c95626ebe78a95d90fd06a01e3d2f8",
+    "topology": "two or three independent RTI ambassador sessions in one test JVM; not a benchmark"
+  },
+  "runs": [
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=portico",
+        "-Dcross.port.base=51330",
+        "-Dgorti.endpoint=",
+        "-Dgorti.fom=${RUNS}\\attempt-01\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[51330]",
+        "-cp",
+        "${RUNS}\\attempt-01\\classes;${RUNS}\\attempt-01\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveFederationTest",
+        "--reports-dir",
+        "${RUNS}\\attempt-01\\LiveFederationTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 1,
+      "class": "LiveFederationTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveFederationTest",
+          "name": "twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants()",
+          "status": "fail",
+          "message": "Expected hla.rti1516e.exceptions.FederationExecutionAlreadyExists to be thrown, but nothing was thrown.",
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    },
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=portico",
+        "-Dcross.port.base=55206",
+        "-Dgorti.endpoint=",
+        "-Dgorti.fom=${RUNS}\\attempt-01\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[55206]",
+        "-cp",
+        "${RUNS}\\attempt-01\\classes;${RUNS}\\attempt-01\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveExchangeTest",
+        "--reports-dir",
+        "${RUNS}\\attempt-01\\LiveExchangeTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 1,
+      "class": "LiveExchangeTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveExchangeTest",
+          "name": "twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi()",
+          "status": "fail",
+          "message": "Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0",
+          "report": "TEST-junit-jupiter.xml"
+        },
+        {
+          "class": "org.gorti.rti.LiveExchangeTest",
+          "name": "explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl()",
+          "status": "fail",
+          "message": "Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0",
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    },
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=portico",
+        "-Dcross.port.base=59945",
+        "-Dgorti.endpoint=",
+        "-Dgorti.fom=${RUNS}\\attempt-01\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[59945]",
+        "-cp",
+        "${RUNS}\\attempt-01\\classes;${RUNS}\\attempt-01\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveTimeArithmeticTest",
+        "--reports-dir",
+        "${RUNS}\\attempt-01\\LiveTimeArithmeticTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 1,
+      "class": "LiveTimeArithmeticTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveTimeArithmeticTest",
+          "name": "sendGaltAndRetractionUseTheSameRepresentableBound(double)[2]",
+          "status": "fail",
+          "message": "Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0",
+          "report": "TEST-junit-jupiter.xml"
+        },
+        {
+          "class": "org.gorti.rti.LiveTimeArithmeticTest",
+          "name": "sendGaltAndRetractionUseTheSameRepresentableBound(double)[1]",
+          "status": "fail",
+          "message": "Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt",
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    }
+  ]
+}

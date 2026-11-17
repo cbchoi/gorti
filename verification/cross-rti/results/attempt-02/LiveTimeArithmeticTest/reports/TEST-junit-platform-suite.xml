@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="JUnit Platform Suite" tests="0" skipped="0" failures="0" errors="0" time="0.002" hostname="LOCAL_TEST_HOST" timestamp="2026-11-17T23:40:13">
+<properties>
+<property name="awt.toolkit" value="sun.awt.windows.WToolkit" />
+<property name="cross.port.base" value="62923" />
+<property name="cross.rti" value="portico" />
+<property name="file.encoding" value="MS949" />
+<property name="file.separator" value="\" />
+<property name="gorti.endpoint" value="" />
+<property name="gorti.fom" value="${RUNS}\attempt-02\classes\exchange-fom.xml" />
+<property name="java.awt.graphicsenv" value="sun.awt.Win32GraphicsEnvironment" />
+<property name="java.awt.printerjob" value="sun.awt.windows.WPrinterJob" />
+<property name="java.class.path" value="${RUNS}\attempt-02\classes;${RUNS}\attempt-02\portico-tcp-override.jar;${PORTICO_HOME}\lib\portico.jar;${TOOLS}\junit-platform-console-standalone-1.11.4.jar" />
+<property name="java.class.version" value="55.0" />
+<property name="java.home" value="C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot" />
+<property name="java.io.tmpdir" value="${USER_HOME}\AppData\Local\Temp\" />
+<property name="java.library.path" value="REDACTED_LOCAL_METADATA" />
+<property name="java.net.preferIPv4Stack" value="true" />
+<property name="java.runtime.name" value="OpenJDK Runtime Environment" />
+<property name="java.runtime.version" value="11.0.31+11" />
+<property name="java.specification.maintenance.version" value="3" />
+<property name="java.specification.name" value="Java Platform API Specification" />
+<property name="java.specification.vendor" value="Oracle Corporation" />
+<property name="java.specification.version" value="11" />
+<property name="java.vendor" value="Eclipse Adoptium" />
+<property name="java.vendor.url" value="https://adoptium.net/" />
+<property name="java.vendor.url.bug" value="https://github.com/adoptium/adoptium-support/issues" />
+<property name="java.vendor.version" value="Temurin-11.0.31+11" />
+<property name="java.version" value="11.0.31" />
+<property name="java.version.date" value="2026-04-21" />
+<property name="java.vm.compressedOopsMode" value="Zero based" />
+<property name="java.vm.info" value="mixed mode" />
+<property name="java.vm.name" value="OpenJDK 64-Bit Server VM" />
+<property name="java.vm.specification.name" value="Java Virtual Machine Specification" />
+<property name="java.vm.specification.vendor" value="Oracle Corporation" />
+<property name="java.vm.specification.version" value="11" />
+<property name="java.vm.vendor" value="Eclipse Adoptium" />
+<property name="java.vm.version" value="11.0.31+11" />
+<property name="jdk.debug" value="release" />
+<property name="junit.docs.version" value="1.11.4" />
+<property name="line.separator" value="&#13;&#10;" />
+<property name="os.arch" value="amd64" />
+<property name="os.name" value="Windows 11" />
+<property name="os.version" value="10.0" />
+<property name="path.separator" value=";" />
+<property name="portico.jgroups.responseTimeout" value="5000" />
+<property name="portico.jgroups.tcp.bindAddress" value="127.0.0.1" />
+<property name="portico.jgroups.tcp.initialHosts" value="127.0.0.1[62923],127.0.0.1[62924],127.0.0.1[62925],127.0.0.1[62926],127.0.0.1[62927],127.0.0.1[62928],127.0.0.1[62929],127.0.0.1[62930],127.0.0.1[62931],127.0.0.1[62932],127.0.0.1[62933],127.0.0.1[62934],127.0.0.1[62935],127.0.0.1[62936],127.0.0.1[62937],127.0.0.1[62938]" />
+<property name="portico.loglevel" value="OFF" />
+<property name="sun.arch.data.model" value="64" />
+<property name="sun.boot.library.path" value="C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot\bin" />
+<property name="sun.cpu.endian" value="little" />
+<property name="sun.cpu.isalist" value="amd64" />
+<property name="sun.desktop" value="windows" />
+<property name="sun.io.unicode.encoding" value="UnicodeLittle" />
+<property name="sun.java.command" value="org.junit.platform.console.ConsoleLauncher execute --select-class org.gorti.rti.LiveTimeArithmeticTest --reports-dir ${RUNS}\attempt-02\LiveTimeArithmeticTest\reports --details tree --disable-ansi-colors --fail-if-no-tests" />
+<property name="sun.java.launcher" value="SUN_STANDARD" />
+<property name="sun.jnu.encoding" value="MS949" />
+<property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers" />
+<property name="sun.os.patch.level" value="" />
+<property name="user.country" value="KR" />
+<property name="user.dir" value="${RUNS}\attempt-02\LiveTimeArithmeticTest" />
+<property name="user.home" value="${USER_HOME}" />
+<property name="user.language" value="ko" />
+<property name="user.name" value="REDACTED_LOCAL_METADATA" />
+<property name="user.script" value="" />
+<property name="user.timezone" value="Asia/Seoul" />
+<property name="user.variant" value="" />
+</properties>
+<system-out>
+unique-id: [engine:junit-platform-suite]
+display-name: JUnit Platform Suite
+</system-out>
+</testsuite>

@@ -19,6 +19,8 @@ plans, payloads, choreography and callback checks matched. This is an HLA
 exchange workload, not a DEVS kernel score. Each RTI used two independent
 federates; gorti additionally used its server. No per-message benchmark logs
 were written; Portico logging was OFF and gorti server logging was error-level.
+Each delivery carried a 4-byte sequence value and a 20-byte HLAASCIIstring value,
+excluding protocol headers and transport framing.
 
 Five warm-up and twenty measured four-trial seed blocks used balanced ABBA/BAAB
 orders randomized with seeds 20261007 and 20261008. Each RTI therefore had 50
@@ -53,6 +55,11 @@ fresh-JVM/host variation prevent attributing the rank reversal to that change
 alone. The result is not a current-version, multi-host, time-management or
 scalability ranking. Portico was not run against the complete gorti test inventory.
 
+Both rates decreased in the second session: Portico by 59.5% and gorti by 17.7%.
+The retained metadata does not identify the host-load or effective JVM-state cause.
+The [separate Java service-test transfer](../../verification/cross-rti/RESULTS.md)
+is not part of these historical performance trials.
+
 ## Binary identity
 
 | Artifact | SHA-256 |
@@ -67,7 +74,7 @@ The linked reports identify the external manifests, raw observations, seed
 schedules and analyses. Do not replace these identities with the later source
 commit when reproducing or citing a result.
 
-## Isolated SDK optimization
+## Separate client-build comparison
 
 A separate 8 October same-server experiment compared lazy callback-report
 signals before/after the SDK change. Five warm-up and twenty measured ABBA/BAAB
@@ -80,11 +87,16 @@ blocks produced 40 measured trials per build; all 100 total trials passed.
 | Task-registration allocation, bytes | 288 | 64 |
 | Task-registration allocations | 3 | 1 |
 
-Throughput increased 4.88%, with ratio interval [1.013765, 1.088442]. Allocation
+The candidate build's throughput was 4.88% higher, with ratio interval
+[1.013765, 1.088442]. Allocation
 values describe task registration, not whole-process memory. Both builds used
-the same server binary and retained callback reporting. This isolated comparison
+the same server binary and retained callback reporting. This within-session comparison
 is separate from the cross-RTI difference. Its manifest/analysis is identified
 by the `report-signal-crossover-20261008` evidence root in the 8 October report.
+
+Complete source snapshots for the measured modified builds are not retained with
+the evidence. The comparison therefore establishes a difference between these
+binary builds, not independently reproducible attribution to one source change.
 
 The model/requirements reproduction archive contains this summary, not these
 historical benchmark observations. Preserve and identify that historical data

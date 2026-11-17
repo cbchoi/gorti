@@ -1,0 +1,26 @@
+{
+  "changes": [
+    {
+      "source": "javasdk\\client\\src\\test\\java\\org\\gorti\\rti\\LiveFederationTest.java",
+      "original_sha256": "c5e83d4cf5e78c3d9c9d2242c5de1c67cb339bb2ce3da9810a454c639fdf036c",
+      "adapted_sha256": "9170a462f30e76627df148aee896bfb8f8151e575620341f3fbf655673f50d7f",
+      "patch": "LiveFederationTest.patch"
+    },
+    {
+      "source": "javasdk\\client\\src\\test\\java\\org\\gorti\\rti\\LiveExchangeTest.java",
+      "original_sha256": "df1157461e8662e2fa5fce68554dc1043cda62eb4bddda5a9db40cfe2973b59b",
+      "adapted_sha256": "19e971e79877721ab8e37e2f8032cc9eb2bcbbbbd78759d36685f48f1d31aa4a",
+      "patch": "LiveExchangeTest.patch"
+    },
+    {
+      "source": "javasdk\\client\\src\\test\\java\\org\\gorti\\rti\\LiveTimeArithmeticTest.java",
+      "original_sha256": "fc0d41b15e546ccf034de1d2ea002d99a59f833fd27cf21642d9aab685c5f118",
+      "adapted_sha256": "0ee48f584dba44f1240a0f0f3e74070976290993ea1212e8bc683ae108afc1fb",
+      "patch": "LiveTimeArithmeticTest.patch"
+    }
+  ],
+  "adapter_sha256": "2d3364aa01b33f575efff7f7c238f4b768e76839e7e7f135c289d10e0de5b589",
+  "fom_sha256": "25c1efa3a298b0eb5659fa212e698d925818c3c2363baddbd9361abb2c354ed8",
+  "separate_control_sha256": "74e523cdc318ee5fde0781583ab167ec25cb5f3eb50c08186e78cbb3f56cbf36",
+  "scope": "Provider/connection setup and gorti URI checks only; service assertions retained."
+}

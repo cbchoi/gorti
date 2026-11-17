@@ -1,0 +1,19 @@
+{
+  "command": [
+    "javac",
+    "--release",
+    "11",
+    "-encoding",
+    "UTF-8",
+    "-cp",
+    "${RUNS}\\portico-control-01\\classes;${RUNS}\\portico-control-01\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+    "-d",
+    "${RUNS}\\portico-control-01\\classes",
+    "${RUNS}\\portico-control-01\\sources\\org\\gorti\\rti\\LiveExchangeTest.java",
+    "${RUNS}\\portico-control-01\\sources\\org\\gorti\\rti\\LiveFederationTest.java",
+    "${RUNS}\\portico-control-01\\sources\\org\\gorti\\rti\\LiveTimeArithmeticTest.java",
+    "${RUNS}\\portico-control-01\\sources\\org\\gorti\\rti\\PortableInteractionControl.java",
+    "${RUNS}\\portico-control-01\\sources\\org\\gorti\\rti\\TestRti.java"
+  ],
+  "returncode": 0
+}

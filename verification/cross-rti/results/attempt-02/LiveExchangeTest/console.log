@@ -1,0 +1,73 @@
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-42173, cluster=gorti-java-empty-sync-33d2485c-d274-409f-93db-1bbfe9049b2e, physical address=127.0.0.1:63838
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-60030, cluster=gorti-java-empty-sync-33d2485c-d274-409f-93db-1bbfe9049b2e, physical address=127.0.0.1:63839
+-------------------------------------------------------------------
+I am coordinator - received request for me from d1848365-4609-4375-a951-fdb13263ea99
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-54731, cluster=gorti-java-exchange-1b4bc6a3-d871-4da2-bb7d-f0e0af736ebb, physical address=127.0.0.1:63840
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-20248, cluster=gorti-java-exchange-1b4bc6a3-d871-4da2-bb7d-f0e0af736ebb, physical address=127.0.0.1:63841
+-------------------------------------------------------------------
+I am coordinator - received request for me from d2dbd2b6-a610-4b49-9260-eb18b7553acb
+.
++-- JUnit Platform Suite [OK]
++-- JUnit Jupiter [OK]
+| '-- LiveExchangeTest [OK]
+|   +-- explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl() 29936 ms [X] peer callback contract: [sync announced] ==> expected: <null> but was: <sync announced must run on the caller thread inside evoke>
+|   '-- twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi() 23287 ms [X] expected: <HLAreliable> but was: <null>
+'-- JUnit Vintage [OK]
+
+Failures (2):
+  JUnit Jupiter:LiveExchangeTest:explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl()
+    MethodSource [className = 'org.gorti.rti.LiveExchangeTest', methodName = 'explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl', methodParameterTypes = '']
+    => org.opentest4j.AssertionFailedError: peer callback contract: [sync announced] ==> expected: <null> but was: <sync announced must run on the caller thread inside evoke>
+       org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+       org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+       org.junit.jupiter.api.AssertNull.failNotNull(AssertNull.java:50)
+       org.junit.jupiter.api.AssertNull.assertNull(AssertNull.java:35)
+       org.junit.jupiter.api.Assertions.assertNull(Assertions.java:287)
+       org.gorti.rti.LiveExchangeTest$Participant.assertHealthy(LiveExchangeTest.java:499)
+       org.gorti.rti.LiveExchangeTest.evoke(LiveExchangeTest.java:436)
+       org.gorti.rti.LiveExchangeTest.await(LiveExchangeTest.java:420)
+       org.gorti.rti.LiveExchangeTest.explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl(LiveExchangeTest.java:232)
+       java.base/java.lang.reflect.Method.invoke(Method.java:566)
+       [...]
+  JUnit Jupiter:LiveExchangeTest:twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi()
+    MethodSource [className = 'org.gorti.rti.LiveExchangeTest', methodName = 'twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi', methodParameterTypes = '']
+    => org.opentest4j.AssertionFailedError: expected: <HLAreliable> but was: <null>
+       org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+       org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+       org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+       org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:182)
+       org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:177)
+       org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:1145)
+       org.gorti.rti.LiveExchangeTest$Model.<init>(LiveExchangeTest.java:469)
+       org.gorti.rti.LiveExchangeTest.twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi(LiveExchangeTest.java:78)
+       java.base/java.lang.reflect.Method.invoke(Method.java:566)
+       java.base/java.util.ArrayList.forEach(ArrayList.java:1541)
+       [...]
+
+Test run finished after 53324 ms
+[         4 containers found      ]
+[         0 containers skipped    ]
+[         4 containers started    ]
+[         0 containers aborted    ]
+[         4 containers successful ]
+[         0 containers failed     ]
+[         2 tests found           ]
+[         0 tests skipped         ]
+[         2 tests started         ]
+[         0 tests aborted         ]
+[         0 tests successful      ]
+[         2 tests failed          ]
+
