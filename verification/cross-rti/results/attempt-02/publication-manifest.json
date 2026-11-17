@@ -1,0 +1,155 @@
+{
+  "policy": "Local paths and host identifiers replaced; user name and system library path removed. JUnit XML reserialized. Outcomes, payload assertions, timings, and runtime settings retained. JARs, executables, class files, and saved federation state are not distributed.",
+  "files": [
+    {
+      "path": "adaptations.json",
+      "original_sha256": "d3ba6ca9fd46f84f0669126bd29571989c8f30028857c95e2adbd7b27f0be397",
+      "public_sha256": "d3ba6ca9fd46f84f0669126bd29571989c8f30028857c95e2adbd7b27f0be397",
+      "changed": false
+    },
+    {
+      "path": "classes/exchange-fom.xml",
+      "original_sha256": "25c1efa3a298b0eb5659fa212e698d925818c3c2363baddbd9361abb2c354ed8",
+      "public_sha256": "25c1efa3a298b0eb5659fa212e698d925818c3c2363baddbd9361abb2c354ed8",
+      "changed": false
+    },
+    {
+      "path": "compile.json",
+      "original_sha256": "74f20bbec31f911259f81025558dad4470ecc893e958a65572e082028a633b6f",
+      "public_sha256": "9ce64de0a2b274d9a6eaacad251e13789c73f0d3e7896588734041167cabd060",
+      "changed": true
+    },
+    {
+      "path": "compile.log",
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "public_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "changed": false
+    },
+    {
+      "path": "java-version.log",
+      "original_sha256": "3f76605edddba9d61d9d5579b7f351d5e292817982310dfd2f66bd2763e095f8",
+      "public_sha256": "3f76605edddba9d61d9d5579b7f351d5e292817982310dfd2f66bd2763e095f8",
+      "changed": false
+    },
+    {
+      "path": "LiveExchangeTest/console.log",
+      "original_sha256": "dd326ea2e31f0a3c835833335da001b02130a1ea7509236087be44f41b866781",
+      "public_sha256": "309022f97c54ab5872d48d57c17f470c869a4a856ff3e63591379994705c3172",
+      "changed": true
+    },
+    {
+      "path": "LiveExchangeTest/reports/TEST-junit-jupiter.xml",
+      "original_sha256": "6747c0bc647cc362d92d0ecf3f1bb8bf29b42d2d918aca8d68798a06d3338a2b",
+      "public_sha256": "25d2100d07bc8d483c0a0846383b1b3501f12de9bca343e1a94ac6bf80f660ab",
+      "changed": true
+    },
+    {
+      "path": "LiveExchangeTest/reports/TEST-junit-platform-suite.xml",
+      "original_sha256": "b44a9017b9322e5b03a7b40bd0a9f4d297e19363538948745d1b433c4bbc0c2b",
+      "public_sha256": "5fdf8c2bd603b1184e6a22133e20d8a33a3209fc9065b7cd6a17633f646e63ee",
+      "changed": true
+    },
+    {
+      "path": "LiveExchangeTest/reports/TEST-junit-vintage.xml",
+      "original_sha256": "c1038bee98ed63824c3072dbfcc3c04840ff5faafbac58920cb6f72cb2bc31f5",
+      "public_sha256": "6c9c3917fdf2320da8eda4c875482d05b9c6249ffca641899215024f12f5d885",
+      "changed": true
+    },
+    {
+      "path": "LiveExchangeTest.patch",
+      "original_sha256": "3d2efef363261df0206c9f14f947fe33b7f6b28f51b5156aee9a79b3d2a3a359",
+      "public_sha256": "3d2efef363261df0206c9f14f947fe33b7f6b28f51b5156aee9a79b3d2a3a359",
+      "changed": false
+    },
+    {
+      "path": "LiveFederationTest/console.log",
+      "original_sha256": "cd6afcb09d938c1e9642b141f61ab14a41834ea2f8f71992c9a316146b1575df",
+      "public_sha256": "48e77ff31f11681e4ccb27785609231d98f28ff3fecc512981fe68c90c871326",
+      "changed": true
+    },
+    {
+      "path": "LiveFederationTest/reports/TEST-junit-jupiter.xml",
+      "original_sha256": "6ac68fff7089ec4c4fd3946d3f9a597065b019762ae6d88b3dedb06a83a8259e",
+      "public_sha256": "e418200f6fa6d6633f01f206fcacb352c2dedb967da2afdbcc1a3834d58b9104",
+      "changed": true
+    },
+    {
+      "path": "LiveFederationTest/reports/TEST-junit-platform-suite.xml",
+      "original_sha256": "44c4c0a99b257d06fad43e3f43a5e9e3f45c99b1963dfa9682163b67f66be222",
+      "public_sha256": "16730ddaf8ea38f1e231523a5754dfcd0eeedd8573ef17a01162a01304fdc73e",
+      "changed": true
+    },
+    {
+      "path": "LiveFederationTest/reports/TEST-junit-vintage.xml",
+      "original_sha256": "fb52576229764ba7b5c98a917fcec4b6f86df9eb4af6cce0b1355f15e473104c",
+      "public_sha256": "a34a8b9c0b3ecdf0072a53d22607adbffe91c823061b0c221b90019700d12807",
+      "changed": true
+    },
+    {
+      "path": "LiveFederationTest.patch",
+      "original_sha256": "6d15b25776e4f02bb0c799904a8a6f808c67c8204d2dda9b5b927790fb14dd5d",
+      "public_sha256": "6d15b25776e4f02bb0c799904a8a6f808c67c8204d2dda9b5b927790fb14dd5d",
+      "changed": false
+    },
+    {
+      "path": "LiveTimeArithmeticTest/console.log",
+      "original_sha256": "afb0308b00e6227adb37c469aaf29115cead89d52960f89159a1c41716ae5050",
+      "public_sha256": "0722dcdc6308a7a5c41ec28ad15a7b0b373534b23d9fa1bfa98be18c4d3501f4",
+      "changed": true
+    },
+    {
+      "path": "LiveTimeArithmeticTest/reports/TEST-junit-jupiter.xml",
+      "original_sha256": "6a76522fd2ea439aacba1f677b56041648984a89f8ffafde449caf687119fcc5",
+      "public_sha256": "13e54d0644bb6a20387836bd70923b25bb8965cad93e6529ebf752c598a59a86",
+      "changed": true
+    },
+    {
+      "path": "LiveTimeArithmeticTest/reports/TEST-junit-platform-suite.xml",
+      "original_sha256": "6d7d76dbd9ba4ccbe7b45ff0e6437640534da48fcdf372807a62e43a8bc12456",
+      "public_sha256": "870cd65bee93cb0bbaf89800ad3285ff7f6b84d096724fbc864d3eabb0f39dde",
+      "changed": true
+    },
+    {
+      "path": "LiveTimeArithmeticTest/reports/TEST-junit-vintage.xml",
+      "original_sha256": "3cf3b54314a58b734ca02d90038c746793def3371e4f24b8c44b8c4d5d979484",
+      "public_sha256": "ecdb64e1a896e863000b78b6b50f246b9511847c60dd9851c854070a68d5f568",
+      "changed": true
+    },
+    {
+      "path": "LiveTimeArithmeticTest.patch",
+      "original_sha256": "5eaee9518d5df0849b4d617665f1be4d548a8942d10a0f81b400e628532d899d",
+      "public_sha256": "5eaee9518d5df0849b4d617665f1be4d548a8942d10a0f81b400e628532d899d",
+      "changed": false
+    },
+    {
+      "path": "results.json",
+      "original_sha256": "3d1a02646268248368912f8791863931e97b93022e0403bb44e9a6bc897e3e8f",
+      "public_sha256": "d4f090a033d04377f330877b2fe370349c26545216ae7b2854cdd4740843732d",
+      "changed": true
+    },
+    {
+      "path": "sources/org/gorti/rti/LiveExchangeTest.java",
+      "original_sha256": "19e971e79877721ab8e37e2f8032cc9eb2bcbbbbd78759d36685f48f1d31aa4a",
+      "public_sha256": "19e971e79877721ab8e37e2f8032cc9eb2bcbbbbd78759d36685f48f1d31aa4a",
+      "changed": false
+    },
+    {
+      "path": "sources/org/gorti/rti/LiveFederationTest.java",
+      "original_sha256": "9170a462f30e76627df148aee896bfb8f8151e575620341f3fbf655673f50d7f",
+      "public_sha256": "9170a462f30e76627df148aee896bfb8f8151e575620341f3fbf655673f50d7f",
+      "changed": false
+    },
+    {
+      "path": "sources/org/gorti/rti/LiveTimeArithmeticTest.java",
+      "original_sha256": "0ee48f584dba44f1240a0f0f3e74070976290993ea1212e8bc683ae108afc1fb",
+      "public_sha256": "0ee48f584dba44f1240a0f0f3e74070976290993ea1212e8bc683ae108afc1fb",
+      "changed": false
+    },
+    {
+      "path": "sources/org/gorti/rti/TestRti.java",
+      "original_sha256": "2d3364aa01b33f575efff7f7c238f4b768e76839e7e7f135c289d10e0de5b589",
+      "public_sha256": "2d3364aa01b33f575efff7f7c238f4b768e76839e7e7f135c289d10e0de5b589",
+      "changed": false
+    }
+  ]
+}

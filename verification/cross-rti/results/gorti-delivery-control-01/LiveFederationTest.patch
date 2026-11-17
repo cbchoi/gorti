@@ -1,0 +1,36 @@
+--- LiveFederationTest.original.java
++++ LiveFederationTest.adapted.java
+@@ -35,8 +35,6 @@
+ import static org.junit.jupiter.api.Assertions.*;
+ 
+ /** Two independent RTI sessions in one JVM; the server is started externally. */
+-@EnabledIfSystemProperty(named = "gorti.endpoint", matches = ".+",
+-        disabledReason = "Live test requires an external RTI and -Dgorti.endpoint/-Dgorti.fom")
+ class LiveFederationTest {
+     private static final Duration CALLBACK_TIMEOUT = Duration.ofSeconds(10);
+     private static final Duration BLOCKED_OBSERVATION = Duration.ofMillis(250);
+@@ -46,10 +44,6 @@
+     @Timeout(120)
+     void twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants() throws Throwable {
+         String endpoint = System.getProperty("gorti.endpoint");
+-        URI address = URI.create(endpoint);
+-        assertEquals("grpc", address.getScheme(), "gorti.endpoint must be grpc://host:port");
+-        assertNotNull(address.getHost(), "gorti.endpoint must include a host");
+-        assertTrue(address.getPort() > 0, "gorti.endpoint must include a port");
+         String fomProperty = System.getProperty("gorti.fom");
+         assertNotNull(fomProperty, "Set gorti.fom to an existing local FOM file");
+         Path fomPath = Path.of(fomProperty).toAbsolutePath().normalize();
+@@ -299,11 +293,11 @@
+ 
+         Participant(String name) throws Exception {
+             this.name = name;
+-            rti = RtiFactoryFactory.getRtiFactory("gorti").getRtiAmbassador();
++            rti = TestRti.ambassador();
+         }
+ 
+         void connect(String endpoint) throws Exception {
+-            rti.connect(callbacks, CallbackModel.HLA_EVOKED, endpoint);
++            TestRti.connect(rti, callbacks);
+             connected = true;
+         }
+ 

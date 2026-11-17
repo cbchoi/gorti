@@ -1,0 +1,291 @@
+{
+  "runtime": {
+    "implementation": "gorti",
+    "java": {
+      "command": [
+        "java",
+        "-version"
+      ],
+      "returncode": 0
+    },
+    "classpath": [
+      {
+        "path": "${REPO}\\javasdk\\client\\target\\gorti-java-client-0.1.0-SNAPSHOT.jar",
+        "sha256": "de12c47045539991845883793731a6a71115232d06085ca9891ab16a0626ae81"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\code\\gson\\gson\\2.14.0\\gson-2.14.0.jar",
+        "sha256": "2cbd119bf1961c28788310963dc80ba65f58cdeec1dd139c8bdb1240faa2c36f"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-ieee1516e-api\\0.1.0-SNAPSHOT\\gorti-ieee1516e-api-0.1.0-SNAPSHOT.jar",
+        "sha256": "09b9715fdcac47420ce51c2e3383b2631924b323513e9d5f4e87d45fd533d5c6"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-java-wire\\0.1.0-SNAPSHOT\\gorti-java-wire-0.1.0-SNAPSHOT.jar",
+        "sha256": "152c9622636736f6d67f2c76ea2c825767fba4c634618b8b1587c2d1a4dc7903"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf\\1.84.0\\grpc-protobuf-1.84.0.jar",
+        "sha256": "076ad68d91d59132970dd739ff908d0b8fffea9fb0ccbea9310d933e0a677802"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\code\\findbugs\\jsr305\\3.0.2\\jsr305-3.0.2.jar",
+        "sha256": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\api\\grpc\\proto-google-common-protos\\2.64.1\\proto-google-common-protos-2.64.1.jar",
+        "sha256": "beb8107f340dc0bb04bf40d1a61631a21e450c58aad93c160959f0292136d99f"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf-lite\\1.84.0\\grpc-protobuf-lite-1.84.0.jar",
+        "sha256": "12827fd4ba3d75f7ab5fceb3296c5ac9f473826e6b2aa67684d32879b7fa239b"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-stub\\1.84.0\\grpc-stub-1.84.0.jar",
+        "sha256": "5d7c9eac0386fbf6f1c9dc90171034939093c9f72196bd9242acf819c5f10a4a"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\protobuf\\protobuf-java\\3.25.9\\protobuf-java-3.25.9.jar",
+        "sha256": "df18b719cd0c5a11e569013216cc9de47a0a954adeede685c0f98ce4c42d4d1a"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\javax\\annotation\\javax.annotation-api\\1.3.2\\javax.annotation-api-1.3.2.jar",
+        "sha256": "e04ba5195bcd555dc95650f7cc614d151e4bcd52d29a10b8aa2197f3ab89ab9b"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-netty-shaded\\1.84.0\\grpc-netty-shaded-1.84.0.jar",
+        "sha256": "f07624d7ca0b0bce8dded33dfe261fd9be59168bb6a77f0580ab09ecd22f113d"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-util\\1.84.0\\grpc-util-1.84.0.jar",
+        "sha256": "b64b8eedb714ec8c22ddc57361c7f2c0718cd51fa9d44a8cff68b30c117a6c23"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-core\\1.84.0\\grpc-core-1.84.0.jar",
+        "sha256": "750c08018e22014cb5e6b6ac64fd4d0b2302b7db9cb2b83a1e0914d0561ed71c"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\android\\annotations\\4.1.1.4\\annotations-4.1.1.4.jar",
+        "sha256": "ba734e1e84c09d615af6a09d33034b4f0442f8772dec120efb376d86a565ae15"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-context\\1.84.0\\grpc-context-1.84.0.jar",
+        "sha256": "e6f6e5db0d704e34d03f013cceb6be326c9ed3916346378ca1587ed41f943080"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\guava\\guava\\33.6.0-android\\guava-33.6.0-android.jar",
+        "sha256": "9532ca9ba8aceb4cd2067171f981c799988b7f5844e3e274811a3bb757034bc4"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\guava\\failureaccess\\1.0.3\\failureaccess-1.0.3.jar",
+        "sha256": "cbfc3906b19b8f55dd7cfd6dfe0aa4532e834250d7f080bd8d211a3e246b59cb"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\guava\\listenablefuture\\9999.0-empty-to-avoid-conflict-with-guava\\listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar",
+        "sha256": "b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\jspecify\\jspecify\\1.0.0\\jspecify-1.0.0.jar",
+        "sha256": "1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\j2objc\\j2objc-annotations\\3.1\\j2objc-annotations-3.1.jar",
+        "sha256": "84d3a150518485f8140ea99b8a985656749629f6433c92b80c75b36aba3b099b"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\com\\google\\errorprone\\error_prone_annotations\\2.50.0\\error_prone_annotations-2.50.0.jar",
+        "sha256": "4667724877f1d37a689202da191e23efa7657c62eef93ccdac406eccfe5cdd0a"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\perfmark\\perfmark-api\\0.27.0\\perfmark-api-0.27.0.jar",
+        "sha256": "c7b478503ec524e55df19b424d46d27c8a68aeb801664fadd4f069b71f52d0f6"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-api\\1.84.0\\grpc-api-1.84.0.jar",
+        "sha256": "a2a57594571a4392751609bf4c63cf838ba7dcdbc8e5fd07983c313cb1565ac8"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\codehaus\\mojo\\animal-sniffer-annotations\\1.27\\animal-sniffer-annotations-1.27.jar",
+        "sha256": "cfd7e51a828fe6b98bc0dbb99e34900c9e9012322cb9ddd57fd8dd0b02da5e27"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter\\5.11.4\\junit-jupiter-5.11.4.jar",
+        "sha256": "aa880e4afba87d447357e4c1fc098c5cb1d200cb9403496c00d3b35a5bd0e8db"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-api\\5.11.4\\junit-jupiter-api-5.11.4.jar",
+        "sha256": "ab83ef9e51ac4597d59d26b4b58812129550e2f579a404c8af7d09f5ce5b4293"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\opentest4j\\opentest4j\\1.3.0\\opentest4j-1.3.0.jar",
+        "sha256": "48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-commons\\1.11.4\\junit-platform-commons-1.11.4.jar",
+        "sha256": "9edd969b0d0670c54105bc91ae79bd1c6f503e12115faba82073b84c86bbc334"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\apiguardian\\apiguardian-api\\1.1.2\\apiguardian-api-1.1.2.jar",
+        "sha256": "b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-params\\5.11.4\\junit-jupiter-params-5.11.4.jar",
+        "sha256": "02a6e015de7ce94ac7f256e7fa05b8091dea861fe79a555a7993313d0f6c7d96"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-engine\\5.11.4\\junit-jupiter-engine-5.11.4.jar",
+        "sha256": "cdf8ac59f3fad774ca738ad03890950eeb91833ef0e8908753177edd26f1581c"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-engine\\1.11.4\\junit-platform-engine-1.11.4.jar",
+        "sha256": "b1dd998f64f9acadc15966d9cd3d08074662677b3e390f0a38fcbf0bb4c72330"
+      },
+      {
+        "path": "${MAVEN_REPOSITORY}\\io\\grpc\\grpc-inprocess\\1.84.0\\grpc-inprocess-1.84.0.jar",
+        "sha256": "b20985726f7d68ba336356580bde09395f3b2fc55dc3d6f38d5fa01abe25b89e"
+      }
+    ],
+    "junit_sha256": "b016ef6b1c3454d6d7c2c88ce081dabf289699686af6622d6e4e2e1b54b4a2fc",
+    "source_base": "cb9d28e7c7c95626ebe78a95d90fd06a01e3d2f8",
+    "topology": "two or three independent RTI ambassador sessions in one test JVM; not a benchmark",
+    "server": {
+      "command": [
+        "${TOOLS}\\rtid-service-transfer.exe",
+        "--listen=127.0.0.1:63859",
+        "--admin-listen=",
+        "--metrics-listen=127.0.0.1:0",
+        "--log-level=error",
+        "--save-dir=${RUNS}\\gorti-control-01\\save-state"
+      ],
+      "sha256": "d320bd2b6cfb756f3b2b2df81c9029e4d5a3dec7496ba77055c34f7ddec4e08c"
+    }
+  },
+  "runs": [
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=gorti",
+        "-Dcross.port.base=63862",
+        "-Dgorti.endpoint=grpc://127.0.0.1:63859",
+        "-Dgorti.fom=${RUNS}\\gorti-control-01\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[63862],127.0.0.1[63863],127.0.0.1[63864],127.0.0.1[63865],127.0.0.1[63866],127.0.0.1[63867],127.0.0.1[63868],127.0.0.1[63869],127.0.0.1[63870],127.0.0.1[63871],127.0.0.1[63872],127.0.0.1[63873],127.0.0.1[63874],127.0.0.1[63875],127.0.0.1[63876],127.0.0.1[63877]",
+        "-cp",
+        "${RUNS}\\gorti-control-01\\classes;${REPO}\\javasdk\\client\\target\\gorti-java-client-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\com\\google\\code\\gson\\gson\\2.14.0\\gson-2.14.0.jar;${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-ieee1516e-api\\0.1.0-SNAPSHOT\\gorti-ieee1516e-api-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-java-wire\\0.1.0-SNAPSHOT\\gorti-java-wire-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf\\1.84.0\\grpc-protobuf-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\code\\findbugs\\jsr305\\3.0.2\\jsr305-3.0.2.jar;${MAVEN_REPOSITORY}\\com\\google\\api\\grpc\\proto-google-common-protos\\2.64.1\\proto-google-common-protos-2.64.1.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf-lite\\1.84.0\\grpc-protobuf-lite-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-stub\\1.84.0\\grpc-stub-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\protobuf\\protobuf-java\\3.25.9\\protobuf-java-3.25.9.jar;${MAVEN_REPOSITORY}\\javax\\annotation\\javax.annotation-api\\1.3.2\\javax.annotation-api-1.3.2.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-netty-shaded\\1.84.0\\grpc-netty-shaded-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-util\\1.84.0\\grpc-util-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-core\\1.84.0\\grpc-core-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\android\\annotations\\4.1.1.4\\annotations-4.1.1.4.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-context\\1.84.0\\grpc-context-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\guava\\33.6.0-android\\guava-33.6.0-android.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\failureaccess\\1.0.3\\failureaccess-1.0.3.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\listenablefuture\\9999.0-empty-to-avoid-conflict-with-guava\\listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar;${MAVEN_REPOSITORY}\\org\\jspecify\\jspecify\\1.0.0\\jspecify-1.0.0.jar;${MAVEN_REPOSITORY}\\com\\google\\j2objc\\j2objc-annotations\\3.1\\j2objc-annotations-3.1.jar;${MAVEN_REPOSITORY}\\com\\google\\errorprone\\error_prone_annotations\\2.50.0\\error_prone_annotations-2.50.0.jar;${MAVEN_REPOSITORY}\\io\\perfmark\\perfmark-api\\0.27.0\\perfmark-api-0.27.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-api\\1.84.0\\grpc-api-1.84.0.jar;${MAVEN_REPOSITORY}\\org\\codehaus\\mojo\\animal-sniffer-annotations\\1.27\\animal-sniffer-annotations-1.27.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter\\5.11.4\\junit-jupiter-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-api\\5.11.4\\junit-jupiter-api-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\opentest4j\\opentest4j\\1.3.0\\opentest4j-1.3.0.jar;${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-commons\\1.11.4\\junit-platform-commons-1.11.4.jar;${MAVEN_REPOSITORY}\\org\\apiguardian\\apiguardian-api\\1.1.2\\apiguardian-api-1.1.2.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-params\\5.11.4\\junit-jupiter-params-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-engine\\5.11.4\\junit-jupiter-engine-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-engine\\1.11.4\\junit-platform-engine-1.11.4.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-inprocess\\1.84.0\\grpc-inprocess-1.84.0.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveFederationTest",
+        "--reports-dir",
+        "${RUNS}\\gorti-control-01\\LiveFederationTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 0,
+      "class": "LiveFederationTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveFederationTest",
+          "name": "twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants()",
+          "status": "pass",
+          "message": null,
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    },
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=gorti",
+        "-Dcross.port.base=63925",
+        "-Dgorti.endpoint=grpc://127.0.0.1:63859",
+        "-Dgorti.fom=${RUNS}\\gorti-control-01\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[63925],127.0.0.1[63926],127.0.0.1[63927],127.0.0.1[63928],127.0.0.1[63929],127.0.0.1[63930],127.0.0.1[63931],127.0.0.1[63932],127.0.0.1[63933],127.0.0.1[63934],127.0.0.1[63935],127.0.0.1[63936],127.0.0.1[63937],127.0.0.1[63938],127.0.0.1[63939],127.0.0.1[63940]",
+        "-cp",
+        "${RUNS}\\gorti-control-01\\classes;${REPO}\\javasdk\\client\\target\\gorti-java-client-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\com\\google\\code\\gson\\gson\\2.14.0\\gson-2.14.0.jar;${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-ieee1516e-api\\0.1.0-SNAPSHOT\\gorti-ieee1516e-api-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-java-wire\\0.1.0-SNAPSHOT\\gorti-java-wire-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf\\1.84.0\\grpc-protobuf-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\code\\findbugs\\jsr305\\3.0.2\\jsr305-3.0.2.jar;${MAVEN_REPOSITORY}\\com\\google\\api\\grpc\\proto-google-common-protos\\2.64.1\\proto-google-common-protos-2.64.1.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf-lite\\1.84.0\\grpc-protobuf-lite-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-stub\\1.84.0\\grpc-stub-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\protobuf\\protobuf-java\\3.25.9\\protobuf-java-3.25.9.jar;${MAVEN_REPOSITORY}\\javax\\annotation\\javax.annotation-api\\1.3.2\\javax.annotation-api-1.3.2.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-netty-shaded\\1.84.0\\grpc-netty-shaded-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-util\\1.84.0\\grpc-util-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-core\\1.84.0\\grpc-core-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\android\\annotations\\4.1.1.4\\annotations-4.1.1.4.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-context\\1.84.0\\grpc-context-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\guava\\33.6.0-android\\guava-33.6.0-android.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\failureaccess\\1.0.3\\failureaccess-1.0.3.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\listenablefuture\\9999.0-empty-to-avoid-conflict-with-guava\\listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar;${MAVEN_REPOSITORY}\\org\\jspecify\\jspecify\\1.0.0\\jspecify-1.0.0.jar;${MAVEN_REPOSITORY}\\com\\google\\j2objc\\j2objc-annotations\\3.1\\j2objc-annotations-3.1.jar;${MAVEN_REPOSITORY}\\com\\google\\errorprone\\error_prone_annotations\\2.50.0\\error_prone_annotations-2.50.0.jar;${MAVEN_REPOSITORY}\\io\\perfmark\\perfmark-api\\0.27.0\\perfmark-api-0.27.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-api\\1.84.0\\grpc-api-1.84.0.jar;${MAVEN_REPOSITORY}\\org\\codehaus\\mojo\\animal-sniffer-annotations\\1.27\\animal-sniffer-annotations-1.27.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter\\5.11.4\\junit-jupiter-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-api\\5.11.4\\junit-jupiter-api-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\opentest4j\\opentest4j\\1.3.0\\opentest4j-1.3.0.jar;${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-commons\\1.11.4\\junit-platform-commons-1.11.4.jar;${MAVEN_REPOSITORY}\\org\\apiguardian\\apiguardian-api\\1.1.2\\apiguardian-api-1.1.2.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-params\\5.11.4\\junit-jupiter-params-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-engine\\5.11.4\\junit-jupiter-engine-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-engine\\1.11.4\\junit-platform-engine-1.11.4.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-inprocess\\1.84.0\\grpc-inprocess-1.84.0.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveExchangeTest",
+        "--reports-dir",
+        "${RUNS}\\gorti-control-01\\LiveExchangeTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 0,
+      "class": "LiveExchangeTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveExchangeTest",
+          "name": "twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi()",
+          "status": "pass",
+          "message": null,
+          "report": "TEST-junit-jupiter.xml"
+        },
+        {
+          "class": "org.gorti.rti.LiveExchangeTest",
+          "name": "explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl()",
+          "status": "pass",
+          "message": null,
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    },
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=gorti",
+        "-Dcross.port.base=63977",
+        "-Dgorti.endpoint=grpc://127.0.0.1:63859",
+        "-Dgorti.fom=${RUNS}\\gorti-control-01\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[63977],127.0.0.1[63978],127.0.0.1[63979],127.0.0.1[63980],127.0.0.1[63981],127.0.0.1[63982],127.0.0.1[63983],127.0.0.1[63984],127.0.0.1[63985],127.0.0.1[63986],127.0.0.1[63987],127.0.0.1[63988],127.0.0.1[63989],127.0.0.1[63990],127.0.0.1[63991],127.0.0.1[63992]",
+        "-cp",
+        "${RUNS}\\gorti-control-01\\classes;${REPO}\\javasdk\\client\\target\\gorti-java-client-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\com\\google\\code\\gson\\gson\\2.14.0\\gson-2.14.0.jar;${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-ieee1516e-api\\0.1.0-SNAPSHOT\\gorti-ieee1516e-api-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\io\\github\\cbchoi\\gorti\\gorti-java-wire\\0.1.0-SNAPSHOT\\gorti-java-wire-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf\\1.84.0\\grpc-protobuf-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\code\\findbugs\\jsr305\\3.0.2\\jsr305-3.0.2.jar;${MAVEN_REPOSITORY}\\com\\google\\api\\grpc\\proto-google-common-protos\\2.64.1\\proto-google-common-protos-2.64.1.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-protobuf-lite\\1.84.0\\grpc-protobuf-lite-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-stub\\1.84.0\\grpc-stub-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\protobuf\\protobuf-java\\3.25.9\\protobuf-java-3.25.9.jar;${MAVEN_REPOSITORY}\\javax\\annotation\\javax.annotation-api\\1.3.2\\javax.annotation-api-1.3.2.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-netty-shaded\\1.84.0\\grpc-netty-shaded-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-util\\1.84.0\\grpc-util-1.84.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-core\\1.84.0\\grpc-core-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\android\\annotations\\4.1.1.4\\annotations-4.1.1.4.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-context\\1.84.0\\grpc-context-1.84.0.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\guava\\33.6.0-android\\guava-33.6.0-android.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\failureaccess\\1.0.3\\failureaccess-1.0.3.jar;${MAVEN_REPOSITORY}\\com\\google\\guava\\listenablefuture\\9999.0-empty-to-avoid-conflict-with-guava\\listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar;${MAVEN_REPOSITORY}\\org\\jspecify\\jspecify\\1.0.0\\jspecify-1.0.0.jar;${MAVEN_REPOSITORY}\\com\\google\\j2objc\\j2objc-annotations\\3.1\\j2objc-annotations-3.1.jar;${MAVEN_REPOSITORY}\\com\\google\\errorprone\\error_prone_annotations\\2.50.0\\error_prone_annotations-2.50.0.jar;${MAVEN_REPOSITORY}\\io\\perfmark\\perfmark-api\\0.27.0\\perfmark-api-0.27.0.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-api\\1.84.0\\grpc-api-1.84.0.jar;${MAVEN_REPOSITORY}\\org\\codehaus\\mojo\\animal-sniffer-annotations\\1.27\\animal-sniffer-annotations-1.27.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter\\5.11.4\\junit-jupiter-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-api\\5.11.4\\junit-jupiter-api-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\opentest4j\\opentest4j\\1.3.0\\opentest4j-1.3.0.jar;${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-commons\\1.11.4\\junit-platform-commons-1.11.4.jar;${MAVEN_REPOSITORY}\\org\\apiguardian\\apiguardian-api\\1.1.2\\apiguardian-api-1.1.2.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-params\\5.11.4\\junit-jupiter-params-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\jupiter\\junit-jupiter-engine\\5.11.4\\junit-jupiter-engine-5.11.4.jar;${MAVEN_REPOSITORY}\\org\\junit\\platform\\junit-platform-engine\\1.11.4\\junit-platform-engine-1.11.4.jar;${MAVEN_REPOSITORY}\\io\\grpc\\grpc-inprocess\\1.84.0\\grpc-inprocess-1.84.0.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.LiveTimeArithmeticTest",
+        "--reports-dir",
+        "${RUNS}\\gorti-control-01\\LiveTimeArithmeticTest\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 0,
+      "class": "LiveTimeArithmeticTest",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.LiveTimeArithmeticTest",
+          "name": "sendGaltAndRetractionUseTheSameRepresentableBound(double)[2]",
+          "status": "pass",
+          "message": null,
+          "report": "TEST-junit-jupiter.xml"
+        },
+        {
+          "class": "org.gorti.rti.LiveTimeArithmeticTest",
+          "name": "sendGaltAndRetractionUseTheSameRepresentableBound(double)[1]",
+          "status": "pass",
+          "message": null,
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    }
+  ]
+}

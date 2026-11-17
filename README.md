@@ -94,6 +94,15 @@ to inputs, expected observations, and execution results.
 The [verification report](docs/verification.md) lists the assessed source,
 test counts, skips, and unresolved records.
 
+The [evidence data release](https://github.com/cbchoi/gorti/releases/tag/evidence-r1)
+contains retained service reports, model traces, and trial-level performance
+data. The [evidence guide](verification/evidence-r1/README.md) gives the checksum,
+offline reanalysis commands, and result interpretation.
+
+The [cross-RTI service experiment](verification/cross-rti/README.md) applies selected
+Java test cases to Portico and gorti. It includes setup adaptations, retained
+pass/fail reports, and the assertions that each run reached.
+
 [Performance results](docs/performance.md) compare Portico/Java and gorti/Go
 using DEVStone-HLA. The results include timing boundaries, execution conditions,
 and confidence intervals. [Reproducibility](docs/reproducibility.md) gives
@@ -104,6 +113,9 @@ commands for model runs, test reports, and performance experiments.
 The [architecture guide](docs/architecture.md) describes service, application,
 and adapter responsibilities. The [education guide](docs/education.md)
 provides exercises in model integration, time management, and test design.
+The [design goals](engineering/specifications/current/SRS.md#11-users-and-design-goals)
+link these uses to examples and tests; the SDD records the corresponding choices
+and their costs.
 
 | Document | Contents |
 |---|---|

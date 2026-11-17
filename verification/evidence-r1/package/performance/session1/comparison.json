@@ -1,0 +1,95 @@
+{
+  "design": "seed-block crossover",
+  "measured_blocks": 20,
+  "warmup_blocks": 5,
+  "failures": [],
+  "bootstrap_unit": "whole four-trial seed block, stratified by ABBA/BAAB sequence",
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 1516,
+  "baseline": {
+    "n": 40,
+    "mean_seconds": 0.91976225495,
+    "median_seconds": 0.6724234,
+    "stdev_seconds": 0.686380714931403,
+    "aggregate_callbacks_per_second": 88283.68370521379
+  },
+  "candidate": {
+    "n": 40,
+    "mean_seconds": 1.1622981875,
+    "median_seconds": 1.1480507000000002,
+    "stdev_seconds": 0.06717850485007754,
+    "aggregate_callbacks_per_second": 69861.59048794008
+  },
+  "completion_speedup": 0.7913307143051876,
+  "throughput_gain_percent": -20.866928569481235,
+  "completion_reduction_percent": -26.369415709843924,
+  "candidate_faster_blocks": 3,
+  "first_in_pair_mean_seconds": 1.01317062755,
+  "second_in_pair_mean_seconds": 1.0688898149,
+  "second_over_first": 1.0549948703948686,
+  "orders": {
+    "AB": {
+      "pairs": 20,
+      "baseline_mean_seconds": 0.8467213751,
+      "candidate_mean_seconds": 1.144976495,
+      "completion_speedup": 0.7395098316843612
+    },
+    "BA": {
+      "pairs": 20,
+      "baseline_mean_seconds": 0.9928031348,
+      "candidate_mean_seconds": 1.17961988,
+      "completion_speedup": 0.8416297076987208
+    }
+  },
+  "positions": {
+    "1": {
+      "n": 20,
+      "mean_seconds": 0.9322953401
+    },
+    "2": {
+      "n": 20,
+      "mean_seconds": 1.14246272485
+    },
+    "3": {
+      "n": 20,
+      "mean_seconds": 1.094045915
+    },
+    "4": {
+      "n": 20,
+      "mean_seconds": 0.99531690495
+    }
+  },
+  "speedup_seed_block_stratified_bootstrap_ci95": [
+    0.5812952483074523,
+    1.0450967684119723
+  ],
+  "second_over_first_seed_block_stratified_bootstrap_ci95": [
+    0.9821823288850949,
+    1.1485050634248577
+  ],
+  "conditions": {
+    "baseline": "portico",
+    "candidate": "gorti"
+  },
+  "portico": {
+    "n": 40,
+    "mean_seconds": 0.91976225495,
+    "median_seconds": 0.6724234,
+    "stdev_seconds": 0.686380714931403,
+    "aggregate_callbacks_per_second": 88283.68370521379
+  },
+  "gorti": {
+    "n": 40,
+    "mean_seconds": 1.1622981875,
+    "median_seconds": 1.1480507000000002,
+    "stdev_seconds": 0.06717850485007754,
+    "aggregate_callbacks_per_second": 69861.59048794008
+  },
+  "gorti_over_portico_mean_completion_ratio": 1.2636941570984392,
+  "ratio_seed_block_stratified_bootstrap_ci95": [
+    0.9568491935148771,
+    1.7202961884028527
+  ],
+  "ratio_interpretation": "gorti/Portico completion: greater than one favors Portico; completion_speedup is the inverse",
+  "semantic_matching_seed_blocks": 25
+}

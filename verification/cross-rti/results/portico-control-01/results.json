@@ -1,0 +1,64 @@
+{
+  "runtime": {
+    "implementation": "portico",
+    "java": {
+      "command": [
+        "java",
+        "-version"
+      ],
+      "returncode": 0
+    },
+    "classpath": [
+      {
+        "path": "${RUNS}\\portico-control-01\\portico-tcp-override.jar",
+        "sha256": "230113b0516970a0b91b7d12b20e0d1dd406c46a015d6b6f5816244041bd497a"
+      },
+      {
+        "path": "${PORTICO_HOME}\\lib\\portico.jar",
+        "sha256": "146dc0a7916b168396c6e595c42aaed0bdc69d64c5c54e728b7cb53fdd94ea84"
+      }
+    ],
+    "junit_sha256": "b016ef6b1c3454d6d7c2c88ce081dabf289699686af6622d6e4e2e1b54b4a2fc",
+    "source_base": "cb9d28e7c7c95626ebe78a95d90fd06a01e3d2f8",
+    "topology": "two or three independent RTI ambassador sessions in one test JVM; not a benchmark"
+  },
+  "runs": [
+    {
+      "command": [
+        "java",
+        "-Dcross.rti=portico",
+        "-Dcross.port.base=50187",
+        "-Dgorti.endpoint=",
+        "-Dgorti.fom=${RUNS}\\portico-control-01\\classes\\exchange-fom.xml",
+        "-Dportico.loglevel=OFF",
+        "-Dportico.jgroups.responseTimeout=5000",
+        "-Djava.net.preferIPv4Stack=true",
+        "-Dportico.jgroups.tcp.bindAddress=127.0.0.1",
+        "-Dportico.jgroups.tcp.initialHosts=127.0.0.1[50187],127.0.0.1[50188],127.0.0.1[50189],127.0.0.1[50190],127.0.0.1[50191],127.0.0.1[50192],127.0.0.1[50193],127.0.0.1[50194],127.0.0.1[50195],127.0.0.1[50196],127.0.0.1[50197],127.0.0.1[50198],127.0.0.1[50199],127.0.0.1[50200],127.0.0.1[50201],127.0.0.1[50202]",
+        "-cp",
+        "${RUNS}\\portico-control-01\\classes;${RUNS}\\portico-control-01\\portico-tcp-override.jar;${PORTICO_HOME}\\lib\\portico.jar;${TOOLS}\\junit-platform-console-standalone-1.11.4.jar",
+        "org.junit.platform.console.ConsoleLauncher",
+        "execute",
+        "--select-class",
+        "org.gorti.rti.PortableInteractionControl",
+        "--reports-dir",
+        "${RUNS}\\portico-control-01\\PortableInteractionControl\\reports",
+        "--details",
+        "tree",
+        "--disable-ansi-colors",
+        "--fail-if-no-tests"
+      ],
+      "returncode": 0,
+      "class": "PortableInteractionControl",
+      "outcomes": [
+        {
+          "class": "org.gorti.rti.PortableInteractionControl",
+          "name": "twoSessionsDeliverTheSameReceiveOrderPayload()",
+          "status": "pass",
+          "message": null,
+          "report": "TEST-junit-jupiter.xml"
+        }
+      ]
+    }
+  ]
+}

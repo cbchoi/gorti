@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="JUnit Platform Suite" tests="0" skipped="0" failures="0" errors="0" time="0" hostname="LOCAL_TEST_HOST" timestamp="2026-11-17T23:43:36">
+<properties>
+<property name="awt.toolkit" value="sun.awt.windows.WToolkit" />
+<property name="cross.port.base" value="50214" />
+<property name="cross.rti" value="gorti" />
+<property name="file.encoding" value="MS949" />
+<property name="file.separator" value="\" />
+<property name="gorti.endpoint" value="grpc://127.0.0.1:50211" />
+<property name="gorti.fom" value="${RUNS}\gorti-delivery-control-01\classes\exchange-fom.xml" />
+<property name="java.awt.graphicsenv" value="sun.awt.Win32GraphicsEnvironment" />
+<property name="java.awt.printerjob" value="sun.awt.windows.WPrinterJob" />
+<property name="java.class.path" value="${RUNS}\gorti-delivery-control-01\classes;${REPO}\javasdk\client\target\gorti-java-client-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\com\google\code\gson\gson\2.14.0\gson-2.14.0.jar;${MAVEN_REPOSITORY}\io\github\cbchoi\gorti\gorti-ieee1516e-api\0.1.0-SNAPSHOT\gorti-ieee1516e-api-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\io\github\cbchoi\gorti\gorti-java-wire\0.1.0-SNAPSHOT\gorti-java-wire-0.1.0-SNAPSHOT.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-protobuf\1.84.0\grpc-protobuf-1.84.0.jar;${MAVEN_REPOSITORY}\com\google\code\findbugs\jsr305\3.0.2\jsr305-3.0.2.jar;${MAVEN_REPOSITORY}\com\google\api\grpc\proto-google-common-protos\2.64.1\proto-google-common-protos-2.64.1.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-protobuf-lite\1.84.0\grpc-protobuf-lite-1.84.0.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-stub\1.84.0\grpc-stub-1.84.0.jar;${MAVEN_REPOSITORY}\com\google\protobuf\protobuf-java\3.25.9\protobuf-java-3.25.9.jar;${MAVEN_REPOSITORY}\javax\annotation\javax.annotation-api\1.3.2\javax.annotation-api-1.3.2.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-netty-shaded\1.84.0\grpc-netty-shaded-1.84.0.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-util\1.84.0\grpc-util-1.84.0.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-core\1.84.0\grpc-core-1.84.0.jar;${MAVEN_REPOSITORY}\com\google\android\annotations\4.1.1.4\annotations-4.1.1.4.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-context\1.84.0\grpc-context-1.84.0.jar;${MAVEN_REPOSITORY}\com\google\guava\guava\33.6.0-android\guava-33.6.0-android.jar;${MAVEN_REPOSITORY}\com\google\guava\failureaccess\1.0.3\failureaccess-1.0.3.jar;${MAVEN_REPOSITORY}\com\google\guava\listenablefuture\9999.0-empty-to-avoid-conflict-with-guava\listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar;${MAVEN_REPOSITORY}\org\jspecify\jspecify\1.0.0\jspecify-1.0.0.jar;${MAVEN_REPOSITORY}\com\google\j2objc\j2objc-annotations\3.1\j2objc-annotations-3.1.jar;${MAVEN_REPOSITORY}\com\google\errorprone\error_prone_annotations\2.50.0\error_prone_annotations-2.50.0.jar;${MAVEN_REPOSITORY}\io\perfmark\perfmark-api\0.27.0\perfmark-api-0.27.0.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-api\1.84.0\grpc-api-1.84.0.jar;${MAVEN_REPOSITORY}\org\codehaus\mojo\animal-sniffer-annotations\1.27\animal-sniffer-annotations-1.27.jar;${MAVEN_REPOSITORY}\org\junit\jupiter\junit-jupiter\5.11.4\junit-jupiter-5.11.4.jar;${MAVEN_REPOSITORY}\org\junit\jupiter\junit-jupiter-api\5.11.4\junit-jupiter-api-5.11.4.jar;${MAVEN_REPOSITORY}\org\opentest4j\opentest4j\1.3.0\opentest4j-1.3.0.jar;${MAVEN_REPOSITORY}\org\junit\platform\junit-platform-commons\1.11.4\junit-platform-commons-1.11.4.jar;${MAVEN_REPOSITORY}\org\apiguardian\apiguardian-api\1.1.2\apiguardian-api-1.1.2.jar;${MAVEN_REPOSITORY}\org\junit\jupiter\junit-jupiter-params\5.11.4\junit-jupiter-params-5.11.4.jar;${MAVEN_REPOSITORY}\org\junit\jupiter\junit-jupiter-engine\5.11.4\junit-jupiter-engine-5.11.4.jar;${MAVEN_REPOSITORY}\org\junit\platform\junit-platform-engine\1.11.4\junit-platform-engine-1.11.4.jar;${MAVEN_REPOSITORY}\io\grpc\grpc-inprocess\1.84.0\grpc-inprocess-1.84.0.jar;${TOOLS}\junit-platform-console-standalone-1.11.4.jar" />
+<property name="java.class.version" value="55.0" />
+<property name="java.home" value="C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot" />
+<property name="java.io.tmpdir" value="${USER_HOME}\AppData\Local\Temp\" />
+<property name="java.library.path" value="REDACTED_LOCAL_METADATA" />
+<property name="java.net.preferIPv4Stack" value="true" />
+<property name="java.runtime.name" value="OpenJDK Runtime Environment" />
+<property name="java.runtime.version" value="11.0.31+11" />
+<property name="java.specification.maintenance.version" value="3" />
+<property name="java.specification.name" value="Java Platform API Specification" />
+<property name="java.specification.vendor" value="Oracle Corporation" />
+<property name="java.specification.version" value="11" />
+<property name="java.vendor" value="Eclipse Adoptium" />
+<property name="java.vendor.url" value="https://adoptium.net/" />
+<property name="java.vendor.url.bug" value="https://github.com/adoptium/adoptium-support/issues" />
+<property name="java.vendor.version" value="Temurin-11.0.31+11" />
+<property name="java.version" value="11.0.31" />
+<property name="java.version.date" value="2026-04-21" />
+<property name="java.vm.compressedOopsMode" value="Zero based" />
+<property name="java.vm.info" value="mixed mode" />
+<property name="java.vm.name" value="OpenJDK 64-Bit Server VM" />
+<property name="java.vm.specification.name" value="Java Virtual Machine Specification" />
+<property name="java.vm.specification.vendor" value="Oracle Corporation" />
+<property name="java.vm.specification.version" value="11" />
+<property name="java.vm.vendor" value="Eclipse Adoptium" />
+<property name="java.vm.version" value="11.0.31+11" />
+<property name="jdk.debug" value="release" />
+<property name="junit.docs.version" value="1.11.4" />
+<property name="line.separator" value="&#13;&#10;" />
+<property name="os.arch" value="amd64" />
+<property name="os.name" value="Windows 11" />
+<property name="os.version" value="10.0" />
+<property name="path.separator" value=";" />
+<property name="portico.jgroups.responseTimeout" value="5000" />
+<property name="portico.jgroups.tcp.bindAddress" value="127.0.0.1" />
+<property name="portico.jgroups.tcp.initialHosts" value="127.0.0.1[50214],127.0.0.1[50215],127.0.0.1[50216],127.0.0.1[50217],127.0.0.1[50218],127.0.0.1[50219],127.0.0.1[50220],127.0.0.1[50221],127.0.0.1[50222],127.0.0.1[50223],127.0.0.1[50224],127.0.0.1[50225],127.0.0.1[50226],127.0.0.1[50227],127.0.0.1[50228],127.0.0.1[50229]" />
+<property name="portico.loglevel" value="OFF" />
+<property name="sun.arch.data.model" value="64" />
+<property name="sun.boot.library.path" value="C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot\bin" />
+<property name="sun.cpu.endian" value="little" />
+<property name="sun.cpu.isalist" value="amd64" />
+<property name="sun.desktop" value="windows" />
+<property name="sun.io.unicode.encoding" value="UnicodeLittle" />
+<property name="sun.java.command" value="org.junit.platform.console.ConsoleLauncher execute --select-class org.gorti.rti.PortableInteractionControl --reports-dir ${RUNS}\gorti-delivery-control-01\PortableInteractionControl\reports --details tree --disable-ansi-colors --fail-if-no-tests" />
+<property name="sun.java.launcher" value="SUN_STANDARD" />
+<property name="sun.jnu.encoding" value="MS949" />
+<property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers" />
+<property name="sun.os.patch.level" value="" />
+<property name="user.country" value="KR" />
+<property name="user.dir" value="${RUNS}\gorti-delivery-control-01\PortableInteractionControl" />
+<property name="user.home" value="${USER_HOME}" />
+<property name="user.language" value="ko" />
+<property name="user.name" value="REDACTED_LOCAL_METADATA" />
+<property name="user.script" value="" />
+<property name="user.timezone" value="Asia/Seoul" />
+<property name="user.variant" value="" />
+</properties>
+<system-out>
+unique-id: [engine:junit-platform-suite]
+display-name: JUnit Platform Suite
+</system-out>
+</testsuite>

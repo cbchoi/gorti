@@ -1,0 +1,38 @@
+--- LiveTimeArithmeticTest.original.java
++++ LiveTimeArithmeticTest.adapted.java
+@@ -27,8 +27,6 @@
+ import static org.junit.jupiter.api.Assertions.*;
+ 
+ /** Real-server Float64 bound regressions with two independent RTI sessions. */
+-@EnabledIfSystemProperty(named = "gorti.endpoint", matches = ".+",
+-        disabledReason = "Requires an external GoRTI and -Dgorti.endpoint=grpc://host:port")
+ class LiveTimeArithmeticTest {
+     @ParameterizedTest(name = "positive lookahead remains visible at logical time {0}")
+     @ValueSource(doubles = {1.0, 9007199254740992.0})
+@@ -75,7 +73,7 @@
+     }
+ 
+     private static final class Participant {
+-        final RTIambassador rti = RtiFactoryFactory.getRtiFactory("gorti").getRtiAmbassador();
++        final RTIambassador rti = TestRti.ambassador();
+         final Callbacks callbacks = new Callbacks();
+         HLAfloat64TimeFactory time;
+         boolean connected;
+@@ -84,7 +82,7 @@
+         Participant() throws Exception { }
+ 
+         void start(String federation, String name) throws Exception {
+-            rti.connect(callbacks, CallbackModel.HLA_EVOKED, System.getProperty("gorti.endpoint"));
++            TestRti.connect(rti, callbacks);
+             connected = true;
+             rti.joinFederationExecution(name, "time-arithmetic", federation);
+             joined = true;
+@@ -114,7 +112,7 @@
+         void start() throws Exception {
+             URL fom = LiveTimeArithmeticTest.class.getResource("/exchange-fom.xml");
+             assertNotNull(fom);
+-            owner.rti.connect(owner.callbacks, CallbackModel.HLA_EVOKED, System.getProperty("gorti.endpoint"));
++            TestRti.connect(owner.rti, owner.callbacks);
+             owner.connected = true;
+             owner.rti.createFederationExecution(name, new URL[] {fom});
+             created = true;

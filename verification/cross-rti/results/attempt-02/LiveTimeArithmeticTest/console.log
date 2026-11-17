@@ -1,0 +1,72 @@
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-31702, cluster=gorti-time-arithmetic-c9dea96e-561d-44f2-a03b-8b7b454297cf, physical address=127.0.0.1:62923
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-2510, cluster=gorti-time-arithmetic-c9dea96e-561d-44f2-a03b-8b7b454297cf, physical address=127.0.0.1:62924
+-------------------------------------------------------------------
+I am coordinator - received request for me from 174c3591-4758-40a3-9715-68660f5735a4
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-42798, cluster=gorti-time-arithmetic-413edb39-49a1-4e8e-9cc5-39a7f9b2316c, physical address=127.0.0.1:62925
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-1662, cluster=gorti-time-arithmetic-413edb39-49a1-4e8e-9cc5-39a7f9b2316c, physical address=127.0.0.1:62926
+-------------------------------------------------------------------
+I am coordinator - received request for me from 27e3504f-b764-49cc-98f0-a72052921c11
+.
++-- JUnit Platform Suite [OK]
++-- JUnit Jupiter [OK]
+| '-- LiveTimeArithmeticTest [OK]
+|   '-- sendGaltAndRetractionUseTheSameRepresentableBound(double) [OK]
+|     +-- positive lookahead remains visible at logical time 1.0 29737 ms [X] Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt
+|     '-- positive lookahead remains visible at logical time 9.007199254740992E15 28390 ms [X] Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt
+'-- JUnit Vintage [OK]
+
+Failures (2):
+  JUnit Jupiter:LiveTimeArithmeticTest:sendGaltAndRetractionUseTheSameRepresentableBound(double):positive lookahead remains visible at logical time 1.0
+    MethodSource [className = 'org.gorti.rti.LiveTimeArithmeticTest', methodName = 'sendGaltAndRetractionUseTheSameRepresentableBound', methodParameterTypes = 'double']
+    => hla.rti1516e.exceptions.RTIinternalError: Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt
+       org.portico.impl.hla1516e.Rti1516eAmbassador.logException(Rti1516eAmbassador.java:5595)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.queryGALT(Rti1516eAmbassador.java:4293)
+       org.gorti.rti.LiveTimeArithmeticTest.sendGaltAndRetractionUseTheSameRepresentableBound(LiveTimeArithmeticTest.java:49)
+       java.base/java.lang.reflect.Method.invoke(Method.java:566)
+       java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:183)
+       [...]
+     Caused by: hla.rti1516e.exceptions.RTIinternalError: No response from RTI (null) for message type: QueryGalt
+       org.portico.impl.hla1516e.Rti1516eAmbassador.processMessage(Rti1516eAmbassador.java:5564)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.queryGALT(Rti1516eAmbassador.java:4258)
+       [...]
+  JUnit Jupiter:LiveTimeArithmeticTest:sendGaltAndRetractionUseTheSameRepresentableBound(double):positive lookahead remains visible at logical time 9.007199254740992E15
+    MethodSource [className = 'org.gorti.rti.LiveTimeArithmeticTest', methodName = 'sendGaltAndRetractionUseTheSameRepresentableBound', methodParameterTypes = 'double']
+    => hla.rti1516e.exceptions.RTIinternalError: Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt
+       org.portico.impl.hla1516e.Rti1516eAmbassador.logException(Rti1516eAmbassador.java:5595)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.queryGALT(Rti1516eAmbassador.java:4293)
+       org.gorti.rti.LiveTimeArithmeticTest.sendGaltAndRetractionUseTheSameRepresentableBound(LiveTimeArithmeticTest.java:49)
+       java.base/java.lang.reflect.Method.invoke(Method.java:566)
+       java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:183)
+       [...]
+     Caused by: hla.rti1516e.exceptions.RTIinternalError: No response from RTI (null) for message type: QueryGalt
+       org.portico.impl.hla1516e.Rti1516eAmbassador.processMessage(Rti1516eAmbassador.java:5564)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.queryGALT(Rti1516eAmbassador.java:4258)
+       [...]
+
+Test run finished after 58243 ms
+[         5 containers found      ]
+[         0 containers skipped    ]
+[         5 containers started    ]
+[         0 containers aborted    ]
+[         5 containers successful ]
+[         0 containers failed     ]
+[         2 tests found           ]
+[         0 tests skipped         ]
+[         2 tests started         ]
+[         0 tests aborted         ]
+[         0 tests successful      ]
+[         2 tests failed          ]
+

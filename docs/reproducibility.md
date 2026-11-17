@@ -7,6 +7,27 @@
 | Regenerate requirement tables | Reconciled input, classification manifest, and execution reports |
 | Compare RTI performance | [Benchmark](benchmark.md) and [performance results](performance.md) |
 
+## Published evidence
+
+The [evidence-r1 data release](https://github.com/cbchoi/gorti/releases/tag/evidence-r1)
+provides the retained service-test reports, nine model runs, three separate
+performance campaigns, and requirements-mapping corrections. Download the named
+`gorti-softwarex-evidence-r1.zip` asset, not GitHub's automatic source archive.
+It is separate from the software 1.0.0 archive.
+
+From the extracted package root, use Python 3.12+:
+
+```text
+python -B verify_package.py
+python -B reanalyze.py --output reanalysis-output
+```
+
+These commands reanalyze retained data without running an RTI. The
+[evidence guide](https://github.com/cbchoi/gorti/blob/evidence-r1/verification/evidence-r1/README.md)
+gives the archive checksum, file locations, observation boundaries, and selected
+analysis/configuration sources. It distinguishes the historical mapping from its
+corrections and the two RTI sessions from the separate client-build comparison.
+
 ## Model and service runs
 
 After [installing the model dependencies](model-integration.md), run from the

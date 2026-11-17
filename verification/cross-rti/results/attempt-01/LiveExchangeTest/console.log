@@ -1,0 +1,75 @@
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-32040, cluster=gorti-java-empty-sync-b56863da-0430-4c8c-abad-2fa3babea5f8, physical address=127.0.0.1:55207
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-63164, cluster=gorti-java-empty-sync-b56863da-0430-4c8c-abad-2fa3babea5f8, physical address=127.0.0.1:55208
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-33924, cluster=gorti-java-exchange-708ab2a3-12a5-44d4-a12b-31a5e8260d9a, physical address=127.0.0.1:55209
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-10131, cluster=gorti-java-exchange-708ab2a3-12a5-44d4-a12b-31a5e8260d9a, physical address=127.0.0.1:55210
+-------------------------------------------------------------------
+.
++-- JUnit Platform Suite [OK]
++-- JUnit Jupiter [OK]
+| '-- LiveExchangeTest [OK]
+|   +-- explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl() 22539 ms [X] Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0
+|   '-- twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi() 20818 ms [X] Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0
+'-- JUnit Vintage [OK]
+
+Failures (2):
+  JUnit Jupiter:LiveExchangeTest:explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl()
+    MethodSource [className = 'org.gorti.rti.LiveExchangeTest', methodName = 'explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl', methodParameterTypes = '']
+    => hla.rti1516e.exceptions.RTIinternalError: Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0
+       org.portico.impl.hla1516e.Rti1516eAmbassador.logException(Rti1516eAmbassador.java:5595)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:692)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:572)
+       org.gorti.rti.LiveExchangeTest$Participant.join(LiveExchangeTest.java:493)
+       org.gorti.rti.LiveExchangeTest.explicitEmptyParticipantsSynchronizeBothEvokedMembersWithImplicitControl(LiveExchangeTest.java:218)
+       [...]
+     Caused by: java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0
+       java.base/jdk.internal.util.Preconditions.outOfBounds(Preconditions.java:64)
+       java.base/jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java:70)
+       java.base/jdk.internal.util.Preconditions.checkIndex(Preconditions.java:248)
+       java.base/java.util.Objects.checkIndex(Objects.java:374)
+       java.base/java.util.ArrayList.get(ArrayList.java:459)
+       [...]
+  JUnit Jupiter:LiveExchangeTest:twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi()
+    MethodSource [className = 'org.gorti.rti.LiveExchangeTest', methodName = 'twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi', methodParameterTypes = '']
+    => hla.rti1516e.exceptions.RTIinternalError: Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0
+       org.portico.impl.hla1516e.Rti1516eAmbassador.logException(Rti1516eAmbassador.java:5595)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:692)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:572)
+       org.gorti.rti.LiveExchangeTest$Participant.join(LiveExchangeTest.java:493)
+       org.gorti.rti.LiveExchangeTest.twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi(LiveExchangeTest.java:75)
+       [...]
+     Caused by: java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0
+       java.base/jdk.internal.util.Preconditions.outOfBounds(Preconditions.java:64)
+       java.base/jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java:70)
+       java.base/jdk.internal.util.Preconditions.checkIndex(Preconditions.java:248)
+       java.base/java.util.Objects.checkIndex(Objects.java:374)
+       java.base/java.util.ArrayList.get(ArrayList.java:459)
+       [...]
+
+Test run finished after 43463 ms
+[         4 containers found      ]
+[         0 containers skipped    ]
+[         4 containers started    ]
+[         0 containers aborted    ]
+[         4 containers successful ]
+[         0 containers failed     ]
+[         2 tests found           ]
+[         0 tests skipped         ]
+[         2 tests started         ]
+[         0 tests aborted         ]
+[         0 tests successful      ]
+[         2 tests failed          ]
+

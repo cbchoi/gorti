@@ -1,0 +1,74 @@
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-14153, cluster=gorti-time-arithmetic-4b8126f0-f62b-4b3c-a166-7a0adce5765c, physical address=127.0.0.1:59945
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-6301, cluster=gorti-time-arithmetic-4b8126f0-f62b-4b3c-a166-7a0adce5765c, physical address=127.0.0.1:59946
+-------------------------------------------------------------------
+I am coordinator - received request for me from f13ea56c-d3bd-4c72-b3c6-6ab7741962ef
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-28520, cluster=gorti-time-arithmetic-885c4bf8-06aa-4dfc-b212-b19d4f6598be, physical address=127.0.0.1:59947
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-19606, cluster=gorti-time-arithmetic-885c4bf8-06aa-4dfc-b212-b19d4f6598be, physical address=127.0.0.1:59948
+-------------------------------------------------------------------
+.
++-- JUnit Platform Suite [OK]
++-- JUnit Jupiter [OK]
+| '-- LiveTimeArithmeticTest [OK]
+|   '-- sendGaltAndRetractionUseTheSameRepresentableBound(double) [OK]
+|     +-- positive lookahead remains visible at logical time 1.0 30193 ms [X] Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt
+|     '-- positive lookahead remains visible at logical time 9.007199254740992E15 20125 ms [X] Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0
+'-- JUnit Vintage [OK]
+
+Failures (2):
+  JUnit Jupiter:LiveTimeArithmeticTest:sendGaltAndRetractionUseTheSameRepresentableBound(double):positive lookahead remains visible at logical time 1.0
+    MethodSource [className = 'org.gorti.rti.LiveTimeArithmeticTest', methodName = 'sendGaltAndRetractionUseTheSameRepresentableBound', methodParameterTypes = 'double']
+    => hla.rti1516e.exceptions.RTIinternalError: Unknown exception received from RTI (class hla.rti1516e.exceptions.RTIinternalError) for queryGALT(): No response from RTI (null) for message type: QueryGalt
+       org.portico.impl.hla1516e.Rti1516eAmbassador.logException(Rti1516eAmbassador.java:5595)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.queryGALT(Rti1516eAmbassador.java:4293)
+       org.gorti.rti.LiveTimeArithmeticTest.sendGaltAndRetractionUseTheSameRepresentableBound(LiveTimeArithmeticTest.java:49)
+       java.base/java.lang.reflect.Method.invoke(Method.java:566)
+       java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:183)
+       [...]
+     Caused by: hla.rti1516e.exceptions.RTIinternalError: No response from RTI (null) for message type: QueryGalt
+       org.portico.impl.hla1516e.Rti1516eAmbassador.processMessage(Rti1516eAmbassador.java:5564)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.queryGALT(Rti1516eAmbassador.java:4258)
+       [...]
+  JUnit Jupiter:LiveTimeArithmeticTest:sendGaltAndRetractionUseTheSameRepresentableBound(double):positive lookahead remains visible at logical time 9.007199254740992E15
+    MethodSource [className = 'org.gorti.rti.LiveTimeArithmeticTest', methodName = 'sendGaltAndRetractionUseTheSameRepresentableBound', methodParameterTypes = 'double']
+    => hla.rti1516e.exceptions.RTIinternalError: Unknown exception received from RTI (class java.lang.IndexOutOfBoundsException) for joinFederationExecution(): Index 0 out of bounds for length 0
+       org.portico.impl.hla1516e.Rti1516eAmbassador.logException(Rti1516eAmbassador.java:5595)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:692)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:572)
+       org.gorti.rti.LiveTimeArithmeticTest$Participant.start(LiveTimeArithmeticTest.java:87)
+       org.gorti.rti.LiveTimeArithmeticTest$Federation.start(LiveTimeArithmeticTest.java:122)
+       [...]
+     Caused by: java.lang.IndexOutOfBoundsException: Index 0 out of bounds for length 0
+       java.base/jdk.internal.util.Preconditions.outOfBounds(Preconditions.java:64)
+       java.base/jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Preconditions.java:70)
+       java.base/jdk.internal.util.Preconditions.checkIndex(Preconditions.java:248)
+       java.base/java.util.Objects.checkIndex(Objects.java:374)
+       java.base/java.util.ArrayList.get(ArrayList.java:459)
+       [...]
+
+Test run finished after 50493 ms
+[         5 containers found      ]
+[         0 containers skipped    ]
+[         5 containers started    ]
+[         0 containers aborted    ]
+[         5 containers successful ]
+[         0 containers failed     ]
+[         2 tests found           ]
+[         0 tests skipped         ]
+[         2 tests started         ]
+[         0 tests aborted         ]
+[         0 tests successful      ]
+[         2 tests failed          ]
+

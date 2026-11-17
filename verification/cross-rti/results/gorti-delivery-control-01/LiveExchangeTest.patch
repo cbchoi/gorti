@@ -1,0 +1,36 @@
+--- LiveExchangeTest.original.java
++++ LiveExchangeTest.adapted.java
+@@ -49,8 +49,6 @@
+  * Two separate RTI sessions in the same JVM against an externally started GoRTI.
+  * This is a public-API exchange regression, not a cross-process benchmark or full conformance test.
+  */
+-@EnabledIfSystemProperty(named = "gorti.endpoint", matches = ".+",
+-        disabledReason = "Requires an external GoRTI and -Dgorti.endpoint=grpc://host:port")
+ class LiveExchangeTest {
+     private static final Duration CALLBACK_TIMEOUT = Duration.ofSeconds(10);
+     private static final String ITEM = "HLAobjectRoot.Item";
+@@ -60,10 +58,6 @@
+     @Timeout(120)
+     void twoSessionsExchangeObjectsInteractionsAndSynchronizationThroughPublicApi() throws Throwable {
+         String endpoint = System.getProperty("gorti.endpoint");
+-        URI address = URI.create(endpoint);
+-        assertEquals("grpc", address.getScheme(), "gorti.endpoint must be grpc://host:port");
+-        assertNotNull(address.getHost(), "gorti.endpoint must include a host");
+-        assertTrue(address.getPort() > 0, "gorti.endpoint must include a port");
+         URL fom = LiveExchangeTest.class.getResource("/exchange-fom.xml");
+         assertNotNull(fom, "The exchange FOM must be on the test classpath");
+         String federation = "gorti-java-exchange-" + UUID.randomUUID();
+@@ -487,11 +481,11 @@
+ 
+         Participant(String name) throws Exception {
+             this.name = name;
+-            rti = RtiFactoryFactory.getRtiFactory("gorti").getRtiAmbassador();
++            rti = TestRti.ambassador();
+         }
+ 
+         void connect(String endpoint) throws Exception {
+-            rti.connect(callbacks, CallbackModel.HLA_EVOKED, endpoint);
++            TestRti.connect(rti, callbacks);
+             connected = true;
+         }
+ 

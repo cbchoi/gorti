@@ -1,0 +1,63 @@
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-50632, cluster=gorti-java-live-f3913f02-5bfc-4d48-9198-61e0a795e87f, physical address=127.0.0.1:53452
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-61793, cluster=gorti-java-live-f3913f02-5bfc-4d48-9198-61e0a795e87f, physical address=127.0.0.1:53453
+-------------------------------------------------------------------
+I am coordinator - received request for me from 5e52e06f-e189-453f-9318-42e45761a3c7
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-35011, cluster=gorti-java-live-f3913f02-5bfc-4d48-9198-61e0a795e87f, physical address=127.0.0.1:53454
+-------------------------------------------------------------------
+I am coordinator - received request for me from c569e70a-9510-4cf7-a34e-048d07966232
+.
++-- JUnit Platform Suite [OK]
++-- JUnit Jupiter [OK]
+| '-- LiveFederationTest [OK]
+|   '-- twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants() 30671 ms [X] Unexpected exception type thrown, expected: <hla.rti1516e.exceptions.FederateNameAlreadyInUse> but was: <hla.rti1516e.exceptions.FederateAlreadyExecutionMember>
+'-- JUnit Vintage [OK]
+
+Failures (1):
+  JUnit Jupiter:LiveFederationTest:twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants()
+    MethodSource [className = 'org.gorti.rti.LiveFederationTest', methodName = 'twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants', methodParameterTypes = '']
+    => org.opentest4j.AssertionFailedError: Unexpected exception type thrown, expected: <hla.rti1516e.exceptions.FederateNameAlreadyInUse> but was: <hla.rti1516e.exceptions.FederateAlreadyExecutionMember>
+       org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+       org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:67)
+       org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:35)
+       org.junit.jupiter.api.Assertions.assertThrows(Assertions.java:3128)
+       org.gorti.rti.LiveFederationTest.twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants(LiveFederationTest.java:72)
+       [...]
+     Caused by: hla.rti1516e.exceptions.FederateAlreadyExecutionMember: federate name in use: A
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:676)
+       org.portico.impl.hla1516e.Rti1516eAmbassador.joinFederationExecution(Rti1516eAmbassador.java:572)
+       org.gorti.rti.LiveFederationTest$Participant.join(LiveFederationTest.java:305)
+       org.gorti.rti.LiveFederationTest.lambda$twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants$1(LiveFederationTest.java:72)
+       org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:53)
+       [...]
+     Caused by: org.portico.lrc.compat.JFederateAlreadyExecutionMember: federate name in use: A
+       org.portico.bindings.jgroups.Federation.sendJoinFederation(Federation.java:285)
+       org.portico.bindings.jgroups.JGroupsConnection.joinFederation(JGroupsConnection.java:251)
+       org.portico.lrc.services.federation.handlers.outgoing.JoinFederationHandler.process(JoinFederationHandler.java:110)
+       org.portico.utils.messaging.MessageSink.process(MessageSink.java:188)
+       org.portico.impl.hla1516e.Impl1516eHelper.processMessage(Impl1516eHelper.java:130)
+       [...]
+
+Test run finished after 30772 ms
+[         4 containers found      ]
+[         0 containers skipped    ]
+[         4 containers started    ]
+[         0 containers aborted    ]
+[         4 containers successful ]
+[         0 containers failed     ]
+[         1 tests found           ]
+[         0 tests skipped         ]
+[         1 tests started         ]
+[         0 tests aborted         ]
+[         0 tests successful      ]
+[         1 tests failed          ]
+

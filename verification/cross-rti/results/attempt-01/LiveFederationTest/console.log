@@ -1,0 +1,45 @@
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-18465, cluster=gorti-java-live-60d0e52c-a7f7-4128-851a-da9b79c879b7, physical address=127.0.0.1:51331
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-13626, cluster=gorti-java-live-60d0e52c-a7f7-4128-851a-da9b79c879b7, physical address=127.0.0.1:51332
+-------------------------------------------------------------------
+.
++-- JUnit Platform Suite [OK]
++-- JUnit Jupiter [OK]
+| '-- LiveFederationTest [OK]
+|   '-- twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants() 16721 ms [X] Expected hla.rti1516e.exceptions.FederationExecutionAlreadyExists to be thrown, but nothing was thrown.
+'-- JUnit Vintage [OK]
+
+Failures (1):
+  JUnit Jupiter:LiveFederationTest:twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants()
+    MethodSource [className = 'org.gorti.rti.LiveFederationTest', methodName = 'twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants', methodParameterTypes = '']
+    => org.opentest4j.AssertionFailedError: Expected hla.rti1516e.exceptions.FederationExecutionAlreadyExists to be thrown, but nothing was thrown.
+       org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:152)
+       org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:73)
+       org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:35)
+       org.junit.jupiter.api.Assertions.assertThrows(Assertions.java:3128)
+       org.gorti.rti.LiveFederationTest.twoSessionsObserveActualEnableCallbacksAndPeerDependentGrants(LiveFederationTest.java:64)
+       java.base/java.lang.reflect.Method.invoke(Method.java:566)
+       java.base/java.util.ArrayList.forEach(ArrayList.java:1541)
+       java.base/java.util.ArrayList.forEach(ArrayList.java:1541)
+
+Test run finished after 16832 ms
+[         4 containers found      ]
+[         0 containers skipped    ]
+[         4 containers started    ]
+[         0 containers aborted    ]
+[         4 containers successful ]
+[         0 containers failed     ]
+[         1 tests found           ]
+[         0 tests skipped         ]
+[         1 tests started         ]
+[         0 tests aborted         ]
+[         0 tests successful      ]
+[         1 tests failed          ]
+

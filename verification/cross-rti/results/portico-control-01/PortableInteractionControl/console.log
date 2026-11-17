@@ -1,0 +1,33 @@
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-21442, cluster=cross-rti-control-c63d3fdf-0ad6-4699-820a-9fe0ec7ae685, physical address=127.0.0.1:50188
+-------------------------------------------------------------------
+
+-------------------------------------------------------------------
+GMS: address=LOCAL_TEST_HOST-4208, cluster=cross-rti-control-c63d3fdf-0ad6-4699-820a-9fe0ec7ae685, physical address=127.0.0.1:50189
+-------------------------------------------------------------------
+I am coordinator - received request for me from 9c436763-fd56-479e-9922-b5b7540a979f
+.
++-- JUnit Platform Suite [OK]
++-- JUnit Jupiter [OK]
+| '-- PortableInteractionControl [OK]
+|   '-- twoSessionsDeliverTheSameReceiveOrderPayload() 25091 ms [OK]
+'-- JUnit Vintage [OK]
+
+Test run finished after 25194 ms
+[         4 containers found      ]
+[         0 containers skipped    ]
+[         4 containers started    ]
+[         0 containers aborted    ]
+[         4 containers successful ]
+[         0 containers failed     ]
+[         1 tests found           ]
+[         0 tests skipped         ]
+[         1 tests started         ]
+[         0 tests aborted         ]
+[         1 tests successful      ]
+[         0 tests failed          ]
+
