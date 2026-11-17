@@ -1,0 +1,251 @@
+{
+  "platform": "Windows-11-10.0.26300-SP0",
+  "logical_cpus": 20,
+  "gorti_profile": "async",
+  "gorti_producer": "local-lrc",
+  "gorti_batch_size": 32,
+  "external_events": 100,
+  "gomaxprocs": "runtime default",
+  "schedule": [
+    {
+      "block": 0,
+      "seed": 1516,
+      "phase": "warmup",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 1,
+      "seed": 1517,
+      "phase": "warmup",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 2,
+      "seed": 1518,
+      "phase": "warmup",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 3,
+      "seed": 1519,
+      "phase": "warmup",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 4,
+      "seed": 1520,
+      "phase": "warmup",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 5,
+      "seed": 1521,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 6,
+      "seed": 1522,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 7,
+      "seed": 1523,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 8,
+      "seed": 1524,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 9,
+      "seed": 1525,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 10,
+      "seed": 1526,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 11,
+      "seed": 1527,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 12,
+      "seed": 1528,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 13,
+      "seed": 1529,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 14,
+      "seed": 1530,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 15,
+      "seed": 1531,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 16,
+      "seed": 1532,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 17,
+      "seed": 1533,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 18,
+      "seed": 1534,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 19,
+      "seed": 1535,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 20,
+      "seed": 1536,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 21,
+      "seed": 1537,
+      "phase": "measured",
+      "sequence": "BAAB"
+    },
+    {
+      "block": 22,
+      "seed": 1538,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 23,
+      "seed": 1539,
+      "phase": "measured",
+      "sequence": "ABBA"
+    },
+    {
+      "block": 24,
+      "seed": 1540,
+      "phase": "measured",
+      "sequence": "ABBA"
+    }
+  ],
+  "warmup_pairs": 10,
+  "measured_pairs": 40,
+  "design": "crossover",
+  "order_seed": 20261008,
+  "schedule_sha256": "60304844c13452eb11a421521f0a85007bbb6117b1af7d214b0428d15b82e9b2",
+  "crossover_labels": {
+    "A": "portico",
+    "B": "gorti"
+  },
+  "independent_federate_processes": 2,
+  "fresh_processes_each_trial": true,
+  "operation_warmup_per_channel": 128,
+  "fom_sha256": "633aaa61984966237f3675bcf005a5fb3722392f2c113ef41ca8b255e1a15040",
+  "workload_sha256": "a82b332fc2935c0e0433edc21128d5594049de26e59d9f00e91f7b45d4392940",
+  "portico_transport": "JGroups TCP/TCPPING override, IPv4 loopback",
+  "logging": "compact participant summaries only; process stdout/stderr held in memory",
+  "measurement_boundary": "timing arm before VERIFY_START to final data callback receive timestamp; data/order validation and successful teardown required, final outcome ACK drain outside timer",
+  "timestamp_detail": "Go pump dequeue before DispatchEvent; Java callback entry before payload validation",
+  "runtime_limitations": "fresh JVMs, 128 operations/channel warmup; host background activity not isolated; not a steady-state long-lived-JVM or multi-host study",
+  "java_version": "openjdk version \"11.0.31\" 2026-04-21\nOpenJDK Runtime Environment Temurin-11.0.31+11 (build 11.0.31+11)\nOpenJDK 64-Bit Server VM Temurin-11.0.31+11 (build 11.0.31+11, mixed mode)\n",
+  "artifacts": {
+    "gorti_server": {
+      "path": "__WORKDIR__/gorti\\benchmark-results\\report-signal-candidate-builds-20261008\\rtid-async.exe",
+      "sha256": "25fa04118532a7638d64df9e9228879c4aa8777e052863e4a62f9b2b37cd3955"
+    },
+    "gorti_client": {
+      "path": "__WORKDIR__/gorti\\benchmark-results\\report-signal-candidate-builds-20261008\\gorti-go-fair-async.exe",
+      "sha256": "a93ae8c11cfa68262b1a1ac0f33a4def81af91689e7e8cf124a5b7708e5d01a1"
+    },
+    "portico_jar": {
+      "path": "__WORKDIR__/gorti\\gorti\\.tools\\portico-extracted\\portico-2.1.4\\lib\\portico.jar",
+      "sha256": "146dc0a7916b168396c6e595c42aaed0bdc69d64c5c54e728b7cb53fdd94ea84"
+    },
+    "transport_override": {
+      "path": "__WORKDIR__/gorti\\benchmark-results\\portico-report-signal-study-20261008\\portico-tcp-override.jar",
+      "sha256": "c117bbf3864e6b39be79f62555bae28caf63794f9e484744c6b584402d04373c"
+    }
+  },
+  "java_classes": {
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$1.class": "ed090c8729f02d1be84394ba4f8b184ad8d65b876a8170039fa5ee1145d96dba",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$10.class": "dc3b2c5ce5e0b78055afe4d63d25a2c68fc4e3aba9dc87c0a07a39c57294a133",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$11.class": "a4b3440d5fc239af4cc156f3540512b171569b6841b8231dfaf81694b88aa83f",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$12.class": "c569cfef8d38addf0e416761572a024dab3c083ff3168e9276c481fb0b9d44ab",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$13.class": "edfc981b956ed82f862f16a724c1cf6d1bc2eb241e9de3e690d858947c6f116b",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$14.class": "1cd5c30cfc9574462c852d79076e653ca455e2e759169f38405a50652eb4f150",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$15.class": "ad1ff6165c63a6b7e8ca9d06d58f6b9ab616adb03fd452438bc1a5b276449a70",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$16.class": "9c1c610c4698ed2716aaeba9956844ef87afbfbc853ddf691a3e4484f74f6da0",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$17.class": "c0af8673231f09f34712dceb371340c4257eed016110bc49bdbb86a8f5ed4204",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$18.class": "759d77b9cd85fc7cf7671efc9c085947145a7dde8b8338da6334ad4e20e70070",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$19.class": "584f26102f8684eb324980232f0a72e797b8a9e646c0e0b8965187d6549f1392",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$2.class": "26e686ab0d5972b9a93efa64f568e188d91339ae070ad8215e736d84127a6c4f",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$20.class": "36fdb6979a04dd1f6aa761bde936bfb4392a7274c9d7277e544090f06f540b60",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$21.class": "bd4263334b631cf05548bc267665755ce1a3e8d33fae27d3a70ab22f90e20c15",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$22.class": "ad08feab6a742160727416b67b93e732a556beec1e2f9a8cad2a0926825142bf",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$23.class": "ab6deb2e03a8a581e479ae17f310ecc150850ac836f0b9f13bfb03359a35acb7",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$24.class": "46482b9693d7ee976f0b0d43d1c0606b6de9d3ded089e647dbc1387c7a26b169",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$25.class": "391b03661ac3c681c19d964a11495ca6bf3d557859cc7e47c8150d8587ccf79e",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$26.class": "047df17e8f583b1b69f54cb97739c9adacd731c83b2974b2010fd3b7f2084fc4",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$27.class": "2faf80050e58bda618dfd75f59d5ec9e9e96e7b17c450686cf3226ed741cc469",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$28.class": "b5af945af5d744d8b3012fd2ea1da30f4ebd662471e07cdbee3557e4bda54ee1",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$29.class": "1292bbebe19e870de84a3d98b06aad586329ec9ed6360746db4deaff4a0b8d26",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$3.class": "2cf700a11e10d334c4da2abfaffd0113f2190d1212d571404fb306dc8b232e17",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$30.class": "c7c96d8e317bee24d84b7d5bb86e49eaab819f1e946d314b476be30cfa65e434",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$31.class": "f008f35c4baba8f0345e08eb449e003ad90c82bd04d2065641299d7bd20acbda",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$32.class": "dbb93bb185368727d93d203505fa99cd847d2f09e718fc777a23639d8badb0de",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$33.class": "4ef6a021afa999193328ade3e149e075dbc007c5837861276d9f68d3735fb609",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$34.class": "2d0554a2259e6e5584a641f2a19558f7bc01d110e111b597ca6b53854f0b05f4",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$35.class": "165ac53b8645516ee1049bd60fc3ec2d1fc69a8c93d0944a9b770c8f536efd95",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$36.class": "449e685d2f78e1756dbd8a9945b12ecac1742fa90bbd4bc627ae284af2994843",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$37.class": "bfae4d05a0256ac3ea96cc2979323153e417f190b17ab0591375291e5640ba5a",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$38.class": "54c5567e90481a8e318a6ce03441088d2b6706b4c4bd749b8019245857bfbabc",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$4.class": "8b1d43a2c9e5cfb0d9cb082675980b6e81e5ef9098c65d4c466976558c8c3c0b",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$5.class": "b9eb54b316cc9bf7f40105eb29e878ae47af21f8722a90eff583d71b163bee9b",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$6.class": "7380bc3d7ce68e0614fc2b017a7601b02302a4623c7e11c098a96423969492e3",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$7.class": "c29ac458debc7c71864fe36123cd5160ff49cfb9b31566b33b1231ff4ea011c9",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$8.class": "1734b2e458d9c6e813463d567202f941c1657379a3ba8c1d08382c4e8dde1635",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$9.class": "d233118abbbf3553bad9d4c26d2634d4907a5df7e69b04e0fdfc65e53de92976",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$CheckedRunnable.class": "6742736f45440a9e5dc45d44bb5de7caf6e6407b18b76734bfaa0f1cbb10d9d3",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$Config.class": "e42534602d6ebcc2398c5e92b570245fd23232f98030ba58632d69140ba9ca54",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$EncodedIteration.class": "88bf4e49e454997c004fc32158aef5225c107fe7a3f55fad434d9938192a4e17",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$GrantEvidence.class": "f297aaa7bda6d6711674291c413b917bf853f1235a9fbd7f1c3aabc1bb4f45db",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$Json.class": "168ca89d3026569ed966a7f19024436768b45a82e868d83bcd05bbd9c375859e",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$MetricLogger.class": "8cd1ad256ff0e00c893c8d6cd0f7ecc1608f021c2a528b6a030531469b2506bf",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$Observation.class": "b889014bed9116e9d0ce7006920299e61b4f6e79371f2cba67c3c2889b748ad8",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$PlanRecord.class": "956eb77e36712b9c9fa0c8ae8fb04e9c3aeb4108fd691ff58282053df44e7855",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$SampleLogger.class": "5ffd9716a2c9167eb7fad55c0d9673f68c28f5dbd50d3f17be96a6b573aec157",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$SemanticLogger.class": "88fab7d3c16bcb4b336f0e0afb44dbf5a0fa77c0add8595554d57d0783fbd3a2",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier$WorkloadPlan.class": "f13e45bbf7396da9677bfd95a6b8b0043addd1e9bb74725b4521f5a4e117af15",
+    "gorti\\verification\\commercialrti\\CommercialRtiVerifier.class": "59ca9d02da76baf563278408e3f50df5ba4ab67d8b5b1517c89edd5f5f57096a"
+  }
+}

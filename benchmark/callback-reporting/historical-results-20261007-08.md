@@ -1,8 +1,10 @@
 # Historical receive-order comparison: 7-8 October 2026
 
 This maintained methods/result summary distinguishes historical performance
-builds from the later RTI/SDK publication commit `4b11da4`. Original execution
-artifacts remain outside Git. It consolidates the
+builds from the later RTI/SDK publication commit `4b11da4`. Raw execution
+artifacts are published in the separate
+[evidence-r1 release asset](https://github.com/cbchoi/gorti/releases/tag/evidence-r1),
+not in Git history. It consolidates the
 [7 October report](../../engineering/verification/portico-fom-static-metadata-20261007.md)
 and [8 October report](../../engineering/verification/portico-report-signal-20261008.md).
 
@@ -98,7 +100,8 @@ Complete source snapshots for the measured modified builds are not retained with
 the evidence. The comparison therefore establishes a difference between these
 binary builds, not independently reproducible attribution to one source change.
 
-The model/requirements reproduction archive contains this summary, not these
-historical benchmark observations. Preserve and identify that historical data
-archive separately. Source and experiment methods belong in Git; execution logs
-and raw measurement artifacts do not.
+The evidence-r1 ZIP includes both RTI sessions and the separate client-build
+comparison, along with the historical model and service results. See the
+[evidence guide](../../verification/evidence-r1/README.md) for the checksum and
+offline reanalysis commands. Source and experiment methods belong in Git;
+the raw historical reports and trial records remain in the release attachment.

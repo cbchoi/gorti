@@ -1,0 +1,46 @@
+{
+  "platform": "Windows-11-10.0.26300-SP0",
+  "logical_cpus": 20,
+  "gomaxprocs": "runtime default",
+  "warmup_pairs": 10,
+  "measured_pairs": 40,
+  "design": "crossover",
+  "warmup_seed_blocks": 5,
+  "measured_seed_blocks": 20,
+  "order_seed": 20261008,
+  "schedule_sha256": "60304844c13452eb11a421521f0a85007bbb6117b1af7d214b0428d15b82e9b2",
+  "fom_sha256": "633aaa61984966237f3675bcf005a5fb3722392f2c113ef41ca8b255e1a15040",
+  "workload_sha256": "a82b332fc2935c0e0433edc21128d5594049de26e59d9f00e91f7b45d4392940",
+  "callback_profile": "async",
+  "batch_size": 32,
+  "legacy_reference": false,
+  "legacy_scope": null,
+  "conditions": {
+    "baseline": "local-lrc",
+    "candidate": "local-lrc"
+  },
+  "order": "balanced randomized ABBA/BAAB, both orders for each seed",
+  "independent_federate_processes": 2,
+  "fresh_server_per_trial": true,
+  "operation_warmup_per_channel": 128,
+  "logging": "compact summaries only",
+  "measurement_boundary": "subscriber armed before VERIFY_START to dequeue timestamp of last subsequently validated callback, before DispatchEvent; final ACK drain required outside timer",
+  "binaries": {
+    "baseline_server": {
+      "path": "__WORKDIR__/gorti\\benchmark-results\\report-signal-baseline-builds-20261008\\rtid-async.exe",
+      "sha256": "25fa04118532a7638d64df9e9228879c4aa8777e052863e4a62f9b2b37cd3955"
+    },
+    "baseline_client": {
+      "path": "__WORKDIR__/gorti\\benchmark-results\\report-signal-baseline-builds-20261008\\gorti-go-fair-async.exe",
+      "sha256": "a13ece3f3e6b987a99efa7aa40b90d6006171b1ef63fb7c2fe8d91199da876cd"
+    },
+    "candidate_server": {
+      "path": "__WORKDIR__/gorti\\benchmark-results\\report-signal-candidate-builds-20261008\\rtid-async.exe",
+      "sha256": "25fa04118532a7638d64df9e9228879c4aa8777e052863e4a62f9b2b37cd3955"
+    },
+    "candidate_client": {
+      "path": "__WORKDIR__/gorti\\benchmark-results\\report-signal-candidate-builds-20261008\\gorti-go-fair-async.exe",
+      "sha256": "a93ae8c11cfa68262b1a1ac0f33a4def81af91689e7e8cf124a5b7708e5d01a1"
+    }
+  }
+}

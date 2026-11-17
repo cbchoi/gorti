@@ -1,0 +1,70 @@
+{
+  "design": "seed-block crossover",
+  "measured_blocks": 20,
+  "warmup_blocks": 5,
+  "failures": [],
+  "bootstrap_unit": "whole four-trial seed block, stratified by ABBA/BAAB sequence",
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 1516,
+  "baseline": {
+    "n": 40,
+    "mean_seconds": 1.5304781925,
+    "median_seconds": 1.5162597999999998,
+    "stdev_seconds": 0.18286367032816242,
+    "aggregate_callbacks_per_second": 53055.31329875515
+  },
+  "candidate": {
+    "n": 40,
+    "mean_seconds": 1.45924998,
+    "median_seconds": 1.44282575,
+    "stdev_seconds": 0.1651010701699777,
+    "aggregate_callbacks_per_second": 55645.023890971715
+  },
+  "completion_speedup": 1.0488115219984446,
+  "throughput_gain_percent": 4.881152199844463,
+  "completion_reduction_percent": 4.653984150120449,
+  "candidate_faster_blocks": 14,
+  "first_in_pair_mean_seconds": 1.4724574175,
+  "second_in_pair_mean_seconds": 1.517270755,
+  "second_over_first": 1.0304343860592493,
+  "orders": {
+    "AB": {
+      "pairs": 20,
+      "baseline_mean_seconds": 1.507502165,
+      "candidate_mean_seconds": 1.48108729,
+      "completion_speedup": 1.0178347860915071
+    },
+    "BA": {
+      "pairs": 20,
+      "baseline_mean_seconds": 1.5534542199999999,
+      "candidate_mean_seconds": 1.43741267,
+      "completion_speedup": 1.0807294609417906
+    }
+  },
+  "positions": {
+    "1": {
+      "n": 20,
+      "mean_seconds": 1.46095919
+    },
+    "2": {
+      "n": 20,
+      "mean_seconds": 1.499628045
+    },
+    "3": {
+      "n": 20,
+      "mean_seconds": 1.483955645
+    },
+    "4": {
+      "n": 20,
+      "mean_seconds": 1.534913465
+    }
+  },
+  "speedup_seed_block_stratified_bootstrap_ci95": [
+    1.0137654070977506,
+    1.088442383791285
+  ],
+  "second_over_first_seed_block_stratified_bootstrap_ci95": [
+    0.9958852128561688,
+    1.0674820117327
+  ]
+}

@@ -1,0 +1,152 @@
+[
+  {
+    "block": 0,
+    "seed": 1516,
+    "phase": "warmup",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 1,
+    "seed": 1517,
+    "phase": "warmup",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 2,
+    "seed": 1518,
+    "phase": "warmup",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 3,
+    "seed": 1519,
+    "phase": "warmup",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 4,
+    "seed": 1520,
+    "phase": "warmup",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 5,
+    "seed": 1521,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 6,
+    "seed": 1522,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 7,
+    "seed": 1523,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 8,
+    "seed": 1524,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 9,
+    "seed": 1525,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 10,
+    "seed": 1526,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 11,
+    "seed": 1527,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 12,
+    "seed": 1528,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 13,
+    "seed": 1529,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 14,
+    "seed": 1530,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 15,
+    "seed": 1531,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 16,
+    "seed": 1532,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 17,
+    "seed": 1533,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 18,
+    "seed": 1534,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 19,
+    "seed": 1535,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 20,
+    "seed": 1536,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 21,
+    "seed": 1537,
+    "phase": "measured",
+    "sequence": "BAAB"
+  },
+  {
+    "block": 22,
+    "seed": 1538,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 23,
+    "seed": 1539,
+    "phase": "measured",
+    "sequence": "ABBA"
+  },
+  {
+    "block": 24,
+    "seed": 1540,
+    "phase": "measured",
+    "sequence": "ABBA"
+  }
+]
